@@ -33,7 +33,7 @@
 - [x] Refactor Local and remote single delete to share plan -> journal -> backup rename -> DB transaction + marker -> finalize.
 - [x] Keep `db::delete_skill` parent-only FK cascade semantics and retained copy behavior.
 - [x] Route batch delete through the single-skill Saga while preserving ordered partial results and duplicate request coalescing.
-- [ ] Add DB failure, missing path, symlink/copy/native, retained copy, remote transport, crash, rollback, commit-unknown, collision, and idempotent retry tests.
+- [x] Add DB failure, missing path, symlink/copy/native, retained copy, remote transport, crash, rollback, commit-unknown, collision, and idempotent retry tests.
 
 ## 6. Update Saga Integration
 
@@ -65,8 +65,8 @@
 - [x] Add an executable FS+DB operation journal spec and update backend index.
 - [x] Update central mutation lock, central update batching, database migration, deletion integrity, target context, redaction, and test-support contracts only where behavior changed.
 - [x] Run full-scope `trellis-check`; reject any unjournaled delete/update path, remote unlocked fallback, best-effort phase write, export leak, or duplicate update orchestrator.
-- [ ] Run `trellis-update-spec`, inspect the scoped diff, and create one Chinese emoji work commit for this child only.
-- [ ] Archive only `07-24-fs-db-operation-journal`, journal the work commit, and do not push.
+- [x] Run `trellis-update-spec`, inspect the scoped diff, and create one Chinese emoji work commit for this child only.
+- [x] Archive only `07-24-fs-db-operation-journal`, journal the work commit, and do not push.
 
 ## Rollback Points
 
