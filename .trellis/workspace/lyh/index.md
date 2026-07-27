@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 69
+- **Total Sessions**: 70
 - **Last Active**: 2026-07-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~566 | Active |
+| `journal-2.md` | ~587 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 70 | 2026-07-28 | 完成 CI 跨平台与供应链加固 | `f2dcc3f78b5ac1dfcfa90476f926d89936261b62` | `dev` |
 | 69 | 2026-07-28 | 完成启动恢复状态机与前端恢复页 | `98ce97f` | `dev` |
 | 68 | 2026-07-27 | 并发作业独占 lease 与迁移协调 | `ccc70666` | `dev` |
 | 67 | 2026-07-27 | GitHub 不可变 preview snapshot | `8394e8c7` | `dev` |

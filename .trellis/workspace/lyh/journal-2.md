@@ -564,3 +564,24 @@ Bound target identity, cache DB, remote resources, events, and operation logs to
 ### Status
 
 [OK] **Completed**
+
+
+## Session 70: 完成 CI 跨平台与供应链加固
+
+**Date**: 2026-07-28
+**Task**: 完成 CI 跨平台与供应链加固
+**Branch**: `dev`
+
+### Summary
+
+新增 Ubuntu/macOS 源码门禁、双生态 fail-closed 依赖审计、Action SHA 固定与 Dependabot；完成 just ci、实时审计和 Windows NSIS bundle 验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f2dcc3f78b5ac1dfcfa90476f926d89936261b62` | (see git log) |
+
+### Status
+
+[OK] **Completed**
