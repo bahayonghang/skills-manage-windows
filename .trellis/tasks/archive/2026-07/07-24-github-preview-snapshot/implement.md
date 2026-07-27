@@ -67,7 +67,8 @@
       （自修 3 处：confirm 步骤 toast 漏出 raw coded 信封、`formatGitHubImportError` 的 normalize/parse 顺序、`formatGitHubImportToast` 只翻译 `preview*` 信封；补 provenance COALESCE 与 rename/skip 测试。）
 - [x] 运行 `trellis-update-spec`，更新 GitHub preview contract、database migration contract，以及实际形成的 frontend IPC/error contract；只记录已实现且有测试的约定。
       （新增 `backend/github-import-preview-contract.md` 的 Immutable Preview Snapshot Lifecycle 场景并修正已过期的 Markdown Fetch Boundary；`backend/database-migrations.md` 补 migration 4 与 4 行 contiguous 断言；新增 `frontend/github-preview-snapshot-token.md`；`guides/cross-layer-thinking-guide.md` 补 optional-token-fallback 反例。）
-- [ ] `git diff --check` 并检查 scoped diff；用符合仓库历史的中文 emoji 提交本子任务代码/spec/task artifacts，不混入排除文件。
+- [x] `git diff --check` 并检查 scoped diff；用符合仓库历史的中文 emoji 提交本子任务代码/spec/task artifacts，不混入排除文件。
+      （提交 `8394e8c7`，63 files；`.trellis/scripts/*`、`workflow.md`、`.gitattributes`、兄弟/父任务目录与审计报告均未纳入。）
 - [ ] `task.py archive 07-24-github-preview-snapshot` 后记录 journal；核对父任务变为 `11/16`，不 push，不完成父 goal。
 
 ## 9. 回滚点
