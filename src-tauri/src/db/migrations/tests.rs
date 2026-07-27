@@ -179,12 +179,14 @@ fn migration_sources_are_checksum_locked() {
     let checksums = [
         descriptor_checksum(1).unwrap(),
         descriptor_checksum(2).unwrap(),
+        descriptor_checksum(3).unwrap(),
     ];
     assert_eq!(
         checksums,
         [
             "aabde4fd51822355cbe2a7982ac895073f6e49e9f34882a50086d145462a736d",
             "92aeea552f562f4142946460635a6d7d2d75c89f8899ea2063a80c213bcf14aa",
+            "ad1c327066e8bd7a0f5d5aca5ccd6666247d92fc2dfbee5d9c37c6a60ae948a8",
         ]
     );
     assert_eq!(checksums.len(), versions::MIGRATIONS.len());
@@ -213,7 +215,7 @@ async fn selected_release_fixtures_upgrade_with_backup_and_cascades() {
                 .fetch_all(&pool)
                 .await
                 .unwrap();
-        assert_eq!(versions.len(), 2);
+        assert_eq!(versions.len(), 3);
         for (index, row) in versions.iter().enumerate() {
             let version = i64::try_from(index + 1).unwrap();
             assert_eq!(row.try_get::<i64, _>("version").unwrap(), version);
@@ -232,6 +234,7 @@ async fn selected_release_fixtures_upgrade_with_backup_and_cascades() {
         );
         assert!(!sentinel.try_get::<String, _>("uid").unwrap().is_empty());
         assert_owned_foreign_keys(&pool).await;
+        assert!(file_has_table(&database_path, "fs_db_operations").await);
         assert!(sqlx::query("PRAGMA foreign_key_check")
             .fetch_optional(&pool)
             .await
@@ -328,7 +331,7 @@ async fn preflight_rejects_checksum_gap_and_future_versions_without_backup() {
     )
     .await;
     assert_preflight_rejection(
-        "INSERT INTO schema_migrations (version, checksum, applied_at) VALUES (3, 'future', 'now')",
+        "INSERT INTO schema_migrations (version, checksum, applied_at) VALUES (4, 'future', 'now')",
         "newer than supported",
     )
     .await;

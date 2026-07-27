@@ -2,6 +2,7 @@ use sha2::{Digest, Sha256};
 
 pub(crate) mod v1;
 pub(super) mod v2;
+pub(super) mod v3;
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct MigrationDescriptor {
@@ -9,7 +10,7 @@ pub(super) struct MigrationDescriptor {
     pub(super) source: &'static str,
 }
 
-pub(super) const MIGRATIONS: [MigrationDescriptor; 2] = [
+pub(super) const MIGRATIONS: [MigrationDescriptor; 3] = [
     MigrationDescriptor {
         version: 1,
         source: v1::SOURCE,
@@ -17,6 +18,10 @@ pub(super) const MIGRATIONS: [MigrationDescriptor; 2] = [
     MigrationDescriptor {
         version: 2,
         source: v2::SOURCE,
+    },
+    MigrationDescriptor {
+        version: 3,
+        source: v3::SOURCE,
     },
 ];
 

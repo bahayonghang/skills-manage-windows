@@ -7,6 +7,7 @@
 
 pub(crate) mod agents_repo;
 pub(crate) mod collections_repo;
+pub(crate) mod fs_db_operations_repo;
 pub(crate) mod installations_repo;
 pub(crate) mod observations_repo;
 pub(crate) mod operation_logs_repo;

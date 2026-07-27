@@ -2,7 +2,7 @@
 
 ## 1. Scope / Trigger
 
-Apply this contract to Local operations that finalize writes under the Central skill root or relocate that root. GUI and CLI must share the same lock; SSH/WSL mutations keep their remote atomic mechanisms and do not take this Local lock.
+Apply this contract to operations that finalize writes under a Central skill root, relocate that root, or recover a pending Central operation. GUI and CLI must share the same Local lock; Local/SSH/WSL delete and update also use a target-derived lease so mutations and recovery for one target serialize across processes.
 
 ## 2. Signatures
 
@@ -11,14 +11,20 @@ pub async fn acquire_central_mutation_guard(
     operation: &'static str,
     timeout: Duration,
 ) -> Result<CentralMutationGuard, CentralMutationError>;
+
+pub async fn acquire_target_mutation_guard(
+    target: &ActiveTarget,
+    operation: &'static str,
+    timeout: Duration,
+) -> Result<CentralMutationGuard, CentralMutationError>;
 ```
 
-The lock path is defined only by `paths::central_mutation_lock_path()` as `app_data_dir()/locks/central-mutation.lock`.
+Local keeps `paths::central_mutation_lock_path()` as `app_data_dir()/locks/central-mutation.lock`. SSH/WSL lock filenames are SHA-256 digests of the validated target ID under the same locks directory; raw target IDs never become path segments.
 
 ## 3. Contracts
 
 - Prepare network data, archives, previews, and unique staging directories before locking.
-- After locking, reload DB/filesystem state, then perform final swap/delete, DB persistence, and existing best-effort operation logging.
+- After locking, recover pending journal rows for that target, reload DB/filesystem state, then perform final swap/delete, DB persistence, and existing best-effort operation logging.
 - Acquire only at the top-level mutation use case. Internal helpers accept the established boundary and must not acquire the same advisory lock again.
 - Lock acquisition runs through `fs_util::run_blocking_fs_with`; async workers must not poll `fs2` directly.
 - Lock failure stops the mutation. There is no unlocked fallback.
@@ -38,7 +44,7 @@ The lock path is defined only by `paths::central_mutation_lock_path()` as `app_d
 ## 5. Good / Base / Bad Cases
 
 - Good: GitHub import stages and parses first, then locks around target recheck, swap, and DB upsert.
-- Base: pure queries, previews, marketplace search, and remote mutations do not acquire the Local lock.
+- Base: pure queries, previews, marketplace search, and remote read-only commands acquire no mutation lease and do not connect solely for recovery.
 - Bad: CLI locks outside a service that locks again, causing self-deadlock.
 
 ## 6. Tests Required
@@ -47,6 +53,8 @@ The lock path is defined only by `paths::central_mutation_lock_path()` as `app_d
 - Assert a contender receives typed timeout, then terminate the helper and assert acquisition succeeds.
 - Run affected mutation-domain tests and `just ci` after moving a lock boundary.
 - Search all production `acquire_central_mutation_guard` call sites and verify they are Local top-level final-apply paths.
+- Assert same-target Local/SSH/WSL delete, update, and recovery contend; different target digests do not contend.
+- Unit tests using the real default lock path serialize through the `cfg(test)` in-process guard so unrelated parallel tests cannot consume the production timeout. Contention/crash tests bypass that guard through `acquire_central_mutation_guard_at` and use isolated paths/processes.
 
 ## 7. Wrong vs Correct
 

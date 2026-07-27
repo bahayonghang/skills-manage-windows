@@ -129,6 +129,7 @@ impl ConnectedSshTarget {
         .await
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) async fn run_command_with_stdin_bytes_cancellable(
         &self,
         command: &str,
@@ -299,6 +300,7 @@ impl ConnectedWslTarget {
         .await
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) async fn run_command_with_stdin_bytes_cancellable(
         &self,
         command: &str,

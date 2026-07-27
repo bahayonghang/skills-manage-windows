@@ -48,6 +48,10 @@ function resetStore() {
     dailyCounts: [],
     isDailyCountsLoading: false,
     dailyCountsError: null,
+    pendingOperations: [],
+    isPendingOperationsLoading: false,
+    retryingOperationId: null,
+    pendingOperationsError: null,
   });
 }
 
@@ -85,6 +89,130 @@ describe("operationLogStore", () => {
 
     expect(invoke).toHaveBeenCalledWith("get_operation_log", { logId: "log-1" });
     expect(useOperationLogStore.getState().selectedEntry).toEqual(mockEntry);
+  });
+
+  it("loads and retries pending Central operations", async () => {
+    const pending = [
+      {
+        operationId: "op-1",
+        targetId: "local",
+        targetKind: "local" as const,
+        operationKind: "central_update" as const,
+        skillId: "skill-a",
+        phase: "copies_pending" as const,
+        updatedAt: "2026-07-27T00:00:00Z",
+      },
+    ];
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(pending)
+      .mockResolvedValueOnce([]);
+
+    await useOperationLogStore.getState().loadPendingOperations();
+    expect(invoke).toHaveBeenNthCalledWith(1, "list_pending_fs_db_operations");
+    expect(useOperationLogStore.getState().pendingOperations).toEqual(pending);
+
+    await useOperationLogStore.getState().retryPendingOperation("op-1");
+    expect(invoke).toHaveBeenNthCalledWith(2, "retry_fs_db_operation", {
+      operationId: "op-1",
+    });
+    expect(useOperationLogStore.getState().pendingOperations).toEqual([]);
+  });
+
+  it("exposes loading and empty states for pending Central operations", async () => {
+    let resolvePending!: (value: []) => void;
+    vi.mocked(invoke).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolvePending = resolve;
+        }),
+    );
+
+    const loading = useOperationLogStore.getState().loadPendingOperations();
+    expect(useOperationLogStore.getState().isPendingOperationsLoading).toBe(true);
+    expect(useOperationLogStore.getState().pendingOperations).toEqual([]);
+
+    resolvePending([]);
+    await loading;
+    expect(useOperationLogStore.getState().isPendingOperationsLoading).toBe(false);
+    expect(useOperationLogStore.getState().pendingOperations).toEqual([]);
+    expect(useOperationLogStore.getState().pendingOperationsError).toBeNull();
+  });
+
+  it("keeps pending state actionable when an offline retry fails", async () => {
+    const pending = [
+      {
+        operationId: "op-offline",
+        targetId: "ssh-offline",
+        targetKind: "ssh" as const,
+        operationKind: "central_update" as const,
+        skillId: "skill-offline",
+        phase: "copies_pending" as const,
+        updatedAt: "2026-07-27T00:00:00Z",
+      },
+    ];
+    useOperationLogStore.setState({ pendingOperations: pending });
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("Target is offline"));
+
+    await expect(
+      useOperationLogStore.getState().retryPendingOperation("op-offline"),
+    ).rejects.toThrow("Target is offline");
+
+    expect(useOperationLogStore.getState().pendingOperations).toEqual(pending);
+    expect(useOperationLogStore.getState().retryingOperationId).toBeNull();
+    expect(useOperationLogStore.getState().pendingOperationsError).toBe(
+      "Error: Target is offline",
+    );
+  });
+
+  it("clears the previous target and discards stale pending responses", async () => {
+    const stale = [
+      {
+        operationId: "old-target-op",
+        targetId: "ssh-old",
+        targetKind: "ssh" as const,
+        operationKind: "central_delete" as const,
+        skillId: "skill-old",
+        phase: "fs_staged" as const,
+        updatedAt: "2026-07-27T00:00:00Z",
+      },
+    ];
+    const fresh = [
+      {
+        operationId: "new-target-op",
+        targetId: "wsl-new",
+        targetKind: "wsl" as const,
+        operationKind: "central_update" as const,
+        skillId: "skill-new",
+        phase: "copies_pending" as const,
+        updatedAt: "2026-07-27T00:00:01Z",
+      },
+    ];
+    let resolveFirst!: (value: typeof stale) => void;
+    let resolveSecond!: (value: typeof fresh) => void;
+    vi.mocked(invoke)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecond = resolve;
+          }),
+      );
+    useOperationLogStore.setState({ pendingOperations: stale });
+
+    const first = useOperationLogStore.getState().loadPendingOperations();
+    expect(useOperationLogStore.getState().pendingOperations).toEqual([]);
+    const second = useOperationLogStore.getState().loadPendingOperations();
+    resolveSecond(fresh);
+    await second;
+    resolveFirst(stale);
+    await first;
+
+    expect(useOperationLogStore.getState().pendingOperations).toEqual(fresh);
   });
 
   it("clears logs with the current filter and reloads", async () => {

@@ -82,6 +82,10 @@ function resetStore() {
     isClearing: false,
     isExporting: false,
     error: null,
+    pendingOperations: [],
+    isPendingOperationsLoading: false,
+    retryingOperationId: null,
+    pendingOperationsError: null,
   });
 }
 
@@ -128,6 +132,107 @@ describe("OperationLogsView", () => {
     expect(await screen.findByTestId("operation-log-detail-drawer")).toBeInTheDocument();
     expect(screen.getAllByText("Scan completed").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/totalSkills/)).toBeInTheDocument();
+  });
+
+  it("shows current-target recovery and retries without blocking cached logs", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "list_operation_logs") return mockPage;
+      if (command === "list_pending_fs_db_operations") {
+        return [
+          {
+            operationId: "op-1",
+            targetId: "local",
+            targetKind: "local",
+            operationKind: "central_update",
+            skillId: "skill-a",
+            phase: "copies_pending",
+            updatedAt: "2026-07-27T00:00:00Z",
+          },
+        ];
+      }
+      if (command === "retry_fs_db_operation") return [];
+      return null;
+    });
+
+    render(<OperationLogsView />);
+    expect(await screen.findByText("Central 待恢复操作")).toBeInTheDocument();
+    expect(screen.getByText("scan.all")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /skill-a/ }));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("retry_fs_db_operation", {
+        operationId: "op-1",
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("Central 待恢复操作")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("shows recovery loading without hiding cached logs, then hides the empty band", async () => {
+    let resolvePending!: (value: []) => void;
+    vi.mocked(invoke).mockImplementation((command) => {
+      if (command === "list_operation_logs") return Promise.resolve(mockPage);
+      if (command === "list_pending_fs_db_operations") {
+        return new Promise((resolve) => {
+          resolvePending = resolve;
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    render(<OperationLogsView />);
+    expect(await screen.findByText("正在检查当前目标中断的变更...")).toBeInTheDocument();
+    expect(screen.getByText("scan.all")).toBeInTheDocument();
+
+    resolvePending([]);
+    await waitFor(() =>
+      expect(screen.queryByText("Central 待恢复操作")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByText("scan.all")).toBeInTheDocument();
+  });
+
+  it("shows an offline recovery error while cached logs remain usable", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "list_operation_logs") return mockPage;
+      if (command === "list_pending_fs_db_operations") {
+        throw new Error("Target is offline");
+      }
+      return null;
+    });
+
+    render(<OperationLogsView />);
+    expect(await screen.findByText(/Target is offline/)).toBeInTheDocument();
+    expect(screen.getByText("scan.all")).toBeInTheDocument();
+  });
+
+  it("keeps long pending identities inside the wrapping narrow-screen controls", async () => {
+    const longSkillId = "skill-with-a-very-long-identity-that-must-not-overlap-neighbor-controls";
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "list_operation_logs") return mockPage;
+      if (command === "list_pending_fs_db_operations") {
+        return [
+          {
+            operationId: "op-responsive",
+            targetId: "local",
+            targetKind: "local",
+            operationKind: "central_update",
+            skillId: longSkillId,
+            phase: "copies_pending",
+            updatedAt: "2026-07-27T00:00:00Z",
+          },
+        ];
+      }
+      return null;
+    });
+    Object.defineProperty(window, "innerWidth", { value: 320, configurable: true });
+
+    render(<OperationLogsView />);
+    const band = await screen.findByLabelText("Central 待恢复操作");
+    const identity = screen.getByText(longSkillId);
+    expect(identity).toHaveClass("max-w-40", "truncate");
+    expect(band.querySelector(".flex-wrap")).not.toBeNull();
+    expect(band.querySelector(".min-w-0")).not.toBeNull();
+    expect(screen.getByText("scan.all")).toBeInTheDocument();
   });
 
   it("reloads when filters change", async () => {

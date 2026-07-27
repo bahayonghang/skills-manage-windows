@@ -6,6 +6,10 @@ Use this contract whenever a code path deletes or reconciles `skills` rows,
 cleans scan-stale skill state, repairs a pre-version-2 database, or changes the
 skill-parent FK migration.
 
+Central filesystem deletion additionally follows `fs-db-operation-journal.md`:
+backup renames occur before the business transaction, and parent deletion plus
+the `db_committed` marker are atomic.
+
 The `skills` row owns exactly these seven relations, in this stable order:
 
 1. `skill_update_states`
@@ -69,6 +73,10 @@ pub struct OrphanRepairReport {
 - Single deletion and keep-set reconciliation run one transaction: delete only
   parent skills, let SQLite cascade all seven owned relations, prune
   repositories, then commit.
+- Central delete uses `commit_delete_fs_db_operation`: delete the parent, prune
+  repositories, and transition `fs_staged -> db_committed` in the same
+  transaction. FS backup cleanup happens only after that commit; a pre-commit
+  failure restores all operation-owned backups.
 - Scanner reconciliation first performs agent-scoped installation and
   observation cleanup in its scan transaction, then deletes stale parents and
   prunes repos. It never repeats the seven-table list.
@@ -98,6 +106,7 @@ pub struct OrphanRepairReport {
 | Keep set is non-empty | Delete only owned rows and parents absent from the keep set |
 | Repair finds zero rows | Return an empty report and write no audit log |
 | Startup repair fails | Fail database initialization before seed; never continue with partial cleanup |
+| Central FS staging succeeds but DB delete/marker fails | Roll back DB, restore every staged path, retain a recoverable row if restore cannot finish |
 
 All repository-layer errors remain `sqlx::Error`; do not replace them with
 string errors or best-effort logging.

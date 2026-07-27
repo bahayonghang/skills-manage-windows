@@ -26,6 +26,9 @@ pub enum CentralSkillsError {
     #[error(transparent)]
     CentralMutation(#[from] crate::services::central_mutation::CentralMutationError),
 
+    #[error(transparent)]
+    CentralOperation(#[from] crate::services::central_operation::CentralOperationError),
+
     /// Remote-target transport failures (connect / inspect / read / list /
     /// remove over the SSH or WSL channel; targets module returns String).
     #[error("{0}")]

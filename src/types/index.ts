@@ -487,6 +487,7 @@ export type {
   OperationLogPage,
   OperationLogStatus,
   OperationLogTargetKind,
+  PendingFsDbOperation,
 } from "./operationLogs";
 
 export type * from "./runtimeLogs";

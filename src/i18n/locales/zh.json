@@ -365,6 +365,12 @@
   "logs": {
     "title": "操作日志",
     "description": "仅保存在本机的操作历史，覆盖扫描、目标、安装、删除、设置和导入导出。",
+    "recovery": {
+      "title": "Central 待恢复操作",
+      "loading": "正在检查当前目标中断的变更...",
+      "summary": "当前有 {{count}} 个操作需要恢复，恢复前该目标不能继续写入。",
+      "error": "操作仍需恢复：{{error}}"
+    },
     "detailTitle": "日志详情",
     "searchPlaceholder": "搜索摘要、错误、对象或动作...",
     "loading": "正在加载日志...",

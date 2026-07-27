@@ -272,6 +272,14 @@ pub fn run() {
                     .await
                     .expect("Failed to open and migrate SQLite database")
             });
+            if let Err(error) = tauri::async_runtime::block_on(
+                services::central_operation::recover_pending_operations(
+                    &pool,
+                    &targets::ActiveTarget::Local,
+                ),
+            ) {
+                tracing::warn!(code = error.code(), "Local Central operation recovery remains pending");
+            }
 
             let secrets: Arc<dyn secrets::SecretStore> =
                 Arc::new(secrets::SystemSecretStore::default());
@@ -373,6 +381,8 @@ pub fn run() {
             commands::logs::get_operation_log,
             commands::logs::clear_operation_logs,
             commands::logs::export_operation_logs,
+            commands::logs::list_pending_fs_db_operations,
+            commands::logs::retry_fs_db_operation,
             commands::logs::get_daily_operation_counts,
             commands::logs::list_runtime_log_files,
             commands::logs::read_runtime_log_file,

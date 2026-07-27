@@ -24,6 +24,13 @@
 
 新增豁免现场时，在 connect 调用上方注释「豁免 test_support::…：<原因>」，并更新本清单。
 
+## Crash / Remote Recovery Harness
+
+- FS+DB Saga crash tests use a real subprocess helper with explicit phase markers; the parent kills the child, reopens the file DB and filesystem, then asserts convergence and artifact retention/cleanup. In-process early returns do not count as crash evidence.
+- SSH/WSL recovery protocol tests use the shared `FakeRunner` seam and assert complete script/argv/stdin plus stable output rows. They must not expose credentials, full command output, or host paths in expected diagnostics.
+- Real Windows WSL rename/restore smoke is ignored unless `SKILLPORT_TEST_WSL_DISTRO` names an available disposable distro. FakeRunner parity is required even when the live smoke cannot run.
+- Tests that exercise production Central mutation entrypoints share a test-only in-process mutex for the real default file-lock path. Do not replace the production timeout or OS lock with this mutex; low-level isolated-path tests must still prove contention, timeout, crash release, and different-target independence.
+
 ## 巡检命令
 
 ```

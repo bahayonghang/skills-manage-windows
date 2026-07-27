@@ -23,3 +23,4 @@
 - [Local Archive Import Contract](./local-archive-import.md)
 - [Skill Deletion Integrity Contract](./skill-deletion-integrity.md)
 - [Versioned SQLite Migration Contract](./database-migrations.md)
+- [Recoverable FS + DB Operation Journal Contract](./fs-db-operation-journal.md)

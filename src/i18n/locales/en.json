@@ -365,6 +365,12 @@
   "logs": {
     "title": "Operation Logs",
     "description": "Local-only operation history for scans, targets, installs, deletes, settings, and imports.",
+    "recovery": {
+      "title": "Pending Central recovery",
+      "loading": "Checking the active target for interrupted changes...",
+      "summary": "{{count}} operation(s) must recover before this target can be changed again.",
+      "error": "Recovery is still required: {{error}}"
+    },
     "detailTitle": "Log details",
     "searchPlaceholder": "Search summary, error, subject, or action...",
     "loading": "Loading logs...",

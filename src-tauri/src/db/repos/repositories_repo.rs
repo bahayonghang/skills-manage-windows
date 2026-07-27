@@ -417,7 +417,30 @@ pub async fn upsert_skill_with_github_repository(
 ) -> Result<(), sqlx::Error> {
     let mut transaction = pool.begin().await?;
 
-    upsert_skill_in_transaction(&mut transaction, skill).await?;
+    upsert_skill_with_github_repository_in_transaction(
+        &mut transaction,
+        skill,
+        owner,
+        repo,
+        branch,
+        url,
+        source_path,
+    )
+    .await?;
+    transaction.commit().await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn upsert_skill_with_github_repository_in_transaction(
+    transaction: &mut Transaction<'_, Sqlite>,
+    skill: &Skill,
+    owner: &str,
+    repo: &str,
+    branch: &str,
+    url: &str,
+    source_path: &str,
+) -> Result<(), sqlx::Error> {
+    upsert_skill_in_transaction(transaction, skill).await?;
 
     let repository_id = github_repository_id(owner, repo, branch);
     let repository_name = format!("{owner}/{repo}");
@@ -446,7 +469,7 @@ pub async fn upsert_skill_with_github_repository(
     .bind(url)
     .bind(&now)
     .bind(&now)
-    .execute(&mut *transaction)
+    .execute(&mut **transaction)
     .await
     ?;
 
@@ -464,10 +487,9 @@ pub async fn upsert_skill_with_github_repository(
     .bind(source_path)
     .bind(&now)
     .bind(&now)
-    .execute(&mut *transaction)
+    .execute(&mut **transaction)
     .await?;
-
-    transaction.commit().await
+    Ok(())
 }
 
 pub async fn set_skill_repository_pinned(

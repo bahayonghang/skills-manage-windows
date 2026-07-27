@@ -50,6 +50,10 @@ pool-only initialization are test-only or documented legacy-fixture seams.
 - Migration 2 consumes the compile-time relation specs, rebuilds all seven
   owned tables with `ON DELETE CASCADE`, guards row counts, recreates indexes,
   and runs `foreign_key_check` before commit.
+- Migration 3 adds the independent `fs_db_operations` recovery journal,
+  target/operation/phase checks, lookup indexes, and a partial unique index
+  allowing only one nonterminal operation per target and skill. Its manifest
+  contents are not part of operation-log export.
 
 ## 4. Validation & Error Matrix
 
@@ -64,6 +68,7 @@ pool-only initialization are test-only or documented legacy-fixture seams.
 | Restore also fails | Return combined error and retain backup plus quarantine |
 | Any pooled connection has `foreign_keys != 1` | Reject that connection |
 | Table rebuild row count changes | Roll back migration 2 |
+| Migration 3 active-operation uniqueness or schema check fails | Roll back migration 3 and restore the pre-migration database backup |
 
 All errors below command boundaries remain `sqlx::Error`; backup, metadata,
 repair audit, restore, and FK validation are never best effort.
@@ -86,9 +91,9 @@ repair audit, restore, and FK validation are never best effort.
 ## 6. Tests Required
 
 - Manifest/checksum-locked readable SQL fixtures for all five selected tags.
-- A locked digest for each descriptor; changing runtime repair code alone must
+- A locked digest for each descriptor, including migration 3; changing runtime repair code alone must
   not change an already-released migration digest.
-- Fixture pre-schema assertions, two contiguous migration rows, preserved
+- Fixture pre-schema assertions, three contiguous migration rows, preserved
   sentinel data, seven cascade FKs, empty `foreign_key_check`, and idempotent
   current reopen with no extra backup.
 - Multiple simultaneous pool connections each report `foreign_keys=1`.

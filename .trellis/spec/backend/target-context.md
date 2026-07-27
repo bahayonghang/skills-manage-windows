@@ -42,6 +42,8 @@ impl AppState {
 - Command 在任何 `.await`、远端连接、FS 构造、operation log 或 event payload 之前冻结 context；service/helper 接受显式 `&ActiveTarget`、`&DbPool` 或领域参数，不重新读取 `AppState`。
 - 业务 target 数据使用 `context.db()`；target registry、secrets、全局 settings 和 operation log sink 仍使用 always-local `state.db`。
 - Operation log identity 统一由 `target_context_from_active_target(context.target())` 生成：`id`/`label` 为真实 target 身份，`kind` 保持 `local|ssh|wsl` 兼容值。
+- Pending-operation list/retry commands resolve one context and require the durable row's target ID/kind to match it. They never recover with a newly selected target's DB or transport.
+- Remote pending inventory is DB-only. Listing does not connect SSH/WSL; explicit retry or a mutation for the same frozen target may construct transport under that target's lease.
 - 不给迁移期 helper 添加 Rust `#[deprecated]` 属性，直到所有调用完成迁移；否则 `clippy -D warnings` 会把兼容调用变成构建失败。迁移状态由本规范和 architecture test 强制。
 
 ## 4. Validation / Error Matrix
@@ -55,6 +57,7 @@ impl AppState {
 | target cache pool 初始化失败 | 返回原 `TargetsError`；不得改用另一 target 或 local DB |
 | 同一 command 同时出现两个 ambient helper | architecture test 失败 |
 | service/helper 需要远端资源 | 从传入 context target 构造；禁止读取 ambient `AppState` |
+| recovery row target 与 context 不一致 | 拒绝恢复；不得连接或改写另一 target |
 
 ## 5. Good / Base / Bad Cases
 

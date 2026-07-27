@@ -35,7 +35,7 @@ mod batch;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use batch::{update_skills_batch, SkillUpdatePlan};
+pub(crate) use batch::{recover_pending_update_operations, update_skills_batch, SkillUpdatePlan};
 
 pub(crate) async fn get_central_skill_update_states_impl(
     pool: &DbPool,

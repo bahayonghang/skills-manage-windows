@@ -17,6 +17,7 @@ import type {
   OperationLogEntry,
   OperationLogFilter,
   OperationLogPage,
+  PendingFsDbOperation,
   LocalArchiveImportResolution,
   LocalArchiveImportResult,
   LocalArchivePreview,
@@ -201,6 +202,11 @@ export const IPC_COMMANDS = {
   clear_operation_logs: command<{ filter: OperationLogFilter }, number>(),
   export_operation_logs: command<{ filter: OperationLogFilter }, string>(),
   get_daily_operation_counts: command<{ days: number }, DailyOperationCount[]>(),
+  list_pending_fs_db_operations: command<undefined, PendingFsDbOperation[]>(),
+  retry_fs_db_operation: command<
+    { operationId: string },
+    PendingFsDbOperation[]
+  >(),
   // ── runtime logs ──────────────────────────────────────────────────────────
   list_runtime_log_files: command<undefined, RuntimeLogFile[]>(),
   read_runtime_log_file: command<

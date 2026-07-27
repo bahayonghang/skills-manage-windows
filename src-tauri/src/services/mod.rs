@@ -7,6 +7,7 @@
 pub mod ai_provider;
 pub mod ai_tagging;
 pub mod central_mutation;
+pub mod central_operation;
 pub mod central_skills;
 pub mod central_store_location;
 pub mod central_updates;

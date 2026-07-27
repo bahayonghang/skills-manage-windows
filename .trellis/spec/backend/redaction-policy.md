@@ -12,6 +12,7 @@
 5. **标记不统一是有意为之**：`[redacted]`（Operation Log，DB 历史行沿用）与 `[REDACTED]`（Runtime Log，前端 fixture 依赖）由模块内部封装，调用方与前端不得依赖对方层的标记字面量。
 6. **前端防线**：`src/lib/runtimeLogger.ts` 的 `SENSITIVE_KEY_PATTERN` 在敏感值过 IPC 前预脱敏，词表须与后端保持同步（后端权威，前端 belt-and-suspenders）。
 7. **两层日志模型勿混**：Operation Log 是持久化前脱敏；Runtime Log 是读取/导出时脱敏（磁盘文件保留原文）。改动脱敏时机属于行为变更，需独立评审。
+8. **Recovery journal 是第三类受控存储**：`fs_db_operations.manifest_json` 可保存恢复所需完整路径和 fingerprint，但不得进入 Operation Log、Runtime Log、IPC summary、状态导出或 telemetry。IPC/Operation Log 仅暴露 operation/target/kind/phase、稳定 error code 与 `CentralOperationError::redacted_message()`；tracing 禁止格式化含 source/path 的原始 recovery error。
 
 ## 来源
 
