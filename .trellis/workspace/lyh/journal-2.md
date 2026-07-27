@@ -403,3 +403,24 @@ Bound target identity, cache DB, remote resources, events, and operation logs to
 ### Status
 
 [OK] **Completed**
+
+
+## Session 64: 完成 FS+DB 可恢复操作协议
+
+**Date**: 2026-07-27
+**Task**: 完成 FS+DB 可恢复操作协议
+**Branch**: `dev`
+
+### Summary
+
+完成 Central 删除与批量更新的 FS+DB Saga、持久化操作日志、按目标互斥锁、启动恢复与恢复 UI；补齐迁移 3、崩溃/远端协议/补偿/脱敏测试及后端契约，默认并发 just ci 通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cf7cee37` | (see git log) |
+
+### Status
+
+[OK] **Completed**
