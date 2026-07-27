@@ -54,7 +54,8 @@
 - [x] Run default-concurrency `just ci`, `python ./.trellis/scripts/task.py validate`, and `git diff --check`.
       (`just ci`: frontend 1497 passed/1 skipped; Rust library 1009 passed/6 ignored plus all binary/E2E suites; production build passed.)
 - [x] Add backend/frontend lifecycle specs and synchronize mutation-lock/spawn-blocking references.
-- [ ] Run Trellis full-scope check and inspect the scoped diff; create one Chinese emoji work commit for this child only.
+- [x] Run Trellis full-scope check and inspect the scoped diff; create one Chinese emoji work commit for this child only.
+      (Committed as `ccc70666`; 47 files. Unrelated Trellis upgrades, parent/sibling tasks, `.gitattributes`, and the audit report were excluded.)
 - [ ] Archive only `07-24-job-concurrency-lease`, journal its work commit, leave the parent active, preserve unrelated dirty files, and do not push.
 
 ## Rollback Points
