@@ -4755,12 +4755,14 @@ name = "skillport"
 version = "0.10.14"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "chrono",
  "clap",
  "flate2",
  "fs2",
  "futures-util",
  "keyring",
+ "minisign-verify",
  "regex",
  "reqwest 0.12.28",
  "serde",

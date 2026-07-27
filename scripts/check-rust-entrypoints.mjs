@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const manifestPath = join(repoRoot, "src-tauri", "Cargo.toml");
 const expectedDefaultRun = "skillport";
-const expectedBins = ["skillport", "skillport-cli"];
+const expectedBins = ["skillport", "skillport-cli", "release-signature-verifier"];
 
 const result = spawnSync(
   "cargo",

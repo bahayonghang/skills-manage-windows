@@ -1,26 +1,82 @@
 name: Release Desktop
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing v<semver> tag to release
+        required: true
+        type: string
 
 concurrency:
-  group: release-${{ github.ref_name }}
-  cancel-in-progress: true
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  release-context:
+    name: Freeze release context
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.context.outputs.tag }}
+      version: ${{ steps.context.outputs.version }}
+      sha: ${{ steps.context.outputs.sha }}
+      release_name: ${{ steps.context.outputs.release_name }}
+    steps:
+      - name: Require canonical manual workflow source
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "$GITHUB_REF" = "refs/heads/main" ] || { echo "Manual releases must run from the main workflow definition." >&2; exit 1; }
+
+      - name: Checkout context resolver
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch canonical refs
+        run: git fetch --force origin main:refs/remotes/origin/main --tags
+
+      - name: Checkout frozen tag commit
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          RELEASE_SHA="$(node scripts/release-context.mjs --tag "$RELEASE_TAG" --resolve-only)"
+          git checkout --detach "$RELEASE_SHA"
+
+      - name: Resolve and validate release context
+        id: context
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: node scripts/release-context.mjs --tag "$RELEASE_TAG"
+
+  quality-gate:
+    name: Validate frozen release commit
+    needs: release-context
+    uses: ./.github/workflows/ci.yml
+    with:
+      checkout_ref: ${{ needs.release-context.outputs.sha }}
+
   build-windows:
     name: Build Windows x64
+    needs: [release-context, quality-gate]
     runs-on: windows-2022
     steps:
-      - name: Checkout
+      - name: Checkout frozen release commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-context.outputs.sha }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
@@ -74,60 +130,35 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           $releaseConfig = @{
-            bundle = @{
-              createUpdaterArtifacts = $true
-            }
-            plugins = @{
-              updater = @{
-                pubkey = $env:TAURI_UPDATER_PUBLIC_KEY
-              }
-            }
+            bundle = @{ createUpdaterArtifacts = $true }
+            plugins = @{ updater = @{ pubkey = $env:TAURI_UPDATER_PUBLIC_KEY } }
           } | ConvertTo-Json -Depth 10 -Compress
           Set-Content -LiteralPath release-updater-config.json -Value $releaseConfig -NoNewline -Encoding utf8
           pnpm tauri build --target x86_64-pc-windows-msvc --bundles nsis,msi --config release-updater-config.json --ci
 
       - name: Prepare Windows assets
         shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ needs.release-context.outputs.version }}
+          RELEASE_TAG: ${{ needs.release-context.outputs.tag }}
         run: |
           $ErrorActionPreference = "Stop"
-          $version = $env:GITHUB_REF_NAME -replace '^v', ''
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          $nsis = @(Get-ChildItem -Path "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis" -Recurse -Filter *.exe)
+          if ($nsis.Count -ne 1) { throw "Expected exactly one Windows NSIS bundle, found $($nsis.Count)." }
+          $nsisAsset = "release-assets/skillport_${env:RELEASE_VERSION}_windows_x64_nsis.exe"
+          Copy-Item $nsis[0].FullName $nsisAsset
+          if (-not (Test-Path "$($nsis[0].FullName).sig")) { throw "Windows NSIS updater signature not found." }
+          Copy-Item "$($nsis[0].FullName).sig" "$nsisAsset.sig"
 
-          $nsis = Get-ChildItem -Path "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis" -Recurse -Filter *.exe | Select-Object -First 1
-          if ($null -eq $nsis) {
-            throw "Windows NSIS bundle not found."
-          }
-          $nsisAsset = "release-assets/skillport_${version}_windows_x64_nsis.exe"
-          Copy-Item $nsis.FullName $nsisAsset
-          if (-not (Test-Path "$($nsis.FullName).sig")) {
-            throw "Windows NSIS updater signature not found at $($nsis.FullName).sig."
-          }
-          Copy-Item "$($nsis.FullName).sig" "$nsisAsset.sig"
-
-          $msi = Get-ChildItem -Path "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi" -Recurse -Filter *.msi | Select-Object -First 1
-          if ($null -eq $msi) {
-            throw "Windows MSI bundle not found."
-          }
-          Copy-Item $msi.FullName "release-assets/skillport_${version}_windows_x64.msi"
+          $msi = @(Get-ChildItem -Path "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi" -Recurse -Filter *.msi)
+          if ($msi.Count -ne 1) { throw "Expected exactly one Windows MSI bundle, found $($msi.Count)." }
+          Copy-Item $msi[0].FullName "release-assets/skillport_${env:RELEASE_VERSION}_windows_x64.msi"
 
           $exePath = "src-tauri/target/x86_64-pc-windows-msvc/release/skillport.exe"
-          if (-not (Test-Path $exePath)) {
-            throw "Windows executable not found at $exePath."
-          }
-          Compress-Archive -Path $exePath -DestinationPath "release-assets/skillport_${version}_windows_x64.zip" -Force
-
-      - name: Generate updater metadata
-        shell: pwsh
-        run: |
-          $version = $env:GITHUB_REF_NAME -replace '^v', ''
-          node scripts/prepare-release-body.mjs --version $version --output release-body.md
-          node scripts/generate-latest-json.mjs --version $version --tag $env:GITHUB_REF_NAME --asset-dir release-assets
-
-      - name: Release preflight
-        shell: pwsh
-        run: |
-          $version = $env:GITHUB_REF_NAME -replace '^v', ''
-          node scripts/release-preflight.mjs --version $version --tag $env:GITHUB_REF_NAME --config release-updater-config.json --asset-dir release-assets
+          if (-not (Test-Path $exePath)) { throw "Windows executable not found at $exePath." }
+          Compress-Archive -Path $exePath -DestinationPath "release-assets/skillport_${env:RELEASE_VERSION}_windows_x64.zip" -Force
+          node scripts/generate-latest-json.mjs --version $env:RELEASE_VERSION --tag $env:RELEASE_TAG --asset-dir release-assets
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -138,73 +169,60 @@ jobs:
 
   build-macos:
     name: Build macOS universal
+    needs: [release-context, quality-gate]
     runs-on: macos-14
     steps:
-      - name: Checkout
+      - name: Checkout frozen release commit
         uses: actions/checkout@v4
-
+        with:
+          ref: ${{ needs.release-context.outputs.sha }}
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
         with:
           version: 10.12.3
           run_install: false
-
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
-
       - name: Cache Rust artifacts
         uses: swatinem/rust-cache@v2
         with:
           workspaces: |
             src-tauri -> target
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
       - name: Sync version metadata
-        shell: pwsh
         run: node scripts/sync-version.mjs
-
       - name: Build universal CLI
         run: |
           cargo build --manifest-path src-tauri/Cargo.toml --release --bin skillport-cli --locked --target aarch64-apple-darwin
           cargo build --manifest-path src-tauri/Cargo.toml --release --bin skillport-cli --locked --target x86_64-apple-darwin
           mkdir -p src-tauri/target/universal-apple-darwin/release
-          lipo -create \
-            src-tauri/target/aarch64-apple-darwin/release/skillport-cli \
-            src-tauri/target/x86_64-apple-darwin/release/skillport-cli \
-            -output src-tauri/target/universal-apple-darwin/release/skillport-cli
-
+          lipo -create src-tauri/target/aarch64-apple-darwin/release/skillport-cli src-tauri/target/x86_64-apple-darwin/release/skillport-cli -output src-tauri/target/universal-apple-darwin/release/skillport-cli
       - name: Build macOS bundles
         run: pnpm tauri build --target universal-apple-darwin --bundles app,dmg --no-sign --ci
-
       - name: Prepare macOS assets
         shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.release-context.outputs.version }}
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
           BUNDLE_ROOT="src-tauri/target/universal-apple-darwin/release/bundle"
           mkdir -p release-assets
-
-          APP_PATH=$(find "$BUNDLE_ROOT/macos" -maxdepth 1 -type d -name "*.app" | head -1 || true)
-          DMG_PATH=$(find "$BUNDLE_ROOT/dmg" -maxdepth 1 -type f -name "*.dmg" | head -1 || true)
-
-          [ -n "$APP_PATH" ] || { echo "macOS .app bundle not found" >&2; exit 1; }
-          [ -n "$DMG_PATH" ] || { echo "macOS .dmg bundle not found" >&2; exit 1; }
-
-          ditto -c -k --keepParent "$APP_PATH" "release-assets/skillport_${VERSION}_macos_universal.zip"
-          cp "$DMG_PATH" "release-assets/skillport_${VERSION}_macos_universal.dmg"
-          tar -C "$(dirname "$APP_PATH")" -czf "release-assets/skillport_${VERSION}_macos_universal.tar.gz" "$(basename "$APP_PATH")"
-
+          mapfile -d '' APPS < <(find "$BUNDLE_ROOT/macos" -maxdepth 1 -type d -name "*.app" -print0)
+          mapfile -d '' DMGS < <(find "$BUNDLE_ROOT/dmg" -maxdepth 1 -type f -name "*.dmg" -print0)
+          [ "${#APPS[@]}" -eq 1 ] || { echo "Expected exactly one macOS app bundle" >&2; exit 1; }
+          [ "${#DMGS[@]}" -eq 1 ] || { echo "Expected exactly one macOS DMG bundle" >&2; exit 1; }
+          ditto -c -k --keepParent "${APPS[0]}" "release-assets/skillport_${RELEASE_VERSION}_macos_universal.zip"
+          cp "${DMGS[0]}" "release-assets/skillport_${RELEASE_VERSION}_macos_universal.dmg"
+          tar -C "$(dirname "${APPS[0]}")" -czf "release-assets/skillport_${RELEASE_VERSION}_macos_universal.tar.gz" "$(basename "${APPS[0]}")"
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -214,6 +232,7 @@ jobs:
 
   build-linux:
     name: Build Linux ${{ matrix.asset-arch }}
+    needs: [release-context, quality-gate]
     runs-on: ${{ matrix.runner }}
     continue-on-error: ${{ matrix.continue_on_error }}
     strategy:
@@ -227,84 +246,56 @@ jobs:
             asset-arch: arm64
             continue_on_error: true
     steps:
-      - name: Checkout
+      - name: Checkout frozen release commit
         uses: actions/checkout@v4
-
+        with:
+          ref: ${{ needs.release-context.outputs.sha }}
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
         with:
           version: 10.12.3
           run_install: false
-
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-
       - name: Cache Rust artifacts
         uses: swatinem/rust-cache@v2
         with:
           workspaces: |
             src-tauri -> target
-
       - name: Install Linux system deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            curl \
-            file \
-            libfuse2 \
-            libssl-dev \
-            libgtk-3-dev \
-            libxdo-dev \
-            librsvg2-dev \
-            libayatana-appindicator3-dev \
-            pkg-config \
-            rpm \
-            wget
-          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev \
-            || sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.0-dev
-          sudo apt-get install -y --no-install-recommends libsoup-3.0-dev \
-            || sudo apt-get install -y --no-install-recommends libsoup2.4-dev
-
+          sudo apt-get install -y --no-install-recommends build-essential curl file libfuse2 libssl-dev libgtk-3-dev libxdo-dev librsvg2-dev libayatana-appindicator3-dev pkg-config rpm wget
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev || sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.0-dev
+          sudo apt-get install -y --no-install-recommends libsoup-3.0-dev || sudo apt-get install -y --no-install-recommends libsoup2.4-dev
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
       - name: Sync version metadata
-        shell: pwsh
         run: node scripts/sync-version.mjs
-
       - name: Build Linux bundles
         run: pnpm tauri build --bundles deb,rpm,appimage --no-sign --ci
-
       - name: Prepare Linux assets
         shell: bash
         env:
+          RELEASE_VERSION: ${{ needs.release-context.outputs.version }}
           ASSET_ARCH: ${{ matrix.asset-arch }}
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
           BUNDLE_ROOT="src-tauri/target/release/bundle"
           mkdir -p release-assets
-
-          DEB_PATH=$(find "$BUNDLE_ROOT/deb" -maxdepth 1 -type f -name "*.deb" | head -1 || true)
-          RPM_PATH=$(find "$BUNDLE_ROOT/rpm" -maxdepth 1 -type f -name "*.rpm" | head -1 || true)
-          APPIMAGE_PATH=$(find "$BUNDLE_ROOT/appimage" -maxdepth 1 -type f -name "*.AppImage" | head -1 || true)
-
-          [ -n "$DEB_PATH" ] || { echo "Linux .deb bundle not found" >&2; exit 1; }
-          [ -n "$RPM_PATH" ] || { echo "Linux .rpm bundle not found" >&2; exit 1; }
-          [ -n "$APPIMAGE_PATH" ] || { echo "Linux .AppImage bundle not found" >&2; exit 1; }
-
-          cp "$DEB_PATH" "release-assets/skillport_${VERSION}_linux_${ASSET_ARCH}.deb"
-          cp "$RPM_PATH" "release-assets/skillport_${VERSION}_linux_${ASSET_ARCH}.rpm"
-          cp "$APPIMAGE_PATH" "release-assets/skillport_${VERSION}_linux_${ASSET_ARCH}.AppImage"
-
+          mapfile -d '' DEBS < <(find "$BUNDLE_ROOT/deb" -maxdepth 1 -type f -name "*.deb" -print0)
+          mapfile -d '' RPMS < <(find "$BUNDLE_ROOT/rpm" -maxdepth 1 -type f -name "*.rpm" -print0)
+          mapfile -d '' APPIMAGES < <(find "$BUNDLE_ROOT/appimage" -maxdepth 1 -type f -name "*.AppImage" -print0)
+          [ "${#DEBS[@]}" -eq 1 ] && [ "${#RPMS[@]}" -eq 1 ] && [ "${#APPIMAGES[@]}" -eq 1 ] || { echo "Expected exactly one DEB, RPM and AppImage" >&2; exit 1; }
+          cp "${DEBS[0]}" "release-assets/skillport_${RELEASE_VERSION}_linux_${ASSET_ARCH}.deb"
+          cp "${RPMS[0]}" "release-assets/skillport_${RELEASE_VERSION}_linux_${ASSET_ARCH}.rpm"
+          cp "${APPIMAGES[0]}" "release-assets/skillport_${RELEASE_VERSION}_linux_${ASSET_ARCH}.AppImage"
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -312,33 +303,132 @@ jobs:
           path: release-assets/*
           if-no-files-found: error
 
-  publish:
-    name: Publish GitHub Release
+  aggregate:
+    name: Verify release artifacts
+    needs: [release-context, quality-gate, build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
-    needs: [build-windows, build-macos, build-linux]
     steps:
-      - name: Checkout release metadata
+      - name: Checkout frozen release commit
         uses: actions/checkout@v4
-
-      - name: Prepare release notes
-        id: release_meta
-        shell: bash
+        with:
+          ref: ${{ needs.release-context.outputs.sha }}
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.12.3
+          run_install: false
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install verifier system deps
         run: |
-          set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
-          node scripts/prepare-release-body.mjs --version "$VERSION" --output release-body.md
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Download release artifacts
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential libssl-dev libgtk-3-dev libxdo-dev librsvg2-dev libayatana-appindicator3-dev pkg-config
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev || sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.0-dev
+          sudo apt-get install -y --no-install-recommends libsoup-3.0-dev || sudo apt-get install -y --no-install-recommends libsoup2.4-dev
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Download platform artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: desktop-release-*
           path: release-assets
           merge-multiple: true
-
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
+      - name: Build release-only updater config
+        env:
+          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+        run: |
+          node -e 'const fs=require("fs"); const key=process.env.TAURI_UPDATER_PUBLIC_KEY; if(!key) throw new Error("Missing TAURI_UPDATER_PUBLIC_KEY"); fs.writeFileSync("release-updater-config.json", JSON.stringify({bundle:{createUpdaterArtifacts:true},plugins:{updater:{pubkey:key}}}))'
+      - name: Verify signature metadata inventory and checksums
+        env:
+          RELEASE_VERSION: ${{ needs.release-context.outputs.version }}
+          RELEASE_TAG: ${{ needs.release-context.outputs.tag }}
+        run: |
+          node scripts/release-preflight.mjs --version "$RELEASE_VERSION" --tag "$RELEASE_TAG" --config release-updater-config.json --asset-dir release-assets
+          node scripts/release-artifacts.mjs --version "$RELEASE_VERSION" --asset-dir release-assets
+          node scripts/release-artifacts.mjs --version "$RELEASE_VERSION" --asset-dir release-assets --verify
+      - name: Upload validated release set
+        uses: actions/upload-artifact@v4
         with:
-          name: SkillPort v${{ steps.release_meta.outputs.version }}
-          body_path: release-body.md
-          files: release-assets/*
+          name: validated-desktop-release
+          path: release-assets/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish verified draft
+    needs: [release-context, aggregate]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ needs.release-context.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.release-context.outputs.version }}
+      RELEASE_SHA: ${{ needs.release-context.outputs.sha }}
+      RELEASE_NAME: ${{ needs.release-context.outputs.release_name }}
+    steps:
+      - name: Checkout frozen release metadata
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-context.outputs.sha }}
+      - name: Download validated release set
+        uses: actions/download-artifact@v4
+        with:
+          name: validated-desktop-release
+          path: release-assets
+      - name: Prepare release notes
+        run: node scripts/prepare-release-body.mjs --version "$RELEASE_VERSION" --output release-body.md
+      - name: Verify remote tag target
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          TAG_SHA="$(git rev-parse "${RELEASE_TAG}^{commit}")"
+          [ "$TAG_SHA" = "$RELEASE_SHA" ] || { echo "Remote tag target changed after context freeze." >&2; exit 1; }
+      - name: Create or reuse same-tag draft
+        id: draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" > release.json 2> release-error.txt; then
+            jq -e '.draft == true' release.json >/dev/null || { echo "A public release already exists for ${RELEASE_TAG}." >&2; exit 1; }
+          else
+            grep -q "HTTP 404" release-error.txt || { cat release-error.txt >&2; exit 1; }
+            jq -n --arg tag "$RELEASE_TAG" --arg sha "$RELEASE_SHA" --arg name "$RELEASE_NAME" --rawfile body release-body.md \
+              '{tag_name:$tag,target_commitish:$sha,name:$name,body:$body,draft:true,prerelease:false}' > draft-request.json
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" --input draft-request.json > release.json
+          fi
+          jq -r '.id' release.json | sed 's/^/release_id=/' >> "$GITHUB_OUTPUT"
+      - name: Reset draft assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -r '.assets[].id' release.json | while read -r asset_id; do
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}"
+          done
+      - name: Upload validated assets
+        run: gh release upload "$RELEASE_TAG" release-assets/* --clobber
+      - name: Verify draft API state and inventory
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" > release.json
+          node scripts/release-draft-state.mjs --release-json release.json --tag "$RELEASE_TAG" --version "$RELEASE_VERSION"
+      - name: Fresh-download and verify checksums
+        run: |
+          mkdir fresh-release
+          gh release download "$RELEASE_TAG" --dir fresh-release
+          node scripts/release-artifacts.mjs --version "$RELEASE_VERSION" --asset-dir fresh-release --verify
+      - name: Publish verified draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          TAG_SHA="$(git rev-parse "${RELEASE_TAG}^{commit}")"
+          [ "$TAG_SHA" = "$RELEASE_SHA" ] || { echo "Remote tag target changed before publish." >&2; exit 1; }
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${{ steps.draft.outputs.release_id }}" -F draft=false > published.json
+      - name: Verify public release state
+        run: node scripts/release-draft-state.mjs --release-json published.json --tag "$RELEASE_TAG" --version "$RELEASE_VERSION" --public

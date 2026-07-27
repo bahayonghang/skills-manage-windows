@@ -2,7 +2,7 @@
 
 ## 1. Scope / Trigger
 
-This contract applies whenever changing test commands, `just ci`, GitHub Actions CI triggers or job names, Rust toolchain checks, contributor validation docs, or `main` branch protection.
+This contract applies whenever changing test commands, `just ci`, GitHub Actions CI/release triggers or job names, Rust toolchain checks, contributor validation docs, or `main` branch protection.
 
 The repository is Windows-first, but the merge gate covers the full frontend and Rust codebase. Cross-platform package builds are release/manual smoke evidence, not routine pull-request checks.
 
@@ -18,6 +18,16 @@ GitHub Actions required job/check:
   job id: ci
   job name / check context: just-ci
   check app id: 15368 (GitHub Actions)
+
+Reusable CI:
+  workflow_call.inputs.checkout_ref: required string
+  checkout: frozen commit SHA
+  jobs run: just-ci only
+
+Desktop release:
+  trigger: push v* tag or workflow_dispatch(tag) from main
+  context: tag + version + peeled commit SHA
+  order: context -> reusable CI + required builds -> aggregate -> draft -> verify -> publish
 ```
 
 The orchestrator owns two parallel, fail-fast chains:
@@ -36,7 +46,33 @@ rust: entrypointcheck -> fmt --check -> clippy --all-targets --locked -> test --
 | Pull request to `main` | Run | Skip |
 | Push to `main` or `dev` | Run | Skip |
 | `workflow_dispatch` | Run | Run |
-| `release.published` | Run | Run |
+| `workflow_call(checkout_ref)` | Run at `checkout_ref` | Skip |
+
+The CI workflow has no `release.published` trigger. Direct manual dispatch is
+the only CI event that runs package smoke jobs. The canonical
+`release-desktop.yml` workflow exclusively owns the formal Windows x64, macOS
+universal, Linux x64, and optional Linux arm64 release matrix.
+
+### Release context and publication contract
+
+- Validate the explicit `v<semver>` tag and peel it to a commit on `origin/main`
+  before reading version files. Checkout that peeled commit, then require
+  `package.json`, `tauri.conf.json`, Cargo metadata, and `Cargo.lock` to agree.
+- Every reusable CI/build checkout uses the frozen SHA. Manual dispatch must use
+  the `main` workflow definition; a selected branch is never a release context.
+- Required platform builds finish before a draft is created. Optional Linux
+  arm64 may be absent, but any arm64 output must be a complete DEB/RPM/AppImage
+  group.
+- Validate the exact artifact inventory, updater signature, `latest.json`, and
+  deterministic `SHA256SUMS` before draft creation. Reset a reused draft, upload
+  the validated set, verify API inventory, then fresh-download and recheck the
+  manifest.
+- `release.target_commitish` is not authoritative for an existing tag and may
+  contain a branch such as `main`. Verify the remote tag's peeled commit instead,
+  including immediately before publication.
+- Workflow permissions default to `contents: read`; only the publish job receives
+  `contents: write`. The sole public transition is the final `draft=false` API
+  update after every prior check succeeds.
 
 Package job guards must remain:
 
@@ -61,6 +97,16 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
 | PR/push trigger removed | `ciWorkflowContract.test.ts` fails |
 | `just-ci` renamed or guarded | Contract test fails; do not update branch protection casually |
 | Package job lacks event guard | Contract test fails |
+| Reusable CI runs package jobs | Contract test fails; `workflow_call` owns only `just-ci` |
+| Manual release runs from a non-`main` workflow ref | Context job fails before checkout/build |
+| Tag is absent, invalid, outside `main`, or version metadata differs | Context job fails before CI/build |
+| Required build or aggregate check fails | Publish job is not scheduled; no new release exists |
+| Optional arm64 has a partial set | Artifact inventory fails before draft creation |
+| Existing same-tag release is public | Publish job fails closed without overwriting it |
+| Draft upload/API/fresh-download check fails | Release remains a private draft |
+| Remote tag moves after context freeze | Draft creation or final publish check fails |
+| Existing release reports `target_commitish: main` | Accept only after the remote tag itself peels to the frozen SHA |
+| Signature, metadata, asset inventory, or checksum is invalid | Aggregate/publish fails before `draft=false` |
 | Rust is not formatted | `cargo fmt --check` fails |
 | Renderer capability, plugin wiring, or inventory drifts | `pnpm capabilitycheck` fails before size/test/build |
 | Test/bin target has a Clippy warning | all-target Clippy fails |
@@ -73,13 +119,30 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
 
 - Good: a PR to `main` runs one stable `just-ci` gate; package jobs skip; merge waits for the current head to pass.
 - Base: a manual run executes `just-ci` plus all smoke packages for pre-release validation.
+- Good: a release tag peels to `main`, reusable CI and all required builds pass,
+  the draft survives fresh-download verification, and one final API call makes
+  the complete release public.
+- Base: optional Linux arm64 produces no artifact; the required x64 inventory is
+  still valid. A retry reuses and resets the same-tag draft.
+- Bad: trusting `release.target_commitish` as the tag commit. GitHub may return a
+  branch name for an existing tag, so compare the peeled remote tag instead.
+- Bad: creating or publishing a release before all required platform jobs and
+  post-upload checks pass.
 - Bad: expanding the whole release packaging matrix to every PR, which adds tens of minutes without improving routine feedback proportionally.
 - Bad: adding a new local check without adding it to `scripts/run-ci.mjs`, or duplicating different commands directly in the workflow.
 
 ## 6. Tests Required
 
 - `pnpm vitest run src/test/contracts/ciWorkflowContract.test.ts`
-  - Parse YAML 1.2; assert event branches, stable job name, shared entrypoint, Rust components, and every package guard.
+  - Parse YAML 1.2; assert event branches, reusable frozen checkout, stable job
+    name, shared entrypoint, Rust components, and manual-only package guards.
+- `pnpm vitest run src/test/contracts/releaseWorkflowContract.test.ts src/test/scripts/release*.test.ts`
+  - Assert frozen tag checkout, required-job DAG, optional artifact rules, draft
+    ordering, least privilege, final tag recheck, sole public transition,
+    metadata/checksum failures, and updater signature tamper cases.
+- `cargo test --manifest-path src-tauri/Cargo.toml --bin release-signature-verifier --locked`
+  - A runtime-compatible wrapped minisign fixture passes; changed installer,
+    signature, and public key fail.
 - `just ci`
   - Assert the complete frontend and Rust chains pass from their shared local/remote entrypoint, including the required capability drift check.
 - `pnpm exec vitest run src/test/contracts/capabilityDrift.test.ts`
@@ -101,7 +164,8 @@ jobs:
     name: renamed-check
 ```
 
-This leaves pull requests untested and breaks the required status context.
+This starts validation after publication and cannot prevent an empty or partial
+public release.
 
 ### Correct
 
@@ -112,14 +176,27 @@ on:
   push:
     branches: [main, dev]
   workflow_dispatch:
-  release:
-    types: [published]
+  workflow_call:
+    inputs:
+      checkout_ref:
+        required: true
+        type: string
 
 jobs:
   ci:
     name: just-ci
+
+# release-desktop.yml
+jobs:
+  quality-gate:
+    uses: ./.github/workflows/ci.yml
+    with:
+      checkout_ref: ${{ needs.release-context.outputs.sha }}
+  publish:
+    needs: [release-context, aggregate]
 ```
 
 Repository checks such as capability drift belong in the ordered `web` steps in
 `scripts/run-ci.mjs`; workflows continue to invoke `just ci` instead of
-duplicating the command.
+duplicating the command. Formal release platform builds remain in
+`release-desktop.yml`; CI manual smoke jobs do not become release dependencies.

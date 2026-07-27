@@ -5,8 +5,8 @@ import { pathToFileURL } from "node:url";
 
 export function parseArgs(argv) {
   const args = {
-    version: process.env.RELEASE_VERSION || process.env.GITHUB_REF_NAME?.replace(/^v/, "") || "",
-    tag: process.env.RELEASE_TAG || process.env.GITHUB_REF_NAME || "",
+    version: process.env.RELEASE_VERSION || "",
+    tag: process.env.RELEASE_TAG || "",
     assetDir: "release-assets",
     repo: process.env.GITHUB_REPOSITORY || "bahayonghang/skills-manage-windows",
   };
@@ -33,7 +33,7 @@ export function parseArgs(argv) {
   }
 
   if (!args.version) {
-    throw new Error("Missing release version. Pass --version or set RELEASE_VERSION/GITHUB_REF_NAME.");
+    throw new Error("Missing release version. Pass --version or set RELEASE_VERSION.");
   }
   if (!args.tag) {
     args.tag = `v${args.version}`;

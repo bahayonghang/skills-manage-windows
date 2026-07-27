@@ -94,7 +94,7 @@ cargo install --path src-tauri --bin skillport-cli --locked --force
 - 最新发布：<https://github.com/bahayonghang/skills-manage-windows/releases/latest>
 - 当前桌面发布目标：Windows x64（`.exe`、`.msi`、`.zip`）、macOS Universal（`.dmg`、`.zip`、`.tar.gz`），以及 Linux x86_64 / arm64（`.deb`、`.rpm`、`.AppImage`）
 - Windows 自动更新使用 Tauri 签名的 NSIS 产物和 `latest.json`；macOS 仍未签名 / notarize，Linux arm64 产物是否可用取决于 GitHub Actions runner 矩阵
-- 维护者在发布桌面 tag 前，请按 `docs/reference/release-process.md` 中的说明运行脚本化 release preflight，校验 updater 配置、NSIS 签名和 `latest.json`。
+- 维护者应推送已存在的 release tag（或手动选择该 tag），由唯一 workflow 对固定 SHA 的 CI、全部必需 bundle、NSIS 密码学签名、`latest.json` 与 fresh-download checksum 完成验证后再原子公开 draft。
 
 ### macOS 未签名构建说明
 

@@ -41,6 +41,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 sha2 = "0.10"
 thiserror = "2"
 async-trait = "0.1"
+base64 = "0.22.1"
+minisign-verify = "0.2.5"
 walkdir = "2"
 regex = "1"
 urlencoding = "2"
