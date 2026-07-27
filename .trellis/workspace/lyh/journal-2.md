@@ -445,3 +445,24 @@ Bound target identity, cache DB, remote resources, events, and operation logs to
 ### Status
 
 [OK] **Completed**
+
+
+## Session 66: 完成 Settings API 域化与目标配置隔离
+
+**Date**: 2026-07-27
+**Task**: 完成 Settings API 域化与目标配置隔离
+**Branch**: `dev`
+
+### Summary
+
+完成 generic settings 显式 allowlist 与 typed value validation；实现 SSH/WSL 独立 target 配置隔离、Local fallback、脱敏持久状态 IPC 和 Settings 告警；新增后端契约 spec，并通过 just ci。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c11aa3f4` | (see git log) |
+
+### Status
+
+[OK] **Completed**
