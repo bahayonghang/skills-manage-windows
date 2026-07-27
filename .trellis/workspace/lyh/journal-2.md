@@ -543,3 +543,24 @@ Bound target identity, cache DB, remote resources, events, and operation logs to
 ### Next Steps
 
 - 父任务 07-24-audit-remediation 现为 12/16，剩余 4 个 planning 子任务
+
+
+## Session 69: 完成启动恢复状态机与前端恢复页
+
+**Date**: 2026-07-28
+**Task**: 完成启动恢复状态机与前端恢复页
+**Branch**: `dev`
+
+### Summary
+
+完成启动恢复状态机与完整前端恢复页：分类目录、数据库打开和 schema 初始化故障，串行重试与 DB/WAL/SHM 备份重建；补齐故障注入、启动恢复 code-spec、just ci 与 Windows cold-start smoke。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `98ce97f` | (see git log) |
+
+### Status
+
+[OK] **Completed**
