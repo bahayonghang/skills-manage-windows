@@ -505,3 +505,41 @@ Bound target identity, cache DB, remote resources, events, and operation logs to
 
 - connect_remote_target 缺测试缝，真实 SSH/WSL snapshot 读/导入未端到端覆盖，需单独 transport seam 重构
 - 父任务 07-24-audit-remediation 剩余 5 个子任务（11/16）
+
+
+## Session 68: 并发作业独占 lease 与迁移协调
+
+**Date**: 2026-07-27
+**Task**: 并发作业独占 lease 与迁移协调
+**Branch**: `dev`
+
+### Summary
+
+用 renderer jobId、独占 RAII lease 和陈旧事件过滤消除 Central update/SkillPort portability 共享取消竞态；legacy Central migration 纳入 Local mutation lock 与 blocking I/O 边界。
+
+### Main Changes
+
+- 新增 fail-closed ExclusiveJobRegistry：同族单 active job、精确 ID 取消、有界 pending cancel、stale lease 隔离与稳定 coded errors
+- 迁移 8 个 start command 与 2 个 cancel command，全部 progress payload 携带 jobId；Zustand 忽略陈旧事件和旧 promise settle
+- 文件 preview 只取得一次 portability lease；Update Center apply 生成 jobId；可见错误统一 formatBackendError 与中英文映射
+- legacy migration 在同一 Local mutation guard 内重查/写 marker，递归 FS 作为一个 run_blocking_fs_with unit
+- 新增后端 exclusive-job lifecycle 与前端 job correlation specs，并同步 mutation-lock/spawn-blocking 契约
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ccc70666` | (see git log) |
+
+### Testing
+
+- [OK] just ci 全绿：前端 1497 passed/1 skipped；Rust 主库 1009 passed/6 ignored，全部 bin/E2E 与 production build 通过
+- [OK] task.py validate 通过（implement/check 各 10 条），git diff --check 通过
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 父任务 07-24-audit-remediation 现为 12/16，剩余 4 个 planning 子任务
