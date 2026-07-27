@@ -37,6 +37,7 @@ import type {
   SshTargetTestResult,
   TagGroup,
   TargetSummary,
+  TargetConfigQuarantineStatus,
   TestSshTargetRequest,
   TestWslTargetRequest,
   UpdateCustomAgentConfig,
@@ -162,6 +163,10 @@ export const IPC_COMMANDS = {
   >(),
   // ── targets ───────────────────────────────────────────────────────────────
   list_targets: command<undefined, TargetSummary[]>(),
+  get_target_config_quarantine_status: command<
+    undefined,
+    TargetConfigQuarantineStatus
+  >(),
   list_wsl_distributions: command<undefined, WslDistributionSummary[]>(),
   create_ssh_target: command<
     { request: CreateSshTargetRequest },

@@ -1,0 +1,8 @@
+{"file": ".trellis/tasks/07-24-settings-domainization/research/live-settings-boundary.md", "reason": "Verify implementation against the live setter inventory and credential constraints"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "Audit logs, metadata, IPC, and UI for raw target or credential leakage"}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "Check error variants and command-boundary coded strings"}
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "Check typed command registration and browser/test seams"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "Check startup and Settings error/quarantine feedback"}
+{"file": ".trellis/spec/frontend/settings-structure.md", "reason": "Check warning placement and Settings layout conventions"}
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "Require the repository aggregate gate before closeout"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Review DB-to-UI data flow and failure behavior end to end"}

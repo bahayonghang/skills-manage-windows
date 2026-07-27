@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/07-24-settings-domainization/research/live-settings-boundary.md", "reason": "Live key inventory, target recovery gap, credential boundary, and UI evidence"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "Quarantine metadata and logs must not persist raw target configuration or credentials"}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "Preserve backend domain error layering and stable IPC error strings"}
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "Add the quarantine status command through the typed frontend IPC adapter"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "Keep startup recovery state visible instead of swallowing async failures"}
+{"file": ".trellis/spec/frontend/settings-structure.md", "reason": "Place persistent quarantine state inside the existing flat Connections settings structure"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Coordinate DB, Rust target loader, IPC, store, and Settings UI contracts"}

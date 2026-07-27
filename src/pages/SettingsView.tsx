@@ -91,6 +91,8 @@ export function SettingsView() {
     loadMarketplaceSkills,
     targets,
     activeTarget,
+    quarantineStatus,
+    quarantineStatusError,
     wslDistributions,
     isLoadingTargets,
     isLoadingWslDistributions,
@@ -548,6 +550,8 @@ export function SettingsView() {
               sshTargetPasswordUpdates={sshTargetPasswordUpdates}
               switchingTargetId={switchingTargetId}
               targetMessage={targetMessage}
+              quarantineStatus={quarantineStatus}
+              quarantineStatusError={quarantineStatusError}
               targets={targets}
               testingTargetId={testingTargetId}
               updatingPasswordTargetId={updatingPasswordTargetId}

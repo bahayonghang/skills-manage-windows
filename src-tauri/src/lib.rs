@@ -280,6 +280,12 @@ pub fn run() {
             ) {
                 tracing::warn!(code = error.code(), "Local Central operation recovery remains pending");
             }
+            if tauri::async_runtime::block_on(targets::recover_target_config(&pool)).is_err() {
+                tracing::warn!(
+                    code = "target_config_recovery_failed",
+                    "Target configuration recovery remains pending"
+                );
+            }
 
             let secrets: Arc<dyn secrets::SecretStore> =
                 Arc::new(secrets::SystemSecretStore::default());
@@ -363,6 +369,7 @@ pub fn run() {
             commands::app_runtime::get_app_runtime_info,
             // Targets
             commands::targets::list_targets,
+            commands::targets::get_target_config_quarantine_status,
             commands::targets::list_wsl_distributions,
             commands::targets::create_ssh_target,
             commands::targets::update_ssh_target,

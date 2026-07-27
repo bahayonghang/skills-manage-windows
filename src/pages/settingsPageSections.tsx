@@ -29,6 +29,7 @@ import type {
   LocalRemoteSyncPreview,
   ScanDirectory,
   TargetSummary,
+  TargetConfigQuarantineStatus,
   WslDistributionSummary,
 } from "@/types";
 import type {
@@ -101,6 +102,8 @@ export interface SettingsPageSectionsProps {
   sshTargetPasswordUpdates: Record<string, string>;
   switchingTargetId: string | null;
   targetMessage: { type: "success" | "error"; text: string } | null;
+  quarantineStatus: TargetConfigQuarantineStatus | null;
+  quarantineStatusError: string | null;
   targets: TargetSummary[];
   testingTargetId: string | null;
   updatingPasswordTargetId: string | null;
@@ -250,6 +253,8 @@ function SettingsConnectionsPage(props: SettingsPageSectionsProps) {
         sshTargetForm={props.sshTargetForm}
         sshTargetPasswordUpdates={props.sshTargetPasswordUpdates}
         targetMessage={props.targetMessage}
+        quarantineStatus={props.quarantineStatus}
+        quarantineStatusError={props.quarantineStatusError}
         targets={props.targets}
         testingTargetId={props.testingTargetId}
         updatingPasswordTargetId={props.updatingPasswordTargetId}

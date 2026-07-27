@@ -41,11 +41,19 @@ const wslTarget: TargetSummary = {
   isActive: false,
 };
 
+const healthyQuarantineStatus = {
+  version: 1 as const,
+  incidents: [],
+  activeTargetReset: false,
+};
+
 describe("targetStore", () => {
   beforeEach(() => {
     useTargetStore.setState({
       targets: [localTarget],
       activeTarget: localTarget,
+      quarantineStatus: null,
+      quarantineStatusError: null,
       wslDistributions: [],
       isLoading: false,
       isLoadingWslDistributions: false,
@@ -62,21 +70,25 @@ describe("targetStore", () => {
   });
 
   it("loads targets and resolves the active target", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce([
-      { ...localTarget, isActive: false },
-      { ...sshTarget, isActive: true },
-    ]);
+    vi.mocked(invoke)
+      .mockResolvedValueOnce([
+        { ...localTarget, isActive: false },
+        { ...sshTarget, isActive: true },
+      ])
+      .mockResolvedValueOnce(healthyQuarantineStatus);
 
     await useTargetStore.getState().loadTargets();
 
     expect(invoke).toHaveBeenCalledWith("list_targets");
+    expect(invoke).toHaveBeenCalledWith("get_target_config_quarantine_status");
     expect(useTargetStore.getState().activeTarget.id).toBe("ssh-demo");
   });
 
   it("creates an ssh target through the backend command", async () => {
     vi.mocked(invoke)
       .mockResolvedValueOnce(sshTarget)
-      .mockResolvedValueOnce([localTarget, sshTarget]);
+      .mockResolvedValueOnce([localTarget, sshTarget])
+      .mockResolvedValueOnce(healthyQuarantineStatus);
 
     const result = await useTargetStore.getState().createSshTarget({
       label: "Lab",
@@ -102,7 +114,8 @@ describe("targetStore", () => {
     const passwordTarget = { ...sshTarget, authMethod: "password" as const };
     vi.mocked(invoke)
       .mockResolvedValueOnce(passwordTarget)
-      .mockResolvedValueOnce([localTarget, passwordTarget]);
+      .mockResolvedValueOnce([localTarget, passwordTarget])
+      .mockResolvedValueOnce(healthyQuarantineStatus);
 
     const result = await useTargetStore.getState().createSshTarget({
       label: "Lab",
@@ -138,7 +151,8 @@ describe("targetStore", () => {
     };
     vi.mocked(invoke)
       .mockResolvedValueOnce(updatedTarget)
-      .mockResolvedValueOnce([localTarget, updatedTarget]);
+      .mockResolvedValueOnce([localTarget, updatedTarget])
+      .mockResolvedValueOnce(healthyQuarantineStatus);
 
     const result = await useTargetStore.getState().updateSshTarget({
       id: "ssh-demo",
@@ -204,7 +218,8 @@ describe("targetStore", () => {
   it("creates a wsl target through the backend command", async () => {
     vi.mocked(invoke)
       .mockResolvedValueOnce(wslTarget)
-      .mockResolvedValueOnce([localTarget, wslTarget]);
+      .mockResolvedValueOnce([localTarget, wslTarget])
+      .mockResolvedValueOnce(healthyQuarantineStatus);
 
     const result = await useTargetStore.getState().createWslTarget({
       label: "Ubuntu",
@@ -229,7 +244,8 @@ describe("targetStore", () => {
     };
     vi.mocked(invoke)
       .mockResolvedValueOnce(updatedTarget)
-      .mockResolvedValueOnce([localTarget, updatedTarget]);
+      .mockResolvedValueOnce([localTarget, updatedTarget])
+      .mockResolvedValueOnce(healthyQuarantineStatus);
 
     const result = await useTargetStore.getState().updateWslTarget({
       id: "wsl-ubuntu",
@@ -275,7 +291,8 @@ describe("targetStore", () => {
       .mockResolvedValueOnce([
         { ...localTarget, isActive: false },
         { ...sshTarget, isActive: true },
-      ]);
+      ])
+      .mockResolvedValueOnce(healthyQuarantineStatus);
 
     await useTargetStore.getState().switchTarget("ssh-demo");
 
@@ -297,7 +314,8 @@ describe("targetStore", () => {
       .mockResolvedValueOnce([
         { ...localTarget, isActive: false },
         { ...sshTarget, hasStoredPassword: true, credentialStatus: "stored", isActive: true },
-      ]);
+      ])
+      .mockResolvedValueOnce(healthyQuarantineStatus);
 
     const result = await useTargetStore
       .getState()
@@ -311,5 +329,44 @@ describe("targetStore", () => {
       password: "secret",
     });
     expect(invoke).toHaveBeenCalledWith("list_targets");
+  });
+
+  it("persists quarantine status across repeated target reloads", async () => {
+    const status = {
+      version: 1 as const,
+      incidents: [
+        {
+          domain: "ssh" as const,
+          detectedAt: "2026-07-27T10:00:00Z",
+          reasonCode: "invalid_json",
+          sourceBytes: 128,
+          sourceSha256: "a".repeat(64),
+        },
+      ],
+      activeTargetReset: true,
+    };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce([localTarget])
+      .mockResolvedValueOnce(status)
+      .mockResolvedValueOnce([localTarget])
+      .mockResolvedValueOnce(status);
+
+    await useTargetStore.getState().loadTargets();
+    await useTargetStore.getState().loadTargets();
+
+    expect(useTargetStore.getState().quarantineStatus).toEqual(status);
+  });
+
+  it("keeps the last quarantine status when the status command fails", async () => {
+    useTargetStore.setState({ quarantineStatus: healthyQuarantineStatus });
+    vi.mocked(invoke)
+      .mockResolvedValueOnce([localTarget])
+      .mockRejectedValueOnce("status unavailable");
+
+    await useTargetStore.getState().loadTargets();
+
+    expect(useTargetStore.getState().targets).toEqual([localTarget]);
+    expect(useTargetStore.getState().quarantineStatus).toEqual(healthyQuarantineStatus);
+    expect(useTargetStore.getState().quarantineStatusError).toBe("status unavailable");
   });
 });

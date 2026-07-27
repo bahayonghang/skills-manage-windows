@@ -1,3 +1,4 @@
+use super::config::load_target_config_snapshot;
 use super::*;
 pub async fn create_ssh_target_impl(
     registry: &TargetRegistry,
@@ -409,22 +410,15 @@ pub async fn get_active_target_impl(
 }
 
 pub async fn active_target_id(local_db: &DbPool) -> Result<String, TargetsError> {
-    Ok(db::get_setting(local_db, ACTIVE_TARGET_SETTING_KEY)
+    Ok(load_target_config_snapshot(local_db)
         .await?
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| LOCAL_TARGET_ID.to_string()))
+        .active_target_id)
 }
 
 pub async fn load_remote_targets(
     local_db: &DbPool,
 ) -> Result<Vec<RemoteTargetConfig>, TargetsError> {
-    let Some(raw) = db::get_setting(local_db, TARGETS_SETTING_KEY).await? else {
-        return Ok(Vec::new());
-    };
-    if raw.trim().is_empty() {
-        return Ok(Vec::new());
-    }
-    serde_json::from_str(&raw).map_err(TargetsError::ParseRemoteTargets)
+    Ok(load_target_config_snapshot(local_db).await?.ssh_targets)
 }
 
 pub(super) async fn save_remote_targets(
@@ -436,13 +430,7 @@ pub(super) async fn save_remote_targets(
 }
 
 pub async fn load_wsl_targets(local_db: &DbPool) -> Result<Vec<WslTargetConfig>, TargetsError> {
-    let Some(raw) = db::get_setting(local_db, WSL_TARGETS_SETTING_KEY).await? else {
-        return Ok(Vec::new());
-    };
-    if raw.trim().is_empty() {
-        return Ok(Vec::new());
-    }
-    serde_json::from_str(&raw).map_err(TargetsError::ParseWslTargets)
+    Ok(load_target_config_snapshot(local_db).await?.wsl_targets)
 }
 
 pub(super) async fn save_wsl_targets(

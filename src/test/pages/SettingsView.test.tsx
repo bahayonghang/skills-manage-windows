@@ -8,6 +8,7 @@ import {
   ScanDirectory,
   AgentWithStatus,
   TargetSummary,
+  TargetConfigQuarantineStatus,
   GitHubPatState,
   WslDistributionSummary,
 } from "@/types";
@@ -197,6 +198,8 @@ function setupMocks({
   setAgentEnabled = vi.fn(),
   targets = [{ id: "local", kind: "local" as const, label: "Local", isActive: true }] as TargetSummary[],
   activeTarget = { id: "local", kind: "local" as const, label: "Local", isActive: true } as TargetSummary,
+  quarantineStatus = null as TargetConfigQuarantineStatus | null,
+  quarantineStatusError = null as string | null,
   wslDistributions = [] as WslDistributionSummary[],
   loadTargets = vi.fn(),
   loadWslDistributions = vi.fn().mockResolvedValue(undefined),
@@ -315,6 +318,8 @@ function setupMocks({
     selector({
       targets,
       activeTarget,
+      quarantineStatus,
+      quarantineStatusError,
       wslDistributions,
       isLoading: false,
       isLoadingWslDistributions,
@@ -978,6 +983,64 @@ describe("SettingsView", () => {
       "password"
     );
     expect(screen.queryByRole("button", { name: /显示.*令牌|隐藏.*令牌/ })).toBeNull();
+  });
+
+  it("keeps sanitized target quarantine evidence visible after a view reload", () => {
+    const quarantineStatus: TargetConfigQuarantineStatus = {
+      version: 1,
+      incidents: [
+        {
+          domain: "ssh",
+          detectedAt: "2026-07-27T10:00:00Z",
+          reasonCode: "invalid_schema",
+          sourceBytes: 321,
+          sourceSha256: "abcdef1234567890".padEnd(64, "0"),
+        },
+        {
+          domain: "wsl",
+          detectedAt: "2026-07-27T11:00:00Z",
+          reasonCode: "invalid_json",
+          sourceBytes: 99,
+          sourceSha256: "123456abcdef7890".padEnd(64, "0"),
+        },
+      ],
+      activeTargetReset: true,
+    };
+    setupMocks({ quarantineStatus });
+
+    const first = renderSettingsView("/settings/connections");
+    expect(
+      screen.getByText("已隔离无效的目标配置").closest('[role="status"]'),
+    ).not.toBeNull();
+    expect(screen.getByText(/SSH.*321 字节.*abcdef123456/)).toBeTruthy();
+    expect(screen.getByText(/WSL.*99 字节.*123456abcdef/)).toBeTruthy();
+    expect(screen.getByText(/已回退到本机/)).toBeTruthy();
+    expect(screen.queryByText(/plaintext-secret|protectedPassword|private-host/)).toBeNull();
+
+    first.unmount();
+    renderSettingsView("/settings/connections");
+    expect(screen.getByText("已隔离无效的目标配置")).toBeTruthy();
+  });
+
+  it("does not show a quarantine warning for a healthy status", () => {
+    setupMocks({
+      quarantineStatus: {
+        version: 1,
+        incidents: [],
+        activeTargetReset: false,
+      },
+    });
+    renderSettingsView("/settings/connections");
+
+    expect(screen.queryByText("已隔离无效的目标配置")).toBeNull();
+  });
+
+  it("shows a sanitized warning when quarantine status cannot be loaded", () => {
+    setupMocks({ quarantineStatusError: "database error: plaintext-secret" });
+    renderSettingsView("/settings/connections");
+
+    expect(screen.getByText(/无法读取目标恢复状态/)).toBeTruthy();
+    expect(screen.queryByText(/plaintext-secret/)).toBeNull();
   });
 
   it("saves the github pat from settings", async () => {

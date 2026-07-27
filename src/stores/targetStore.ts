@@ -4,6 +4,7 @@ import {
   CreateSshTargetRequest,
   CreateWslTargetRequest,
   SshTargetTestResult,
+  TargetConfigQuarantineStatus,
   TargetSummary,
   TestSshTargetRequest,
   TestWslTargetRequest,
@@ -23,6 +24,8 @@ const LOCAL_TARGET: TargetSummary = {
 interface TargetState {
   targets: TargetSummary[];
   activeTarget: TargetSummary;
+  quarantineStatus: TargetConfigQuarantineStatus | null;
+  quarantineStatusError: string | null;
   wslDistributions: WslDistributionSummary[];
   isLoading: boolean;
   isLoadingWslDistributions: boolean;
@@ -75,6 +78,8 @@ function markActive(
 export const useTargetStore = create<TargetState>((set, get) => ({
   targets: [LOCAL_TARGET],
   activeTarget: LOCAL_TARGET,
+  quarantineStatus: null,
+  quarantineStatusError: null,
   wslDistributions: [],
   isLoading: false,
   isLoadingWslDistributions: false,
@@ -88,18 +93,44 @@ export const useTargetStore = create<TargetState>((set, get) => ({
   wslDistributionError: null,
 
   loadTargets: async () => {
-    set({ isLoading: true, error: null });
-    try {
-      const targets = await invoke("list_targets");
+    set({ isLoading: true, error: null, quarantineStatusError: null });
+    const [targetsResult, quarantineResult] = await Promise.allSettled([
+      invoke("list_targets"),
+      invoke("get_target_config_quarantine_status"),
+    ]);
+
+    if (targetsResult.status === "rejected") {
       set({
-        targets: targets ?? [LOCAL_TARGET],
-        activeTarget: resolveActiveTarget(targets ?? [LOCAL_TARGET]),
+        targets: [LOCAL_TARGET],
+        activeTarget: LOCAL_TARGET,
+        error: String(targetsResult.reason),
+        quarantineStatus:
+          quarantineResult.status === "fulfilled"
+            ? quarantineResult.value
+            : get().quarantineStatus,
+        quarantineStatusError:
+          quarantineResult.status === "rejected"
+            ? String(quarantineResult.reason)
+            : null,
         isLoading: false,
       });
-    } catch (err) {
-      set({ error: String(err), isLoading: false });
-      throw err;
+      throw targetsResult.reason;
     }
+
+    const targets = targetsResult.value ?? [LOCAL_TARGET];
+    set({
+      targets,
+      activeTarget: resolveActiveTarget(targets),
+      quarantineStatus:
+        quarantineResult.status === "fulfilled"
+          ? quarantineResult.value
+          : get().quarantineStatus,
+      quarantineStatusError:
+        quarantineResult.status === "rejected"
+          ? String(quarantineResult.reason)
+          : null,
+      isLoading: false,
+    });
   },
 
   loadWslDistributions: async () => {

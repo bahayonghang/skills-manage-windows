@@ -13,6 +13,7 @@ use crate::db::{self, DbPool};
 
 mod askpass;
 mod commands;
+mod config;
 mod cred;
 mod error;
 mod exec;
@@ -29,6 +30,7 @@ mod wsl_discovery;
 #[cfg(test)]
 use askpass::*;
 use commands::*;
+pub use config::{get_target_config_quarantine_status_impl, recover_target_config};
 use cred::*;
 use exec::*;
 use model::*;

@@ -24,3 +24,4 @@
 - [Skill Deletion Integrity Contract](./skill-deletion-integrity.md)
 - [Versioned SQLite Migration Contract](./database-migrations.md)
 - [Recoverable FS + DB Operation Journal Contract](./fs-db-operation-journal.md)
+- [Settings Domain Boundary and Target Quarantine Contract](./settings-domain-boundary.md)

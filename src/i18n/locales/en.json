@@ -149,6 +149,13 @@
     "symlinkDisabled": "This remote target does not support symlink install.",
     "projectModeUnsupported": "Project-scoped install is not available for this target.",
     "centralUpdatesUnsupported": "Remote Central update checks are not available in this version.",
+    "quarantine": {
+      "title": "Invalid target configuration was isolated",
+      "description": "The affected target domain was reset as a whole. Only diagnostic metadata is retained; the original configuration and credentials are not available here.",
+      "statusUnavailable": "Target recovery status could not be loaded. Target configuration safety cannot be confirmed until the status is available.",
+      "incident": "{{domain}} · {{time}} · {{bytes}} bytes · SHA-256 {{digest}}…",
+      "localFallback": "The active target was reset to Local because it was no longer valid."
+    },
     "pathCopied": "Remote path copied",
     "quickSwitch": {
       "trigger": "Switch active target",

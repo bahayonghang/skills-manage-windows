@@ -75,6 +75,10 @@ export function useSettingsViewBindings() {
 
   const targets = useTargetStore((state) => state.targets);
   const activeTarget = useTargetStore((state) => state.activeTarget);
+  const quarantineStatus = useTargetStore((state) => state.quarantineStatus);
+  const quarantineStatusError = useTargetStore(
+    (state) => state.quarantineStatusError
+  );
   const wslDistributions = useTargetStore((state) => state.wslDistributions);
   const isLoadingTargets = useTargetStore((state) => state.isLoading);
   const isLoadingWslDistributions = useTargetStore(
@@ -160,6 +164,8 @@ export function useSettingsViewBindings() {
     loadMarketplaceSkills,
     targets,
     activeTarget,
+    quarantineStatus,
+    quarantineStatusError,
     wslDistributions,
     isLoadingTargets,
     isLoadingWslDistributions,

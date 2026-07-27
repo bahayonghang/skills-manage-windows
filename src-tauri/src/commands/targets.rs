@@ -5,10 +5,11 @@ use crate::operation_log::{
 };
 use crate::targets::{
     create_ssh_target_impl, create_wsl_target_impl, delete_target_impl, get_active_target_impl,
-    list_wsl_distributions_impl, set_active_target_impl, test_ssh_target_impl,
-    test_wsl_target_impl, update_ssh_target_impl, update_ssh_target_password_impl,
-    update_wsl_target_impl, CreateSshTargetRequest, CreateWslTargetRequest, SshTargetTestResult,
-    TargetKind, TargetSummary, TestSshTargetRequest, TestWslTargetRequest, UpdateSshTargetRequest,
+    get_target_config_quarantine_status_impl, list_wsl_distributions_impl, set_active_target_impl,
+    test_ssh_target_impl, test_wsl_target_impl, update_ssh_target_impl,
+    update_ssh_target_password_impl, update_wsl_target_impl, CreateSshTargetRequest,
+    CreateWslTargetRequest, SshTargetTestResult, TargetConfigQuarantineStatus, TargetKind,
+    TargetSummary, TestSshTargetRequest, TestWslTargetRequest, UpdateSshTargetRequest,
     UpdateWslTargetRequest, WslDistributionSummary, WslTargetTestResult,
 };
 use crate::AppState;
@@ -28,6 +29,15 @@ pub async fn list_targets(state: State<'_, AppState>) -> Result<Vec<TargetSummar
         .list_targets(&state.db)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_target_config_quarantine_status(
+    state: State<'_, AppState>,
+) -> Result<TargetConfigQuarantineStatus, String> {
+    get_target_config_quarantine_status_impl(&state.db)
+        .await
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

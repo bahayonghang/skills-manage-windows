@@ -38,6 +38,11 @@ const WSL_ONLY_ERROR = "WSL targets are available only in the Tauri app.";
 export function registerTargetFixtures(): void {
   registerIpcFixtures({
     list_targets: () => [LOCAL_TARGET, LONG_PATH_SSH_TARGET],
+    get_target_config_quarantine_status: () => ({
+      version: 1,
+      incidents: [],
+      activeTargetReset: false,
+    }),
     list_wsl_distributions: () => BROWSER_FIXTURE_WSL_DISTRIBUTIONS,
     // 建远程目标依赖真实 SSH/WSL，浏览器演示态保持「仅桌面可用」语义
     create_ssh_target: () => Promise.reject(SSH_ONLY_ERROR),

@@ -1,3 +1,4 @@
+use super::config::load_target_config_snapshot;
 use super::*;
 pub struct TargetRegistry {
     pools: Mutex<HashMap<String, DbPool>>,
@@ -333,7 +334,8 @@ impl TargetRegistry {
         &self,
         local_db: &DbPool,
     ) -> Result<Vec<TargetSummary>, TargetsError> {
-        let active_id = active_target_id(local_db).await?;
+        let snapshot = load_target_config_snapshot(local_db).await?;
+        let active_id = snapshot.active_target_id;
         let mut targets = vec![TargetSummary {
             id: LOCAL_TARGET_ID.to_string(),
             kind: TargetKind::Local,
@@ -354,10 +356,10 @@ impl TargetRegistry {
             is_active: active_id == LOCAL_TARGET_ID,
         }];
 
-        for target in load_remote_targets(local_db).await? {
+        for target in snapshot.ssh_targets {
             targets.push(self.target_summary(&target, active_id.as_str()));
         }
-        for target in load_wsl_targets(local_db).await? {
+        for target in snapshot.wsl_targets {
             targets.push(self.wsl_target_summary(&target, active_id.as_str()));
         }
 
@@ -365,24 +367,8 @@ impl TargetRegistry {
     }
 
     pub async fn active_target(&self, local_db: &DbPool) -> Result<ActiveTarget, TargetsError> {
-        let active_id = active_target_id(local_db).await?;
-        self.active_target_by_id(local_db, &active_id).await
-    }
-
-    async fn active_target_by_id(
-        &self,
-        local_db: &DbPool,
-        active_id: &str,
-    ) -> Result<ActiveTarget, TargetsError> {
-        self.target_by_id(local_db, active_id)
-            .await
-            .map_err(|error| {
-                if active_id == LOCAL_TARGET_ID {
-                    error
-                } else {
-                    TargetsError::ActiveTargetMissing(active_id.to_string())
-                }
-            })
+        let snapshot = load_target_config_snapshot(local_db).await?;
+        self.target_from_snapshot(snapshot, None)
     }
 
     pub async fn target_by_id(
@@ -390,13 +376,22 @@ impl TargetRegistry {
         local_db: &DbPool,
         target_id: &str,
     ) -> Result<ActiveTarget, TargetsError> {
-        let target_id = target_id.trim();
+        let snapshot = load_target_config_snapshot(local_db).await?;
+        self.target_from_snapshot(snapshot, Some(target_id.trim()))
+    }
+
+    fn target_from_snapshot(
+        &self,
+        snapshot: super::config::TargetConfigSnapshot,
+        requested_target_id: Option<&str>,
+    ) -> Result<ActiveTarget, TargetsError> {
+        let target_id = requested_target_id.unwrap_or(&snapshot.active_target_id);
         if target_id == LOCAL_TARGET_ID {
             return Ok(ActiveTarget::Local);
         }
 
-        let mut target = load_remote_targets(local_db)
-            .await?
+        let mut target = snapshot
+            .ssh_targets
             .into_iter()
             .find(|target| target.id == target_id)
             .map(|target| ActiveTarget::Ssh(Box::new(target)));
@@ -407,8 +402,8 @@ impl TargetRegistry {
             return Ok(target);
         }
 
-        if let Some(target) = load_wsl_targets(local_db)
-            .await?
+        if let Some(target) = snapshot
+            .wsl_targets
             .into_iter()
             .find(|target| target.id == target_id)
         {
@@ -426,8 +421,7 @@ impl TargetRegistry {
         &self,
         local_db: &DbPool,
     ) -> Result<TargetContext, TargetsError> {
-        let active_id = active_target_id(local_db).await?;
-        let target = self.active_target_by_id(local_db, &active_id).await?;
+        let target = self.active_target(local_db).await?;
         let db = self.db_for_target(local_db, &target).await?;
         Ok(TargetContext::new(target, db))
     }

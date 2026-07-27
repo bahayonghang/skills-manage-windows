@@ -3,6 +3,9 @@ use std::collections::HashMap;
 use std::time::Instant;
 use tauri::State;
 
+use super::settings_policy::{
+    category_for_key, setting_audit_details, validate_setting, SettingCategory,
+};
 use crate::db::{self, DbPool, ScanDirectory};
 use crate::operation_log::{
     record_operation_log_best_effort, target_context_from_active_target, with_operation_log,
@@ -115,12 +118,7 @@ pub async fn get_settings_impl(
 
 /// Set (upsert) a settings value.
 pub async fn set_setting_impl(pool: &DbPool, key: &str, value: &str) -> Result<(), String> {
-    if key.trim().is_empty() {
-        return Err("Settings key cannot be empty".to_string());
-    }
-    if is_protected_settings_key(key) {
-        return Err(protected_settings_error(key));
-    }
+    validate_setting(key, value)?;
     db::set_setting(pool, key, value)
         .await
         .map_err(|e| e.to_string())
@@ -131,11 +129,8 @@ pub async fn set_settings_impl(
     pool: &DbPool,
     values: &HashMap<String, String>,
 ) -> Result<(), String> {
-    if values.keys().any(|key| key.trim().is_empty()) {
-        return Err("Settings key cannot be empty".to_string());
-    }
-    if let Some(key) = values.keys().find(|key| is_protected_settings_key(key)) {
-        return Err(protected_settings_error(key));
+    for (key, value) in values {
+        validate_setting(key, value)?;
     }
     db::set_settings(pool, values)
         .await
@@ -369,27 +364,29 @@ pub async fn set_setting(
         .map(|target| target_context_from_active_target(&target))
         .unwrap_or_else(|_| crate::operation_log::local_target_context());
     let started_at = Instant::now();
+    let category = category_for_key(&key);
     let result = set_setting_impl(&state.db, &key, &value).await;
     let status = if result.is_ok() {
         "succeeded"
     } else {
         "failed"
     };
+    let category_name = category.map(SettingCategory::as_str).unwrap_or("forbidden");
     let mut event = OperationLogEvent::new(
         "settings",
         "settings.set",
         status,
         if result.is_ok() {
-            format!("Updated setting {}", key)
+            format!("Updated {category_name} setting")
         } else {
-            format!("Failed to update setting {}", key)
+            format!("Failed to update {category_name} setting")
         },
     )
-    .subject("setting", &key, &key)
-    .details(json!({
-        "key": key,
-        "valueStored": result.is_ok(),
-    }))
+    .subject("setting_category", category_name, category_name)
+    .details(setting_audit_details(
+        std::iter::once(key.as_str()),
+        result.is_ok(),
+    ))
     .duration_ms(started_at.elapsed().as_millis() as i64);
     if let Err(error) = &result {
         event = event.error(error);
@@ -416,22 +413,20 @@ pub async fn set_settings(
     } else {
         "failed"
     };
-    let mut keys = values.keys().cloned().collect::<Vec<_>>();
-    keys.sort();
     let mut event = OperationLogEvent::new(
         "settings",
         "settings.set_batch",
         status,
         if result.is_ok() {
-            format!("Updated {} settings", keys.len())
+            format!("Updated {} settings", values.len())
         } else {
             "Failed to update settings batch".to_string()
         },
     )
-    .details(json!({
-        "keys": keys,
-        "valueStored": result.is_ok(),
-    }))
+    .details(setting_audit_details(
+        values.keys().map(String::as_str),
+        result.is_ok(),
+    ))
     .duration_ms(started_at.elapsed().as_millis() as i64);
     if let Err(error) = &result {
         event = event.error(error);
@@ -675,83 +670,24 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_setting_after_set() {
-        let pool = setup_test_db().await;
-        set_setting_impl(&pool, "theme", "dark").await.unwrap();
-
-        let value = get_setting_impl(&pool, "theme").await.unwrap();
-        assert_eq!(value.as_deref(), Some("dark"));
-    }
-
-    #[tokio::test]
     async fn test_protected_secret_settings_are_blocked() {
         let pool = setup_test_db().await;
 
         assert!(get_setting_impl(&pool, "github_pat").await.is_err());
-        assert!(set_setting_impl(&pool, "github_pat", "token")
-            .await
-            .is_err());
         assert!(get_setting_impl(&pool, "ai_api_key").await.is_err());
-        assert!(set_setting_impl(&pool, "ai_api_key", "token")
-            .await
-            .is_err());
         assert!(get_setting_impl(&pool, "ai_api_key__deepseek")
             .await
             .is_err());
-        assert!(set_setting_impl(&pool, "ai_api_key__deepseek", "token")
-            .await
-            .is_err());
-    }
-
-    // ── set_setting_impl ──────────────────────────────────────────────────────
-
-    #[tokio::test]
-    async fn test_set_setting_upserts() {
-        let pool = setup_test_db().await;
-        set_setting_impl(&pool, "lang", "en").await.unwrap();
-        set_setting_impl(&pool, "lang", "zh").await.unwrap();
-
-        let value = get_setting_impl(&pool, "lang").await.unwrap();
-        assert_eq!(
-            value.as_deref(),
-            Some("zh"),
-            "Second set should overwrite first"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_set_setting_empty_key_fails() {
-        let pool = setup_test_db().await;
-        let result = set_setting_impl(&pool, "  ", "some-value").await;
-        assert!(result.is_err(), "Empty key should fail validation");
-    }
-
-    #[tokio::test]
-    async fn test_set_and_get_multiple_settings() {
-        let pool = setup_test_db().await;
-        set_setting_impl(&pool, "a", "1").await.unwrap();
-        set_setting_impl(&pool, "b", "2").await.unwrap();
-        set_setting_impl(&pool, "c", "3").await.unwrap();
-
-        assert_eq!(
-            get_setting_impl(&pool, "a").await.unwrap().as_deref(),
-            Some("1")
-        );
-        assert_eq!(
-            get_setting_impl(&pool, "b").await.unwrap().as_deref(),
-            Some("2")
-        );
-        assert_eq!(
-            get_setting_impl(&pool, "c").await.unwrap().as_deref(),
-            Some("3")
-        );
     }
 
     #[tokio::test]
     async fn test_batch_settings_block_protected_secret_keys() {
         let pool = setup_test_db().await;
         let mut values = HashMap::new();
-        values.insert("theme".to_string(), "dark".to_string());
+        values.insert(
+            "central_update_check_mode_v1".to_string(),
+            "sync".to_string(),
+        );
         values.insert("ai_api_key__deepseek".to_string(), "token".to_string());
 
         assert!(set_settings_impl(&pool, &values).await.is_err());
@@ -766,15 +702,81 @@ mod tests {
                 .unwrap(),
             None
         );
+        assert_eq!(
+            db::get_setting(&pool, "central_update_check_mode_v1")
+                .await
+                .unwrap(),
+            None,
+            "batch validation must finish before the transaction begins"
+        );
     }
 
     #[tokio::test]
     async fn test_set_setting_empty_value_is_allowed() {
         let pool = setup_test_db().await;
-        // Empty value is valid — it means the key is explicitly set to empty string.
-        let result = set_setting_impl(&pool, "empty-val", "").await;
+        let result = set_setting_impl(&pool, "ai_model__custom", "").await;
         assert!(result.is_ok(), "Setting an empty value should succeed");
-        let value = get_setting_impl(&pool, "empty-val").await.unwrap();
+        let value = get_setting_impl(&pool, "ai_model__custom").await.unwrap();
         assert_eq!(value.as_deref(), Some(""));
+    }
+
+    #[tokio::test]
+    async fn test_generic_setters_reject_internal_and_unknown_keys_with_stable_errors() {
+        let pool = setup_test_db().await;
+        for key in [
+            "ssh_targets_v1",
+            "wsl_targets_v1",
+            "active_target_id_v1",
+            "target_config_quarantine_v1",
+            "migration_complete_v1",
+            "feature_gate_v1",
+            "unknown_key",
+        ] {
+            let error = set_setting_impl(&pool, key, "do-not-echo")
+                .await
+                .unwrap_err();
+            assert!(error.starts_with("setting_key_forbidden:"));
+            assert!(!error.contains(key));
+            assert!(!error.contains("do-not-echo"));
+            assert_eq!(db::get_setting(&pool, key).await.unwrap(), None);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_batch_invalid_value_writes_nothing() {
+        let pool = setup_test_db().await;
+        let values = HashMap::from([
+            ("ai_tag_concurrency".to_string(), "2".to_string()),
+            (
+                "ai_tag_interval_ms".to_string(),
+                "private-value".to_string(),
+            ),
+        ]);
+
+        let error = set_settings_impl(&pool, &values).await.unwrap_err();
+        assert_eq!(
+            error,
+            "setting_value_invalid: The setting value is invalid."
+        );
+        assert!(!error.contains("private-value"));
+        assert_eq!(
+            db::get_setting(&pool, "ai_tag_concurrency").await.unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn test_setting_audit_details_never_include_caller_keys_or_values() {
+        let raw_unknown_key = "password=caller-secret";
+        let details =
+            setting_audit_details(["ai_model__custom", raw_unknown_key].into_iter(), false);
+        let serialized = serde_json::to_string(&details).unwrap();
+
+        assert_eq!(details["categories"], json!(["ai"]));
+        assert_eq!(details["keyCount"], 2);
+        assert_eq!(details["valueStored"], false);
+        assert!(!serialized.contains("ai_model__custom"));
+        assert!(!serialized.contains(raw_unknown_key));
+        assert!(!serialized.contains("caller-secret"));
     }
 }

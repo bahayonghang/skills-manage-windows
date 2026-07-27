@@ -19,6 +19,7 @@ pub mod saved_views;
 pub mod scanner;
 pub(crate) mod serde_helpers;
 pub mod settings;
+mod settings_policy;
 pub mod skill_update_inventory;
 pub mod skills;
 pub mod tag_groups;

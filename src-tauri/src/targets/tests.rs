@@ -154,7 +154,7 @@ pub(super) mod suite {
     }
 
     #[tokio::test]
-    async fn resolved_context_keeps_owned_target_after_active_target_changes() {
+    async fn resolved_context_keeps_owned_target_while_missing_active_falls_back_to_local() {
         let registry = TargetRegistry::default();
         let pool = memory_db().await;
         let context = registry.resolve_active_context(&pool).await.unwrap();
@@ -166,10 +166,16 @@ pub(super) mod suite {
         assert_eq!(context.id(), LOCAL_TARGET_ID);
         assert_eq!(context.kind(), TargetKind::Local);
         assert!(matches!(context.target(), ActiveTarget::Local));
-        assert!(matches!(
-            registry.resolve_active_context(&pool).await,
-            Err(TargetsError::ActiveTargetMissing(id)) if id == "missing-target"
-        ));
+        let recovered = registry.resolve_active_context(&pool).await.unwrap();
+        assert_eq!(recovered.id(), LOCAL_TARGET_ID);
+        assert!(matches!(recovered.target(), ActiveTarget::Local));
+        assert_eq!(
+            db::get_setting(&pool, ACTIVE_TARGET_SETTING_KEY)
+                .await
+                .unwrap()
+                .as_deref(),
+            Some(LOCAL_TARGET_ID)
+        );
     }
 
     #[tokio::test]
