@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 66
+- **Total Sessions**: 67
 - **Last Active**: 2026-07-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~468 | Active |
+| `journal-2.md` | ~507 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 67 | 2026-07-27 | GitHub 不可变 preview snapshot | `8394e8c7` | `dev` |
 | 66 | 2026-07-27 | 完成 Settings API 域化与目标配置隔离 | `c11aa3f4` | `dev` |
 | 65 | 2026-07-27 | 完成 Release 原子发布门禁 | `3d3473b8` | `dev` |
 | 64 | 2026-07-27 | 完成 FS+DB 可恢复操作协议 | `cf7cee37` | `dev` |

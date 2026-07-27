@@ -466,3 +466,42 @@ Bound target identity, cache DB, remote resources, events, and operation logs to
 ### Status
 
 [OK] **Completed**
+
+
+## Session 67: GitHub 不可变 preview snapshot
+
+**Date**: 2026-07-27
+**Task**: GitHub 不可变 preview snapshot
+**Branch**: `dev`
+
+### Summary
+
+统一 Local/SSH/WSL 的 preview snapshot 注册表，import 与 markdown 读取改为必填 previewId，删除全部分支重拉 fallback；新增 digest v1 与 migration v4 per-skill provenance；六个生命周期错误走稳定 code 信封映射中英文重新预览提示。
+
+### Main Changes
+
+- preview 一次性钉住 commit SHA，tree/raw/tarball 与远程 tarball 全部使用该 SHA，展示数据仍用分支名
+- digest v1：域分隔 + u64 大端长度分帧 + 逐文件 SHA-256，排序在 helper 内部完成
+- snapshot registry 统一三种 target，单 import lease：失败释放可重试、成功原子消费、lease 期间 discard 延迟到 release
+- 删除 resolve_remote_import_workspace 与 fetch_skill_markdown，import/markdown 只读已注册 snapshot
+- migration v4 append-only 追加 nullable resolved_commit_sha/content_digest，写入用 COALESCE 防被无 provenance 写入方擦除
+- spec 新增 Immutable Preview Snapshot Lifecycle 场景与 frontend snapshot token 契约，并修正已过期的 Markdown Fetch Boundary
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8394e8c7` | (see git log) |
+
+### Testing
+
+- [OK] just ci 全绿；cargo test --locked 1014 passed；受影响 Vitest 485 passed
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- connect_remote_target 缺测试缝，真实 SSH/WSL snapshot 读/导入未端到端覆盖，需单独 transport seam 重构
+- 父任务 07-24-audit-remediation 剩余 5 个子任务（11/16）
