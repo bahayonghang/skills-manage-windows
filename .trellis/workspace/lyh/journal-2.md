@@ -424,3 +424,24 @@ Bound target identity, cache DB, remote resources, events, and operation logs to
 ### Status
 
 [OK] **Completed**
+
+
+## Session 65: 完成 Release 原子发布门禁
+
+**Date**: 2026-07-27
+**Task**: 完成 Release 原子发布门禁
+**Branch**: `dev`
+
+### Summary
+
+完成 frozen tag/SHA、可复用 CI、必需平台构建、真实 updater 验签、严格产物与 checksum、draft 回验后唯一公开；独立检查修复 target_commitish 语义与 tag 竞态，just ci 和 Windows NSIS/MSI bundle 通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3d3473b8` | (see git log) |
+
+### Status
+
+[OK] **Completed**
