@@ -57,7 +57,7 @@
 - [x] 检查 diff 只包含本子任务 workflow、scripts/tests、必要 Rust verifier、双语文档和 quality spec；不纳入其他未提交改动。
 - [x] 若 draft upload/verify 失败，保留 draft 供排查并重跑；禁止手工提前 publish。若 workflow 必须回滚，回到 tag/manual + draft 状态机的上一可用提交，不恢复 `release.published` 先公开顺序。
 - [x] 运行 `trellis-check`，修复 context checkout、GitHub `target_commitish` 语义、tag 竞态与最小权限问题。
-- [ ] 提交工作改动后归档本子任务，并在父任务中登记完成与 `07-24-ci-supply-chain` 的后续合并顺序。
+- [x] 提交工作改动后归档本子任务，并在父任务中登记完成与 `07-24-ci-supply-chain` 的后续合并顺序。
 - [x] 不 push、不创建 tag、不执行真实 GitHub 发布；如需远端演练，先列出 tag、SHA、draft side effects 并取得明确授权。
 
 ## 9. 验证证据（2026-07-27）
@@ -78,3 +78,4 @@
 - `python ./.trellis/scripts/task.py validate 07-24-release-pipeline-gate`
   通过，implement/check context 各 4 条。`actionlint` 本机未安装；workflow
   使用 YAML 1.2 contract tests 和完整本地 CI 验证，未把缺失工具记为通过。
+- 本地工作提交：`3d3473b8`；archive 和 journal 仅记录本子任务，不 push。
