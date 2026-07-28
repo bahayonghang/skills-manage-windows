@@ -1,11 +1,19 @@
+use super::super::types::GitHubUpdateSource;
+use super::state::{
+    find_remote_skill_candidate, is_fresh_update_available_state, reused_or_prepared_local_hash,
+};
 use super::*;
 use crate::db::SkillRepository;
-use crate::services::central_updates::collect_remote_added_skills;
-use crate::services::central_updates::fs::RemoteSkillFile;
+use crate::services::central_updates::fs::{
+    collect_remote_skill_files, ensure_remote_skill_manifest, RemoteSkillFile,
+};
 use crate::services::central_updates::repository_sync::build_remote_missing_skills;
+use crate::services::central_updates::{collect_remote_added_skills, repo_cache_key};
+use crate::services::github_import::{GitHubRepoRef, GitHubRepoSnapshot};
 use crate::test_support::mem_pool as setup_test_db;
-use chrono::Duration as ChronoDuration;
+use chrono::{Duration as ChronoDuration, Utc};
 use sqlx::SqlitePool;
+use std::path::Path;
 use tempfile::TempDir;
 
 async fn setup_remote_test_db(remote_home: &Path) -> SqlitePool {

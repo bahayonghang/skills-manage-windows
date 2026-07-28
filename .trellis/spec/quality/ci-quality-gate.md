@@ -47,6 +47,9 @@ web: typecheck -> lint -> capabilitycheck -> sizecheck -> test -> build
 rust: entrypointcheck -> ipc:codegen:check -> fmt --check -> clippy --all-targets --locked -> test --locked
 ```
 
+`pnpm sizecheck` enforces the 800-line limit uniformly across production source
+files. There are no frozen baseline exceptions or per-file allowlist bypasses.
+
 ## 3. Contracts
 
 ### Event contract
@@ -142,6 +145,7 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
 | Signature, metadata, asset inventory, or checksum is invalid | Aggregate/publish fails before `draft=false` |
 | Rust is not formatted | `cargo fmt --check` fails |
 | Renderer capability, plugin wiring, or inventory drifts | `pnpm capabilitycheck` fails before size/test/build |
+| A production source file exceeds 800 lines | `pnpm sizecheck` fails; no per-file baseline exemption is permitted |
 | Rust/Serde IPC metadata drifts from the checked artifact | `pnpm ipc:codegen:check` fails before Rust fmt/Clippy/test |
 | Test/bin target has a Clippy warning | all-target Clippy fails |
 | Cargo lockfile would change | `--locked` command fails |

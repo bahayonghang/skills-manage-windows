@@ -50,8 +50,8 @@ audit. The Windows `just-ci` required check then runs the complete local gate an
 fails if either prerequisite job failed. Routine pull requests do not build
 installers; package smoke remains a manual/release workflow concern.
 
-- Keep production source files under `src/` and `src-tauri/src/` at or below 800 lines whenever practical.
-- The repository currently carries a small frozen allowlist of oversized production files; `pnpm sizecheck` fails if a new file crosses 800 lines or if an allowlisted file grows further.
+- Keep production source files under `src/` and `src-tauri/src/` at or below 800 lines.
+- `pnpm sizecheck` enforces the 800-line limit uniformly; no production file has a per-file allowlist bypass.
 - Components must not call Tauri `invoke()` directly. Route IPC through stores or service-layer helpers so UI code stays testable and platform boundaries remain explicit.
 
 If your change touches UI behavior, include screenshots or a short screen recording in the pull request.
