@@ -68,9 +68,9 @@ function collectUses(value: unknown): string[] {
 }
 
 describe("CI workflow contract", () => {
-  it("runs the quality gate for main pull requests and integration pushes", () => {
+  it("runs the quality gate for main pull requests", () => {
     expect(workflow.on.pull_request).toEqual({ branches: ["main"] });
-    expect(workflow.on.push).toEqual({ branches: ["main", "dev"] });
+    expect(workflow.on.push).toBeUndefined();
     expect(workflow.on.workflow_dispatch).toBeNull();
     expect(workflow.on.release).toBeUndefined();
     expect(workflow.on.workflow_call).toEqual({
