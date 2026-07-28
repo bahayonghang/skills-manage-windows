@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 73
+- **Total Sessions**: 74
 - **Last Active**: 2026-07-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~666 | Active |
+| `journal-2.md` | ~687 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 74 | 2026-07-28 | 优化 Skill Usage 页面体验 | `39f8a674` | `dev` |
 | 73 | 2026-07-28 | 完成极限审计整改父任务验收 | - | `dev` |
 | 72 | 2026-07-28 | 清偿 size budget 历史例外 | `a9a337f3` | `dev` |
 | 71 | 2026-07-28 | 完成 Typed IPC 与结构化错误边界迁移 | `9f7a719f` | `dev` |

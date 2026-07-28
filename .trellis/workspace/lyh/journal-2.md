@@ -664,3 +664,24 @@ Bound target identity, cache DB, remote resources, events, and operation logs to
 ### Status
 
 [OK] **Completed**
+
+
+## Session 74: 优化 Skill Usage 页面体验
+
+**Date**: 2026-07-28
+**Task**: 优化 Skill Usage 页面体验
+**Branch**: `dev`
+
+### Summary
+
+完成扫描骨架、紧凑 KPI、安装状态筛选、匹配状态提示和 target 切换数据重置；通过 just ci 与 1024/1280/1920 浏览器验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `39f8a674` | (see git log) |
+
+### Status
+
+[OK] **Completed**
