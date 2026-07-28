@@ -3,6 +3,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 
 import { useUsageStore } from "@/stores/usageStore";
 import { useTargetStore } from "@/stores/targetStore";
+import { ipcFixtureError } from "@/lib/ipc/errors";
 import { useUsageBootstrap } from "@/pages/skillUsageBindings";
 import {
   ipcInvokeCalls,
@@ -191,7 +192,7 @@ describe("usageStore", () => {
 
   it("refresh writes error on backend failure and stops refreshing", async () => {
     mockIpcCommand("usage_refresh", () =>
-      Promise.reject(new Error("io error")),
+      Promise.reject(ipcFixtureError("storage.unavailable", "io error")),
     );
     const summary = await useUsageStore.getState().refresh(false);
     expect(summary).toBeNull();

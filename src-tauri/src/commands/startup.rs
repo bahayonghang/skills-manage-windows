@@ -13,59 +13,70 @@ pub fn get_startup_status(coordinator: State<'_, StartupCoordinator>) -> Startup
 pub async fn retry_startup(
     app: AppHandle,
     coordinator: State<'_, StartupCoordinator>,
-) -> Result<StartupStatus, String> {
-    let _operation = coordinator.lock_operation().await;
-    if coordinator.status() == StartupStatus::Ready {
-        return Ok(StartupStatus::Ready);
-    }
-    Ok(crate::run_startup_attempt(&app, coordinator.inner(), false).await)
+) -> crate::ipc_error::IpcResult<StartupStatus> {
+    crate::ipc_boundary!(
+        async move {
+            let _operation = coordinator.lock_operation().await;
+            if coordinator.status() == StartupStatus::Ready {
+                return Ok(StartupStatus::Ready);
+            }
+            Ok(crate::run_startup_attempt(&app, coordinator.inner(), false).await)
+        }
+        .await
+    )
 }
 
 #[tauri::command]
 pub async fn rebuild_startup_database(
     app: AppHandle,
     coordinator: State<'_, StartupCoordinator>,
-) -> Result<StartupStatus, String> {
-    let _operation = coordinator.lock_operation().await;
-    let previous = coordinator.status();
-    let diagnostic = match previous {
-        StartupStatus::RecoveryRequired {
-            diagnostic,
-            can_rebuild: true,
-            ..
-        } => diagnostic,
-        _ => {
-            return Err(
-                "startup.rebuild_unavailable: Database rebuild is not available.".to_string(),
-            )
-        }
-    };
-
-    coordinator.set_status(StartupStatus::Checking);
-    match backup_database_set(coordinator.db_path()).await {
-        Ok(_) => Ok(crate::run_startup_attempt(&app, coordinator.inner(), true).await),
-        Err(error) => {
-            tracing::error!(
-                code = StartupIssue::DatabaseRecoveryFailed.code(),
-                error = %error,
-                "Startup database recovery backup failed"
-            );
-            let status = if matches!(error, StartupError::RecoveryRollback { .. }) {
-                StartupStatus::Fatal {
-                    issue: StartupIssue::DatabaseRecoveryFailed,
-                }
-            } else {
+) -> crate::ipc_error::IpcResult<StartupStatus> {
+    crate::ipc_boundary!(
+        async move {
+            let _operation = coordinator.lock_operation().await;
+            let previous = coordinator.status();
+            let diagnostic = match previous {
                 StartupStatus::RecoveryRequired {
-                    issue: StartupIssue::DatabaseRecoveryFailed,
                     diagnostic,
-                    can_rebuild: coordinator.db_path().is_file(),
-                    backup_created: false,
+                    can_rebuild: true,
+                    ..
+                } => diagnostic,
+                _ => {
+                    return Err(
+                        "startup.rebuild_unavailable: Database rebuild is not available."
+                            .to_string(),
+                    )
                 }
             };
-            coordinator.set_status(status.clone());
-            Ok(status)
+
+            coordinator.set_status(StartupStatus::Checking);
+            match backup_database_set(coordinator.db_path()).await {
+                Ok(_) => Ok(crate::run_startup_attempt(&app, coordinator.inner(), true).await),
+                Err(error) => {
+                    tracing::error!(
+                        code = StartupIssue::DatabaseRecoveryFailed.code(),
+                        error = %error,
+                        "Startup database recovery backup failed"
+                    );
+                    let status = if matches!(error, StartupError::RecoveryRollback { .. }) {
+                        StartupStatus::Fatal {
+                            issue: StartupIssue::DatabaseRecoveryFailed,
+                        }
+                    } else {
+                        StartupStatus::RecoveryRequired {
+                            issue: StartupIssue::DatabaseRecoveryFailed,
+                            diagnostic,
+                            can_rebuild: coordinator.db_path().is_file(),
+                            backup_created: false,
+                        }
+                    };
+                    coordinator.set_status(status.clone());
+                    Ok(status)
+                }
+            }
         }
-    }
+        .await
+    )
 }
 
 #[tauri::command]

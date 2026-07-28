@@ -66,6 +66,7 @@ pub struct CentralRepositorySyncSummary {
     pub skipped_remote_added: usize,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralRepositorySyncFailure {
@@ -88,6 +89,7 @@ pub struct CentralRepositorySyncPreview {
 /// Central repository sync confirms additions through its own verified
 /// inventory snapshot, not through a renderer preview token. It therefore
 /// carries no `previewId` and must never fabricate one.
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralRepositoryAddedSkillSelection {
@@ -95,6 +97,7 @@ pub struct CentralRepositoryAddedSkillSelection {
     pub selections: Vec<GitHubSkillImportSelection>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralRepositoryAdditionSkipRequest {
@@ -104,6 +107,7 @@ pub struct CentralRepositoryAdditionSkipRequest {
     pub skill_name: String,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralRepositoryAdditionUnskipRequest {
@@ -117,6 +121,7 @@ pub(crate) struct CentralRemoteAddedCollection {
     pub skipped_remote_added: Vec<CentralRemoteAddedSkill>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralRepositorySyncDecisions {
@@ -129,6 +134,7 @@ pub struct CentralRepositorySyncDecisions {
     pub unskip_additions: Vec<CentralRepositoryAdditionUnskipRequest>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralRepositorySyncApplyResult {
@@ -237,7 +243,7 @@ pub(crate) async fn check_central_repository_sync_impl(
             app,
             job_id,
             "checking",
-            &state_result.status,
+            state_result.status.as_str(),
             total,
             &counters,
             Some(skill),
@@ -269,7 +275,7 @@ pub(crate) async fn check_central_repository_sync_impl(
     .await?;
     let remote_missing_states = states
         .iter()
-        .filter(|state| state.status == SkillUpdateStatus::RemoteMissing.as_str())
+        .filter(|state| state.status == SkillUpdateStatus::RemoteMissing)
         .cloned()
         .collect::<Vec<_>>();
     let remote_missing = build_remote_missing_skills(&repo_by_id, remote_missing_states);

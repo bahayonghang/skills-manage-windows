@@ -68,3 +68,66 @@ expect(ipcInvokeCalls("scan_all_skills")).toHaveLength(1);
 ## 约定 5：调用方分层不变
 
 store 是唯一 invoke 层（`src/stores/` 与少数 lib/hook 基础设施）；组件/页面不得直接 `invoke`，需要 IPC 动作时下沉为 store action（先例：`ObsidianVaultView` 的 `open_obsidian_path` → `obsidianStore.openObsidianPath`）。`listen` 包装在浏览器态返回 no-op unlisten，调用方无需再包 runtime guard。
+
+## Scenario: Rust-Derived Contracts And Structured Rejections
+
+### 1. Scope / Trigger
+
+- 修改 generated command、IPC rejection、fixture failure 或错误 code 分支时适用。
+
+### 2. Signatures
+
+```ts
+type IpcErrorPayload = { code: string; message: string; retryable: boolean };
+class IpcInvokeError extends Error { code: string; retryable: boolean }
+normalizeIpcRejection(error: unknown): Error
+```
+
+`IPC_COMMANDS` 合并 88 个 handwritten 条目与 Rust/Serde 生成的 42 个条目；
+`UNTYPED_IPC_COMMANDS` 固定为剩余 47 个。
+
+### 3. Contracts
+
+- 已有 `IpcInvokeError` 必须原实例透传；有效对象载荷包装为 `IpcInvokeError`。
+- strict legacy `code:message` 仅用于过渡；未知 rejection 使用固定
+  `internal.unexpected`，不得暴露 raw transport 值。
+- `String(error)` 只返回 public message；行为分支读取 `code`，不得嗅探 message。
+- `generatedCommandMap.ts` 只含 phantom args/result 元数据，不 import Tauri、不生成可调用 client。
+- Serde serialize phase 是 result 权威，deserialize phase 是 args 权威；`Option` 的
+  required-null/optional-null 差异必须在 Rust 或真实调用边界解决，禁止 cast to `unknown`。
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+| --- | --- |
+| existing `IpcInvokeError` | same object returned |
+| valid structured payload | wrapper exposes code/message/retryable |
+| missing browser fixture | preserve `IpcFixtureMissingError` |
+| unknown/raw sensitive rejection | fixed safe unexpected error |
+| generated/handwritten overlap | contract test fails |
+| generated artifact contains runtime invoke or `unknown` | contract test fails |
+
+### 5. Good / Base / Bad Cases
+
+- Good: `await invoke("generated_command", args)` infers Rust-derived args/result.
+- Base: a remaining allowlisted command uses the compatibility overload.
+- Bad: explicit generic hides drift, message regex controls behavior, or generated code bypasses `@/lib/ipc`.
+
+### 6. Tests Required
+
+- Adapter tests cover object/coded/plain/unknown rejection, identity pass-through and `String(error)`.
+- Fixture tests use `ipcFixtureError(code, message)` for expected backend failures.
+- Coverage asserts 130 typed / 47 untyped / 177 frontend, 42 generated and seven explicit backend-only handlers.
+- Run `pnpm ipc:codegen:check` twice after generation to prove determinism.
+
+### 7. Wrong vs Correct
+
+```ts
+// Wrong: hides generated contract and branches on prose.
+await invoke<Result>("refresh_skill_update_inventory", args);
+if (String(error).includes("cancel")) return;
+
+// Correct
+await invoke("refresh_skill_update_inventory", args);
+if (parseBackendError(error).code === "operation.cancelled") return;
+```

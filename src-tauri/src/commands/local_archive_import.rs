@@ -34,20 +34,26 @@ pub use crate::services::local_archive_import::{
 pub async fn preview_local_skill_archive(
     state: State<'_, AppState>,
     archive_path: String,
-) -> Result<LocalArchivePreview, String> {
-    let request_context = state.resolve_target_context().await?;
-    let active_target = request_context.target().clone();
-    // ZIP import is local-only for MVP. SSH/WSL targets must disable the
-    // ZIP intent in the frontend; a stray call is rejected here.
-    if !matches!(active_target, ActiveTarget::Local) {
-        return Err(
-            local_archive_import::LocalArchiveImportError::RemoteTargetUnsupported.to_ipc_error(),
-        );
-    }
-    let pool = request_context.db().clone();
-    local_archive_import::preview_local_skill_archive_impl(&pool, &archive_path)
+) -> crate::ipc_error::IpcResult<LocalArchivePreview> {
+    crate::ipc_boundary!(
+        async move {
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            // ZIP import is local-only for MVP. SSH/WSL targets must disable the
+            // ZIP intent in the frontend; a stray call is rejected here.
+            if !matches!(active_target, ActiveTarget::Local) {
+                return Err(
+                    local_archive_import::LocalArchiveImportError::RemoteTargetUnsupported
+                        .to_ipc_error(),
+                );
+            }
+            let pool = request_context.db().clone();
+            local_archive_import::preview_local_skill_archive_impl(&pool, &archive_path)
+                .await
+                .map_err(|e| e.to_ipc_error())
+        }
         .await
-        .map_err(|e| e.to_ipc_error())
+    )
 }
 
 /// Import a local `.zip` skill archive into Central.
@@ -63,35 +69,41 @@ pub async fn import_local_skill_archive(
     expected_fingerprint: ArchiveFingerprint,
     resolution: LocalArchiveImportResolution,
     renamed_skill_id: Option<String>,
-) -> Result<LocalArchiveImportResult, String> {
-    let request_context = state.resolve_target_context().await?;
-    let active_target = request_context.target().clone();
-    if !matches!(active_target, ActiveTarget::Local) {
-        return Err(
-            local_archive_import::LocalArchiveImportError::RemoteTargetUnsupported.to_ipc_error(),
-        );
-    }
-    let target_context = target_context_from_active_target(&active_target);
-    let pool = request_context.db().clone();
-    let started_at = Instant::now();
-    let requested_resolution = resolution.clone();
-    let result = local_archive_import::import_local_skill_archive_impl(
-        &pool,
-        &archive_path,
-        expected_fingerprint,
-        resolution,
-        renamed_skill_id,
+) -> crate::ipc_error::IpcResult<LocalArchiveImportResult> {
+    crate::ipc_boundary!(
+        async move {
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            if !matches!(active_target, ActiveTarget::Local) {
+                return Err(
+                    local_archive_import::LocalArchiveImportError::RemoteTargetUnsupported
+                        .to_ipc_error(),
+                );
+            }
+            let target_context = target_context_from_active_target(&active_target);
+            let pool = request_context.db().clone();
+            let started_at = Instant::now();
+            let requested_resolution = resolution.clone();
+            let result = local_archive_import::import_local_skill_archive_impl(
+                &pool,
+                &archive_path,
+                expected_fingerprint,
+                resolution,
+                renamed_skill_id,
+            )
+            .await;
+            record_local_archive_import_operation(
+                &pool,
+                target_context,
+                &result,
+                &requested_resolution,
+                started_at.elapsed().as_millis() as i64,
+            )
+            .await;
+            result.map_err(|e| e.to_ipc_error())
+        }
+        .await
     )
-    .await;
-    record_local_archive_import_operation(
-        &pool,
-        target_context,
-        &result,
-        &requested_resolution,
-        started_at.elapsed().as_millis() as i64,
-    )
-    .await;
-    result.map_err(|e| e.to_ipc_error())
 }
 
 fn resolution_label(resolution: &LocalArchiveImportResolution) -> &'static str {

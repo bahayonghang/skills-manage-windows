@@ -203,16 +203,22 @@ pub async fn create_collection(
     state: State<'_, AppState>,
     name: String,
     description: Option<String>,
-) -> Result<Collection, String> {
-    let pool = state.active_db().await?;
-    create_collection_impl(&pool, &name, description.as_deref()).await
+) -> crate::ipc_error::IpcResult<Collection> {
+    crate::ipc_boundary_async!({
+        let pool = state.active_db().await?;
+        create_collection_impl(&pool, &name, description.as_deref()).await
+    })
 }
 
 /// Tauri command: return all collections.
 #[tauri::command]
-pub async fn get_collections(state: State<'_, AppState>) -> Result<Vec<Collection>, String> {
-    let pool = state.active_db().await?;
-    get_collections_impl(&pool).await
+pub async fn get_collections(
+    state: State<'_, AppState>,
+) -> crate::ipc_error::IpcResult<Vec<Collection>> {
+    crate::ipc_boundary_async!({
+        let pool = state.active_db().await?;
+        get_collections_impl(&pool).await
+    })
 }
 
 /// Tauri command: return a collection with its member skills.
@@ -220,9 +226,11 @@ pub async fn get_collections(state: State<'_, AppState>) -> Result<Vec<Collectio
 pub async fn get_collection_detail(
     state: State<'_, AppState>,
     collection_id: String,
-) -> Result<CollectionDetail, String> {
-    let pool = state.active_db().await?;
-    get_collection_detail_impl(&pool, &collection_id).await
+) -> crate::ipc_error::IpcResult<CollectionDetail> {
+    crate::ipc_boundary_async!({
+        let pool = state.active_db().await?;
+        get_collection_detail_impl(&pool, &collection_id).await
+    })
 }
 
 /// Tauri command: add a skill to a collection.
@@ -231,30 +239,38 @@ pub async fn add_skill_to_collection(
     state: State<'_, AppState>,
     collection_id: String,
     skill_id: String,
-) -> Result<(), String> {
-    let pool = state.active_db().await?;
-    add_skill_to_collection_impl(&pool, &collection_id, &skill_id).await
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary_async!({
+        let pool = state.active_db().await?;
+        add_skill_to_collection_impl(&pool, &collection_id, &skill_id).await
+    })
 }
 
 /// Tauri command: remove a skill from a collection.
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn remove_skill_from_collection(
     state: State<'_, AppState>,
     collection_id: String,
     skill_id: String,
-) -> Result<(), String> {
-    let pool = state.active_db().await?;
-    remove_skill_from_collection_impl(&pool, &collection_id, &skill_id).await
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary_async!({
+        let pool = state.active_db().await?;
+        remove_skill_from_collection_impl(&pool, &collection_id, &skill_id).await
+    })
 }
 
 /// Tauri command: delete a collection.
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn delete_collection(
     state: State<'_, AppState>,
     collection_id: String,
-) -> Result<(), String> {
-    let pool = state.active_db().await?;
-    delete_collection_impl(&pool, &collection_id).await
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary_async!({
+        let pool = state.active_db().await?;
+        delete_collection_impl(&pool, &collection_id).await
+    })
 }
 
 /// Tauri command: update a collection's name and description.
@@ -264,22 +280,27 @@ pub async fn update_collection(
     collection_id: String,
     name: String,
     description: Option<String>,
-) -> Result<Collection, String> {
-    let pool = state.active_db().await?;
-    update_collection_impl(&pool, &collection_id, &name, description.as_deref()).await
+) -> crate::ipc_error::IpcResult<Collection> {
+    crate::ipc_boundary_async!({
+        let pool = state.active_db().await?;
+        update_collection_impl(&pool, &collection_id, &name, description.as_deref()).await
+    })
 }
 
 /// Tauri command: install all skills in a collection to the given agents.
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn batch_install_collection(
     state: State<'_, AppState>,
     collection_id: String,
     agent_ids: Vec<String>,
-) -> Result<BatchInstallResult, String> {
-    let request_context = state.resolve_target_context().await?;
-    let active_target = request_context.target().clone();
-    let pool = request_context.db().clone();
-    batch_install_collection_impl(&pool, &active_target, &collection_id, &agent_ids).await
+) -> crate::ipc_error::IpcResult<BatchInstallResult> {
+    crate::ipc_boundary_async!({
+        let request_context = state.resolve_target_context().await?;
+        let active_target = request_context.target().clone();
+        let pool = request_context.db().clone();
+        batch_install_collection_impl(&pool, &active_target, &collection_id, &agent_ids).await
+    })
 }
 
 /// Tauri command: export a collection to a JSON string.
@@ -287,19 +308,24 @@ pub async fn batch_install_collection(
 pub async fn export_collection(
     state: State<'_, AppState>,
     collection_id: String,
-) -> Result<String, String> {
-    let pool = state.active_db().await?;
-    export_collection_impl(&pool, &collection_id).await
+) -> crate::ipc_error::IpcResult<String> {
+    crate::ipc_boundary_async!({
+        let pool = state.active_db().await?;
+        export_collection_impl(&pool, &collection_id).await
+    })
 }
 
 /// Tauri command: import a collection from a JSON string.
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn import_collection(
     state: State<'_, AppState>,
     json: String,
-) -> Result<Collection, String> {
-    let pool = state.active_db().await?;
-    import_collection_impl(&pool, &json).await
+) -> crate::ipc_error::IpcResult<Collection> {
+    crate::ipc_boundary_async!({
+        let pool = state.active_db().await?;
+        import_collection_impl(&pool, &json).await
+    })
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

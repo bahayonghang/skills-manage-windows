@@ -13,6 +13,7 @@ use crate::services::github_import::ImportedGitHubSkillSummary;
  * ========================================================================
  */
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillRefreshScope {
@@ -29,6 +30,7 @@ pub struct SkillRefreshScope {
     pub agent_ids: Option<Vec<String>>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SkillRefreshScopeKind {
@@ -38,6 +40,7 @@ pub enum SkillRefreshScopeKind {
     Platform,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SkillRefreshMode {
@@ -45,6 +48,7 @@ pub enum SkillRefreshMode {
     Sync,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SkillRefreshCachePolicy {
@@ -61,6 +65,7 @@ impl SkillRefreshCachePolicy {
     }
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillUpdateInventory {
@@ -69,6 +74,11 @@ pub struct SkillUpdateInventory {
     pub remote_missing: Vec<RemoteMissingSkill>,
     pub platform_duplicates: Vec<PlatformDuplicateGroup>,
     #[serde(default)]
+    // Keep serde(default) deserialize-only in Specta's phased metadata.
+    #[cfg_attr(
+        feature = "ipc-codegen",
+        serde(rename(deserialize = "deletedPlatformCopies"))
+    )]
     pub deleted_platform_copies: Vec<DeletedPlatformCopyGroup>,
     /// Phase P2 始终空，留位给后续 orphan 扫描（broken symlink / 孤儿 .copy 目录）。
     pub orphans: Vec<OrphanSkillEntry>,
@@ -76,6 +86,7 @@ pub struct SkillUpdateInventory {
     pub generated_at: String,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatableSkill {
@@ -85,6 +96,7 @@ pub struct UpdatableSkill {
     pub diagnostics: Option<SkillUpdateDiagnostic>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteAddedSkill {
@@ -95,6 +107,7 @@ pub struct RemoteAddedSkill {
     pub conflict_existing_skill_id: Option<String>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteMissingSkill {
@@ -104,6 +117,7 @@ pub struct RemoteMissingSkill {
     pub diagnostics: Option<SkillUpdateDiagnostic>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlatformDuplicateGroup {
@@ -114,6 +128,7 @@ pub struct PlatformDuplicateGroup {
     pub plugin_paths: Vec<String>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeletedPlatformCopyGroup {
@@ -123,6 +138,7 @@ pub struct DeletedPlatformCopyGroup {
     pub writable_paths: Vec<String>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OrphanSkillEntry {
@@ -130,6 +146,7 @@ pub struct OrphanSkillEntry {
     pub broken_path: String,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FailedRepository {
@@ -139,6 +156,7 @@ pub struct FailedRepository {
     pub diagnostics: Option<SkillUpdateDiagnostic>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillUpdateDiagnostic {
@@ -217,6 +235,7 @@ pub struct SkillUpdateApplyFailure {
     pub error: String,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ForceSkillUpdateRequest {
@@ -225,6 +244,7 @@ pub struct ForceSkillUpdateRequest {
     pub refresh_copy_installations: bool,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ForceSkillUpdateResult {
@@ -233,6 +253,7 @@ pub struct ForceSkillUpdateResult {
     pub failed: Vec<ForceSkillUpdateFailure>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ForceSkillUpdateSuccess {
@@ -245,6 +266,7 @@ pub struct ForceSkillUpdateSuccess {
     pub copy_installations_refreshed: bool,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ForceSkillUpdateSkip {
@@ -252,6 +274,7 @@ pub struct ForceSkillUpdateSkip {
     pub reason: String,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ForceSkillUpdateFailure {
@@ -261,6 +284,7 @@ pub struct ForceSkillUpdateFailure {
     pub error: String,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ForceRepositoryMirrorRequest {
@@ -275,6 +299,7 @@ pub struct ForceRepositoryMirrorRequest {
     pub remove_copy_installations_for_deleted: bool,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ForceRepositoryMirrorResult {

@@ -89,8 +89,8 @@ export function buildInitialSelections(
   );
 }
 
-export function normalizeMessage(message: string) {
-  return message.replace(/^Error:\s*/, "");
+export function normalizeMessage(message: unknown) {
+  return String(message).replace(/^Error:\s*/, "");
 }
 
 /**
@@ -101,17 +101,22 @@ export function normalizeMessage(message: string) {
  * message keeps its historical text. The `Error:` prefix is stripped before
  * parsing so a stringified `Error` still resolves its code.
  */
-export function formatGitHubImportError(message: string, t: TFunction) {
-  return formatBackendError(normalizeMessage(message), t);
+export function formatGitHubImportError(error: unknown, t: TFunction) {
+  return formatBackendError(
+    typeof error === "string" ? normalizeMessage(error) : error,
+    t,
+  );
 }
 
 /**
  * True when the failure means the confirmed preview snapshot is gone, expired,
  * mismatched, or tampered with, so the user must preview the repository again.
  */
-export function isPreviewSnapshotFailure(message: string) {
+export function isPreviewSnapshotFailure(error: unknown) {
   return (
-    parseBackendError(normalizeMessage(message)).code?.startsWith(
+    parseBackendError(
+      typeof error === "string" ? normalizeMessage(error) : error,
+    ).code?.startsWith(
       "github_import.preview",
     ) === true
   );
@@ -131,18 +136,24 @@ export function formatGitHubImportToast(error: unknown, t: TFunction) {
     : message;
 }
 
-export function looksLikeGitHubAuthGuidance(message: string) {
-  return /rate limit|personal access token|\bpat\b|github denied access|requires authentication|configured github token/i.test(
-    message,
+export function looksLikeGitHubAuthGuidance(error: unknown) {
+  return new Set([
+    "github_import.rate_limited",
+    "github_import.access_denied",
+    "github_import.configured_token_failed",
+  ]).has(parseBackendError(error).code ?? "");
+}
+
+export function looksLikeConfiguredGitHubTokenFailure(error: unknown) {
+  return (
+    parseBackendError(error).code === "github_import.configured_token_failed"
   );
 }
 
-export function looksLikeConfiguredGitHubTokenFailure(message: string) {
-  return /configured github token was used/i.test(message);
-}
-
-export function looksLikeMissingSshPassword(message: string) {
-  return /ssh password for target .* is not available/i.test(message);
+export function looksLikeMissingSshPassword(error: unknown) {
+  return (
+    parseBackendError(error).code === "credential.ssh_password_unavailable"
+  );
 }
 
 export function clampPercent(value: number) {

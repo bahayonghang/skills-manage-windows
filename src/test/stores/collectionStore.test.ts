@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Collection, CollectionDetail } from "@/types";
 import * as tauriBridge from "@/lib/ipc";
+import { ipcFixtureError } from "@/lib/ipc/errors";
 
 // Mock Tauri core before importing the store
 vi.mock("@tauri-apps/api/core", () => ({
@@ -23,7 +24,7 @@ const mockCollections: Collection[] = [
   {
     id: "col-2",
     name: "Backend",
-    description: undefined,
+    description: null,
     created_at: "2026-04-09T01:00:00Z",
     updated_at: "2026-04-09T01:00:00Z",
   },
@@ -87,12 +88,14 @@ describe("collectionStore", () => {
   });
 
   it("loadCollections sets error on failure", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("DB error"));
+    vi.mocked(invoke).mockRejectedValueOnce(
+      ipcFixtureError("storage.unavailable", "DB error"),
+    );
 
     await useCollectionStore.getState().loadCollections();
 
     const state = useCollectionStore.getState();
-    expect(state.error).toContain("DB error");
+    expect(state.error).toBe("DB error");
     expect(state.isLoading).toBe(false);
   });
 
@@ -144,6 +147,7 @@ describe("collectionStore", () => {
     const newCollection: Collection = {
       id: "col-3",
       name: "Test",
+      description: null,
       created_at: "2026-04-10T00:00:00Z",
       updated_at: "2026-04-10T00:00:00Z",
     };
@@ -209,12 +213,14 @@ describe("collectionStore", () => {
   });
 
   it("loadCollectionDetail sets error on failure", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("Not found"));
+    vi.mocked(invoke).mockRejectedValueOnce(
+      ipcFixtureError("resource.not_found", "Not found"),
+    );
 
     await useCollectionStore.getState().loadCollectionDetail("invalid-id");
 
     const state = useCollectionStore.getState();
-    expect(state.error).toContain("Not found");
+    expect(state.error).toBe("Not found");
     expect(state.isLoadingDetail).toBe(false);
   });
 

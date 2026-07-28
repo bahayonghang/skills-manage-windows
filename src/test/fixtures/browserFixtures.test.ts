@@ -80,7 +80,11 @@ describe("browser fixtures drive real store loaders", () => {
       useSkillStore
         .getState()
         .uninstallSkillFromAgent("fixture-central-skill", "claude-code"),
-    ).rejects.toEqual(DESKTOP_ONLY_UNINSTALL_ERROR);
+    ).rejects.toMatchObject({
+      code: "runtime.desktop_required",
+      message: DESKTOP_ONLY_UNINSTALL_ERROR,
+      retryable: false,
+    });
     expect(useSkillStore.getState().error).toBe(DESKTOP_ONLY_UNINSTALL_ERROR);
 
     await expect(
@@ -89,7 +93,11 @@ describe("browser fixtures drive real store loaders", () => {
         .batchUninstallSkillsFromAgent("claude-code", [
           { skill_id: "fixture-central-skill" },
         ]),
-    ).rejects.toEqual(DESKTOP_ONLY_UNINSTALL_ERROR);
+    ).rejects.toMatchObject({
+      code: "runtime.desktop_required",
+      message: DESKTOP_ONLY_UNINSTALL_ERROR,
+      retryable: false,
+    });
   });
 
   it("usageStore.refresh populates overview/providers/scope", async () => {

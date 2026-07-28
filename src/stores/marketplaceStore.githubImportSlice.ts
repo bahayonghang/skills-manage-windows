@@ -1,4 +1,5 @@
 import { setupExplanationStreamListeners } from "@/lib/explanationStream";
+import { backendErrorStateValue } from "@/lib/backendError";
 import i18n from "@/i18n";
 import { invoke, isTauriRuntime } from "@/lib/ipc";
 import { GitHubRepoRef, GitHubSkillImportSelection } from "@/types";
@@ -108,7 +109,7 @@ export function createMarketplaceGitHubImportSlice({
               preview: null,
               importResult: null,
               previewedRepoUrl: repoUrl,
-              error: String(err),
+              error: backendErrorStateValue(err),
               importProgress: null,
               importStartedAt: null,
             },
@@ -204,7 +205,7 @@ export function createMarketplaceGitHubImportSlice({
             githubImport: {
               ...state.githubImport,
               isImporting: false,
-              error: String(err),
+              error: backendErrorStateValue(err),
               importProgress: null,
               importStartedAt: null,
             },
@@ -319,7 +320,10 @@ export function createMarketplaceGitHubImportSlice({
               ...state.githubImport,
               skillMarkdown: {
                 ...state.githubImport.skillMarkdown,
-                [sourcePath]: { status: "error", error: String(err) },
+                [sourcePath]: {
+                  status: "error",
+                  error: backendErrorStateValue(err),
+                },
               },
             },
           }));
@@ -490,7 +494,7 @@ export function createMarketplaceGitHubImportSlice({
                   summary: null,
                   isLoading: false,
                   isStreaming: false,
-                  error: String(err),
+                  error: backendErrorStateValue(err),
                 },
               },
             },

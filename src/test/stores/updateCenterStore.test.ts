@@ -18,6 +18,7 @@ vi.mock("@tauri-apps/api/window", () => ({
 }));
 
 import { useUpdateCenterStore } from "@/stores/updateCenterStore";
+import { ipcFixtureError } from "@/lib/ipc/errors";
 import type {
   SkillUpdateApplyResult,
   SkillUpdateDecisions,
@@ -169,12 +170,14 @@ describe("updateCenterStore", () => {
       progressHandler = handler;
       return unlisten;
     });
-    mockInvoke.mockRejectedValueOnce("network unavailable");
+    mockInvoke.mockRejectedValueOnce(
+      ipcFixtureError("storage.unavailable", "network unavailable"),
+    );
 
     const refresh = useUpdateCenterStore
       .getState()
       .refresh({ kind: "all", mode: "sync" });
-    const rejection = expect(refresh).rejects.toBe("network unavailable");
+    const rejection = expect(refresh).rejects.toThrow("network unavailable");
     await vi.waitFor(() => expect(mockInvoke).toHaveBeenCalledOnce());
     progressHandler?.({
       payload: {

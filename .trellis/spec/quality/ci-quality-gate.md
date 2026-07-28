@@ -44,7 +44,7 @@ The orchestrator owns two parallel, fail-fast chains:
 
 ```text
 web: typecheck -> lint -> capabilitycheck -> sizecheck -> test -> build
-rust: entrypointcheck -> fmt --check -> clippy --all-targets --locked -> test --locked
+rust: entrypointcheck -> ipc:codegen:check -> fmt --check -> clippy --all-targets --locked -> test --locked
 ```
 
 ## 3. Contracts
@@ -142,6 +142,7 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
 | Signature, metadata, asset inventory, or checksum is invalid | Aggregate/publish fails before `draft=false` |
 | Rust is not formatted | `cargo fmt --check` fails |
 | Renderer capability, plugin wiring, or inventory drifts | `pnpm capabilitycheck` fails before size/test/build |
+| Rust/Serde IPC metadata drifts from the checked artifact | `pnpm ipc:codegen:check` fails before Rust fmt/Clippy/test |
 | Test/bin target has a Clippy warning | all-target Clippy fails |
 | Cargo lockfile would change | `--locked` command fails |
 | Frontend unit tests pass but bundling is invalid | `pnpm build` fails |
@@ -190,7 +191,7 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
   - A runtime-compatible wrapped minisign fixture passes; changed installer,
     signature, and public key fail.
 - `just ci`
-  - Assert the complete frontend and Rust chains pass from their shared local/remote entrypoint, including the required capability drift check.
+  - Assert the complete frontend and Rust chains pass from their shared local/remote entrypoint, including capability and typed-IPC drift checks.
 - `pnpm exec vitest run src/test/contracts/capabilityDrift.test.ts`
   - Assert missing permissions, stale JSON/table state, unexpected imports, and stale dependency/initializer sets all fail.
 - For CI, packaging, or release workflow changes on Windows: `pnpm tauri build` and confirm the expected NSIS/MSI bundle path.
@@ -254,3 +255,78 @@ Repository checks such as capability drift belong in the ordered `web` steps in
 `scripts/run-ci.mjs`; workflows continue to invoke `just ci` instead of
 duplicating the command. Formal release platform builds remain in
 `release-desktop.yml`; CI manual smoke jobs do not become release dependencies.
+
+## Scenario: Typed IPC Codegen And Parity Gate
+
+### 1. Scope / Trigger
+
+- 修改 Rust command 签名/Serde 字段、runtime registry、generated batch、IPC map 或 codegen 依赖时适用。
+
+### 2. Signatures
+
+```text
+pnpm ipc:codegen       -> generate src/lib/ipc/generatedCommandMap.ts
+pnpm ipc:codegen:check -> temporary generation + byte comparison + rename-drift probe
+SkillUpdateState.status -> Rust/SQLx/Serde/Specta SkillUpdateStatus
+cargo metadata bins     -> skillport, skillport-cli, release-signature-verifier
+```
+
+`ipc-codegen` feature 精确固定 `tauri-specta/specta = 2.0.0-rc.25` 与
+`specta-typescript/specta-serde = 0.0.12`，正常 runtime/release 不启用该 feature。
+
+### 3. Contracts
+
+- runtime registry 184；generated registry 42 且为 runtime 子集。
+- frontend 177 = typed 130 + allowlist 47；runtime - frontend 恰为冻结的 backend-only 7。
+- 180 个 fallible command 使用 `IpcResult`；4 个 infallible command 保持原签名。
+- generator 使用 structured Specta metadata 和 Serde phases；不得以 source regex 证明类型一致性。
+- generated type 必须来自 Rust 字段的真实类型。持久化字段不得用 Specta-only override
+  收窄：例如 SQLite `TEXT` 状态必须在 Rust 中使用实现 SQLx 文本编解码的 enum，Serde、
+  Specta 与 SQLx 共享同一组 rename；既有合法值可回读，未知值 fail closed。
+- application Cargo package 不得增加 feature-gated 独立 codegen bin。Tauri bundler 会从
+  Cargo metadata 收集 package 的全部 bin，即使 `required-features` 未启用也可能继续查找
+  未生成的 executable。codegen 复用 `skillport --ipc-codegen` tool mode；
+  `entrypointcheck` 将 package bin 固定为上述三项。
+
+### 4. Validation & Error Matrix
+
+| Drift | Required failure |
+| --- | --- |
+| Rust arg/Serde field rename without artifact | byte check |
+| generated name absent from runtime/caller | parity test |
+| allowlist grows or overlaps typed map | count/overlap test |
+| artifact contains runtime import/callable invoke/unknown | artifact contract test |
+| raw string command rejection returns | fallibility boundary test |
+| Specta output narrower than the Rust/SQLx persisted field | typecheck or persisted-value compatibility test |
+| SQLite contains an unknown persisted enum value | typed row decode fails; do not widen generated output to `string` |
+| application package gains an unexpected Cargo bin | `entrypointcheck` fails before release build |
+| feature-gated codegen bin is absent during Tauri bundle | Windows bundle failure; consolidate it into `skillport` tool mode |
+
+### 5. Good / Base / Bad Cases
+
+- Good: regenerate once, check twice, commit Rust source and deterministic artifact together.
+- Good: a persisted status enum derives SQLx/Serde/Specta from one Rust definition and all historical
+  text values decode to the generated TypeScript union.
+- Base: remaining 47 commands stay explicitly allowlisted.
+- Bad: hand-edit generated output, use a Specta-only type override over `String`, float RC
+  dependencies, parse names as proof of result types, or add a feature-gated bin to the application package.
+
+### 6. Tests Required
+
+- `pnpm ipc:codegen:check`.
+- `pnpm entrypointcheck`; assert Cargo metadata exposes exactly the three approved bins.
+- `pnpm exec vitest run src/test/contracts/ipcCommandCoverage.test.ts`.
+- Persisted enum compatibility test: raw-insert every historical SQLite text value, decode the typed
+  row, and assert an unknown value returns an error.
+- `cargo clippy --all-targets --locked -- -D warnings` and `cargo test --locked`.
+- Final `just ci`; Windows packaging changes also require `pnpm tauri build` and bundle inventory check.
+
+### 7. Wrong vs Correct
+
+```text
+Wrong: edit generatedCommandMap.ts or add a Specta-only override until typecheck passes.
+Correct: fix the authoritative Rust/SQLx/Serde type or the real caller, run pnpm ipc:codegen, then prove --check is clean.
+
+Wrong: add src/bin/ipc-codegen.rs with required-features inside the Tauri application package.
+Correct: dispatch --ipc-codegen from the existing skillport bin and keep entrypointcheck plus a real Windows bundle gate.
+```

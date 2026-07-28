@@ -103,7 +103,7 @@ pub(crate) async fn force_update_central_skills_impl(
                     source_path: before.source_path,
                     local_hash: before.last_remote_hash,
                     remote_hash: before.latest_remote_hash,
-                    bytes_changed: before.status == SkillUpdateStatus::UpdateAvailable.as_str(),
+                    bytes_changed: before.status == SkillUpdateStatus::UpdateAvailable,
                     copy_installations_refreshed: request.refresh_copy_installations,
                 });
             }
@@ -226,7 +226,7 @@ pub(crate) async fn force_mirror_central_repositories_impl(
                     source_path: before.source_path,
                     local_hash: before.last_remote_hash,
                     remote_hash: before.latest_remote_hash,
-                    bytes_changed: before.status == SkillUpdateStatus::UpdateAvailable.as_str(),
+                    bytes_changed: before.status == SkillUpdateStatus::UpdateAvailable,
                     copy_installations_refreshed: true,
                 });
             }

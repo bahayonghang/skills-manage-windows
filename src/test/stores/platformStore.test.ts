@@ -8,6 +8,7 @@ import {
   SkillCountsSummary,
 } from "@/types";
 import { usePlatformStore } from "@/stores/platformStore";
+import { ipcFixtureError } from "@/lib/ipc/errors";
 import {
   ipcInvokeCalls,
   ipcInvokedCommands,
@@ -226,7 +227,7 @@ describe("platformStore", () => {
   it("sets error and clears isLoading when hydrateShell fails", async () => {
     mockIpcCommands({
       get_bootstrap_snapshot: () =>
-        Promise.reject(new Error("bootstrap failed")),
+        Promise.reject(ipcFixtureError("storage.unavailable", "bootstrap failed")),
       get_setting: null,
       list_platform_paths: mockPlatformPaths,
     });
@@ -310,7 +311,8 @@ describe("platformStore", () => {
     usePlatformStore.getState().resetForTargetChange();
 
     mockIpcCommands({
-      scan_all_skills: () => Promise.reject(new Error("ssh scan failed")),
+      scan_all_skills: () =>
+        Promise.reject(ipcFixtureError("transport.unavailable", "ssh scan failed")),
       get_bootstrap_snapshot: mockBootstrapSnapshot,
       get_setting: JSON.stringify(mockCategoryVisibility),
       list_platform_paths: mockPlatformPaths,
@@ -489,7 +491,7 @@ describe("platformStore", () => {
 
   it("addCustomAgent throws on failure", async () => {
     mockIpcCommand("add_custom_agent", () =>
-      Promise.reject(new Error("UNIQUE constraint")),
+      Promise.reject(ipcFixtureError("resource.conflict", "UNIQUE constraint")),
     );
 
     await expect(
@@ -554,7 +556,7 @@ describe("platformStore", () => {
 
   it("removeCustomAgent throws on failure", async () => {
     mockIpcCommand("remove_custom_agent", () =>
-      Promise.reject(new Error("Not found")),
+      Promise.reject(ipcFixtureError("resource.not_found", "Not found")),
     );
 
     await expect(
@@ -604,7 +606,7 @@ describe("platformStore", () => {
     expect(usePlatformStore.getState().topTagsError).toBeNull();
 
     mockIpcCommand("get_central_top_tags", () =>
-      Promise.reject(new Error("tags backend down")),
+      Promise.reject(ipcFixtureError("transport.unavailable", "tags backend down")),
     );
     await usePlatformStore.getState().loadTopTags(6);
 

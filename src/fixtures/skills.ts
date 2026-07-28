@@ -1,4 +1,4 @@
-import { registerIpcFixtures } from "@/lib/ipc";
+import { ipcFixtureError, registerIpcFixtures } from "@/lib/ipc";
 import {
   BROWSER_PLATFORM_PATHS,
   getPlatformSkillDir,
@@ -87,11 +87,14 @@ export function registerSkillsFixtures(): void {
     get_skills_by_agent: ({ agentId }) =>
       BROWSER_FIXTURE_SKILLS_BY_AGENT[agentId] ?? [],
     get_central_skills: () => [],
-    // 卸载依赖真实文件系统，浏览器演示态保持「桌面运行时必需」语义：
-    // reject 原字符串（Tauri 命令错误即 string），store catch 后 error 文案不变
+    // 卸载依赖真实文件系统，浏览器演示态保持「桌面运行时必需」语义。
     uninstall_skill_from_agent: () =>
-      Promise.reject(DESKTOP_ONLY_UNINSTALL_ERROR),
+      Promise.reject(
+        ipcFixtureError("runtime.desktop_required", DESKTOP_ONLY_UNINSTALL_ERROR),
+      ),
     batch_uninstall_skills_from_agent: () =>
-      Promise.reject(DESKTOP_ONLY_UNINSTALL_ERROR),
+      Promise.reject(
+        ipcFixtureError("runtime.desktop_required", DESKTOP_ONLY_UNINSTALL_ERROR),
+      ),
   });
 }

@@ -14,11 +14,28 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { TYPED_IPC_COMMAND_NAMES, UNTYPED_IPC_COMMANDS } from "@/lib/ipc";
+import {
+  HANDWRITTEN_IPC_COMMAND_NAMES,
+  TYPED_IPC_COMMAND_NAMES,
+  UNTYPED_IPC_COMMANDS,
+} from "@/lib/ipc";
+import { GENERATED_IPC_COMMAND_NAMES } from "@/lib/ipc/generatedCommandMap";
 
 const SRC_ROOT = join(process.cwd(), "src");
 const IPC_ADAPTER_DIR = join(SRC_ROOT, "lib", "ipc");
 const TAURI_SOURCE_ROOT = join(process.cwd(), "src-tauri", "src");
+const TAURI_COMMAND_ROOT = join(TAURI_SOURCE_ROOT, "commands");
+const IPC_REGISTRY_PATH = join(TAURI_SOURCE_ROOT, "ipc_registry.rs");
+const GENERATED_ARTIFACT_PATH = join(IPC_ADAPTER_DIR, "generatedCommandMap.ts");
+const BACKEND_ONLY_COMMANDS = [
+  "detect_agents",
+  "get_active_target",
+  "get_central_skills_page",
+  "read_skill_content",
+  "suggest_skill_tags",
+  "sync_registry",
+  "sync_registry_with_options",
+] as const;
 
 function collectSourceFiles(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
@@ -65,6 +82,32 @@ function scanInvokedCommands(): Map<string, string[]> {
   return invoked;
 }
 
+function collectRegistryCommands(macroName: string): string[] {
+  const source = readFileSync(IPC_REGISTRY_PATH, "utf8");
+  const start = source.indexOf(`macro_rules! ${macroName}`);
+  if (start < 0) throw new Error(`missing registry macro ${macroName}`);
+  const bodyStart = source.indexOf("$callback! {", start);
+  const bodyEnd = source.indexOf("\n        }\n    };", bodyStart);
+  if (bodyStart < 0 || bodyEnd < 0) {
+    throw new Error(`malformed registry macro ${macroName}`);
+  }
+  return [...source.slice(bodyStart, bodyEnd).matchAll(/^\s*([a-z0-9_]+)\s*=>/gm)]
+    .map((match) => match[1]);
+}
+
+function collectTauriCommandSignatures(root = TAURI_SOURCE_ROOT): Map<string, string | null> {
+  const signatures = new Map<string, string | null>();
+  const commandPattern =
+    /#\[tauri::command\][\s\S]*?\bpub\s+(?:async\s+)?fn\s+([a-z0-9_]+)\s*\([\s\S]*?\)\s*(?:->\s*([^\{]+))?\s*\{/g;
+  for (const file of collectProductionFiles(root, /\.rs$/)) {
+    const source = readFileSync(file, "utf8");
+    for (const match of source.matchAll(commandPattern)) {
+      signatures.set(match[1], match[2]?.replace(/\s+/g, " ").trim() ?? null);
+    }
+  }
+  return signatures;
+}
+
 describe("ipc command coverage ratchet", () => {
   const invoked = scanInvokedCommands();
   const typed = new Set(TYPED_IPC_COMMAND_NAMES);
@@ -93,6 +136,89 @@ describe("ipc command coverage ratchet", () => {
 
   it("keeps the typed map at or above the design floor (40 commands)", () => {
     expect(TYPED_IPC_COMMAND_NAMES.length).toBeGreaterThanOrEqual(40);
+  });
+
+  it("freezes the 130 typed / 47 untyped / 177 frontend migration counts", () => {
+    expect(HANDWRITTEN_IPC_COMMAND_NAMES).toHaveLength(88);
+    expect(GENERATED_IPC_COMMAND_NAMES).toHaveLength(42);
+    expect(TYPED_IPC_COMMAND_NAMES).toHaveLength(130);
+    expect(UNTYPED_IPC_COMMANDS).toHaveLength(47);
+    expect(new Set([...TYPED_IPC_COMMAND_NAMES, ...UNTYPED_IPC_COMMANDS]).size).toBe(177);
+  });
+
+  it("keeps generated and handwritten command maps disjoint", () => {
+    const handwritten = new Set(HANDWRITTEN_IPC_COMMAND_NAMES);
+    expect(GENERATED_IPC_COMMAND_NAMES.filter((name) => handwritten.has(name))).toEqual([]);
+  });
+
+  it("keeps the generated artifact equal to the frozen Rust generated registry", () => {
+    const registered = collectRegistryCommands("__skillport_generated_commands");
+    expect([...GENERATED_IPC_COMMAND_NAMES].sort()).toEqual(registered.sort());
+    expect(registered.every((command) => invoked.has(command))).toBe(true);
+  });
+
+  it("keeps generated metadata adapter-only and phase-aware", () => {
+    const artifact = readFileSync(GENERATED_ARTIFACT_PATH, "utf8");
+    const commandMap = artifact.slice(
+      artifact.indexOf("export const GENERATED_IPC_COMMANDS"),
+      artifact.indexOf("export const GENERATED_IPC_COMMAND_NAMES"),
+    );
+    expect(artifact).not.toContain("@tauri-apps/api/core");
+    expect(artifact).not.toMatch(/\binvoke\s*\(/);
+    expect(artifact).not.toMatch(/:\s*unknown\b/);
+    expect(commandMap).toContain("get_github_pat: command<undefined, GitHubPatState_Serialize>()");
+    expect(commandMap).toContain(
+      "refresh_skill_update_inventory: command<{ scope: SkillRefreshScope; operationId: string }, SkillUpdateInventory_Serialize>()",
+    );
+    expect(commandMap).not.toMatch(/\b(?:app|state):/);
+    expect(commandMap).toContain("request: LocalRemoteSyncPreviewRequest");
+    expect(artifact).toContain("repoPath?: string | null");
+    expect(commandMap).toContain("LocalRemoteSyncPreview_Serialize");
+  });
+
+  it("detects a Rust-derived argument or Serde field rename as byte drift", () => {
+    const artifact = readFileSync(GENERATED_ARTIFACT_PATH, "utf8");
+    const mutated = artifact.replace("repositoryIds: string[]", "renamedRepositoryIds: string[]");
+    expect(mutated).not.toBe(artifact);
+    expect(Buffer.from(mutated).equals(Buffer.from(artifact))).toBe(false);
+  });
+
+  it("keeps runtime, frontend, and backend-only command sets in parity", () => {
+    const runtime = collectRegistryCommands("__skillport_runtime_commands");
+    const runtimeSet = new Set(runtime);
+    const frontend = new Set([...TYPED_IPC_COMMAND_NAMES, ...UNTYPED_IPC_COMMANDS]);
+    expect(runtime).toHaveLength(184);
+    expect([...frontend].filter((command) => !runtimeSet.has(command))).toEqual([]);
+    expect(runtime.filter((command) => !frontend.has(command)).sort()).toEqual(
+      [...BACKEND_ONLY_COMMANDS].sort(),
+    );
+  });
+
+  it("keeps one runtime handler registry and the 180 / 4 fallibility boundary", () => {
+    const handlerOwners = collectProductionFiles(TAURI_SOURCE_ROOT, /\.rs$/)
+      .filter((file) => readFileSync(file, "utf8").includes("tauri::generate_handler!"));
+    expect(handlerOwners).toEqual([IPC_REGISTRY_PATH]);
+
+    const signatures = collectTauriCommandSignatures(TAURI_COMMAND_ROOT);
+    const fallible = [...signatures.entries()]
+      .filter(([, result]) => result?.includes("IpcResult<"));
+    const infallible = [...signatures.entries()]
+      .filter(([, result]) => !result?.includes("IpcResult<"))
+      .map(([name]) => name)
+      .sort();
+    expect(signatures.size).toBe(184);
+    expect(fallible).toHaveLength(180);
+    expect(infallible).toEqual([
+      "exit_startup",
+      "get_app_runtime_info",
+      "get_startup_status",
+      "record_frontend_runtime_log",
+    ]);
+    expect(
+      [...signatures.values()].some(
+        (result) => result?.startsWith("Result<") && result.includes("String"),
+      ),
+    ).toBe(false);
   });
 
   it("does not expose saved-secret plaintext reveal commands", () => {

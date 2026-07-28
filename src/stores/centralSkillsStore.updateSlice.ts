@@ -1,4 +1,5 @@
 import { invoke, isTauriRuntime, listen } from "@/lib/ipc";
+import { parseBackendError } from "@/lib/backendError";
 import {
   AiTagProgressPayload,
   CentralSkillUpdateProgressPayload,
@@ -13,7 +14,6 @@ import {
   SkillWithLinks,
 } from "@/types";
 import type {
-  CentralRepositorySyncApplyResult,
   CentralRepositorySyncPreview,
 } from "@/types/centralRepositorySync";
 import {
@@ -210,15 +210,25 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       updateJob: createRunningUpdateJob("updating", targetIds, jobId),
     });
     try {
-      const result = await invoke<CentralRepositorySyncApplyResult>(
+      const ipcDecisions = {
+        ...decisions,
+        additions: decisions.additions.map((addition) => ({
+          ...addition,
+          selections: addition.selections.map((selection) => ({
+            ...selection,
+            renamedSkillId: selection.renamedSkillId ?? null,
+          })),
+        })),
+      };
+      const result = await invoke(
         "apply_central_repository_sync",
-        { decisions }
+        { decisions: ipcDecisions }
       );
       const [skills, repositories, tags, updateStates] = await Promise.all([
         invoke<SkillWithLinks[]>("get_central_skills"),
         invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
         invoke<SkillTag[]>("get_skill_tags"),
-        invoke<CentralSkillUpdateState[]>("get_central_skill_update_states"),
+        invoke("get_central_skill_update_states"),
       ]);
       const failed =
         result.deleteResult.failed.length + result.failedRepositories.length;
@@ -357,13 +367,13 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
 
     set({ error: null });
     try {
-      const kept = await invoke<string[]>("keep_remote_missing_central_skills", {
+      const kept = await invoke("keep_remote_missing_central_skills", {
         skillIds,
       });
       const [skills, repositories, updateStates] = await Promise.all([
         invoke<SkillWithLinks[]>("get_central_skills"),
         invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
-        invoke<CentralSkillUpdateState[]>("get_central_skill_update_states"),
+        invoke("get_central_skill_update_states"),
       ]);
       set((state) => ({
         skills: skills ?? [],
@@ -479,7 +489,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       set((state) => state.portabilityJob.jobId === jobId ? ({
         portabilityJob: {
           ...state.portabilityJob,
-          status: String(err).includes("cancelled") ? "cancelled" : "failed",
+          status: parseBackendError(err).code === "operation.cancelled" ? "cancelled" : "failed",
           error: String(err),
         },
       }) : {});
@@ -523,7 +533,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       set((state) => state.portabilityJob.jobId === jobId ? ({
         portabilityJob: {
           ...state.portabilityJob,
-          status: String(err).includes("cancelled") ? "cancelled" : "failed",
+          status: parseBackendError(err).code === "operation.cancelled" ? "cancelled" : "failed",
           error: String(err),
         },
       }) : {});
@@ -563,7 +573,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       set((state) => state.portabilityJob.jobId === jobId ? ({
         portabilityJob: {
           ...state.portabilityJob,
-          status: String(err).includes("cancelled") ? "cancelled" : "failed",
+          status: parseBackendError(err).code === "operation.cancelled" ? "cancelled" : "failed",
           error: String(err),
         },
       }) : {});
@@ -598,7 +608,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       set((state) => state.portabilityJob.jobId === jobId ? ({
         portabilityJob: {
           ...state.portabilityJob,
-          status: String(err).includes("cancelled") ? "cancelled" : "failed",
+          status: parseBackendError(err).code === "operation.cancelled" ? "cancelled" : "failed",
           error: String(err),
         },
       }) : {});
@@ -608,7 +618,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       invoke<SkillWithLinks[]>("get_central_skills"),
       invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
       invoke<SkillTag[]>("get_skill_tags"),
-      invoke<CentralSkillUpdateState[]>("get_central_skill_update_states"),
+      invoke("get_central_skill_update_states"),
     ]);
     set((state) => state.portabilityJob.jobId === jobId ? ({
         skills: skills ?? [],

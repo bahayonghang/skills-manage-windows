@@ -1,4 +1,4 @@
-import { registerIpcFixtures } from "@/lib/ipc";
+import { ipcFixtureError, registerIpcFixtures } from "@/lib/ipc";
 import { BROWSER_PLATFORM_PATHS } from "@/lib/platformPathPolicy";
 import type {
   AgentWithStatus,
@@ -177,7 +177,7 @@ export function registerPlatformFixtures(): void {
     set_agent_enabled: ({ agentId, isEnabled }) => {
       const agent = BROWSER_FIXTURE_AGENTS.find((item) => item.id === agentId);
       if (!agent) {
-        throw new Error(`Unknown fixture agent '${agentId}'`);
+        throw ipcFixtureError("resource.not_found", "Agent not found");
       }
       return { ...agent, is_enabled: isEnabled };
     },

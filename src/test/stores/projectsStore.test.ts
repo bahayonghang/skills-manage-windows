@@ -98,11 +98,11 @@ describe("projectsStore", () => {
     expect(scannedHandler).not.toBeNull();
     scannedHandler!({ payload: { projectId: sampleProject.id, skillCount: 3 } });
 
-    await vi.waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith("get_project_skills", {
-        id: sampleProject.id,
-      });
-    });
+    await vi.waitFor(() =>
+      expect(useProjectsStore.getState().skillsByProject[sampleProject.id]).toEqual([
+        sampleSkill,
+      ]),
+    );
 
     const state = useProjectsStore.getState();
     expect(state.scanningProjectIds.has(sampleProject.id)).toBe(false);

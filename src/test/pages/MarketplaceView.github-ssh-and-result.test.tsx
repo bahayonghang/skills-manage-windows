@@ -212,7 +212,7 @@ describe("MarketplaceView GitHub SSH and result flows", () => {
 
   it("shows settings guidance when github preview fails with auth or rate-limit help", async () => {
     storeState.githubImport.error =
-      "GitHub API rate limit exceeded. Save a Personal Access Token in Settings and retry.";
+      "github_import.rate_limited:GitHub rate limited the request.";
 
     renderMarketplaceView();
     fireEvent.click(screen.getByRole("button", { name: /Import GitHub repo|导入 GitHub 仓库/i }));

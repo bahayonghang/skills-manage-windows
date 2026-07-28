@@ -1,4 +1,5 @@
 import type { TFunction } from "i18next";
+import { parseBackendError } from "@/lib/backendError";
 
 import type {
   SkillportStateExportedTarget,
@@ -101,12 +102,11 @@ export function statusTone(status: SkillportStateSkillPreview["status"]) {
 }
 
 export function isManifestPreviewError(error: unknown) {
-  const message = String(error);
-  return (
-    message.includes("Invalid SkillPort state JSON:") ||
-    message.includes("Unsupported SkillPort state export kind") ||
-    message.includes("Unsupported SkillPort state export version:")
-  );
+  return new Set([
+    "portable_state.invalid_manifest_json",
+    "portable_state.unsupported_export_kind",
+    "portable_state.unsupported_export_version",
+  ]).has(parseBackendError(error).code ?? "");
 }
 
 export function conflictKey(

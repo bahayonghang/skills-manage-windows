@@ -1,9 +1,6 @@
 import { invoke, isTauriRuntime } from "@/lib/ipc";
 import {
   AgentWithStatus,
-  CentralStoreLocationChangeResult,
-  CentralStoreLocationPreview,
-  CentralSkillUpdateState,
   SkillAiTagReview,
   SkillRepositoryWithStats,
   SkillTag,
@@ -19,7 +16,7 @@ type AiApiKeyState = { configured: boolean };
 
 async function loadAiApiKeyState(): Promise<AiApiKeyState | null> {
   try {
-    return (await invoke<AiApiKeyState>("get_ai_api_key_state")) ?? null;
+    return (await invoke("get_ai_api_key_state")) ?? null;
   } catch {
     return null;
   }
@@ -63,7 +60,7 @@ export function createCentralListSlice({ set, get, getGeneration }: CentralStore
         invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
         invoke<SkillTag[]>("get_skill_tags"),
         invoke<SkillAiTagReview[]>("get_pending_ai_tag_reviews"),
-        invoke<CentralSkillUpdateState[]>("get_central_skill_update_states"),
+        invoke("get_central_skill_update_states"),
         loadAiApiKeyState(),
       ]);
       if (requestId === loadRequestId && generation === getGeneration()) {
@@ -89,12 +86,12 @@ export function createCentralListSlice({ set, get, getGeneration }: CentralStore
     }
   },
   previewCentralStoreLocationChange: async (targetPath: string) => {
-    return invoke<CentralStoreLocationPreview>("preview_central_store_location_change", {
+    return invoke("preview_central_store_location_change", {
       request: { targetPath },
     });
   },
   applyCentralStoreLocationChange: async (targetPath: string) => {
-    return invoke<CentralStoreLocationChangeResult>("apply_central_store_location_change", {
+    return invoke("apply_central_store_location_change", {
       request: { targetPath, overwriteExisting: true },
     });
   },

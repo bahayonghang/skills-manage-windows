@@ -61,7 +61,7 @@ pub async fn upsert_skill_update_state(
     .bind(&state.latest_remote_hash)
     .bind(&state.last_checked_at)
     .bind(&state.last_updated_at)
-    .bind(&state.status)
+    .bind(state.status)
     .bind(&state.error)
     .execute(pool)
     .await

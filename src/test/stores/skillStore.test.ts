@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { ScannedSkill } from "@/types";
 import { useSkillStore } from "@/stores/skillStore";
+import { ipcFixtureError } from "@/lib/ipc/errors";
 import {
   ipcInvokeCalls,
   ipcInvokedCommands,
@@ -101,7 +102,7 @@ describe("skillStore", () => {
 
   it("sets error and clears loading when fetch fails", async () => {
     mockIpcCommand("get_skills_by_agent", () =>
-      Promise.reject(new Error("Agent not found")),
+      Promise.reject(ipcFixtureError("resource.not_found", "Agent not found")),
     );
 
     await useSkillStore.getState().getSkillsByAgent("claude-code");
@@ -251,7 +252,7 @@ describe("skillStore", () => {
 
   it("sets error and clears pending uninstall state when uninstall fails", async () => {
     mockIpcCommand("uninstall_skill_from_agent", () =>
-      Promise.reject(new Error("Permission denied")),
+      Promise.reject(ipcFixtureError("permission.denied", "Permission denied")),
     );
 
     await expect(

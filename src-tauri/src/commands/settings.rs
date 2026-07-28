@@ -139,300 +139,317 @@ pub async fn set_settings_impl(
 
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
 
-/// Tauri command: return all scan directories.
 #[tauri::command]
 pub async fn get_scan_directories(
     state: State<'_, AppState>,
-) -> Result<Vec<ScanDirectory>, String> {
-    let pool = state.active_db().await?;
-    get_scan_directories_impl(&pool).await
+) -> crate::ipc_error::IpcResult<Vec<ScanDirectory>> {
+    crate::ipc_boundary_async!({
+        let pool = state.active_db().await?;
+        get_scan_directories_impl(&pool).await
+    })
 }
 
-/// Tauri command: add a new custom scan directory.
 #[tauri::command]
 pub async fn add_scan_directory(
     state: State<'_, AppState>,
     path: String,
     label: Option<String>,
-) -> Result<ScanDirectory, String> {
-    let request_context = state.resolve_target_context().await?;
-    let active_target = request_context.target().clone();
-    let target_context = target_context_from_active_target(&active_target);
-    let pool = request_context.db().clone();
-    let remote_home = active_target.remote_home();
-    let started_at = Instant::now();
-    let result =
-        add_scan_directory_impl_for_home(&pool, &path, label.as_deref(), remote_home).await;
-    match &result {
-        Ok(directory) => {
-            record_operation_log_best_effort(
-                &state.db,
-                target_context,
-                OperationLogEvent::new(
-                    "settings",
-                    "scan_dir.add",
-                    "succeeded",
-                    format!("Added scan directory {}", directory.path),
+) -> crate::ipc_error::IpcResult<ScanDirectory> {
+    crate::ipc_boundary_async!({
+        let request_context = state.resolve_target_context().await?;
+        let active_target = request_context.target().clone();
+        let target_context = target_context_from_active_target(&active_target);
+        let pool = request_context.db().clone();
+        let remote_home = active_target.remote_home();
+        let started_at = Instant::now();
+        let result =
+            add_scan_directory_impl_for_home(&pool, &path, label.as_deref(), remote_home).await;
+        match &result {
+            Ok(directory) => {
+                record_operation_log_best_effort(
+                    &state.db,
+                    target_context,
+                    OperationLogEvent::new(
+                        "settings",
+                        "scan_dir.add",
+                        "succeeded",
+                        format!("Added scan directory {}", directory.path),
+                    )
+                    .subject("scan_root", &directory.path, &directory.path)
+                    .details(json!({
+                        "path": &directory.path,
+                        "label": &directory.label,
+                    }))
+                    .duration_ms(started_at.elapsed().as_millis() as i64),
                 )
-                .subject("scan_root", &directory.path, &directory.path)
-                .details(json!({
-                    "path": &directory.path,
-                    "label": &directory.label,
-                }))
-                .duration_ms(started_at.elapsed().as_millis() as i64),
-            )
-            .await;
-        }
-        Err(error) => {
-            record_operation_log_best_effort(
-                &state.db,
-                target_context,
-                OperationLogEvent::new(
-                    "settings",
-                    "scan_dir.add",
-                    "failed",
-                    format!("Failed to add scan directory {}", path),
+                .await;
+            }
+            Err(error) => {
+                record_operation_log_best_effort(
+                    &state.db,
+                    target_context,
+                    OperationLogEvent::new(
+                        "settings",
+                        "scan_dir.add",
+                        "failed",
+                        format!("Failed to add scan directory {}", path),
+                    )
+                    .subject("scan_root", &path, &path)
+                    .error(error)
+                    .duration_ms(started_at.elapsed().as_millis() as i64),
                 )
-                .subject("scan_root", &path, &path)
-                .error(error)
-                .duration_ms(started_at.elapsed().as_millis() as i64),
-            )
-            .await;
+                .await;
+            }
         }
-    }
-    result
+        result
+    })
 }
 
-/// Tauri command: remove a custom scan directory by path.
 #[tauri::command]
-pub async fn remove_scan_directory(state: State<'_, AppState>, path: String) -> Result<(), String> {
-    let request_context = state.resolve_target_context().await?;
-    let active_target = request_context.target().clone();
-    let target_context = target_context_from_active_target(&active_target);
-    let pool = request_context.db().clone();
-    with_operation_log(
-        &state,
-        OperationSpec::new(
-            target_context,
-            |_: &(), duration_ms| {
-                OperationLogEvent::new(
-                    "settings",
-                    "scan_dir.remove",
-                    "succeeded",
-                    format!("Removed scan directory {}", path),
-                )
-                .subject("scan_root", &path, &path)
-                .duration_ms(duration_ms)
-            },
-            |_: &String, duration_ms| {
-                OperationLogEvent::new(
-                    "settings",
-                    "scan_dir.remove",
-                    "failed",
-                    format!("Failed to remove scan directory {}", path),
-                )
-                .subject("scan_root", &path, &path)
-                .duration_ms(duration_ms)
-            },
-        ),
-        || remove_scan_directory_impl(&pool, &path),
-    )
-    .await
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn remove_scan_directory(
+    state: State<'_, AppState>,
+    path: String,
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary_async!({
+        let request_context = state.resolve_target_context().await?;
+        let active_target = request_context.target().clone();
+        let target_context = target_context_from_active_target(&active_target);
+        let pool = request_context.db().clone();
+        with_operation_log(
+            &state,
+            OperationSpec::new(
+                target_context,
+                |_: &(), duration_ms| {
+                    OperationLogEvent::new(
+                        "settings",
+                        "scan_dir.remove",
+                        "succeeded",
+                        format!("Removed scan directory {}", path),
+                    )
+                    .subject("scan_root", &path, &path)
+                    .duration_ms(duration_ms)
+                },
+                |_: &String, duration_ms| {
+                    OperationLogEvent::new(
+                        "settings",
+                        "scan_dir.remove",
+                        "failed",
+                        format!("Failed to remove scan directory {}", path),
+                    )
+                    .subject("scan_root", &path, &path)
+                    .duration_ms(duration_ms)
+                },
+            ),
+            || remove_scan_directory_impl(&pool, &path),
+        )
+        .await
+    })
 }
 
-/// Tauri command: set the is_active flag on a scan directory.
 #[tauri::command]
 pub async fn set_scan_directory_active(
     state: State<'_, AppState>,
     path: String,
     is_active: bool,
-) -> Result<(), String> {
-    let request_context = state.resolve_target_context().await?;
-    let active_target = request_context.target().clone();
-    let target_context = target_context_from_active_target(&active_target);
-    let pool = request_context.db().clone();
-    with_operation_log(
-        &state,
-        OperationSpec::new(
-            target_context,
-            |_: &(), duration_ms| {
-                OperationLogEvent::new(
-                    "settings",
-                    "scan_dir.toggle",
-                    "succeeded",
-                    format!("Updated scan directory {} enabled={}", path, is_active),
-                )
-                .subject("scan_root", &path, &path)
-                .details(json!({
-                    "path": &path,
-                    "isActive": is_active,
-                }))
-                .duration_ms(duration_ms)
-            },
-            |_: &String, duration_ms| {
-                OperationLogEvent::new(
-                    "settings",
-                    "scan_dir.toggle",
-                    "failed",
-                    format!("Failed to update scan directory {}", path),
-                )
-                .subject("scan_root", &path, &path)
-                .details(json!({
-                    "path": &path,
-                    "isActive": is_active,
-                }))
-                .duration_ms(duration_ms)
-            },
-        ),
-        || set_scan_directory_active_impl(&pool, &path, is_active),
-    )
-    .await
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary_async!({
+        let request_context = state.resolve_target_context().await?;
+        let active_target = request_context.target().clone();
+        let target_context = target_context_from_active_target(&active_target);
+        let pool = request_context.db().clone();
+        with_operation_log(
+            &state,
+            OperationSpec::new(
+                target_context,
+                |_: &(), duration_ms| {
+                    OperationLogEvent::new(
+                        "settings",
+                        "scan_dir.toggle",
+                        "succeeded",
+                        format!("Updated scan directory {} enabled={}", path, is_active),
+                    )
+                    .subject("scan_root", &path, &path)
+                    .details(json!({
+                        "path": &path,
+                        "isActive": is_active,
+                    }))
+                    .duration_ms(duration_ms)
+                },
+                |_: &String, duration_ms| {
+                    OperationLogEvent::new(
+                        "settings",
+                        "scan_dir.toggle",
+                        "failed",
+                        format!("Failed to update scan directory {}", path),
+                    )
+                    .subject("scan_root", &path, &path)
+                    .details(json!({
+                        "path": &path,
+                        "isActive": is_active,
+                    }))
+                    .duration_ms(duration_ms)
+                },
+            ),
+            || set_scan_directory_active_impl(&pool, &path, is_active),
+        )
+        .await
+    })
 }
 
-/// Tauri command: get a settings value by key.
 #[tauri::command]
 pub async fn get_setting(
     state: State<'_, AppState>,
     key: String,
-) -> Result<Option<String>, String> {
-    get_setting_impl(&state.db, &key).await
+) -> crate::ipc_error::IpcResult<Option<String>> {
+    crate::ipc_boundary_async!({ get_setting_impl(&state.db, &key).await })
 }
 
-/// Tauri command: get multiple settings values by key.
 #[tauri::command]
 pub async fn get_settings(
     state: State<'_, AppState>,
     keys: Vec<String>,
-) -> Result<HashMap<String, Option<String>>, String> {
-    get_settings_impl(&state.db, &keys).await
+) -> crate::ipc_error::IpcResult<HashMap<String, Option<String>>> {
+    crate::ipc_boundary_async!({ get_settings_impl(&state.db, &keys).await })
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn get_ai_api_key_state(
     state: State<'_, AppState>,
     provider: Option<String>,
-) -> Result<crate::services::ai_provider::AiApiKeyState, String> {
-    crate::services::ai_provider::get_ai_api_key_state_impl(
-        &state.db,
-        state.secrets.as_ref(),
-        provider.as_deref(),
-    )
-    .await
-    .map_err(|e| e.to_string())
+) -> crate::ipc_error::IpcResult<crate::services::ai_provider::AiApiKeyState> {
+    crate::ipc_boundary_async!({
+        crate::services::ai_provider::get_ai_api_key_state_impl(
+            &state.db,
+            state.secrets.as_ref(),
+            provider.as_deref(),
+        )
+        .await
+        .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn set_ai_api_key(
     state: State<'_, AppState>,
     value: String,
     provider: Option<String>,
-) -> Result<crate::services::ai_provider::AiApiKeyState, String> {
-    crate::services::ai_provider::set_ai_api_key_impl(
-        &state.db,
-        state.secrets.as_ref(),
-        value,
-        provider.as_deref(),
-    )
-    .await
-    .map_err(|e| e.to_string())
+) -> crate::ipc_error::IpcResult<crate::services::ai_provider::AiApiKeyState> {
+    crate::ipc_boundary_async!({
+        crate::services::ai_provider::set_ai_api_key_impl(
+            &state.db,
+            state.secrets.as_ref(),
+            value,
+            provider.as_deref(),
+        )
+        .await
+        .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn clear_ai_api_key(
     state: State<'_, AppState>,
     provider: Option<String>,
-) -> Result<crate::services::ai_provider::AiApiKeyState, String> {
-    crate::services::ai_provider::clear_ai_api_key_impl(
-        &state.db,
-        state.secrets.as_ref(),
-        provider.as_deref(),
-    )
-    .await
-    .map_err(|e| e.to_string())
+) -> crate::ipc_error::IpcResult<crate::services::ai_provider::AiApiKeyState> {
+    crate::ipc_boundary_async!({
+        crate::services::ai_provider::clear_ai_api_key_impl(
+            &state.db,
+            state.secrets.as_ref(),
+            provider.as_deref(),
+        )
+        .await
+        .map_err(|e| e.to_string())
+    })
 }
 
-/// Tauri command: set (upsert) a settings value.
 #[tauri::command]
 pub async fn set_setting(
     state: State<'_, AppState>,
     key: String,
     value: String,
-) -> Result<(), String> {
-    let target_context = state
-        .active_target()
-        .await
-        .map(|target| target_context_from_active_target(&target))
-        .unwrap_or_else(|_| crate::operation_log::local_target_context());
-    let started_at = Instant::now();
-    let category = category_for_key(&key);
-    let result = set_setting_impl(&state.db, &key, &value).await;
-    let status = if result.is_ok() {
-        "succeeded"
-    } else {
-        "failed"
-    };
-    let category_name = category.map(SettingCategory::as_str).unwrap_or("forbidden");
-    let mut event = OperationLogEvent::new(
-        "settings",
-        "settings.set",
-        status,
-        if result.is_ok() {
-            format!("Updated {category_name} setting")
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary_async!({
+        let target_context = state
+            .active_target()
+            .await
+            .map(|target| target_context_from_active_target(&target))
+            .unwrap_or_else(|_| crate::operation_log::local_target_context());
+        let started_at = Instant::now();
+        let category = category_for_key(&key);
+        let result = set_setting_impl(&state.db, &key, &value).await;
+        let status = if result.is_ok() {
+            "succeeded"
         } else {
-            format!("Failed to update {category_name} setting")
-        },
-    )
-    .subject("setting_category", category_name, category_name)
-    .details(setting_audit_details(
-        std::iter::once(key.as_str()),
-        result.is_ok(),
-    ))
-    .duration_ms(started_at.elapsed().as_millis() as i64);
-    if let Err(error) = &result {
-        event = event.error(error);
-    }
-    record_operation_log_best_effort(&state.db, target_context, event).await;
-    result
+            "failed"
+        };
+        let category_name = category.map(SettingCategory::as_str).unwrap_or("forbidden");
+        let mut event = OperationLogEvent::new(
+            "settings",
+            "settings.set",
+            status,
+            if result.is_ok() {
+                format!("Updated {category_name} setting")
+            } else {
+                format!("Failed to update {category_name} setting")
+            },
+        )
+        .subject("setting_category", category_name, category_name)
+        .details(setting_audit_details(
+            std::iter::once(key.as_str()),
+            result.is_ok(),
+        ))
+        .duration_ms(started_at.elapsed().as_millis() as i64);
+        if let Err(error) = &result {
+            event = event.error(error);
+        }
+        record_operation_log_best_effort(&state.db, target_context, event).await;
+        result
+    })
 }
 
-/// Tauri command: set (upsert) multiple settings values in one batch.
 #[tauri::command]
 pub async fn set_settings(
     state: State<'_, AppState>,
     values: HashMap<String, String>,
-) -> Result<(), String> {
-    let target_context = state
-        .active_target()
-        .await
-        .map(|target| target_context_from_active_target(&target))
-        .unwrap_or_else(|_| crate::operation_log::local_target_context());
-    let started_at = Instant::now();
-    let result = set_settings_impl(&state.db, &values).await;
-    let status = if result.is_ok() {
-        "succeeded"
-    } else {
-        "failed"
-    };
-    let mut event = OperationLogEvent::new(
-        "settings",
-        "settings.set_batch",
-        status,
-        if result.is_ok() {
-            format!("Updated {} settings", values.len())
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary_async!({
+        let target_context = state
+            .active_target()
+            .await
+            .map(|target| target_context_from_active_target(&target))
+            .unwrap_or_else(|_| crate::operation_log::local_target_context());
+        let started_at = Instant::now();
+        let result = set_settings_impl(&state.db, &values).await;
+        let status = if result.is_ok() {
+            "succeeded"
         } else {
-            "Failed to update settings batch".to_string()
-        },
-    )
-    .details(setting_audit_details(
-        values.keys().map(String::as_str),
-        result.is_ok(),
-    ))
-    .duration_ms(started_at.elapsed().as_millis() as i64);
-    if let Err(error) = &result {
-        event = event.error(error);
-    }
-    record_operation_log_best_effort(&state.db, target_context, event).await;
-    result
+            "failed"
+        };
+        let mut event = OperationLogEvent::new(
+            "settings",
+            "settings.set_batch",
+            status,
+            if result.is_ok() {
+                format!("Updated {} settings", values.len())
+            } else {
+                "Failed to update settings batch".to_string()
+            },
+        )
+        .details(setting_audit_details(
+            values.keys().map(String::as_str),
+            result.is_ok(),
+        ))
+        .duration_ms(started_at.elapsed().as_millis() as i64);
+        if let Err(error) = &result {
+            event = event.error(error);
+        }
+        record_operation_log_best_effort(&state.db, target_context, event).await;
+        result
+    })
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

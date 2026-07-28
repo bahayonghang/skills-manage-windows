@@ -982,7 +982,7 @@ async fn test_upsert_skill_update_state() {
         latest_remote_hash: Some("fnv1a64:new".to_string()),
         last_checked_at: Some("2026-04-25T00:00:00Z".to_string()),
         last_updated_at: None,
-        status: "update_available".to_string(),
+        status: SkillUpdateStatus::UpdateAvailable,
         error: None,
     };
 
@@ -993,8 +993,60 @@ async fn test_upsert_skill_update_state() {
 
     assert_eq!(states.len(), 1);
     assert_eq!(states[0].skill_id, "central-1");
-    assert_eq!(states[0].status, "update_available");
+    assert_eq!(states[0].status, SkillUpdateStatus::UpdateAvailable);
     assert_eq!(states[0].latest_remote_hash.as_deref(), Some("fnv1a64:new"));
+}
+
+#[tokio::test]
+async fn test_skill_update_status_decodes_existing_values_and_rejects_unknown() {
+    let pool = setup_test_db().await;
+    let cases = [
+        ("up_to_date", SkillUpdateStatus::UpToDate),
+        ("update_available", SkillUpdateStatus::UpdateAvailable),
+        ("unsupported", SkillUpdateStatus::Unsupported),
+        ("remote_missing", SkillUpdateStatus::RemoteMissing),
+        ("error", SkillUpdateStatus::Error),
+        ("cancelled", SkillUpdateStatus::Cancelled),
+    ];
+
+    for (index, (persisted, _)) in cases.iter().enumerate() {
+        let skill_id = format!("status-{index}");
+        upsert_skill(&pool, &make_skill(&skill_id, persisted, true))
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO skill_update_states (skill_id, source_type, status) VALUES (?, 'github', ?)",
+        )
+        .bind(skill_id)
+        .bind(persisted)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    let states = get_skill_update_states(&pool).await.unwrap();
+    let statuses = states
+        .into_iter()
+        .map(|state| (state.skill_id, state.status))
+        .collect::<HashMap<_, _>>();
+    for (index, (_, expected)) in cases.iter().enumerate() {
+        assert_eq!(statuses.get(&format!("status-{index}")), Some(expected));
+    }
+
+    upsert_skill(&pool, &make_skill("status-invalid", "Invalid", true))
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_update_states (skill_id, source_type, status) VALUES ('status-invalid', 'github', 'future_status')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let error = get_skill_update_states_for_skills(&pool, &["status-invalid".to_string()])
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("future_status"));
 }
 
 #[tokio::test]
@@ -1063,7 +1115,7 @@ async fn test_delete_skill() {
             latest_remote_hash: Some("fnv1a64:new".to_string()),
             last_checked_at: Some(Utc::now().to_rfc3339()),
             last_updated_at: None,
-            status: "update_available".to_string(),
+            status: SkillUpdateStatus::UpdateAvailable,
             error: None,
         },
     )

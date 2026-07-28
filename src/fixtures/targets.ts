@@ -1,4 +1,4 @@
-import { registerIpcFixtures } from "@/lib/ipc";
+import { ipcFixtureError, registerIpcFixtures } from "@/lib/ipc";
 import type { TargetSummary, WslDistributionSummary } from "@/types";
 
 const LOCAL_TARGET: TargetSummary = {
@@ -45,10 +45,14 @@ export function registerTargetFixtures(): void {
     }),
     list_wsl_distributions: () => BROWSER_FIXTURE_WSL_DISTRIBUTIONS,
     // 建远程目标依赖真实 SSH/WSL，浏览器演示态保持「仅桌面可用」语义
-    create_ssh_target: () => Promise.reject(SSH_ONLY_ERROR),
-    update_ssh_target: () => Promise.reject(SSH_ONLY_ERROR),
-    create_wsl_target: () => Promise.reject(WSL_ONLY_ERROR),
-    update_wsl_target: () => Promise.reject(WSL_ONLY_ERROR),
+    create_ssh_target: () =>
+      Promise.reject(ipcFixtureError("runtime.desktop_required", SSH_ONLY_ERROR)),
+    update_ssh_target: () =>
+      Promise.reject(ipcFixtureError("runtime.desktop_required", SSH_ONLY_ERROR)),
+    create_wsl_target: () =>
+      Promise.reject(ipcFixtureError("runtime.desktop_required", WSL_ONLY_ERROR)),
+    update_wsl_target: () =>
+      Promise.reject(ipcFixtureError("runtime.desktop_required", WSL_ONLY_ERROR)),
     test_ssh_target: () => ({
       ok: true,
       remoteHome: "/home/fixture",

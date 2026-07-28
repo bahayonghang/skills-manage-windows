@@ -14,12 +14,14 @@ use crate::services::central_store_location::{
 };
 use crate::AppState;
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralStoreLocationPreviewRequest {
     pub target_path: String,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralStoreLocationApplyRequest {
@@ -28,33 +30,45 @@ pub struct CentralStoreLocationApplyRequest {
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn preview_central_store_location_change(
     state: State<'_, AppState>,
     request: CentralStoreLocationPreviewRequest,
-) -> Result<CentralStoreLocationPreview, String> {
-    let request_context = state.resolve_target_context().await?;
-    let target = request_context.target().clone();
-    ensure_local_target(&target).map_err(|e| e.to_string())?;
-    let pool = request_context.db().clone();
-    preview_central_store_location_change_impl(&pool, &request.target_path)
+) -> crate::ipc_error::IpcResult<CentralStoreLocationPreview> {
+    crate::ipc_boundary!(
+        async move {
+            let request_context = state.resolve_target_context().await?;
+            let target = request_context.target().clone();
+            ensure_local_target(&target).map_err(|e| e.to_string())?;
+            let pool = request_context.db().clone();
+            preview_central_store_location_change_impl(&pool, &request.target_path)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn apply_central_store_location_change(
     state: State<'_, AppState>,
     request: CentralStoreLocationApplyRequest,
-) -> Result<CentralStoreLocationChangeResult, String> {
-    let request_context = state.resolve_target_context().await?;
-    let target = request_context.target().clone();
-    ensure_local_target(&target).map_err(|e| e.to_string())?;
-    let pool = request_context.db().clone();
-    apply_central_store_location_change_impl(
-        &pool,
-        &request.target_path,
-        request.overwrite_existing,
+) -> crate::ipc_error::IpcResult<CentralStoreLocationChangeResult> {
+    crate::ipc_boundary!(
+        async move {
+            let request_context = state.resolve_target_context().await?;
+            let target = request_context.target().clone();
+            ensure_local_target(&target).map_err(|e| e.to_string())?;
+            let pool = request_context.db().clone();
+            apply_central_store_location_change_impl(
+                &pool,
+                &request.target_path,
+                request.overwrite_existing,
+            )
+            .await
+            .map_err(|e| e.to_string())
+        }
+        .await
     )
-    .await
-    .map_err(|e| e.to_string())
 }

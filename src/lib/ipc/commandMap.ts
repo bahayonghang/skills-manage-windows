@@ -1,3 +1,5 @@
+import { GENERATED_IPC_COMMANDS } from "./generatedCommandMap";
+
 import type {
   AgentWithStatus,
   ArchiveFingerprint,
@@ -84,7 +86,18 @@ type IpcCommandSpec<Args, Result> = {
 // 同时让 Object.keys 可枚举已类型化命令（供 ipcCommandCoverage 测试使用）。
 const command = <Args, Result>() => ({}) as IpcCommandSpec<Args, Result>;
 
-export const IPC_COMMANDS = {
+function mergeCommandMaps<
+  Generated extends Record<string, IpcCommandSpec<unknown, unknown>>,
+  Handwritten extends Record<string, IpcCommandSpec<unknown, unknown>>,
+>(
+  generated: Generated,
+  handwritten: Handwritten &
+    Record<Extract<keyof Generated, keyof Handwritten>, never>,
+) {
+  return { ...generated, ...handwritten } as const;
+}
+
+export const HANDWRITTEN_IPC_COMMANDS = {
   // ── startup gate ─────────────────────────────────────────────────────────
   get_startup_status: command<undefined, StartupStatus>(),
   retry_startup: command<undefined, StartupStatus>(),
@@ -323,6 +336,11 @@ export const IPC_COMMANDS = {
   reorder_saved_views: command<{ ids: string[] }, void>(),
 } as const;
 
+export const IPC_COMMANDS = mergeCommandMaps(
+  GENERATED_IPC_COMMANDS,
+  HANDWRITTEN_IPC_COMMANDS,
+);
+
 export type IpcCommandMap = typeof IPC_COMMANDS;
 
 export type CommandArgs<K extends keyof IpcCommandMap> =
@@ -332,6 +350,8 @@ export type CommandResult<K extends keyof IpcCommandMap> =
 
 export const TYPED_IPC_COMMAND_NAMES: readonly string[] =
   Object.keys(IPC_COMMANDS);
+export const HANDWRITTEN_IPC_COMMAND_NAMES: readonly string[] =
+  Object.keys(HANDWRITTEN_IPC_COMMANDS);
 
 /**
  * 尚未进入 IPC_COMMANDS 的存量命令允许清单（ratchet：只减不增）。
@@ -344,39 +364,21 @@ export const UNTYPED_IPC_COMMANDS: readonly string[] = [
   "add_registry",
   "add_scan_directory",
   "add_skill_to_collection",
-  "apply_central_repository_sync",
-  "apply_central_store_location_change",
-  "apply_local_remote_sync",
   "assign_skill_tags",
   "assign_skills_to_repository",
-  "batch_install_central_skills",
-  "batch_install_collection",
-  "batch_install_to_agents",
   "browse_skills_sh_directory",
   "bulk_suggest_skill_tags",
   "cancel_ai_tag_job",
-  "clear_ai_api_key",
-  "clear_github_pat",
-  "clear_skill_update_inventory",
   "create_collection",
   "create_or_update_skill_repository",
   "create_skill_tag",
-  "delete_central_skill",
-  "delete_central_skills",
-  "delete_collection",
-  "delete_skill_repository",
   "explain_skill",
   "explain_skill_stream",
   "export_collection",
-  "force_mirror_central_repositories",
-  "force_update_central_skills",
   "get_agents",
-  "get_ai_api_key_state",
   "get_app_runtime_info",
-  "get_central_skill_update_states",
   "get_collection_detail",
   "get_collections",
-  "get_github_pat",
   "get_pending_ai_tag_reviews",
   "get_project_skills",
   "get_scan_directories",
@@ -384,48 +386,24 @@ export const UNTYPED_IPC_COMMANDS: readonly string[] = [
   "get_skill_explanation",
   "get_skill_repositories",
   "get_skill_tags",
-  "get_skill_update_inventory",
-  "import_collection",
-  "import_obsidian_skill_to_central",
-  "import_obsidian_skill_to_platform",
-  "install_from_skills_sh",
-  "install_marketplace_skill",
-  "install_skill_to_agent",
-  "install_skill_to_project",
-  "keep_remote_missing_central_skills",
   "list_projects",
   "list_projects_using_skill",
   "list_registries",
   "pick_project_folder",
-  "preview_central_store_location_change",
   "preview_delete_central_skills",
   "preview_delete_skill_repository",
-  "preview_local_remote_sync",
   "read_skills_sh_file",
   "record_frontend_runtime_log",
   "refresh_skill_explanation",
-  "refresh_skill_update_inventory",
-  "remove_project",
-  "remove_registry",
-  "remove_scan_directory",
-  "remove_skill_from_collection",
   "rename_project",
   "rescan_project",
   "resolve_skills_sh_url",
-  "scan_deleted_platform_copies",
-  "scan_platform_duplicate_skills",
   "search_marketplace_skills",
   "search_skills_sh",
-  "set_ai_api_key",
-  "set_github_pat",
   "set_project_pinned",
   "set_scan_directory_active",
   "set_settings",
   "set_skill_repository_pinned",
   "skip_ai_tag_review",
-  "test_ai_connection",
-  "test_github_pat",
-  "unassign_skill_tags",
-  "uninstall_skill_from_project",
   "update_collection",
 ];

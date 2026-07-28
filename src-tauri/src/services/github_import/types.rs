@@ -1,4 +1,5 @@
 use super::*;
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct GitHubRepoRef {
@@ -8,6 +9,7 @@ pub struct GitHubRepoRef {
     pub normalized_url: String,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum DuplicateResolution {
@@ -69,6 +71,7 @@ pub struct GitHubRepoPreview {
     pub expires_at: String,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct GitHubSkillImportSelection {
@@ -77,6 +80,7 @@ pub struct GitHubSkillImportSelection {
     pub renamed_skill_id: Option<String>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportedGitHubSkillSummary {
@@ -88,6 +92,7 @@ pub struct ImportedGitHubSkillSummary {
     pub resolution: DuplicateResolution,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct GitHubRepoImportResult {
@@ -413,6 +418,7 @@ pub(super) struct GitHubErrorResponse {
     pub(super) message: Option<String>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GitHubPatTestResult {
@@ -423,6 +429,7 @@ pub struct GitHubPatTestResult {
     pub message: String,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct GitHubPatState {

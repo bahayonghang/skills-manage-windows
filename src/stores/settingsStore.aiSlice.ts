@@ -252,7 +252,7 @@ export function createAiSettingsSlice<TState extends AiSettingsStoreState>(
           keys: AI_SETTING_KEYS,
         });
         const loadedSettings = normalizeAiSettings(values);
-        const aiApiKeyState = await invoke<AiApiKeyState>("get_ai_api_key_state", {
+        const aiApiKeyState = await invoke("get_ai_api_key_state", {
           provider: loadedSettings.provider,
         });
         set({
@@ -329,7 +329,7 @@ export function createAiSettingsSlice<TState extends AiSettingsStoreState>(
 
       try {
         const [aiApiKeyState] = await Promise.all([
-          invoke<AiApiKeyState>("get_ai_api_key_state", { provider: providerId }),
+          invoke("get_ai_api_key_state", { provider: providerId }),
           current.aiSettingsLoaded
             ? invoke("set_settings", { values: serializeAiSettings(nextSettings) })
             : Promise.resolve(),
@@ -368,7 +368,7 @@ export function createAiSettingsSlice<TState extends AiSettingsStoreState>(
         return;
       }
       try {
-        const apiKeyState = await invoke<AiApiKeyState>("clear_ai_api_key", {
+        const apiKeyState = await invoke("clear_ai_api_key", {
           provider: get().aiSettings.provider,
         });
         set({
@@ -422,7 +422,7 @@ export function createAiSettingsSlice<TState extends AiSettingsStoreState>(
 
       try {
         const savedApiKeyState = settings.apiKey.trim()
-          ? await invoke<AiApiKeyState>("set_ai_api_key", {
+          ? await invoke("set_ai_api_key", {
               provider: settings.provider,
               value: settings.apiKey,
             })
@@ -467,7 +467,7 @@ export function createAiSettingsSlice<TState extends AiSettingsStoreState>(
       }
 
       try {
-        const testResult = await invoke<AiConnectionTestResult>("test_ai_connection");
+        const testResult = await invoke("test_ai_connection");
         set({ aiTesting: false, aiTestResult: testResult } as Partial<TState>);
         return testResult;
       } catch (err) {

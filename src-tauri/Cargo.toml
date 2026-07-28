@@ -7,6 +7,15 @@ authors = ["iamzhihuix"]
 license = "Apache-2.0"
 edition = "2021"
 
+[features]
+default = []
+ipc-codegen = [
+  "dep:specta",
+  "dep:specta-serde",
+  "dep:specta-typescript",
+  "dep:tauri-specta",
+]
+
 [lib]
 name = "skillport_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
@@ -52,6 +61,10 @@ clap = { version = "4", features = ["derive"] }
 # Local archive (ZIP) skill import: pure-Rust reader, no shell extraction.
 # License: MIT OR Apache-2.0. Used by `services::local_archive_import`.
 zip = { version = "2", default-features = false, features = ["deflate"] }
+specta = { version = "=2.0.0-rc.25", features = ["derive", "function", "tokio"], optional = true }
+specta-serde = { version = "=0.0.12", optional = true }
+specta-typescript = { version = "=0.0.12", optional = true }
+tauri-specta = { version = "=2.0.0-rc.25", features = ["derive"], optional = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

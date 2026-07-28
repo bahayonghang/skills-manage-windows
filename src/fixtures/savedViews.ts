@@ -1,4 +1,4 @@
-import { registerIpcFixtures } from "@/lib/ipc";
+import { ipcFixtureError, registerIpcFixtures } from "@/lib/ipc";
 import type { SavedView } from "@/types";
 
 /** 浏览器演示态的内存数据集：CRUD 全走 fixture 命令，store 只按真实路径 refetch。 */
@@ -45,7 +45,9 @@ export function registerSavedViewFixtures(): void {
           : view,
       );
       const found = views.find((view) => view.id === id);
-      if (!found) throw new Error(`Saved view '${id}' not found`);
+      if (!found) {
+        throw ipcFixtureError("resource.not_found", "Saved view not found");
+      }
       return found;
     },
     delete_saved_view: ({ id }) => {

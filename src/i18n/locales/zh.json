@@ -1185,7 +1185,8 @@
       "update_available": "有更新",
       "unsupported": "不支持",
       "remote_missing": "远端已删除",
-      "error": "检查失败"
+      "error": "检查失败",
+      "cancelled": "已取消"
     },
     "portabilityOpen": "导入 / 导出",
     "portabilityTitle": "导入导出中央库状态",

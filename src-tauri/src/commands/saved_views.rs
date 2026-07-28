@@ -116,18 +116,30 @@ pub async fn reorder_saved_views_impl(pool: &DbPool, ids: Vec<String>) -> Result
 // ─── Tauri commands ──────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub async fn list_saved_views(state: State<'_, AppState>) -> Result<Vec<SavedView>, String> {
-    let pool = state.active_db().await?;
-    list_saved_views_impl(&pool).await
+pub async fn list_saved_views(
+    state: State<'_, AppState>,
+) -> crate::ipc_error::IpcResult<Vec<SavedView>> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            list_saved_views_impl(&pool).await
+        }
+        .await
+    )
 }
 
 #[tauri::command]
 pub async fn create_saved_view(
     state: State<'_, AppState>,
     input: CreateSavedViewInput,
-) -> Result<SavedView, String> {
-    let pool = state.active_db().await?;
-    create_saved_view_impl(&pool, input).await
+) -> crate::ipc_error::IpcResult<SavedView> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            create_saved_view_impl(&pool, input).await
+        }
+        .await
+    )
 }
 
 #[tauri::command]
@@ -135,24 +147,42 @@ pub async fn update_saved_view(
     state: State<'_, AppState>,
     id: String,
     input: UpdateSavedViewInput,
-) -> Result<SavedView, String> {
-    let pool = state.active_db().await?;
-    update_saved_view_impl(&pool, &id, input).await
+) -> crate::ipc_error::IpcResult<SavedView> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            update_saved_view_impl(&pool, &id, input).await
+        }
+        .await
+    )
 }
 
 #[tauri::command]
-pub async fn delete_saved_view(state: State<'_, AppState>, id: String) -> Result<(), String> {
-    let pool = state.active_db().await?;
-    delete_saved_view_impl(&pool, &id).await
+pub async fn delete_saved_view(
+    state: State<'_, AppState>,
+    id: String,
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            delete_saved_view_impl(&pool, &id).await
+        }
+        .await
+    )
 }
 
 #[tauri::command]
 pub async fn reorder_saved_views(
     state: State<'_, AppState>,
     ids: Vec<String>,
-) -> Result<(), String> {
-    let pool = state.active_db().await?;
-    reorder_saved_views_impl(&pool, ids).await
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            reorder_saved_views_impl(&pool, ids).await
+        }
+        .await
+    )
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────

@@ -25,6 +25,7 @@ pub struct ObsidianSkill {
     pub is_already_central: bool,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ObsidianImportResult {
     pub skill_id: String,

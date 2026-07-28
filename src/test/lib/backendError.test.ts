@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { TFunction } from "i18next";
 
 import { formatBackendError, parseBackendError } from "@/lib/backendError";
+import { IpcInvokeError } from "@/lib/ipc";
 import i18n from "@/i18n";
 
 describe("backend error helpers", () => {
@@ -14,6 +15,24 @@ describe("backend error helpers", () => {
       code: "ai.rate_limit",
       message: "Provider rate limit reached.",
       details: "HTTP 429: Too Many Requests",
+      retryable: false,
+    });
+  });
+
+  it("reads structured IPC errors without reparsing their message", () => {
+    expect(
+      parseBackendError(
+        new IpcInvokeError({
+          code: "github_import.rate_limited",
+          message: "Try again later",
+          retryable: true,
+        }),
+      ),
+    ).toEqual({
+      code: "github_import.rate_limited",
+      message: "Try again later",
+      details: null,
+      retryable: true,
     });
   });
 

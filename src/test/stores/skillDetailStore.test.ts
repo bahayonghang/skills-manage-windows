@@ -16,6 +16,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 import { invoke } from "@tauri-apps/api/core";
+import { ipcFixtureError } from "@/lib/ipc/errors";
 import { useSkillDetailStore } from "@/stores/skillDetailStore";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -220,7 +221,9 @@ describe("skillDetailStore", () => {
   });
 
   it("sets error and clears loading when load fails", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("Skill not found"));
+    vi.mocked(invoke).mockRejectedValueOnce(
+      ipcFixtureError("resource.not_found", "Skill not found"),
+    );
     await useSkillDetailStore.getState().loadDetail({ skillId: "nonexistent" });
     const state = useSkillDetailStore.getState();
     expect(state.error).toContain("Skill not found");
@@ -269,7 +272,9 @@ describe("skillDetailStore", () => {
   });
 
   it("sets error when install fails", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("Permission denied"));
+    vi.mocked(invoke).mockRejectedValueOnce(
+      ipcFixtureError("permission.denied", "Permission denied"),
+    );
     await useSkillDetailStore.getState().installSkill("frontend-design", "cursor");
     const state = useSkillDetailStore.getState();
     expect(state.error).toContain("Permission denied");
@@ -318,7 +323,9 @@ describe("skillDetailStore", () => {
   });
 
   it("sets error when uninstall fails", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("Not installed"));
+    vi.mocked(invoke).mockRejectedValueOnce(
+      ipcFixtureError("resource.not_found", "Not installed"),
+    );
     await useSkillDetailStore.getState().uninstallSkill("frontend-design", "claude-code");
     const state = useSkillDetailStore.getState();
     expect(state.error).toContain("Not installed");
@@ -628,7 +635,9 @@ describe("skillDetailStore", () => {
 
   it("keeps skill context and allows retry after a failed explanation request", async () => {
     vi.mocked(invoke)
-      .mockRejectedValueOnce(new Error("temporary failure"))
+      .mockRejectedValueOnce(
+        ipcFixtureError("transport.unavailable", "temporary failure", true),
+      )
       .mockResolvedValueOnce(undefined);
 
     await useSkillDetailStore

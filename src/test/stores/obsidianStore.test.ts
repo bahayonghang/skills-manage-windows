@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { useObsidianStore } from "@/stores/obsidianStore";
+import { ipcFixtureError } from "@/lib/ipc/errors";
 import { ipcInvokeCalls, mockIpcCommand } from "@/test/support/ipcMock";
 
 const mockVaults = [
@@ -69,7 +70,7 @@ describe("obsidianStore", () => {
 
   it("surfaces load errors as store error state", async () => {
     mockIpcCommand("get_obsidian_vaults", () => {
-      throw new Error("scan failed");
+      throw ipcFixtureError("transport.unavailable", "scan failed");
     });
 
     await useObsidianStore.getState().loadVaults();

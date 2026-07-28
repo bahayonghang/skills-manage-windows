@@ -40,7 +40,7 @@ const mockCollections: Collection[] = [
   {
     id: "col-2",
     name: "Backend",
-    description: undefined,
+    description: null,
     created_at: "2026-04-09T01:00:00Z",
     updated_at: "2026-04-09T01:00:00Z",
   },

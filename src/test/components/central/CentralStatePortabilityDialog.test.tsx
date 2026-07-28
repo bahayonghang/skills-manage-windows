@@ -4,6 +4,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import defaultCapability from "../../../../src-tauri/capabilities/default.json";
 import { CentralStatePortabilityDialog } from "@/components/central/CentralStatePortabilityDialog";
+import { ipcFixtureError } from "@/lib/ipc/errors";
 import type {
   SkillportStateImportPreview,
   SkillportStatePortabilityJob,
@@ -261,7 +262,12 @@ describe("CentralStatePortabilityDialog", () => {
     const previewImport = vi.fn().mockResolvedValue(preview);
     const previewImportFile = vi
       .fn()
-      .mockRejectedValue(new Error("Invalid SkillPort state JSON: bad json"));
+      .mockRejectedValue(
+        ipcFixtureError(
+          "portable_state.invalid_manifest_json",
+          "Invalid SkillPort state JSON: bad json",
+        ),
+      );
 
     renderDialog({ previewImport, previewImportFile });
     fireEvent.click(screen.getByTestId("central-portability-import-tab"));
@@ -523,8 +529,15 @@ describe("CentralStatePortabilityDialog", () => {
     const previewImport = vi
       .fn()
       .mockResolvedValueOnce(preview)
-      .mockRejectedValueOnce(new Error("Repository access denied"))
-      .mockRejectedValueOnce(new Error("Invalid SkillPort state JSON: bad json"));
+      .mockRejectedValueOnce(
+        ipcFixtureError("github_import.access_denied", "Repository access denied"),
+      )
+      .mockRejectedValueOnce(
+        ipcFixtureError(
+          "portable_state.invalid_manifest_json",
+          "Invalid SkillPort state JSON: bad json",
+        ),
+      );
 
     renderDialog({ previewImport });
 

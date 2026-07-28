@@ -128,6 +128,7 @@ const UPDATE_STATUS_PRESENTATION: Record<
   unsupported: { icon: CircleSlash2, className: "text-muted-foreground" },
   remote_missing: { icon: Link2Off, className: "text-warning-foreground" },
   error: { icon: AlertCircle, className: "text-foreground" },
+  cancelled: { icon: CircleSlash2, className: "text-muted-foreground" },
 };
 
 function PlatformInstallStatusGroups({

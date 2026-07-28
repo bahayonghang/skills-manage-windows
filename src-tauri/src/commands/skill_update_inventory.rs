@@ -64,93 +64,112 @@ impl std::fmt::Display for UpdateCommandError {
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn refresh_skill_update_inventory(
     app: AppHandle,
     state: State<'_, AppState>,
     scope: SkillRefreshScope,
     operation_id: String,
-) -> Result<SkillUpdateInventory, String> {
-    let request_context = state.resolve_target_context().await?;
-    let active_target = request_context.target().clone();
-    let pool = request_context.db().clone();
-    let target_context = target_context_from_active_target(&active_target);
-    let request_details = refresh_request_details(&scope);
-    let progress_app = Arc::new(app);
-    let progress: SnapshotProgressReporter = Arc::new(move |event: SnapshotProgressEvent| {
-        let payload = SkillUpdateInventoryProgressPayload {
-            operation_id: operation_id.clone(),
-            status: match event.status {
-                SnapshotProgressStatus::Started => "started",
-                SnapshotProgressStatus::RepositoryStarted => "repository_started",
-                SnapshotProgressStatus::RepositoryCompleted => "repository_completed",
-                SnapshotProgressStatus::RepositoryFailed => "repository_failed",
-                SnapshotProgressStatus::Finalizing => "finalizing",
-            },
-            total: event.total,
-            completed: event.completed,
-            repository_key: event.repository_key,
-            repository_name: event.repository_name,
-        };
-        let _ = progress_app.emit(UPDATE_INVENTORY_PROGRESS_EVENT, payload);
-    });
-    with_operation_log(
-        &state,
-        update_operation_spec(
-            target_context,
-            "update_center.refresh",
-            "Refreshed skill update inventory",
-            "Failed to refresh skill update inventory",
-            request_details,
-            refresh_result_details,
-        ),
-        || async {
-            let fs = CentralFs::from_active_target(active_target)
-                .await
-                .map_err(|e| e.to_string())?;
-            let auth = github_import::github_direct_auth_from_secret_store(
-                &state.db,
-                state.secrets.as_ref(),
+) -> crate::ipc_error::IpcResult<SkillUpdateInventory> {
+    crate::ipc_boundary!(
+        async move {
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let pool = request_context.db().clone();
+            let target_context = target_context_from_active_target(&active_target);
+            let request_details = refresh_request_details(&scope);
+            let progress_app = Arc::new(app);
+            let progress: SnapshotProgressReporter =
+                Arc::new(move |event: SnapshotProgressEvent| {
+                    let payload = SkillUpdateInventoryProgressPayload {
+                        operation_id: operation_id.clone(),
+                        status: match event.status {
+                            SnapshotProgressStatus::Started => "started",
+                            SnapshotProgressStatus::RepositoryStarted => "repository_started",
+                            SnapshotProgressStatus::RepositoryCompleted => "repository_completed",
+                            SnapshotProgressStatus::RepositoryFailed => "repository_failed",
+                            SnapshotProgressStatus::Finalizing => "finalizing",
+                        },
+                        total: event.total,
+                        completed: event.completed,
+                        repository_key: event.repository_key,
+                        repository_name: event.repository_name,
+                    };
+                    let _ = progress_app.emit(UPDATE_INVENTORY_PROGRESS_EVENT, payload);
+                });
+            with_operation_log(
+                &state,
+                update_operation_spec(
+                    target_context,
+                    "update_center.refresh",
+                    "Refreshed skill update inventory",
+                    "Failed to refresh skill update inventory",
+                    request_details,
+                    refresh_result_details,
+                ),
+                || async {
+                    let fs = CentralFs::from_active_target(active_target)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    let auth = github_import::github_direct_auth_from_secret_store(
+                        &state.db,
+                        state.secrets.as_ref(),
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+                    let client = github_import::github_client().map_err(|e| e.to_string())?;
+                    refresh_skill_update_inventory_impl(
+                        &pool,
+                        &fs,
+                        auth.as_deref(),
+                        &client,
+                        &state.central_update_snapshots,
+                        scope,
+                        Some(progress),
+                    )
+                    .await
+                    .map_err(|e| UpdateCommandError(e.to_string()))
+                },
             )
             .await
-            .map_err(|e| e.to_string())?;
-            let client = github_import::github_client().map_err(|e| e.to_string())?;
-            refresh_skill_update_inventory_impl(
-                &pool,
-                &fs,
-                auth.as_deref(),
-                &client,
-                &state.central_update_snapshots,
-                scope,
-                Some(progress),
-            )
-            .await
-            .map_err(|e| UpdateCommandError(e.to_string()))
-        },
+            .map_err(UpdateCommandError::into_inner)
+        }
+        .await
     )
-    .await
-    .map_err(UpdateCommandError::into_inner)
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn get_skill_update_inventory(
     state: State<'_, AppState>,
     scope: Option<SkillRefreshScope>,
-) -> Result<SkillUpdateInventory, String> {
-    let pool = state.active_db().await?;
-    get_skill_update_inventory_impl_scoped(&pool, scope)
+) -> crate::ipc_error::IpcResult<SkillUpdateInventory> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            get_skill_update_inventory_impl_scoped(&pool, scope)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn clear_skill_update_inventory(
     state: State<'_, AppState>,
     scope: Option<SkillRefreshScope>,
-) -> Result<(), String> {
-    let pool = state.active_db().await?;
-    clear_skill_update_inventory_impl(&pool, scope)
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            clear_skill_update_inventory_impl(&pool, scope)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
@@ -159,178 +178,195 @@ pub async fn apply_skill_update_decisions(
     state: State<'_, AppState>,
     job_id: String,
     decisions: SkillUpdateDecisions,
-) -> Result<SkillUpdateApplyResult, String> {
-    let lease = state
-        .central_update_jobs
-        .acquire(&job_id)
-        .map_err(|e| e.to_string())?;
-    let request_context = state.resolve_target_context().await?;
-    let active_target = request_context.target().clone();
-    let pool = request_context.db().clone();
-    let target_context = target_context_from_active_target(&active_target);
-    let request_details = apply_request_details(&decisions);
-    with_operation_log(
-        &state,
-        update_operation_spec(
-            target_context,
-            "update_center.apply",
-            "Applied skill update decisions",
-            "Failed to apply skill update decisions",
-            request_details,
-            apply_result_details,
-        ),
-        || async {
-            let fs = CentralFs::from_active_target(active_target.clone())
-                .await
+) -> crate::ipc_error::IpcResult<SkillUpdateApplyResult> {
+    crate::ipc_boundary!(
+        async move {
+            let lease = state
+                .central_update_jobs
+                .acquire(&job_id)
                 .map_err(|e| e.to_string())?;
-            let auth = github_import::github_direct_auth_from_secret_store(
-                &state.db,
-                state.secrets.as_ref(),
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let pool = request_context.db().clone();
+            let target_context = target_context_from_active_target(&active_target);
+            let request_details = apply_request_details(&decisions);
+            with_operation_log(
+                &state,
+                update_operation_spec(
+                    target_context,
+                    "update_center.apply",
+                    "Applied skill update decisions",
+                    "Failed to apply skill update decisions",
+                    request_details,
+                    apply_result_details,
+                ),
+                || async {
+                    let fs = CentralFs::from_active_target(active_target.clone())
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    let auth = github_import::github_direct_auth_from_secret_store(
+                        &state.db,
+                        state.secrets.as_ref(),
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+                    let client = github_import::github_client().map_err(|e| e.to_string())?;
+                    apply_skill_update_decisions_impl(
+                        Some(&app),
+                        lease.job_id(),
+                        &pool,
+                        &active_target,
+                        &fs,
+                        lease.cancel_flag(),
+                        auth.as_deref(),
+                        &client,
+                        &state.central_update_snapshots,
+                        decisions,
+                    )
+                    .await
+                    .map_err(|e| UpdateCommandError(e.to_string()))
+                },
             )
             .await
-            .map_err(|e| e.to_string())?;
-            let client = github_import::github_client().map_err(|e| e.to_string())?;
-            apply_skill_update_decisions_impl(
-                Some(&app),
-                lease.job_id(),
-                &pool,
-                &active_target,
-                &fs,
-                lease.cancel_flag(),
-                auth.as_deref(),
-                &client,
-                &state.central_update_snapshots,
-                decisions,
-            )
-            .await
-            .map_err(|e| UpdateCommandError(e.to_string()))
-        },
+            .map_err(UpdateCommandError::into_inner)
+        }
+        .await
     )
-    .await
-    .map_err(UpdateCommandError::into_inner)
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn force_update_central_skills(
     state: State<'_, AppState>,
     request: ForceSkillUpdateRequest,
-) -> Result<ForceSkillUpdateResult, String> {
-    let request_context = state.resolve_target_context().await?;
-    let active_target = request_context.target().clone();
-    let pool = request_context.db().clone();
-    let target_context = target_context_from_active_target(&active_target);
-    let request_details = json!({
-        "requestedSkills": request.skill_ids.len(),
-        "refreshCopies": request.refresh_copy_installations,
-    });
-    with_operation_log(
-        &state,
-        update_operation_spec(
-            target_context,
-            "update_center.force_update",
-            "Force-updated Central skills",
-            "Failed to force-update Central skills",
-            request_details,
-            |result: &ForceSkillUpdateResult| {
-                json!({
-                    "overwritten": result.overwritten.len(),
-                    "skipped": result.skipped.len(),
-                    "failed": result.failed.len(),
-                })
-            },
-        ),
-        || async {
-            let fs = CentralFs::from_active_target(active_target)
-                .await
-                .map_err(|e| e.to_string())?;
-            let auth = github_import::github_direct_auth_from_secret_store(
-                &state.db,
-                state.secrets.as_ref(),
+) -> crate::ipc_error::IpcResult<ForceSkillUpdateResult> {
+    crate::ipc_boundary!(
+        async move {
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let pool = request_context.db().clone();
+            let target_context = target_context_from_active_target(&active_target);
+            let request_details = json!({
+                "requestedSkills": request.skill_ids.len(),
+                "refreshCopies": request.refresh_copy_installations,
+            });
+            with_operation_log(
+                &state,
+                update_operation_spec(
+                    target_context,
+                    "update_center.force_update",
+                    "Force-updated Central skills",
+                    "Failed to force-update Central skills",
+                    request_details,
+                    |result: &ForceSkillUpdateResult| {
+                        json!({
+                            "overwritten": result.overwritten.len(),
+                            "skipped": result.skipped.len(),
+                            "failed": result.failed.len(),
+                        })
+                    },
+                ),
+                || async {
+                    let fs = CentralFs::from_active_target(active_target)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    let auth = github_import::github_direct_auth_from_secret_store(
+                        &state.db,
+                        state.secrets.as_ref(),
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+                    let client = github_import::github_client().map_err(|e| e.to_string())?;
+                    force_update_central_skills_impl(
+                        &pool,
+                        &fs,
+                        auth.as_deref(),
+                        &client,
+                        &state.central_update_snapshots,
+                        SnapshotCachePolicy::Bypass,
+                        request,
+                    )
+                    .await
+                    .map_err(|e| UpdateCommandError(e.to_string()))
+                },
             )
             .await
-            .map_err(|e| e.to_string())?;
-            let client = github_import::github_client().map_err(|e| e.to_string())?;
-            force_update_central_skills_impl(
-                &pool,
-                &fs,
-                auth.as_deref(),
-                &client,
-                &state.central_update_snapshots,
-                SnapshotCachePolicy::Bypass,
-                request,
-            )
-            .await
-            .map_err(|e| UpdateCommandError(e.to_string()))
-        },
+            .map_err(UpdateCommandError::into_inner)
+        }
+        .await
     )
-    .await
-    .map_err(UpdateCommandError::into_inner)
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn force_mirror_central_repositories(
     app: AppHandle,
     state: State<'_, AppState>,
     request: ForceRepositoryMirrorRequest,
-) -> Result<ForceRepositoryMirrorResult, String> {
-    let request_context = state.resolve_target_context().await?;
-    let active_target = request_context.target().clone();
-    let pool = request_context.db().clone();
-    let target_context = target_context_from_active_target(&active_target);
-    let request_details = json!({
-        "requestedRepositories": request.repository_ids.len(),
-        "deleteMissing": request.delete_missing,
-        "importAdded": request.import_added,
-        "overwriteTracked": request.overwrite_tracked,
-    });
-    with_operation_log(
-        &state,
-        update_operation_spec(
-            target_context,
-            "update_center.force_mirror",
-            "Force-mirrored Central repositories",
-            "Failed to force-mirror Central repositories",
-            request_details,
-            |result: &ForceRepositoryMirrorResult| {
-                json!({
-                    "overwritten": result.overwritten.len(),
-                    "imported": result.imported.len(),
-                    "deleted": result.deleted.succeeded.len(),
-                    "deleteFailures": result.deleted.failed.len(),
-                    "skipped": result.skipped.len(),
-                    "failedRepositories": result.failed_repositories.len(),
-                    "failedItems": result.failed_items.len(),
-                })
-            },
-        ),
-        || async {
-            let fs = CentralFs::from_active_target(active_target.clone())
-                .await
-                .map_err(|e| e.to_string())?;
-            let auth = github_import::github_direct_auth_from_secret_store(
-                &state.db,
-                state.secrets.as_ref(),
+) -> crate::ipc_error::IpcResult<ForceRepositoryMirrorResult> {
+    crate::ipc_boundary!(
+        async move {
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let pool = request_context.db().clone();
+            let target_context = target_context_from_active_target(&active_target);
+            let request_details = json!({
+                "requestedRepositories": request.repository_ids.len(),
+                "deleteMissing": request.delete_missing,
+                "importAdded": request.import_added,
+                "overwriteTracked": request.overwrite_tracked,
+            });
+            with_operation_log(
+                &state,
+                update_operation_spec(
+                    target_context,
+                    "update_center.force_mirror",
+                    "Force-mirrored Central repositories",
+                    "Failed to force-mirror Central repositories",
+                    request_details,
+                    |result: &ForceRepositoryMirrorResult| {
+                        json!({
+                            "overwritten": result.overwritten.len(),
+                            "imported": result.imported.len(),
+                            "deleted": result.deleted.succeeded.len(),
+                            "deleteFailures": result.deleted.failed.len(),
+                            "skipped": result.skipped.len(),
+                            "failedRepositories": result.failed_repositories.len(),
+                            "failedItems": result.failed_items.len(),
+                        })
+                    },
+                ),
+                || async {
+                    let fs = CentralFs::from_active_target(active_target.clone())
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    let auth = github_import::github_direct_auth_from_secret_store(
+                        &state.db,
+                        state.secrets.as_ref(),
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+                    let client = github_import::github_client().map_err(|e| e.to_string())?;
+                    force_mirror_central_repositories_impl(
+                        Some(&app),
+                        &pool,
+                        &active_target,
+                        &fs,
+                        auth.as_deref(),
+                        &client,
+                        &state.central_update_snapshots,
+                        SnapshotCachePolicy::Bypass,
+                        request,
+                    )
+                    .await
+                    .map_err(|e| UpdateCommandError(e.to_string()))
+                },
             )
             .await
-            .map_err(|e| e.to_string())?;
-            let client = github_import::github_client().map_err(|e| e.to_string())?;
-            force_mirror_central_repositories_impl(
-                Some(&app),
-                &pool,
-                &active_target,
-                &fs,
-                auth.as_deref(),
-                &client,
-                &state.central_update_snapshots,
-                SnapshotCachePolicy::Bypass,
-                request,
-            )
-            .await
-            .map_err(|e| UpdateCommandError(e.to_string()))
-        },
+            .map_err(UpdateCommandError::into_inner)
+        }
+        .await
     )
-    .await
-    .map_err(UpdateCommandError::into_inner)
 }
 
 fn update_operation_event(
@@ -483,23 +519,35 @@ mod tests {
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn scan_platform_duplicate_skills(
     state: State<'_, AppState>,
     agent_ids: Option<Vec<String>>,
-) -> Result<Vec<PlatformDuplicateGroup>, String> {
-    let pool = state.active_db().await?;
-    scan_platform_duplicate_skills_with_pool(&pool, agent_ids)
+) -> crate::ipc_error::IpcResult<Vec<PlatformDuplicateGroup>> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            scan_platform_duplicate_skills_with_pool(&pool, agent_ids)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn scan_deleted_platform_copies(
     state: State<'_, AppState>,
     agent_ids: Option<Vec<String>>,
-) -> Result<Vec<DeletedPlatformCopyGroup>, String> {
-    let pool = state.active_db().await?;
-    scan_deleted_platform_copies_with_pool(&pool, agent_ids)
+) -> crate::ipc_error::IpcResult<Vec<DeletedPlatformCopyGroup>> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            scan_deleted_platform_copies_with_pool(&pool, agent_ids)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }

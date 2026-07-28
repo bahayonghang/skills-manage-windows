@@ -22,6 +22,7 @@ import {
   __resetMainWindowReadyForTest,
   clearIpcFixturesForTest,
   invoke,
+  IpcInvokeError,
   IpcFixtureMissingError,
   isTauriRuntime,
   listen,
@@ -97,18 +98,26 @@ describe("ipc adapter", () => {
     it("records IPC failures through the registered diagnostic hook", async () => {
       enableTauriRuntime();
       const recorder = vi.fn();
-      const error = new Error("backend failed");
+      const error = {
+        code: "storage.unavailable",
+        message: "Backend failed",
+        retryable: false,
+      };
       registerIpcFailureRecorder(recorder);
       mockTauriInvoke.mockRejectedValueOnce(error);
 
       await expect(
         invoke("dangerous_command", { token: "secret" }),
-      ).rejects.toThrow("backend failed");
+      ).rejects.toThrow("Backend failed");
 
       expect(recorder).toHaveBeenCalledWith(
         "dangerous_command",
-        { token: "secret" },
-        error,
+        { token: "[REDACTED]" },
+        expect.objectContaining({
+          code: "storage.unavailable",
+          message: "Backend failed",
+          retryable: false,
+        }),
       );
     });
 
@@ -120,7 +129,7 @@ describe("ipc adapter", () => {
 
       await expect(
         invoke("record_frontend_runtime_log", { payload: { message: "boom" } }),
-      ).rejects.toThrow("logger failed");
+      ).rejects.toThrow("The operation failed. See runtime logs for details.");
 
       expect(recorder).not.toHaveBeenCalled();
     });
@@ -135,6 +144,143 @@ describe("ipc adapter", () => {
 
       expect(recorder).toHaveBeenCalledTimes(1);
       expect(recorder.mock.calls[0][0]).toBe("get_obsidian_vaults");
+    });
+  });
+
+  describe("error normalization", () => {
+    it("passes an existing IpcInvokeError through unchanged", async () => {
+      enableTauriRuntime();
+      const rejection = new IpcInvokeError({
+        code: "operation.cancelled",
+        message: "The operation was cancelled.",
+        retryable: false,
+      });
+      mockTauriInvoke.mockRejectedValueOnce(rejection);
+
+      const error = await invoke("dangerous_command").catch((value) => value);
+
+      expect(error).toBe(rejection);
+    });
+
+    it("wraps structured payloads and preserves message stringification", async () => {
+      enableTauriRuntime();
+      mockTauriInvoke.mockRejectedValueOnce({
+        code: "operation.cancelled",
+        message: "Historical cancellation message",
+        retryable: false,
+      });
+
+      const error = (await invoke("dangerous_command").catch(
+        (value) => value,
+      )) as IpcInvokeError;
+
+      expect(error).toBeInstanceOf(IpcInvokeError);
+      expect(error.code).toBe("operation.cancelled");
+      expect(error.retryable).toBe(false);
+      expect(String(error)).toBe("Historical cancellation message");
+      expect(String(error)).not.toContain("[object Object]");
+      expect(String(error)).not.toContain("IpcInvokeError:");
+
+      const direct = new IpcInvokeError({
+        code: "operation.cancelled",
+        message: "Historical cancellation message",
+        retryable: false,
+      });
+      expect(String(direct)).toBe("Historical cancellation message");
+    });
+
+    it.each([
+      [
+        "legacy coded string",
+        "ai.rate_limit:Try again",
+        "ai.rate_limit",
+        "The AI provider request failed.",
+      ],
+      [
+        "plain string",
+        "Legacy failure",
+        "internal.unexpected",
+        "The operation failed. See runtime logs for details.",
+      ],
+      [
+        "JavaScript Error",
+        new Error("Transport failure"),
+        "internal.unexpected",
+        "The operation failed. See runtime logs for details.",
+      ],
+    ])("normalizes %s", async (_label, rejection, code, message) => {
+      enableTauriRuntime();
+      mockTauriInvoke.mockRejectedValueOnce(rejection);
+
+      const error = (await invoke("dangerous_command").catch(
+        (value) => value,
+      )) as IpcInvokeError;
+
+      expect(error).toBeInstanceOf(IpcInvokeError);
+      expect(error.code).toBe(code);
+      expect(String(error)).toBe(message);
+    });
+
+    it("uses a fixed safe message for unknown transport values", async () => {
+      enableTauriRuntime();
+      mockTauriInvoke.mockRejectedValueOnce({ raw: "transport detail" });
+
+      await expect(invoke("dangerous_command")).rejects.toThrow(
+        "The operation failed. See runtime logs for details.",
+      );
+    });
+
+    it("redacts sensitive messages before recording or display", async () => {
+      enableTauriRuntime();
+      const recorder = vi.fn();
+      registerIpcFailureRecorder(recorder);
+      mockTauriInvoke.mockRejectedValueOnce(
+        "failed at C:\\Users\\alice\\skill.md token=ghp_secret",
+      );
+
+      const error = await invoke("dangerous_command", {
+        password: "hunter2",
+        path: "C:\\Users\\alice\\skill.md",
+      }).catch((value) => value);
+
+      expect(String(error)).not.toContain("alice");
+      expect(String(error)).not.toContain("ghp_secret");
+      expect(recorder).toHaveBeenCalledWith(
+        "dangerous_command",
+        { password: "[REDACTED]", path: "[REDACTED]" },
+        error,
+      );
+    });
+
+    it.each([
+      String.raw`C:\Users\alice\private\skill.md`,
+      "C:/Users/alice/private/skill.md",
+      String.raw`..\alice\private\skill.md`,
+      "../alice/private/skill.md",
+      "/home/alice/private/skill.md",
+      "ssh -i private.pem host -- command",
+      "stdout: first line\nstderr: second line",
+      "ghp_super_secret",
+      "sk-live-secret",
+      "-----BEGIN PRIVATE KEY-----",
+      "file content: private thesis text",
+      "https://example.invalid/path?token=secret",
+      "quoted data: 'private value'",
+      "UNKNOWN_ENV=private-value",
+    ])("never exposes an adversarial raw rejection seed %s", async (seed) => {
+      enableTauriRuntime();
+      const recorder = vi.fn();
+      registerIpcFailureRecorder(recorder);
+      mockTauriInvoke.mockRejectedValueOnce(seed);
+
+      const error = await invoke("dangerous_command", {
+        value: seed,
+        nested: { content: seed },
+      }).catch((value) => value);
+      const recorded = JSON.stringify(recorder.mock.calls);
+
+      expect(String(error)).not.toContain(seed);
+      expect(recorded).not.toContain(seed);
     });
   });
 
@@ -201,7 +347,9 @@ describe("ipc adapter", () => {
         throw new Error("fixture boom");
       });
 
-      await expect(invoke("boom_command")).rejects.toThrow("fixture boom");
+      await expect(invoke("boom_command")).rejects.toThrow(
+        "The operation failed. See runtime logs for details.",
+      );
     });
 
     it("rejects with IpcFixtureMissingError for unregistered commands", async () => {

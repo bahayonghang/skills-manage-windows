@@ -165,7 +165,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       }));
       return;
     }
-    await invoke<void>("remove_scan_directory", { path });
+    await invoke("remove_scan_directory", { path });
     set((state) => ({
       scanDirectories: state.scanDirectories.filter((dir) => dir.path !== path),
     }));
@@ -250,7 +250,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       return;
     }
     try {
-      const state = await invoke<GitHubPatState>("get_github_pat");
+      const state = await invoke("get_github_pat");
       set({
         githubPatState: state,
         isLoadingGitHubPat: false,
@@ -276,7 +276,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       return;
     }
     try {
-      const state = await invoke<GitHubPatState>("set_github_pat", { value });
+      const state = await invoke("set_github_pat", { value });
       set({
         githubPatState: state,
         isSavingGitHubPat: false,
@@ -302,7 +302,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       return;
     }
     try {
-      const state = await invoke<GitHubPatState>("clear_github_pat");
+      const state = await invoke("clear_github_pat");
       set({
         githubPatState: state,
         isSavingGitHubPat: false,
@@ -327,7 +327,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       return BROWSER_FIXTURE_GITHUB_PAT_TEST_RESULT;
     }
     try {
-      const result = await invoke<GitHubPatTestResult>("test_github_pat");
+      const result = await invoke("test_github_pat");
       set({
         githubPatTestResult: result,
         isTestingGitHubPat: false,

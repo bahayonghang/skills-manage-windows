@@ -1,4 +1,4 @@
-import { registerIpcFixtures } from "@/lib/ipc";
+import { ipcFixtureError, registerIpcFixtures } from "@/lib/ipc";
 import type { TagGroup } from "@/types";
 
 /** 浏览器演示态的内存数据集：CRUD 全走 fixture 命令，store 只按真实路径 refetch。 */
@@ -42,7 +42,9 @@ export function registerTagGroupFixtures(): void {
           : g,
       );
       const found = groups.find((g) => g.id === id);
-      if (!found) throw new Error(`Tag group '${id}' not found`);
+      if (!found) {
+        throw ipcFixtureError("resource.not_found", "Tag group not found");
+      }
       return found;
     },
     delete_tag_group: ({ id }) => {

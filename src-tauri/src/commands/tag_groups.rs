@@ -107,18 +107,30 @@ pub async fn set_tag_group_impl(
 // ─── Tauri commands ──────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub async fn list_tag_groups(state: State<'_, AppState>) -> Result<Vec<TagGroup>, String> {
-    let pool = state.active_db().await?;
-    list_tag_groups_impl(&pool).await
+pub async fn list_tag_groups(
+    state: State<'_, AppState>,
+) -> crate::ipc_error::IpcResult<Vec<TagGroup>> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            list_tag_groups_impl(&pool).await
+        }
+        .await
+    )
 }
 
 #[tauri::command]
 pub async fn create_tag_group(
     state: State<'_, AppState>,
     input: CreateTagGroupInput,
-) -> Result<TagGroup, String> {
-    let pool = state.active_db().await?;
-    create_tag_group_impl(&pool, input).await
+) -> crate::ipc_error::IpcResult<TagGroup> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            create_tag_group_impl(&pool, input).await
+        }
+        .await
+    )
 }
 
 #[tauri::command]
@@ -126,24 +138,42 @@ pub async fn update_tag_group(
     state: State<'_, AppState>,
     id: String,
     input: UpdateTagGroupInput,
-) -> Result<TagGroup, String> {
-    let pool = state.active_db().await?;
-    update_tag_group_impl(&pool, &id, input).await
+) -> crate::ipc_error::IpcResult<TagGroup> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            update_tag_group_impl(&pool, &id, input).await
+        }
+        .await
+    )
 }
 
 #[tauri::command]
-pub async fn delete_tag_group(state: State<'_, AppState>, id: String) -> Result<(), String> {
-    let pool = state.active_db().await?;
-    delete_tag_group_impl(&pool, &id).await
+pub async fn delete_tag_group(
+    state: State<'_, AppState>,
+    id: String,
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            delete_tag_group_impl(&pool, &id).await
+        }
+        .await
+    )
 }
 
 #[tauri::command]
 pub async fn reorder_tag_groups(
     state: State<'_, AppState>,
     ids: Vec<String>,
-) -> Result<(), String> {
-    let pool = state.active_db().await?;
-    reorder_tag_groups_impl(&pool, ids).await
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            reorder_tag_groups_impl(&pool, ids).await
+        }
+        .await
+    )
 }
 
 #[tauri::command]
@@ -151,9 +181,14 @@ pub async fn set_tag_group(
     state: State<'_, AppState>,
     tag_id: String,
     group_id: Option<String>,
-) -> Result<(), String> {
-    let pool = state.active_db().await?;
-    set_tag_group_impl(&pool, &tag_id, group_id.as_deref()).await
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            set_tag_group_impl(&pool, &tag_id, group_id.as_deref()).await
+        }
+        .await
+    )
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────

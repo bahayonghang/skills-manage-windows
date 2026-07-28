@@ -92,7 +92,7 @@ export interface ScannedSkill {
   id: string;
   row_id?: string;
   name: string;
-  description?: string;
+  description: string | null;
   file_path: string;
   dir_path: string;
   link_type: string;
@@ -275,7 +275,7 @@ export interface DeleteSkillRepositoryResult {
 export interface Collection {
   id: string;
   name: string;
-  description?: string;
+  description: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -300,10 +300,10 @@ export interface SkillRepository {
   id: string;
   name: string;
   source_type: string;
-  owner?: string;
-  repo?: string;
-  branch?: string;
-  url?: string;
+  owner: string | null;
+  repo: string | null;
+  branch: string | null;
+  url: string | null;
   pinned: boolean;
   is_unknown: boolean;
   created_at: string;
@@ -402,7 +402,8 @@ export type CentralSkillUpdateStatus =
   | "update_available"
   | "unsupported"
   | "remote_missing"
-  | "error";
+  | "error"
+  | "cancelled";
 
 export interface CentralSkillUpdateState {
   skill_id: string;

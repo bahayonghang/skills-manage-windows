@@ -5,6 +5,7 @@ import type {
   CentralRepositorySyncPreview,
 } from "@/types/centralRepositorySync";
 import * as tauriBridge from "@/lib/ipc";
+import { ipcFixtureError } from "@/lib/ipc/errors";
 
 // Mock Tauri core before importing the store
 vi.mock("@tauri-apps/api/core", () => ({
@@ -82,6 +83,10 @@ const mockRepositories: SkillRepositoryWithStats[] = [
     id: "local-unknown",
     name: "本地 / 未知来源",
     source_type: "local",
+    owner: null,
+    repo: null,
+    branch: null,
+    url: null,
     pinned: false,
     is_unknown: true,
     created_at: "2026-04-17T00:00:00.000Z",
@@ -270,24 +275,28 @@ describe("centralSkillsStore", () => {
   });
 
   it("sets error when loadCentralSkills fails", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("DB error"));
+    vi.mocked(invoke).mockRejectedValueOnce(
+      ipcFixtureError("storage.unavailable", "DB error"),
+    );
 
     await useCentralSkillsStore.getState().loadCentralSkills();
 
     const state = useCentralSkillsStore.getState();
-    expect(state.error).toContain("DB error");
+    expect(state.error).toBe("DB error");
     expect(state.isLoading).toBe(false);
   });
 
   it("rethrows on failure when throwOnError is true and still writes store error", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("DB error"));
+    vi.mocked(invoke).mockRejectedValueOnce(
+      ipcFixtureError("storage.unavailable", "DB error"),
+    );
 
     await expect(
       useCentralSkillsStore.getState().loadCentralSkills({ throwOnError: true })
     ).rejects.toThrow("DB error");
 
     const state = useCentralSkillsStore.getState();
-    expect(state.error).toContain("DB error");
+    expect(state.error).toBe("DB error");
     expect(state.isLoading).toBe(false);
     expect(state.isRefreshingList).toBe(false);
   });
@@ -614,7 +623,9 @@ describe("centralSkillsStore", () => {
   });
 
   it("sets error and clears deleting state when central deletion fails", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("delete failed"));
+    vi.mocked(invoke).mockRejectedValueOnce(
+      ipcFixtureError("storage.unavailable", "delete failed"),
+    );
 
     await expect(
       useCentralSkillsStore
@@ -622,7 +633,7 @@ describe("centralSkillsStore", () => {
         .deleteCentralSkill("frontend-design", [])
     ).rejects.toThrow("delete failed");
 
-    expect(useCentralSkillsStore.getState().error).toContain("delete failed");
+    expect(useCentralSkillsStore.getState().error).toBe("delete failed");
     expect(useCentralSkillsStore.getState().isDeleting).toBe(false);
   });
 
@@ -777,7 +788,9 @@ describe("centralSkillsStore", () => {
   });
 
   it("sets error and re-throws when installSkill fails", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("symlink failed"));
+    vi.mocked(invoke).mockRejectedValueOnce(
+      ipcFixtureError("storage.unavailable", "symlink failed"),
+    );
 
     await expect(
       useCentralSkillsStore
@@ -786,7 +799,7 @@ describe("centralSkillsStore", () => {
     ).rejects.toThrow("symlink failed");
 
     const state = useCentralSkillsStore.getState();
-    expect(state.error).toContain("symlink failed");
+    expect(state.error).toBe("symlink failed");
     expect(state.isInstalling).toBe(false);
   });
 
@@ -850,7 +863,9 @@ describe("centralSkillsStore", () => {
   it("sets error and re-throws when togglePlatformLink fails", async () => {
     useCentralSkillsStore.setState({ skills: mockSkills });
 
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("toggle failed"));
+    vi.mocked(invoke).mockRejectedValueOnce(
+      ipcFixtureError("storage.unavailable", "toggle failed"),
+    );
 
     await expect(
       useCentralSkillsStore
@@ -859,7 +874,7 @@ describe("centralSkillsStore", () => {
     ).rejects.toThrow("toggle failed");
 
     const state = useCentralSkillsStore.getState();
-    expect(state.error).toContain("toggle failed");
+    expect(state.error).toBe("toggle failed");
     expect(state.togglingAgentId).toBeNull();
   });
 

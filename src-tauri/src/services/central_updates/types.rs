@@ -4,56 +4,11 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+pub use crate::db::SkillUpdateStatus;
 use crate::db::{Skill, SkillRepositoryAssignment, SkillUpdateState};
 use crate::services::github_import::{GitHubRepoRef, RemoteSkillCandidate};
 
 use super::fs::RemoteSkillFile;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SkillUpdateStatus {
-    UpToDate,
-    UpdateAvailable,
-    Unsupported,
-    RemoteMissing,
-    Error,
-    Cancelled,
-}
-
-impl SkillUpdateStatus {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::UpToDate => "up_to_date",
-            Self::UpdateAvailable => "update_available",
-            Self::Unsupported => "unsupported",
-            Self::RemoteMissing => "remote_missing",
-            Self::Error => "error",
-            Self::Cancelled => "cancelled",
-        }
-    }
-}
-
-impl std::fmt::Display for SkillUpdateStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-impl std::str::FromStr for SkillUpdateStatus {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "up_to_date" => Self::UpToDate,
-            "update_available" => Self::UpdateAvailable,
-            "unsupported" => Self::Unsupported,
-            "remote_missing" => Self::RemoteMissing,
-            "error" => Self::Error,
-            "cancelled" => Self::Cancelled,
-            other => return Err(format!("unknown SkillUpdateStatus: {other}")),
-        })
-    }
-}
 
 /// Cache policy for GitHub repository snapshots during update checks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

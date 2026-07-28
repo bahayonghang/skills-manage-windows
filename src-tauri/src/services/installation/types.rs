@@ -7,12 +7,14 @@
 use serde::{Deserialize, Serialize};
 
 /// Result of a single skill install operation.
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstallResult {
     pub symlink_path: String,
 }
 
 /// Describes a target that was already installed and safely left in place.
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkippedInstall {
     pub agent_id: String,
@@ -21,6 +23,7 @@ pub struct SkippedInstall {
 }
 
 /// Result of a batch install across multiple agents.
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BatchInstallResult {
     pub succeeded: Vec<String>,
@@ -29,6 +32,7 @@ pub struct BatchInstallResult {
 }
 
 /// Describes a single failed install within a batch operation.
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FailedInstall {
     pub agent_id: String,
@@ -61,6 +65,7 @@ pub struct BatchUninstallSkillResult {
 }
 
 /// Successful item from a Central batch install request.
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CentralBatchInstallSuccess {
     pub skill_id: String,
@@ -69,6 +74,7 @@ pub struct CentralBatchInstallSuccess {
 }
 
 /// Failed item from a Central batch install request.
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CentralBatchInstallFailure {
     pub skill_id: String,
@@ -77,6 +83,7 @@ pub struct CentralBatchInstallFailure {
 }
 
 /// Skipped item from a Central batch install request.
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CentralBatchInstallSkipped {
     pub skill_id: String,
@@ -86,6 +93,7 @@ pub struct CentralBatchInstallSkipped {
 }
 
 /// Result of installing multiple Central skills to multiple targets.
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CentralBatchInstallResult {
     pub succeeded: Vec<CentralBatchInstallSuccess>,

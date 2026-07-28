@@ -60,9 +60,17 @@ const binaryTargets = skillportPackage.targets
   .filter(({ kind }) => kind.includes("bin"))
   .map(({ name }) => name);
 const missingBins = expectedBins.filter((name) => !binaryTargets.includes(name));
+const unexpectedBins = binaryTargets.filter((name) => !expectedBins.includes(name));
 
 if (missingBins.length > 0) {
   console.error(`[entrypointcheck] Missing binary target(s): ${missingBins.join(", ")}.`);
+  process.exit(1);
+}
+
+if (unexpectedBins.length > 0) {
+  console.error(
+    `[entrypointcheck] Unexpected binary target(s) would be included in desktop bundles: ${unexpectedBins.join(", ")}.`,
+  );
   process.exit(1);
 }
 

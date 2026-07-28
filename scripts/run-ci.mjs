@@ -25,6 +25,7 @@ const chains = [
     name: "rust",
     steps: [
       { name: "entrypoints", command: "pnpm", args: ["entrypointcheck"] },
+      { name: "ipc-codegen", command: "pnpm", args: ["ipc:codegen:check"] },
       {
         name: "fmt",
         command: "cargo",

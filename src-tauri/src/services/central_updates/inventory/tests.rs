@@ -1093,7 +1093,7 @@ async fn refresh_clears_stale_update_inventory_without_touching_baseline() {
             latest_remote_hash: Some("fnv1a64:new".to_string()),
             last_checked_at: Some(Utc::now().to_rfc3339()),
             last_updated_at: None,
-            status: SkillUpdateStatus::UpdateAvailable.to_string(),
+            status: SkillUpdateStatus::UpdateAvailable,
             error: None,
         },
     )
@@ -1128,10 +1128,7 @@ async fn refresh_clears_stale_update_inventory_without_touching_baseline() {
         .await
         .unwrap();
     assert_eq!(states.len(), 1);
-    assert_eq!(
-        states[0].status,
-        SkillUpdateStatus::UpdateAvailable.to_string()
-    );
+    assert_eq!(states[0].status, SkillUpdateStatus::UpdateAvailable);
 }
 
 #[tokio::test]
@@ -1672,7 +1669,7 @@ async fn clear_inventory_does_not_delete_skills_or_update_states() {
             latest_remote_hash: None,
             last_checked_at: Some(Utc::now().to_rfc3339()),
             last_updated_at: None,
-            status: SkillUpdateStatus::UpdateAvailable.to_string(),
+            status: SkillUpdateStatus::UpdateAvailable,
             error: None,
         },
     )
@@ -1765,7 +1762,7 @@ async fn apply_keep_missing_detaches_source() {
             latest_remote_hash: None,
             last_checked_at: Some(Utc::now().to_rfc3339()),
             last_updated_at: None,
-            status: SkillUpdateStatus::RemoteMissing.to_string(),
+            status: SkillUpdateStatus::RemoteMissing,
             error: Some("removed remotely".to_string()),
         },
     )
@@ -2015,7 +2012,7 @@ async fn apply_returns_clean_result_when_all_succeed() {
             latest_remote_hash: None,
             last_checked_at: Some(Utc::now().to_rfc3339()),
             last_updated_at: None,
-            status: SkillUpdateStatus::RemoteMissing.to_string(),
+            status: SkillUpdateStatus::RemoteMissing,
             error: Some("removed remotely".to_string()),
         },
     )
@@ -2369,7 +2366,7 @@ async fn force_update_overwrites_when_hashes_match_and_refreshes_copy() {
         .await
         .unwrap();
     assert_eq!(states.len(), 1);
-    assert_eq!(states[0].status, SkillUpdateStatus::UpToDate.to_string());
+    assert_eq!(states[0].status, SkillUpdateStatus::UpToDate);
     assert_eq!(states[0].last_remote_hash, states[0].latest_remote_hash);
 }
 

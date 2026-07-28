@@ -144,7 +144,7 @@ export function GlobalSearchDialog({
       result.push({
         id: `collection-${col.id}`,
         label: col.name,
-        description: col.description,
+        description: col.description ?? undefined,
         groupKey: "collections",
         groupLabel: t("globalSearch.collections"),
         icon: (

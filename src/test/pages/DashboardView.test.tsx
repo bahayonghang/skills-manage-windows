@@ -82,6 +82,8 @@ const repositories: SkillRepositoryWithStats[] = [
     source_type: "github",
     owner: "openai",
     repo: "skills",
+    branch: null,
+    url: null,
     pinned: false,
     is_unknown: false,
     created_at: "2026-04-10T00:00:00Z",

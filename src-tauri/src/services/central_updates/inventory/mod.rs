@@ -228,8 +228,8 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
             }
         };
 
-        match state_result.status.parse::<SkillUpdateStatus>().ok() {
-            Some(SkillUpdateStatus::UpdateAvailable) => {
+        match state_result.status {
+            SkillUpdateStatus::UpdateAvailable => {
                 let repository_id = repository_id_for_state(&repo_by_id, &state_result);
                 let diagnostics = Some(diagnostic_from_state(&state_result, cache_policy, false));
                 updatable.push(UpdatableSkill {
@@ -238,7 +238,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
                     diagnostics,
                 });
             }
-            Some(SkillUpdateStatus::RemoteMissing) => {
+            SkillUpdateStatus::RemoteMissing => {
                 remote_missing_states.push(state_result);
             }
             _ => {

@@ -1185,7 +1185,8 @@
       "update_available": "Update available",
       "unsupported": "Unsupported",
       "remote_missing": "Removed remotely",
-      "error": "Check failed"
+      "error": "Check failed",
+      "cancelled": "Cancelled"
     },
     "portabilityOpen": "Import / Export",
     "portabilityTitle": "Import / export Central state",

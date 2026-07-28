@@ -105,7 +105,7 @@ pub(crate) async fn check_central_skill_updates_impl(
             app,
             job_id,
             "checking",
-            &state_result.status,
+            state_result.status.as_str(),
             total,
             &counters,
             Some(skill),
@@ -414,7 +414,7 @@ pub(crate) async fn keep_remote_missing_central_skills_impl(
         let update_state = states_by_skill_id
             .get(skill_id)
             .ok_or_else(|| CentralUpdatesError::NoRemoteMissingState(skill_id.clone()))?;
-        if update_state.status != SkillUpdateStatus::RemoteMissing.as_str() {
+        if update_state.status != SkillUpdateStatus::RemoteMissing {
             return Err(CentralUpdatesError::NotRemoteMissing(skill_id.clone()));
         }
     }
@@ -674,9 +674,9 @@ pub(crate) fn state_from_remote(
         last_checked_at: Some(now.clone()),
         last_updated_at: if updated { Some(now) } else { None },
         status: if updated {
-            SkillUpdateStatus::UpToDate.to_string()
+            SkillUpdateStatus::UpToDate
         } else {
-            status.to_string()
+            status
         },
         error: None,
     }
@@ -722,13 +722,13 @@ pub(crate) fn unsupported_state_from_assignment(
         latest_remote_hash: None,
         last_checked_at: Some(Utc::now().to_rfc3339()),
         last_updated_at: None,
-        status: SkillUpdateStatus::Unsupported.to_string(),
+        status: SkillUpdateStatus::Unsupported,
         error: Some(reason),
     }
 }
 
 fn is_fresh_update_available_state(state: &SkillUpdateState) -> bool {
-    if state.status != SkillUpdateStatus::UpdateAvailable.as_str() {
+    if state.status != SkillUpdateStatus::UpdateAvailable {
         return false;
     }
     let Some(last_checked_at) = state.last_checked_at.as_deref() else {
@@ -758,7 +758,7 @@ pub(crate) fn remote_missing_state_from_assignment(
         latest_remote_hash: None,
         last_checked_at: Some(Utc::now().to_rfc3339()),
         last_updated_at: None,
-        status: SkillUpdateStatus::RemoteMissing.to_string(),
+        status: SkillUpdateStatus::RemoteMissing,
         error: Some(reason.to_string()),
     }
 }
@@ -779,7 +779,7 @@ pub(crate) fn error_state_from_assignment(
         latest_remote_hash: None,
         last_checked_at: Some(Utc::now().to_rfc3339()),
         last_updated_at: None,
-        status: SkillUpdateStatus::Error.to_string(),
+        status: SkillUpdateStatus::Error,
         error: Some(error.to_string()),
     }
 }
@@ -817,16 +817,15 @@ fn skill_target_dir(skill: &Skill) -> Result<PathBuf, CentralUpdatesError> {
 
 pub(crate) fn update_counters_for_state(counters: &mut UpdateCounters, state: &SkillUpdateState) {
     counters.completed += 1;
-    let parsed = state.status.parse::<SkillUpdateStatus>().ok();
-    match parsed {
-        Some(SkillUpdateStatus::UpToDate) | Some(SkillUpdateStatus::UpdateAvailable) => {
+    match state.status {
+        SkillUpdateStatus::UpToDate | SkillUpdateStatus::UpdateAvailable => {
             counters.succeeded += 1;
         }
-        Some(SkillUpdateStatus::Unsupported) | Some(SkillUpdateStatus::RemoteMissing) => {
+        SkillUpdateStatus::Unsupported | SkillUpdateStatus::RemoteMissing => {
             counters.skipped += 1;
         }
-        Some(SkillUpdateStatus::Error) => counters.failed += 1,
-        Some(SkillUpdateStatus::Cancelled) | None => {}
+        SkillUpdateStatus::Error => counters.failed += 1,
+        SkillUpdateStatus::Cancelled => {}
     }
 }
 

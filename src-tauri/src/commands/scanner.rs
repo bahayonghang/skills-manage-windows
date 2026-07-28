@@ -42,72 +42,85 @@ where
 /// Tauri command: scan all agent skill directories and persist the results to
 /// SQLite. Returns a `ScanResult` with per-agent skill counts.
 #[tauri::command]
-pub async fn scan_all_skills(state: State<'_, AppState>) -> Result<ScanResult, String> {
-    let request_context = state.resolve_target_context().await?;
-    let active_target = request_context.target().clone();
-    let target_context = target_context_from_active_target(&active_target);
-    let pool = request_context.db().clone();
-    db::set_setting_best_effort(&pool, "scan_state", "refreshing").await;
-    let started_at = Instant::now();
+pub async fn scan_all_skills(
+    state: State<'_, AppState>,
+) -> crate::ipc_error::IpcResult<ScanResult> {
+    crate::ipc_boundary!(
+        async move {
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let target_context = target_context_from_active_target(&active_target);
+            let pool = request_context.db().clone();
+            db::set_setting_best_effort(&pool, "scan_state", "refreshing").await;
+            let started_at = Instant::now();
 
-    let scan_result = match active_target {
-        ActiveTarget::Local => scan_all_skills_impl(&pool).await,
-        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
-            run_remote_scan_with_timeout(
-                scan_remote_skills_impl(&pool, &active_target),
-                Duration::from_secs(90),
-            )
-            .await
-        }
-    };
+            let scan_result = match active_target {
+                ActiveTarget::Local => scan_all_skills_impl(&pool).await,
+                ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+                    run_remote_scan_with_timeout(
+                        scan_remote_skills_impl(&pool, &active_target),
+                        Duration::from_secs(90),
+                    )
+                    .await
+                }
+            };
 
-    match scan_result {
-        Ok(result) => {
-            let completed_at = Utc::now().to_rfc3339();
-            db::set_setting_best_effort(&pool, "scan_last_completed_at", &completed_at).await;
-            db::set_setting_best_effort(&pool, "scan_state", "idle").await;
-            record_operation_log_best_effort(
-                &state.db,
-                target_context,
-                OperationLogEvent::new(
-                    "scan",
-                    "scan.all",
-                    "succeeded",
-                    format!(
-                        "Scanned {} skills across {} agents",
-                        result.total_skills, result.agents_scanned
-                    ),
-                )
-                .subject("scan_root", "all", "All scan directories")
-                .details(json!({
-                    "totalSkills": result.total_skills,
-                    "agentsScanned": result.agents_scanned,
-                    "skillsByAgent": result.skills_by_agent,
-                }))
-                .duration_ms(started_at.elapsed().as_millis() as i64),
-            )
-            .await;
-            Ok(result)
+            match scan_result {
+                Ok(result) => {
+                    let completed_at = Utc::now().to_rfc3339();
+                    db::set_setting_best_effort(&pool, "scan_last_completed_at", &completed_at)
+                        .await;
+                    db::set_setting_best_effort(&pool, "scan_state", "idle").await;
+                    record_operation_log_best_effort(
+                        &state.db,
+                        target_context,
+                        OperationLogEvent::new(
+                            "scan",
+                            "scan.all",
+                            "succeeded",
+                            format!(
+                                "Scanned {} skills across {} agents",
+                                result.total_skills, result.agents_scanned
+                            ),
+                        )
+                        .subject("scan_root", "all", "All scan directories")
+                        .details(json!({
+                            "totalSkills": result.total_skills,
+                            "agentsScanned": result.agents_scanned,
+                            "skillsByAgent": result.skills_by_agent,
+                        }))
+                        .duration_ms(started_at.elapsed().as_millis() as i64),
+                    )
+                    .await;
+                    Ok(result)
+                }
+                Err(error) => {
+                    db::set_setting_best_effort(&pool, "scan_state", "error").await;
+                    let is_timeout = matches!(error, ScannerError::Timeout(_));
+                    let error = error.to_string();
+                    record_operation_log_best_effort(
+                        &state.db,
+                        target_context,
+                        OperationLogEvent::new(
+                            "scan",
+                            "scan.all",
+                            "failed",
+                            "Failed to scan skills",
+                        )
+                        .subject("scan_root", "all", "All scan directories")
+                        .error(&error)
+                        .details(json!({
+                            "reason": if is_timeout { "timeout" } else { "error" },
+                        }))
+                        .duration_ms(started_at.elapsed().as_millis() as i64),
+                    )
+                    .await;
+                    Err(error)
+                }
+            }
         }
-        Err(error) => {
-            db::set_setting_best_effort(&pool, "scan_state", "error").await;
-            let is_timeout = matches!(error, ScannerError::Timeout(_));
-            let error = error.to_string();
-            record_operation_log_best_effort(
-                &state.db,
-                target_context,
-                OperationLogEvent::new("scan", "scan.all", "failed", "Failed to scan skills")
-                    .subject("scan_root", "all", "All scan directories")
-                    .error(&error)
-                    .details(json!({
-                        "reason": if is_timeout { "timeout" } else { "error" },
-                    }))
-                    .duration_ms(started_at.elapsed().as_millis() as i64),
-            )
-            .await;
-            Err(error)
-        }
-    }
+        .await
+    )
 }
 
 #[cfg(test)]

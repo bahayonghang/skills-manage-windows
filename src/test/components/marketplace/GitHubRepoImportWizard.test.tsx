@@ -396,8 +396,7 @@ describe("GitHubRepoImportWizard", () => {
   it("shows PAT settings guidance for GitHub rate-limit errors", () => {
     renderWizard({
       preview: null,
-      previewError:
-        "GitHub API access was denied because the rate limit was exceeded (HTTP 403).",
+      previewError: "github_import.rate_limited:GitHub rate limited the request.",
     });
 
     expect(
@@ -409,7 +408,7 @@ describe("GitHubRepoImportWizard", () => {
     renderWizard({
       preview: null,
       previewError:
-        "GitHub denied access while inspecting the repository (HTTP 403). A configured GitHub token was used, but token permissions are insufficient.",
+        "github_import.configured_token_failed:GitHub denied access to the repository.",
     });
 
     expect(
