@@ -606,3 +606,33 @@ Bound target identity, cache DB, remote resources, events, and operation logs to
 ### Status
 
 [OK] **Completed**
+
+
+## Session 72: 清偿 size budget 历史例外
+
+**Date**: 2026-07-28
+**Task**: 清偿 size budget 历史例外
+**Branch**: `dev`
+
+### Summary
+
+拆分五个超过 800 行的历史模块，恢复无例外的统一 size gate。
+
+### Main Changes
+
+- 保持 Central 更新、collections、seed、页面与唯一技能卡片的公开边界和行为。
+- 移除 frozen allowlist，并同步 CI quality gate 与贡献指南。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a9a337f3` | (see git log) |
+
+### Testing
+
+- [OK] just ci；pnpm sizecheck；任务校验；独立代码审阅。
+
+### Status
+
+[OK] **Completed**
