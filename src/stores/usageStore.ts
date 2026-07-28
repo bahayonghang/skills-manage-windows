@@ -249,7 +249,12 @@ export const useUsageStore = create<UsageState>((set, get) => ({
         ++refreshSequence;
         ++pageSequence;
         ++detailSequence;
+        // 连同页面数据一起清空：重扫期间不得继续展示上一个 target 的面板
         set({
+          overview: null,
+          recent: [],
+          providers: [],
+          loading: false,
           detail: null,
           selectedSkill: null,
           detailLoading: false,

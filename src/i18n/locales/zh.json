@@ -243,6 +243,7 @@
     "notDetected": "未检测到",
     "unavailable": "不可用",
     "showingCachedAfterError": "刷新失败，正在显示上次成功扫描的数据",
+    "scanning": "正在扫描各平台会话日志…",
     "range": {
       "allRecorded": "全部已记录历史",
       "latestCalls": "最新 {{count}} 条",
@@ -273,7 +274,9 @@
       "placeholder": "暂无数据，刷新后此处会显示统计内容。",
       "title": "尚未发现技能调用",
       "noData": "请刷新或展开数据源状态，确认受支持平台存在可读取的会话日志。",
-      "noActivity": "此时间范围内没有活动"
+      "noActivity": "此时间范围内没有活动",
+      "filteredTitle": "没有符合筛选条件的技能",
+      "filteredHint": "切回「全部」可查看所有已记录技能。"
     },
     "sort": {
       "label": "技能排序",
@@ -282,7 +285,14 @@
       "recent": "按最近",
       "name": "按名称"
     },
+    "matchFilter": {
+      "label": "按安装状态筛选",
+      "all": "全部",
+      "installed": "已安装",
+      "unlinked": "未关联"
+    },
     "rankingCount": "{{count}} 个技能",
+    "rankingFiltered": "{{count}} / {{total}} 个技能",
     "columns": {
       "skill": "技能",
       "match": "中央库匹配",

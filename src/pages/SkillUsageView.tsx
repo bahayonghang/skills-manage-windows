@@ -58,8 +58,10 @@ export function SkillUsageView() {
     uniqueSources: 0,
     uniqueSessions: 0,
   };
-  const initialLoading = overview === null && refreshing;
-  const availableProviders = providers.filter((provider) => provider.available).length;
+  const initialLoading = overview === null && error === null;
+  const availableProviders = providers.filter(
+    (provider) => provider.available,
+  ).length;
 
   const selectSkill = (skill: string, trigger: HTMLButtonElement) => {
     detailTriggerRef.current = trigger;
@@ -104,7 +106,7 @@ export function SkillUsageView() {
               aria-label={t("skillUsage.refresh")}
             >
               {refreshing ? (
-                <Loader2 className="size-4 animate-spin" />
+                <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />
               ) : (
                 <RefreshCw className="size-4" />
               )}
@@ -148,11 +150,13 @@ export function SkillUsageView() {
           </StatusBanner>
         )}
 
-        <UsageMetricStrip
-          kpis={kpis}
-          singlePlatform={selectedSource !== null}
-          className="mb-4"
-        />
+        {!initialLoading && (
+          <UsageMetricStrip
+            kpis={kpis}
+            singlePlatform={selectedSource !== null}
+            className="mb-4"
+          />
+        )}
 
         {initialLoading ? (
           <UsageSkeleton />
@@ -166,14 +170,14 @@ export function SkillUsageView() {
           >
             <UsageSection
               title={t("skillUsage.panels.topSkills")}
-              range={t("skillUsage.range.allRecorded")}
               className="min-h-[32rem] xl:row-span-3"
+              fill
             >
               <SkillUsageTable
                 skills={overview?.topSkills ?? []}
                 selectedSkill={selectedSkill}
                 onSelect={selectSkill}
-                className="h-[32rem]"
+                className="h-full min-h-[24rem]"
               />
             </UsageSection>
 
@@ -190,7 +194,9 @@ export function SkillUsageView() {
                 title={t("skillUsage.panels.recent")}
                 range={t("skillUsage.range.latestCalls", { count: 20 })}
               >
-                <RecentCallsFeed calls={recent} onSelect={selectSkill} />
+                <div className="scrollbar-subtle max-h-[26rem] overflow-y-auto">
+                  <RecentCallsFeed calls={recent} onSelect={selectSkill} />
+                </div>
               </UsageSection>
             )}
 
@@ -206,7 +212,9 @@ export function SkillUsageView() {
                 title={t("skillUsage.panels.recent")}
                 range={t("skillUsage.range.latestCalls", { count: 20 })}
               >
-                <RecentCallsFeed calls={recent} onSelect={selectSkill} />
+                <div className="scrollbar-subtle max-h-[26rem] overflow-y-auto">
+                  <RecentCallsFeed calls={recent} onSelect={selectSkill} />
+                </div>
               </UsageSection>
             )}
           </div>
@@ -241,27 +249,31 @@ function UsageSection({
   title,
   range,
   className,
+  fill = false,
   children,
 }: {
   title: string;
   range?: string;
   className?: string;
+  /** true 时卡片纵向 flex，children 填满剩余高度（供表格内部滚动用） */
+  fill?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <section
       className={cn(
         "min-w-0 overflow-hidden rounded-md border border-border bg-card",
+        fill && "flex flex-col",
         className,
       )}
     >
-      <div className="flex min-h-11 items-center justify-between gap-3 border-b border-border px-3 py-2">
+      <div className="flex min-h-11 shrink-0 items-center justify-between gap-3 border-b border-border px-3 py-2">
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
         {range && (
           <span className="text-xs text-muted-foreground">{range}</span>
         )}
       </div>
-      {children}
+      {fill ? <div className="min-h-0 flex-1">{children}</div> : children}
     </section>
   );
 }
@@ -313,11 +325,37 @@ function ScopeBadge({ scope }: { scope: UsageScopeInfo }) {
 }
 
 function UsageSkeleton() {
+  const { t } = useTranslation();
   return (
-    <div className="grid animate-pulse gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(22rem,0.85fr)]">
-      <div className="h-[34rem] rounded-md border border-border bg-muted/30 xl:row-span-2" />
-      <div className="h-56 rounded-md border border-border bg-muted/25" />
-      <div className="h-64 rounded-md border border-border bg-muted/20" />
+    <div className="relative">
+      <div className="animate-pulse motion-reduce:animate-none">
+        {/* KPI 条形态骨架：占位与 UsageMetricStrip 同形，避免真实组件渲染 0 值 */}
+        <div className="mb-4 flex flex-wrap gap-x-10 gap-y-2 border-y border-border bg-muted/15 px-4 py-3">
+          {[0, 1, 2, 3].map((index) => (
+            <div key={index} className="space-y-1.5">
+              <div className="h-3 w-14 rounded bg-muted/40" />
+              <div className="h-6 w-20 rounded bg-muted/50" />
+            </div>
+          ))}
+        </div>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(22rem,0.85fr)]">
+          <div className="h-[34rem] rounded-md border border-border bg-muted/30 xl:row-span-2" />
+          <div className="h-56 rounded-md border border-border bg-muted/25" />
+          <div className="h-64 rounded-md border border-border bg-muted/20" />
+        </div>
+      </div>
+      <div
+        role="status"
+        className="absolute inset-0 z-10 flex items-center justify-center"
+      >
+        <span className="flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2 text-sm text-muted-foreground shadow-sm">
+          <Loader2
+            aria-hidden
+            className="size-4 animate-spin motion-reduce:animate-none"
+          />
+          {t("skillUsage.scanning")}
+        </span>
+      </div>
     </div>
   );
 }

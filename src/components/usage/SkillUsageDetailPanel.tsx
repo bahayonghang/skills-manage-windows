@@ -4,6 +4,7 @@ import { ArrowUpRight, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ActivityHeatmap } from "@/components/usage/ActivityHeatmap";
+import { UsageMatchStatus } from "@/components/usage/SkillUsageTable";
 import { formatUsageRelativeTime } from "@/components/usage/usageFormat";
 import { projectShort } from "@/lib/timeAgo";
 import type { SkillUsageDetail } from "@/types/usage";
@@ -45,9 +46,7 @@ export function SkillUsageDetailPanel({
           <h3 className="truncate text-sm font-semibold text-foreground">
             {detail.skill}
           </h3>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {t(`skillUsage.match.${detail.matchStatus}`)}
-          </p>
+          <UsageMatchStatus status={detail.matchStatus} className="mt-0.5" />
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {detail.resolvedSkillId && (

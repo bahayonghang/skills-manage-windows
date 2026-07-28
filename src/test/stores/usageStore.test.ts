@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 
+const { mockTauriListen } = vi.hoisted(() => ({
+  mockTauriListen: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: mockTauriListen,
+}));
+
 import { useUsageStore } from "@/stores/usageStore";
 import { useTargetStore } from "@/stores/targetStore";
 import { ipcFixtureError } from "@/lib/ipc/errors";
@@ -76,6 +84,8 @@ function deferred<T>() {
 
 beforeEach(() => {
   toastInfoMock.mockReset();
+  mockTauriListen.mockReset();
+  mockTauriListen.mockResolvedValue(() => undefined);
   useUsageStore.setState({
     overview: null,
     recent: [],
@@ -373,11 +383,17 @@ describe("usageStore", () => {
     const claudeRecent = deferred<never[]>();
     const codexOverview = deferred<ReturnType<typeof overviewFixture>>();
     const codexRecent = deferred<never[]>();
-    mockIpcCommand("usage_get_overview", ({ source }: { source: string | null }) =>
-      source === "Claude Code" ? claudeOverview.promise : codexOverview.promise,
+    mockIpcCommand(
+      "usage_get_overview",
+      ({ source }: { source: string | null }) =>
+        source === "Claude Code"
+          ? claudeOverview.promise
+          : codexOverview.promise,
     );
-    mockIpcCommand("usage_get_recent", ({ source }: { source: string | null }) =>
-      source === "Claude Code" ? claudeRecent.promise : codexRecent.promise,
+    mockIpcCommand(
+      "usage_get_recent",
+      ({ source }: { source: string | null }) =>
+        source === "Claude Code" ? claudeRecent.promise : codexRecent.promise,
     );
 
     const first = useUsageStore.getState().selectSource("Claude Code");
@@ -484,5 +500,55 @@ describe("usageStore", () => {
     await loading;
     expect(useUsageStore.getState().detail).toBeNull();
     expect(useUsageStore.getState().selectedSkill).toBeNull();
+  });
+
+  it("clears visible page data and forces a refresh when the target changes", async () => {
+    type TargetChangedHandler = (event: { payload: string }) => void;
+    let targetChangedHandler: TargetChangedHandler | undefined;
+    mockTauriListen.mockImplementation(
+      async (_event: string, handler: unknown) => {
+        targetChangedHandler = handler as TargetChangedHandler;
+        return () => undefined;
+      },
+    );
+    const refresh = vi.fn(async () => null);
+    useUsageStore.setState({
+      overview: overviewFixture(),
+      recent: [
+        {
+          skill: "review",
+          timestampMs: 1,
+          project: "/home/demo/repo",
+          sessionId: "s1",
+          source: "Claude Code",
+          matchStatus: "matched",
+          resolvedSkillId: "review",
+        },
+      ],
+      providers: [
+        {
+          providerId: "claude-code",
+          displayName: "Claude Code",
+          available: true,
+          callCount: 4,
+          scannedAtMs: 1700000000000,
+        },
+      ],
+      selectedSource: "Claude Code",
+      loading: true,
+      refresh,
+    });
+
+    await useUsageStore.getState().subscribeTargetChanged();
+    expect(targetChangedHandler).toBeDefined();
+    targetChangedHandler!({ payload: "ssh-prod" });
+
+    const state = useUsageStore.getState();
+    expect(state.overview).toBeNull();
+    expect(state.recent).toEqual([]);
+    expect(state.providers).toEqual([]);
+    expect(state.loading).toBe(false);
+    expect(state.selectedSource).toBeNull();
+    expect(refresh).toHaveBeenCalledWith(true);
   });
 });

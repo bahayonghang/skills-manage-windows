@@ -243,6 +243,7 @@
     "notDetected": "not detected",
     "unavailable": "Unavailable",
     "showingCachedAfterError": "Refresh failed; showing the last successful scan",
+    "scanning": "Scanning session logs across platforms…",
     "range": {
       "allRecorded": "All recorded history",
       "latestCalls": "Latest {{count}}",
@@ -273,7 +274,9 @@
       "placeholder": "No data yet. Refresh to populate this panel.",
       "title": "No skill calls detected",
       "noData": "Refresh or open provider health to check for readable session logs from supported platforms.",
-      "noActivity": "No activity in this period"
+      "noActivity": "No activity in this period",
+      "filteredTitle": "No skills match this filter",
+      "filteredHint": "Switch back to “All” to see every recorded skill."
     },
     "sort": {
       "label": "Sort skills",
@@ -282,7 +285,14 @@
       "recent": "recent",
       "name": "name"
     },
+    "matchFilter": {
+      "label": "Filter by install state",
+      "all": "All",
+      "installed": "Installed",
+      "unlinked": "Unlinked"
+    },
     "rankingCount": "{{count}} skills",
+    "rankingFiltered": "{{count}} / {{total}} skills",
     "columns": {
       "skill": "Skill",
       "match": "Central match",
