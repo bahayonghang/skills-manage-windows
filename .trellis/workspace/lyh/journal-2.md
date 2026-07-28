@@ -585,3 +585,24 @@ Bound target identity, cache DB, remote resources, events, and operation logs to
 ### Status
 
 [OK] **Completed**
+
+
+## Session 71: 完成 Typed IPC 与结构化错误边界迁移
+
+**Date**: 2026-07-28
+**Task**: 完成 Typed IPC 与结构化错误边界迁移
+**Branch**: `dev`
+
+### Summary
+
+完成 180 个 Tauri command 的结构化 IpcError 迁移、首批 42 个 Rust-derived Typed IPC、parity/codegen 门禁与 Windows NSIS 打包验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9f7a719f` | (see git log) |
+
+### Status
+
+[OK] **Completed**
