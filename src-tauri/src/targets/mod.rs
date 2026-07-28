@@ -5,7 +5,9 @@ use std::ffi::OsString;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::{Command, ExitStatus, Stdio};
+use std::process::{Command, ExitStatus};
+#[cfg(windows)]
+use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 

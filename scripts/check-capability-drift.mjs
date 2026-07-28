@@ -180,8 +180,12 @@ export function validateCapabilityContract(observed, contract) {
   return errors;
 }
 
+function normalizeNewlines(text) {
+  return text.replace(/\r\n/g, "\n");
+}
+
 export function validateRenderedTable(document, contract) {
-  const current = extractMarkedContent(document, TABLE_START, TABLE_END);
+  const current = normalizeNewlines(extractMarkedContent(document, TABLE_START, TABLE_END));
   const expected = renderCapabilityTable(contract);
   return current === expected ? [] : ["Human-readable capability table is stale; run pnpm capabilitycheck -- --update."];
 }
