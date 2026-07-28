@@ -57,7 +57,7 @@ pub(crate) enum ProcessCancellation<'a> {
 
 ## 6. Tests Required
 
-- 真实 fixture process：never-exit timeout、单线程 runtime 公平性、两个并发 supervisor、stdin broken pipe、stdout/stderr cap。并发性用两个 child 互等 marker 的 barrier 证明启动重叠，禁止用紧固定墙钟阈值；后者在 `just ci` 的 Web/Rust 并行负载下会产生假失败。
+- 真实 fixture process：never-exit timeout、单线程 runtime 公平性、两个并发 supervisor、stdin broken pipe、stdout/stderr cap。broken-pipe fixture 必须关闭继承的 OS stdin descriptor/handle；仅 drop `std::io::stdin()` 返回的非 owning 句柄不会关闭底层 pipe，不能作为跨平台证据。并发性用两个 child 互等 marker 的 barrier 证明启动重叠，禁止用紧固定墙钟阈值；后者在 `just ci` 的 Web/Rust 并行负载下会产生假失败。
 - process tree：fixture parent 生成 descendant，cancel 和 supervisor future drop 后等待 marker 窗口，断言 descendant 未存活；Windows 由 Job Object 路径执行，Unix 由 process group 路径执行。
 - FakeRunner：program/args/stdin 保持字节兼容，并断言 probe/standard/bulk policy 选择。
 - TargetsError：timeout 与 output cap 映射为 typed variant；既有 start/write/wait Display 文案不变。

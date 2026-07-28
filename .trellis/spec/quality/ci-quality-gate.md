@@ -284,6 +284,7 @@ cargo metadata bins     -> skillport, skillport-cli, release-signature-verifier
 - frontend 177 = typed 130 + allowlist 47；runtime - frontend 恰为冻结的 backend-only 7。
 - 180 个 fallible command 使用 `IpcResult`；4 个 infallible command 保持原签名。
 - generator 使用 structured Specta metadata 和 Serde phases；不得以 source regex 证明类型一致性。
+- 对 codegen checker 按字节比较的受控生成文本，必须在 `.gitattributes` 中按路径固定 `text eol=lf`；不得依赖开发者本机的 `core.autocrlf` 设置维持 artifact parity。
 - generated type 必须来自 Rust 字段的真实类型。持久化字段不得用 Specta-only override
   收窄：例如 SQLite `TEXT` 状态必须在 Rust 中使用实现 SQLx 文本编解码的 enum，Serde、
   Specta 与 SQLx 共享同一组 rename；既有合法值可回读，未知值 fail closed。

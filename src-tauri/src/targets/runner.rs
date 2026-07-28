@@ -409,6 +409,26 @@ mod tests {
     const FIXTURE_LEAK_ENV: &str = "SKILLPORT_PROCESS_FIXTURE_LEAK";
     const FIXTURE_TEST: &str = "targets::runner::tests::supervised_process_fixture";
 
+    #[cfg(unix)]
+    fn close_fixture_stdin() {
+        use std::os::fd::{FromRawFd, OwnedFd};
+
+        // SAFETY: the fixture is spawned with a dedicated piped stdin and does
+        // not access the descriptor again after this helper closes it.
+        drop(unsafe { OwnedFd::from_raw_fd(0) });
+    }
+
+    #[cfg(windows)]
+    fn close_fixture_stdin() {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Foundation::CloseHandle;
+
+        let handle = std::io::stdin().as_raw_handle();
+        // SAFETY: the fixture is spawned with a dedicated piped stdin and does
+        // not access the handle again after this helper closes it.
+        assert_ne!(unsafe { CloseHandle(handle) }, 0, "close fixture stdin");
+    }
+
     fn fixture_command(mode: &str, ready: Option<&Path>, leak: Option<&Path>) -> Command {
         let mut command = Command::new(std::env::current_exe().expect("current test executable"));
         command
@@ -467,9 +487,9 @@ mod tests {
                 let _ = std::io::stderr().flush();
             }
             "close_stdin" => {
-                // Drop stdin and stay alive long enough for the parent to start
-                // a large write and observe EPIPE, instead of racing a fast exit.
-                drop(std::io::stdin());
+                close_fixture_stdin();
+                // Stay alive long enough for the parent to observe the closed
+                // pipe instead of racing a fast child exit.
                 std::thread::sleep(Duration::from_secs(2));
             }
             "barrier" => {

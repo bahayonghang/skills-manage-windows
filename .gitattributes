@@ -12,3 +12,6 @@
 # across Windows and Unix checkouts.
 *.rs text eol=lf
 *.mjs text eol=lf
+
+# Keep the byte-compared generated IPC artifact stable across checkout settings.
+src/lib/ipc/generatedCommandMap.ts text eol=lf
