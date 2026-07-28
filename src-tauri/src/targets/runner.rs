@@ -447,14 +447,31 @@ mod tests {
         match mode.as_str() {
             "sleep" => std::thread::sleep(Duration::from_secs(30)),
             "large_stdout" => {
-                std::io::stdout().write_all(&vec![b'x'; 16 * 1024]).unwrap();
-                std::io::stdout().flush().unwrap();
+                // Write well past the test limit in chunks so a full pipe buffer
+                // cannot hide the overflow behind a single short write.
+                let chunk = vec![b'x'; 8 * 1024];
+                for _ in 0..8 {
+                    if std::io::stdout().write_all(&chunk).is_err() {
+                        break;
+                    }
+                }
+                let _ = std::io::stdout().flush();
             }
             "large_stderr" => {
-                std::io::stderr().write_all(&vec![b'x'; 16 * 1024]).unwrap();
-                std::io::stderr().flush().unwrap();
+                let chunk = vec![b'x'; 8 * 1024];
+                for _ in 0..8 {
+                    if std::io::stderr().write_all(&chunk).is_err() {
+                        break;
+                    }
+                }
+                let _ = std::io::stderr().flush();
             }
-            "close_stdin" => {}
+            "close_stdin" => {
+                // Drop stdin and stay alive long enough for the parent to start
+                // a large write and observe EPIPE, instead of racing a fast exit.
+                drop(std::io::stdin());
+                std::thread::sleep(Duration::from_secs(2));
+            }
             "barrier" => {
                 let ready = PathBuf::from(std::env::var_os(FIXTURE_READY_ENV).expect("ready"));
                 let peer = PathBuf::from(std::env::var_os(FIXTURE_LEAK_ENV).expect("peer"));
@@ -557,13 +574,16 @@ mod tests {
             ))
             .await;
 
-        assert!(matches!(
-            result,
-            Err(RunnerError::OutputLimitExceeded {
-                stream: RunnerStream::Stdout,
-                limit: 1024
-            })
-        ));
+        assert!(
+            matches!(
+                result,
+                Err(RunnerError::OutputLimitExceeded {
+                    stream: RunnerStream::Stdout,
+                    limit: 1024
+                })
+            ),
+            "unexpected stdout overflow result: {result:?}"
+        );
     }
 
     #[tokio::test]
@@ -571,38 +591,44 @@ mod tests {
         let result = ProcessRunner
             .run(test_request(
                 fixture_command("large_stderr", None, None),
-                Duration::from_secs(3),
+                Duration::from_secs(5),
                 1024,
             ))
             .await;
 
-        assert!(matches!(
-            result,
-            Err(RunnerError::OutputLimitExceeded {
-                stream: RunnerStream::Stderr,
-                limit: 1024
-            })
-        ));
+        assert!(
+            matches!(
+                result,
+                Err(RunnerError::OutputLimitExceeded {
+                    stream: RunnerStream::Stderr,
+                    limit: 1024
+                })
+            ),
+            "unexpected stderr overflow result: {result:?}"
+        );
     }
 
     #[tokio::test]
     async fn closed_stdin_is_classified_as_write_failure() {
         let request = test_request(
             fixture_command("close_stdin", None, None),
-            Duration::from_secs(3),
+            Duration::from_secs(5),
             1024,
         )
         .with_stdin(&vec![b'x'; 8 * 1024 * 1024]);
 
         let result = ProcessRunner.run(request).await;
 
-        assert!(matches!(
-            result,
-            Err(RunnerError::Io {
-                phase: RunnerPhase::WriteStdin,
-                ..
-            })
-        ));
+        assert!(
+            matches!(
+                result,
+                Err(RunnerError::Io {
+                    phase: RunnerPhase::WriteStdin,
+                    ..
+                })
+            ),
+            "unexpected closed-stdin result: {result:?}"
+        );
     }
 
     #[tokio::test]
