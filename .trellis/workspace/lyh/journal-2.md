@@ -636,3 +636,31 @@ Bound target identity, cache DB, remote resources, events, and operation logs to
 ### Status
 
 [OK] **Completed**
+
+
+## Session 73: 完成极限审计整改父任务验收
+
+**Date**: 2026-07-28
+**Task**: 完成极限审计整改父任务验收
+**Branch**: `dev`
+
+### Summary
+
+完成 16 个审计整改子任务的本地集成复核并归档父任务；父任务本身无独立产品提交。
+
+### Main Changes
+
+- 核对全部子任务归档状态、验收映射、P3-01 逐文件计数与统一 size policy。
+- 记录最终 just ci 通过及不推送、不创建远程 PR 的交付边界。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] 父任务 task.py validate；16/16 archive status；just ci。
+
+### Status
+
+[OK] **Completed**
