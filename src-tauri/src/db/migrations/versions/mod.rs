@@ -31,5 +31,8 @@ pub(super) const MIGRATIONS: [MigrationDescriptor; 4] = [
 ];
 
 pub(super) fn checksum(source: &str) -> String {
-    format!("{:x}", Sha256::digest(source.as_bytes()))
+    // Normalize newlines so Windows CRLF working trees and Unix LF checkouts
+    // produce the same migration lock hash from identical logical sources.
+    let normalized = source.replace("\r\n", "\n").replace('\r', "\n");
+    format!("{:x}", Sha256::digest(normalized.as_bytes()))
 }

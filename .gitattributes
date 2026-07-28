@@ -7,3 +7,8 @@
 # picking either side (task state lives in task.json, not index.md). See
 # .trellis/spec/cli/backend/directory-structure.md for details.
 .trellis/workspace/*/journal-*.md merge=union
+
+# Keep Rust sources LF so include_str!-based migration checksums stay stable
+# across Windows and Unix checkouts.
+*.rs text eol=lf
+*.mjs text eol=lf

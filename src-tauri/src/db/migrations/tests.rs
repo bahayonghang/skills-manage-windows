@@ -185,7 +185,7 @@ fn migration_sources_are_checksum_locked() {
     assert_eq!(
         checksums,
         [
-            "aabde4fd51822355cbe2a7982ac895073f6e49e9f34882a50086d145462a736d",
+            "173296a19419edf197e3baa3b22de1f33184a1d8631141549751fbf1cfc24f7f",
             "92aeea552f562f4142946460635a6d7d2d75c89f8899ea2063a80c213bcf14aa",
             "ad1c327066e8bd7a0f5d5aca5ccd6666247d92fc2dfbee5d9c37c6a60ae948a8",
             "f1225528d87dccc2b06e0553a241fd3f0e56463cf69faafb18976401da111188",
