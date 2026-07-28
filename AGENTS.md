@@ -40,7 +40,7 @@ pnpm tauri build
 - `just build`：跑 `pnpm tauri build`，然后把 `src-tauri/target/release/bundle/nsis/` 里最新的 Windows 安装包复制到根目录 `outputs/`。
 - `just install`：跑 `just build`，然后以 passive 模式运行根目录 `outputs/` 里的最新 NSIS 安装包。
 - 改 CI 或发布流程时，优先保持 `just ci` 和 GitHub Actions 的检查项一致，避免本地和远端两套标准。
-- GitHub Actions 的 `just-ci` 在指向 `main` 的 PR、`main` / `dev` push、手动触发和 release 上运行；跨平台 smoke package 只在手动触发或 release 上运行。
+- GitHub Actions 的 `just-ci` 在指向 `main` 的 PR、手动触发和 release 上运行；跨平台 smoke package 只在手动触发或 release 上运行。
 
 ## 修改约束
 
