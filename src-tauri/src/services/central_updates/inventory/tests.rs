@@ -1093,7 +1093,7 @@ async fn refresh_clears_stale_update_inventory_without_touching_baseline() {
             latest_remote_hash: Some("fnv1a64:new".to_string()),
             last_checked_at: Some(Utc::now().to_rfc3339()),
             last_updated_at: None,
-            status: SkillUpdateStatus::UpdateAvailable.to_string(),
+            status: SkillUpdateStatus::UpdateAvailable,
             error: None,
         },
     )
@@ -1128,10 +1128,7 @@ async fn refresh_clears_stale_update_inventory_without_touching_baseline() {
         .await
         .unwrap();
     assert_eq!(states.len(), 1);
-    assert_eq!(
-        states[0].status,
-        SkillUpdateStatus::UpdateAvailable.to_string()
-    );
+    assert_eq!(states[0].status, SkillUpdateStatus::UpdateAvailable);
 }
 
 #[tokio::test]
@@ -1672,7 +1669,7 @@ async fn clear_inventory_does_not_delete_skills_or_update_states() {
             latest_remote_hash: None,
             last_checked_at: Some(Utc::now().to_rfc3339()),
             last_updated_at: None,
-            status: SkillUpdateStatus::UpdateAvailable.to_string(),
+            status: SkillUpdateStatus::UpdateAvailable,
             error: None,
         },
     )
@@ -1765,7 +1762,7 @@ async fn apply_keep_missing_detaches_source() {
             latest_remote_hash: None,
             last_checked_at: Some(Utc::now().to_rfc3339()),
             last_updated_at: None,
-            status: SkillUpdateStatus::RemoteMissing.to_string(),
+            status: SkillUpdateStatus::RemoteMissing,
             error: Some("removed remotely".to_string()),
         },
     )
@@ -2015,7 +2012,7 @@ async fn apply_returns_clean_result_when_all_succeed() {
             latest_remote_hash: None,
             last_checked_at: Some(Utc::now().to_rfc3339()),
             last_updated_at: None,
-            status: SkillUpdateStatus::RemoteMissing.to_string(),
+            status: SkillUpdateStatus::RemoteMissing,
             error: Some("removed remotely".to_string()),
         },
     )
@@ -2090,6 +2087,13 @@ async fn apply_remove_platform_duplicates_uses_plain_uninstall_for_non_claude_ag
         .execute(&pool)
         .await
         .unwrap();
+    crate::test_support::seed_central_skill(
+        &pool,
+        &central_dir.join("dup"),
+        "dup",
+        "Duplicate skill",
+    )
+    .await;
 
     db::upsert_agent_skill_observation(
         &pool,
@@ -2167,20 +2171,16 @@ async fn apply_remove_deleted_platform_copies_removes_managed_copy() {
         .execute(&pool)
         .await
         .unwrap();
+    let mut platform_skill = make_central_skill("removed-skill", &cursor_skill_dir);
+    platform_skill.is_central = false;
+    platform_skill.canonical_path = None;
+    db::upsert_skill(&pool, &platform_skill).await.unwrap();
     db::upsert_skill_installation(
         &pool,
-        &SkillInstallation {
-            skill_id: "removed-skill".to_string(),
-            agent_id: "cursor".to_string(),
-            installed_path: cursor_skill_dir_str.clone(),
-            link_type: "copy".to_string(),
-            symlink_target: None,
-            created_at: Utc::now().to_rfc3339(),
-        },
+        &copy_installation("removed-skill", "cursor", &cursor_skill_dir),
     )
     .await
     .unwrap();
-
     let mut result = SkillUpdateApplyResult::default();
     apply_remove_deleted_platform_copies_step(
         &pool,
@@ -2366,7 +2366,7 @@ async fn force_update_overwrites_when_hashes_match_and_refreshes_copy() {
         .await
         .unwrap();
     assert_eq!(states.len(), 1);
-    assert_eq!(states[0].status, SkillUpdateStatus::UpToDate.to_string());
+    assert_eq!(states[0].status, SkillUpdateStatus::UpToDate);
     assert_eq!(states[0].last_remote_hash, states[0].latest_remote_hash);
 }
 
@@ -2774,7 +2774,7 @@ fn scan_deleted_platform_copies_groups_writable_non_central_observations() {
 }
 
 #[tokio::test]
-async fn scan_deleted_platform_copies_detects_installations_missing_from_central() {
+async fn scan_deleted_platform_copies_detects_observations_missing_from_central() {
     let pool = setup_test_db().await;
     let temp = TempDir::new().unwrap();
     let central_dir = temp.path().join("central");
@@ -2795,16 +2795,15 @@ async fn scan_deleted_platform_copies_detects_installations_missing_from_central
         .execute(&pool)
         .await
         .unwrap();
-    db::upsert_skill_installation(
+    db::upsert_agent_skill_observation(
         &pool,
-        &SkillInstallation {
-            skill_id: "removed-skill".to_string(),
-            agent_id: "cursor".to_string(),
-            installed_path: removed_dir_str.clone(),
-            link_type: "copy".to_string(),
-            symlink_target: None,
-            created_at: Utc::now().to_rfc3339(),
-        },
+        &make_observation(
+            "cursor",
+            "removed-skill",
+            &removed_dir_str,
+            "writable",
+            false,
+        ),
     )
     .await
     .unwrap();
@@ -2899,20 +2898,6 @@ async fn scan_deleted_platform_copies_excludes_paths_outside_agent_root() {
     )
     .await
     .unwrap();
-    db::upsert_skill_installation(
-        &pool,
-        &SkillInstallation {
-            skill_id: "removed-skill".to_string(),
-            agent_id: "cursor".to_string(),
-            installed_path: outside_dir_str,
-            link_type: "copy".to_string(),
-            symlink_target: None,
-            created_at: Utc::now().to_rfc3339(),
-        },
-    )
-    .await
-    .unwrap();
-
     let groups = scan_deleted_platform_copies_with_pool(&pool, Some(vec!["cursor".to_string()]))
         .await
         .unwrap();
@@ -2935,16 +2920,9 @@ async fn scan_deleted_platform_copies_excludes_file_paths() {
         .execute(&pool)
         .await
         .unwrap();
-    db::upsert_skill_installation(
+    db::upsert_agent_skill_observation(
         &pool,
-        &SkillInstallation {
-            skill_id: "removed-skill".to_string(),
-            agent_id: "cursor".to_string(),
-            installed_path: file_path_str,
-            link_type: "copy".to_string(),
-            symlink_target: None,
-            created_at: Utc::now().to_rfc3339(),
-        },
+        &make_observation("cursor", "removed-skill", &file_path_str, "writable", false),
     )
     .await
     .unwrap();

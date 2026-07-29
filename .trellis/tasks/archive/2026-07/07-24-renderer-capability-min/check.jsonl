@@ -1,0 +1,6 @@
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Verify the new required check runs through just ci and Windows package evidence is real."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Check focused tests are placed in the owning Rust modules and frontend contract suites."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Audit service/command error boundaries and semantic failure coverage."}
+{"file":".trellis/spec/backend/spawn-blocking-io.md","reason":"Audit file IO scheduling, limits, cleanup, and Windows AppHandle constraints."}
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Audit store-only IPC routing, command typing, fixture coverage, and reveal removal."}
+{"file":".trellis/tasks/07-24-renderer-capability-min/research/live-boundary-2026-07-26.md","reason":"Check every live authority surface and scope exclusion against the final diff."}

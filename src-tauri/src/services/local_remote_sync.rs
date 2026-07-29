@@ -151,7 +151,9 @@ pub async fn apply_local_remote_sync_impl(
                 &connection,
                 &plan.repo_snapshot,
                 &plan.preview.repo.remote_path,
-            ) {
+            )
+            .await
+            {
                 result.failed.push(LocalRemoteSyncFailure {
                     id: plan.preview.repo.id.clone(),
                     label: plan.preview.repo.label.clone(),
@@ -184,7 +186,7 @@ pub async fn apply_local_remote_sync_impl(
         match preview.status {
             LocalRemoteSyncItemStatus::Skip => result.skipped_skills.push(preview),
             LocalRemoteSyncItemStatus::Add | LocalRemoteSyncItemStatus::Update => {
-                match apply_snapshot(&connection, &snapshot, &preview.remote_path) {
+                match apply_snapshot(&connection, &snapshot, &preview.remote_path).await {
                     Ok(()) => result.synced_skills.push(preview),
                     Err(error) => result.failed.push(LocalRemoteSyncFailure {
                         id: preview.id,
@@ -238,6 +240,7 @@ async fn build_sync_plan(
     let skills_remote_root = paths::remote_central_skills_root(&remote_home);
 
     let repo_remote_hash = remote_snapshot_hash(&connection, &repo_remote_root, &repo_snapshot)
+        .await
         .map_err(|error| LocalRemoteSyncError::RepoRemoteInspect(error.to_string()))?;
     let repo_preview = preview_item(
         &repo_snapshot,
@@ -251,11 +254,11 @@ async fn build_sync_plan(
     let mut snapshots_with_preview = Vec::with_capacity(skill_snapshots.len());
     for snapshot in skill_snapshots {
         let remote_path = remote_join(&skills_remote_root, &snapshot.id);
-        let (remote_hash, error) = match remote_snapshot_hash(&connection, &remote_path, &snapshot)
-        {
-            Ok(hash) => (hash, None),
-            Err(error) => (None, Some(error.to_string())),
-        };
+        let (remote_hash, error) =
+            match remote_snapshot_hash(&connection, &remote_path, &snapshot).await {
+                Ok(hash) => (hash, None),
+                Err(error) => (None, Some(error.to_string())),
+            };
         let preview = preview_item(
             &snapshot,
             LocalRemoteSyncItemKind::Skill,
@@ -636,7 +639,7 @@ pub fn build_archive(snapshot: &LocalSnapshot) -> Result<Vec<u8>, LocalRemoteSyn
         .map_err(|error| LocalRemoteSyncError::io("Failed to compress archive", error))
 }
 
-fn remote_snapshot_hash(
+async fn remote_snapshot_hash(
     connection: &ConnectedRemoteTarget,
     remote_root: &str,
     snapshot: &LocalSnapshot,
@@ -649,6 +652,7 @@ fn remote_snapshot_hash(
         .join("\n");
     let output = connection
         .run_command_with_stdin_bytes(&remote_hash_command(remote_root), manifest.as_bytes())
+        .await
         .map_err(|e| LocalRemoteSyncError::Remote(e.to_string()))?;
     let output = String::from_utf8_lossy(&output);
     parse_remote_hash_output(&output)
@@ -699,7 +703,7 @@ pub fn parse_remote_hash_output(output: &str) -> Result<Option<String>, LocalRem
     Ok(Some(hash_entries(entries)))
 }
 
-fn apply_snapshot(
+async fn apply_snapshot(
     connection: &ConnectedRemoteTarget,
     snapshot: &LocalSnapshot,
     remote_path: &str,
@@ -725,6 +729,7 @@ fn apply_snapshot(
             &remote_apply_command(remote_path, &parent, &staging, &backup),
             &archive,
         )
+        .await
         .map(|_| ())
         .map_err(|error| LocalRemoteSyncError::RemoteApply {
             path: remote_path.to_string(),

@@ -253,7 +253,9 @@ async fn registry_cache_column_migration_is_idempotent() {
     let dir = tempdir().expect("create tempdir");
     let db_path = dir.path().join("migration.sqlite");
     let db_path = db_path.to_string_lossy().into_owned();
-    let pool = db::create_pool(&db_path).await.expect("create pool");
+    let pool = db::create_pool(std::path::Path::new(&db_path))
+        .await
+        .expect("create pool");
 
     sqlx::query(
         "CREATE TABLE skill_registries (

@@ -10,16 +10,12 @@ use super::prompt::{
     detect_explanation_api_protocol, resolve_api_protocol, resolve_custom_url,
     ExplanationApiProtocol,
 };
-use super::reveal_ai_api_key_impl;
 use super::stream::get_fallback_endpoint;
-use crate::db;
-use crate::secrets::{MockSecretStore, SecretError, SecretStore, AI_API_KEY_SECRET_KEY};
 use tempfile::TempDir;
 
 async fn setup_test_db() -> (crate::db::DbPool, TempDir) {
     crate::test_support::file_pool().await
 }
-
 #[test]
 fn explicit_protocol_overrides_url_detection() {
     assert_eq!(
@@ -178,7 +174,14 @@ fn custom_provider_has_no_fallback() {
 
 #[tokio::test]
 async fn load_cached_skill_explanation_drops_empty_rows() {
-    let (pool, _dir) = setup_test_db().await;
+    let (pool, dir) = setup_test_db().await;
+    crate::test_support::seed_central_skill(
+        &pool,
+        &dir.path().join("defuddle"),
+        "defuddle",
+        "Test skill",
+    )
+    .await;
 
     sqlx::query(
         "INSERT INTO skill_explanations (skill_id, explanation, lang, model, created_at, updated_at)
@@ -232,7 +235,7 @@ async fn cache_skill_explanation_rejects_blank_text() {
 
 #[tokio::test]
 async fn load_cached_skill_explanation_summaries_returns_nonblank_lang_matches() {
-    let (pool, _dir) = setup_test_db().await;
+    let (pool, dir) = setup_test_db().await;
 
     for (skill_id, explanation, lang) in [
         ("defuddle", "中文解释", "zh"),
@@ -240,6 +243,13 @@ async fn load_cached_skill_explanation_summaries_returns_nonblank_lang_matches()
         ("empty-row", "   ", "zh"),
         ("english-only", "English summary", "en"),
     ] {
+        crate::test_support::seed_central_skill(
+            &pool,
+            &dir.path().join(skill_id),
+            skill_id,
+            "Test skill",
+        )
+        .await;
         sqlx::query(
             "INSERT INTO skill_explanations (skill_id, explanation, lang, model, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?)",
@@ -282,80 +292,4 @@ async fn load_cached_skill_explanation_summaries_returns_nonblank_lang_matches()
     assert!(!summaries.contains_key("empty-row"));
     assert!(!summaries.contains_key("english-only"));
     assert!(!summaries.contains_key("unknown"));
-}
-
-#[tokio::test]
-async fn reveal_ai_api_key_returns_provider_scoped_secret() {
-    let (pool, _dir) = setup_test_db().await;
-    let secrets = MockSecretStore::default();
-    secrets
-        .set("ai_api_key__deepseek", " sk-deepseek ")
-        .expect("provider secret");
-
-    let revealed = reveal_ai_api_key_impl(&pool, &secrets, Some("deepseek"))
-        .await
-        .expect("reveal provider secret");
-
-    assert_eq!(revealed.as_deref(), Some("sk-deepseek"));
-}
-
-#[tokio::test]
-async fn reveal_ai_api_key_uses_legacy_secret_fallback() {
-    let (pool, _dir) = setup_test_db().await;
-    let secrets = MockSecretStore::default();
-    secrets
-        .set(AI_API_KEY_SECRET_KEY, "sk-legacy")
-        .expect("legacy secret");
-
-    let revealed = reveal_ai_api_key_impl(&pool, &secrets, Some("deepseek"))
-        .await
-        .expect("reveal legacy secret");
-
-    assert_eq!(revealed.as_deref(), Some("sk-legacy"));
-}
-
-#[tokio::test]
-async fn reveal_ai_api_key_uses_current_provider_when_omitted() {
-    let (pool, _dir) = setup_test_db().await;
-    let secrets = MockSecretStore::default();
-    db::set_setting(&pool, "ai_provider", "openrouter")
-        .await
-        .unwrap();
-    secrets
-        .set("ai_api_key__openrouter", "sk-openrouter")
-        .expect("provider secret");
-
-    let revealed = reveal_ai_api_key_impl(&pool, &secrets, None)
-        .await
-        .expect("reveal current provider secret");
-
-    assert_eq!(revealed.as_deref(), Some("sk-openrouter"));
-}
-
-#[tokio::test]
-async fn reveal_ai_api_key_uses_legacy_settings_fallback() {
-    let (pool, _dir) = setup_test_db().await;
-    let secrets = MockSecretStore::default();
-    secrets.set_set_error(SecretError::Other("keyring down".to_string()));
-    db::set_setting(&pool, AI_API_KEY_SECRET_KEY, " sk-legacy-db ")
-        .await
-        .unwrap();
-
-    let revealed = reveal_ai_api_key_impl(&pool, &secrets, Some("claude"))
-        .await
-        .expect("reveal legacy settings secret");
-
-    assert_eq!(revealed.as_deref(), Some("sk-legacy-db"));
-}
-
-#[tokio::test]
-async fn reveal_ai_api_key_returns_none_when_missing() {
-    let (pool, _dir) = setup_test_db().await;
-    let secrets = MockSecretStore::default();
-
-    let revealed = reveal_ai_api_key_impl(&pool, &secrets, Some("claude"))
-        .await
-        .expect("reveal missing");
-
-    assert_eq!(revealed, None);
 }

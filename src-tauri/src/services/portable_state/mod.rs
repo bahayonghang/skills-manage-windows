@@ -6,6 +6,7 @@
 
 mod error;
 mod export;
+mod file_adapter;
 mod import;
 mod preview;
 mod progress;
@@ -21,6 +22,7 @@ use crate::db::DbPool;
 
 pub use error::PortableStateError;
 pub(crate) use export::export_skillport_state_impl;
+pub(crate) use file_adapter::{read_skillport_state_file, write_skillport_state_file};
 pub(crate) use import::import_skillport_state_for_target;
 #[cfg(test)]
 use import::{

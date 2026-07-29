@@ -5,7 +5,9 @@ use std::ffi::OsString;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::{Command, ExitStatus, Stdio};
+#[cfg(windows)]
+use std::process::Stdio;
+use std::process::{Command, ExitStatus};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
@@ -13,10 +15,13 @@ use crate::db::{self, DbPool};
 
 mod askpass;
 mod commands;
+mod config;
 mod cred;
 mod error;
 mod exec;
 mod model;
+mod process_api;
+mod process_tree;
 mod registry;
 mod remote;
 mod runner;
@@ -27,9 +32,11 @@ mod wsl_discovery;
 #[cfg(test)]
 use askpass::*;
 use commands::*;
+pub use config::{get_target_config_quarantine_status_impl, recover_target_config};
 use cred::*;
 use exec::*;
 use model::*;
+use process_api::*;
 #[cfg(test)]
 use wsl_discovery::*;
 
@@ -40,5 +47,8 @@ pub use exec::*;
 pub use model::*;
 pub use registry::TargetRegistry;
 pub use remote::*;
-pub(crate) use runner::{CommandRunner, ProcessRunner, RunnerError, RunnerPhase};
+pub(crate) use runner::{
+    CommandRunner, ProcessCancellation, ProcessPolicy, ProcessRequest, ProcessRunner, RunnerError,
+    RunnerPhase,
+};
 pub use wsl_discovery::list_wsl_distributions_impl;

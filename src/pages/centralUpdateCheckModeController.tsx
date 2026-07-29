@@ -14,6 +14,7 @@ import {
   preferredUpdateCenterTab,
   type UpdateCheckMode,
 } from "@/pages/centralUpdateCheckMode";
+import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useUpdateCenterStore } from "@/stores/updateCenterStore";
 import type { SkillRepositoryWithStats } from "@/types";
@@ -41,6 +42,7 @@ export function useCentralUpdateCheckModeController({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const refreshUpdateInventory = useUpdateCenterStore((state) => state.refresh);
   const openUpdateCenter = useUpdateCenterStore((state) => state.openDialog);
+  const loadCentralSkills = useCentralSkillsStore((state) => state.loadCentralSkills);
   const isUpdateCenterRefreshing = useUpdateCenterStore((state) => state.isRefreshing);
   const refreshProgress = useUpdateCenterStore((state) => state.refreshProgress);
   const modePreference = useSettingsStore((state) => state.centralUpdateCheckMode);
@@ -70,6 +72,12 @@ export function useCentralUpdateCheckModeController({
       try {
         const scope = buildUpdateCheckScope(mode, checkButtonState);
         const inventory = await refreshUpdateInventory(scope);
+        // 检查成败只由 inventory 决定；列表重取失败只 toast，不影响打开参数与时机。
+        try {
+          await loadCentralSkills({ throwOnError: true });
+        } catch (listErr) {
+          toast.error(t("central.refreshError", { error: String(listErr) }));
+        }
         openUpdateCenter(
           preferredUpdateCenterTab(inventory),
           buildUpdateCheckRefreshContext(scope, checkButtonState),
@@ -83,7 +91,7 @@ export function useCentralUpdateCheckModeController({
         setIsSubmitting(false);
       }
     },
-    [checkButtonState, openUpdateCenter, refreshUpdateInventory, t],
+    [checkButtonState, loadCentralSkills, openUpdateCenter, refreshUpdateInventory, t],
   );
 
   const handleClick = useCallback(() => {

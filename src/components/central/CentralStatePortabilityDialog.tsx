@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { formatBackendError } from "@/lib/backendError";
 import {
   JsonViewToggle,
   SummaryTile,
@@ -57,7 +58,11 @@ interface CentralStatePortabilityDialogProps {
   onOpenChange: (open: boolean) => void;
   activeTarget: TargetSummary;
   exportState: () => Promise<string>;
+  saveExport: (path: string, json: string) => Promise<void>;
   previewImport: (json: string) => Promise<SkillportStateImportPreview>;
+  previewImportFile: (
+    path: string,
+  ) => Promise<{ json: string; preview: SkillportStateImportPreview }>;
   importState: (
     json: string,
     resolutions: SkillportStateImportResolution[],
@@ -68,8 +73,8 @@ interface CentralStatePortabilityDialogProps {
 }
 
 type TabId = "export" | "import";
-
 const IDLE_PORTABILITY_JOB: SkillportStatePortabilityJob = {
+  jobId: null,
   phase: null,
   status: "idle",
   total: 0,
@@ -81,7 +86,9 @@ export function CentralStatePortabilityDialog({
   onOpenChange,
   activeTarget,
   exportState,
+  saveExport,
   previewImport,
+  previewImportFile,
   importState,
   portabilityJob = IDLE_PORTABILITY_JOB,
   onCancelJob,
@@ -162,9 +169,7 @@ export function CentralStatePortabilityDialog({
       setExportSummary(parseExportSummary(json));
       setExportViewMode("pretty");
     } catch (err) {
-      toast.error(
-        tRef.current("central.portabilityExportError", { error: String(err) }),
-      );
+      toast.error(tRef.current("central.portabilityExportError", { error: formatBackendError(err, tRef.current) }));
     } finally {
       setIsExportLoading(false);
     }
@@ -186,35 +191,40 @@ export function CentralStatePortabilityDialog({
       const raw = exportJsonRaw || (await exportState());
       const json = exportViewMode === "raw" ? raw : prettifyJson(raw);
       const { save } = await import("@tauri-apps/plugin-dialog");
-      const { writeTextFile } = await import("@tauri-apps/plugin-fs");
       const path = await save({
         defaultPath: defaultExportFileName(),
         filters: [{ name: "JSON", extensions: ["json"] }],
       });
       if (!path) return;
-      await writeTextFile(path, json);
+      await saveExport(path, json);
       toast.success(t("central.portabilityExportSuccess"));
     } catch (err) {
-      toast.error(t("central.portabilityExportError", { error: String(err) }));
+      toast.error(t("central.portabilityExportError", { error: formatBackendError(err, t) }));
     }
   }
 
   async function handleChooseImportFile() {
     try {
       const { open: openFile } = await import("@tauri-apps/plugin-dialog");
-      const { readTextFile } = await import("@tauri-apps/plugin-fs");
       const selected = await openFile({
         multiple: false,
         filters: [{ name: "JSON", extensions: ["json"] }],
       });
       if (typeof selected !== "string") return;
-      const text = await readTextFile(selected);
-      setImportJson(text);
+      setIsPreviewLoading(true);
+      const result = await previewImportFile(selected);
+      setImportJson(result.json);
       setImportFormatError(null);
       setLastImportResult(null);
-      await handlePreview(text);
+      applyPreview(result.preview);
     } catch (err) {
-      toast.error(t("central.portabilityImportError", { error: String(err) }));
+      if (isManifestPreviewError(err)) {
+        setPreview(null);
+        setLastImportResult(null);
+      }
+      toast.error(t("central.portabilityImportError", { error: formatBackendError(err, t) }));
+    } finally {
+      setIsPreviewLoading(false);
     }
   }
 
@@ -232,29 +242,32 @@ export function CentralStatePortabilityDialog({
     if (!trimmed) return;
     setIsPreviewLoading(true);
     try {
-      const nextPreview = await previewImport(trimmed);
-      setPreview(nextPreview);
-      setLastImportResult(null);
-      setConflictResolutions(
-        Object.fromEntries(
-          nextPreview.skills
-            .filter((skill) => skill.status === "conflict")
-            .map((skill) => [
-              conflictKey(skill),
-              "skip" as SkillportStateImportResolutionType,
-            ]),
-        ),
-      );
-      setRenameValues({});
+      applyPreview(await previewImport(trimmed));
     } catch (err) {
       if (isManifestPreviewError(err)) {
         setPreview(null);
         setLastImportResult(null);
       }
-      toast.error(t("central.portabilityPreviewError", { error: String(err) }));
+      toast.error(t("central.portabilityPreviewError", { error: formatBackendError(err, t) }));
     } finally {
       setIsPreviewLoading(false);
     }
+  }
+
+  function applyPreview(nextPreview: SkillportStateImportPreview) {
+    setPreview(nextPreview);
+    setLastImportResult(null);
+    setConflictResolutions(
+      Object.fromEntries(
+        nextPreview.skills
+          .filter((skill) => skill.status === "conflict")
+          .map((skill) => [
+            conflictKey(skill),
+            "skip" as SkillportStateImportResolutionType,
+        ]),
+      ),
+    );
+    setRenameValues({});
   }
 
   function buildResolutions(): SkillportStateImportResolution[] {
@@ -312,7 +325,7 @@ export function CentralStatePortabilityDialog({
       }
       await onAfterImport?.();
     } catch (err) {
-      toast.error(t("central.portabilityImportError", { error: String(err) }));
+      toast.error(t("central.portabilityImportError", { error: formatBackendError(err, t) }));
     } finally {
       setIsImporting(false);
     }

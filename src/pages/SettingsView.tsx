@@ -63,7 +63,6 @@ export function SettingsView() {
     isSavingGitHubPat,
     isTestingGitHubPat,
     loadGitHubPat,
-    revealGitHubPat,
     saveGitHubPat,
     clearGitHubPat,
     testGitHubPat,
@@ -78,7 +77,6 @@ export function SettingsView() {
     loadAiSettings,
     updateAiSettings,
     switchAiProvider,
-    revealAiApiKey,
     clearAiApiKey,
     testAiConnection,
     agents,
@@ -93,6 +91,8 @@ export function SettingsView() {
     loadMarketplaceSkills,
     targets,
     activeTarget,
+    quarantineStatus,
+    quarantineStatusError,
     wslDistributions,
     isLoadingTargets,
     isLoadingWslDistributions,
@@ -550,6 +550,8 @@ export function SettingsView() {
               sshTargetPasswordUpdates={sshTargetPasswordUpdates}
               switchingTargetId={switchingTargetId}
               targetMessage={targetMessage}
+              quarantineStatus={quarantineStatus}
+              quarantineStatusError={quarantineStatusError}
               targets={targets}
               testingTargetId={testingTargetId}
               updatingPasswordTargetId={updatingPasswordTargetId}
@@ -598,8 +600,6 @@ export function SettingsView() {
               onRefreshWslDistributions={() => {
                 void loadWslDistributions().catch(() => undefined);
               }}
-              onRevealAiApiKey={revealAiApiKey}
-              onRevealGitHubPat={revealGitHubPat}
               onRemoveDirectory={(path) => {
                 void handleRemoveDirectory(path);
               }}

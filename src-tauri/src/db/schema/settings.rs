@@ -4,9 +4,9 @@
 //! - `operation_logs`：本地结构化操作历史，6 条索引覆盖时间、目标、级别、
 //!   动作、分类、批次维度的查询路径
 
-use crate::db::DbPool;
+use sqlx::SqliteConnection;
 
-pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
+pub(super) async fn init(connection: &mut SqliteConnection) -> Result<(), sqlx::Error> {
     // settings table
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS settings (
@@ -14,7 +14,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
             value TEXT NOT NULL
         )",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     // operation_logs table — local-only structured operation history.
@@ -39,7 +39,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
             batch_id       TEXT
         )",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     for index_sql in [
@@ -56,7 +56,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
         "CREATE INDEX IF NOT EXISTS idx_operation_logs_batch_id
          ON operation_logs(batch_id)",
     ] {
-        sqlx::query(index_sql).execute(pool).await?;
+        sqlx::query(index_sql).execute(&mut *connection).await?;
     }
 
     Ok(())

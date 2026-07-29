@@ -1,6 +1,7 @@
 import type { TFunction } from "i18next";
 import { toast } from "sonner";
 
+import { formatGitHubImportToast } from "@/components/marketplace/githubImportWizardUtils";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
@@ -18,10 +19,16 @@ export function useCentralSkillsImportWorkflow({
 }: CentralSkillsImportWorkflowDeps) {
   const skillsByAgent = useSkillStore((store) => store.skillsByAgent);
   const getSkillsByAgent = useSkillStore((store) => store.getSkillsByAgent);
-  const previewGitHubRepoImport = useMarketplaceStore((store) => store.previewGitHubRepoImport);
-  const importGitHubRepoSkills = useMarketplaceStore((store) => store.importGitHubRepoSkills);
+  const previewGitHubRepoImport = useMarketplaceStore(
+    (store) => store.previewGitHubRepoImport,
+  );
+  const importGitHubRepoSkills = useMarketplaceStore(
+    (store) => store.importGitHubRepoSkills,
+  );
   const installSkill = useCentralSkillsStore((store) => store.installSkill);
-  const loadCentralSkills = useCentralSkillsStore((store) => store.loadCentralSkills);
+  const loadCentralSkills = useCentralSkillsStore(
+    (store) => store.loadCentralSkills,
+  );
   const refreshCounts = usePlatformStore((store) => store.refreshCounts);
 
   async function handleGitHubPreview() {
@@ -39,7 +46,13 @@ export function useCentralSkillsImportWorkflow({
       toast.success(t("marketplace.githubImportCentralSuccess"));
       return result;
     } catch (err) {
-      toast.error(t("marketplace.githubImportError", { error: String(err) }));
+      // Snapshot lifecycle failures arrive as a coded envelope; localize them so
+      // the toast tells the user to preview the repository again.
+      toast.error(
+        t("marketplace.githubImportError", {
+          error: formatGitHubImportToast(err, t),
+        }),
+      );
       throw err;
     }
   }
@@ -48,7 +61,7 @@ export function useCentralSkillsImportWorkflow({
     skillId: string,
     agentIds: string[],
     method: "symlink" | "copy",
-    projectPath?: string | null
+    projectPath?: string | null,
   ) {
     const result = await installSkill(skillId, agentIds, method, projectPath);
     await Promise.all(agentIds.map((agentId) => getSkillsByAgent(agentId)));

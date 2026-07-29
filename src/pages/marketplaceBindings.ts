@@ -22,6 +22,9 @@ export function useMarketplaceBindings() {
   const importGitHubRepoSkills = useMarketplaceStore(
     (state) => state.importGitHubRepoSkills
   );
+  const installGitHubPreviewSkill = useMarketplaceStore(
+    (state) => state.installGitHubPreviewSkill
+  );
   const resetGitHubImport = useMarketplaceStore((state) => state.resetGitHubImport);
   const skillsShResults = useMarketplaceStore((state) => state.skillsShResults);
   const skillsShQuery = useMarketplaceStore((state) => state.skillsShQuery);
@@ -52,6 +55,7 @@ export function useMarketplaceBindings() {
     githubImport,
     previewGitHubRepoImport,
     importGitHubRepoSkills,
+    installGitHubPreviewSkill,
     resetGitHubImport,
     skillsShResults,
     skillsShQuery,

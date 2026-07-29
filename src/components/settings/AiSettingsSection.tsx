@@ -8,7 +8,6 @@ import {
   ServerCog,
   SlidersHorizontal,
 } from "lucide-react";
-import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -47,7 +46,6 @@ interface AiSettingsSectionProps {
   showAiTestDetails: boolean;
   onProviderChange: (id: string) => void;
   onClearApiKey: () => void;
-  onRevealApiKey: (providerId: string) => Promise<string | null>;
   onSetShowAiTestDetails: (
     value: boolean | ((current: boolean) => boolean),
   ) => void;
@@ -68,13 +66,11 @@ export function AiSettingsSection({
   showAiTestDetails,
   onProviderChange,
   onClearApiKey,
-  onRevealApiKey,
   onSetShowAiTestDetails,
   onTestConnection,
   onUpdateAiSettings,
 }: AiSettingsSectionProps) {
   const { t } = useTranslation();
-  const [revealError, setRevealError] = useState<string | null>(null);
   const currentProvider = AI_PROVIDERS.find(
     (provider) => provider.id === aiSettings.provider,
   );
@@ -86,10 +82,6 @@ export function AiSettingsSection({
     aiSettings.region,
   );
   const aiControlsDisabled = isLoadingAiSettings || aiSaveStatus === "saving";
-
-  useEffect(() => {
-    setRevealError(null);
-  }, [aiSettings.provider, aiSettings.apiKey, aiApiKeyState.configured]);
 
   return (
     <SettingsSection
@@ -172,15 +164,7 @@ export function AiSettingsSection({
               configured={aiApiKeyState.configured}
               disabled={aiControlsDisabled}
               placeholder={t("settings.aiApiKeyPlaceholder")}
-              revealScopeKey={aiSettings.provider}
-              inputShowLabel={t("settings.aiApiKeyShow")}
-              inputHideLabel={t("settings.aiApiKeyHide")}
-              savedRevealLabel={t("settings.aiApiKeyRevealSaved")}
-              savedHideLabel={t("settings.aiApiKeyHideSaved")}
-              savedHiddenHint={t("settings.aiApiKeySavedHiddenHint", {
-                provider: currentProviderLabel,
-              })}
-              savedRevealedHint={t("settings.aiApiKeySavedRevealedHint", {
+              savedHiddenHint={t("settings.aiApiKeyConfiguredNoReveal", {
                 provider: currentProviderLabel,
               })}
               inputReplacementHint={t("settings.aiApiKeyWillReplace", {
@@ -189,8 +173,6 @@ export function AiSettingsSection({
               onChange={(nextValue) =>
                 onUpdateAiSettings({ apiKey: nextValue })
               }
-              onRevealSaved={() => onRevealApiKey(aiSettings.provider)}
-              onRevealError={setRevealError}
             />
             <div className="mt-3 space-y-2 text-xs text-muted-foreground">
               <p>
@@ -204,11 +186,6 @@ export function AiSettingsSection({
                   {t("settings.aiApiKeyFingerprint", {
                     fingerprint: aiApiKeyState.fingerprint,
                   })}
-                </p>
-              ) : null}
-              {revealError ? (
-                <p className="text-destructive-text">
-                  {t("settings.aiApiKeyRevealFailed", { error: revealError })}
                 </p>
               ) : null}
               {aiApiKeyState.error ? (

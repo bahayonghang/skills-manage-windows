@@ -12,7 +12,7 @@
 - `src/stores/`：Zustand 状态层。组件里不要直接调 Tauri `invoke()`。
 - `src/components/skill/UnifiedSkillCard.tsx`：技能卡片唯一实现，新增场景优先复用。
 - `src-tauri/src/`：Rust 后端，含 commands、数据库、linker、marketplace。
-- 中央技能目录：`~/.agents/skills/`
+- 私有 Central 技能目录：`~/.skillsmanage/skills/`；Universal Agents 共享目标：`~/.agents/skills/`
 - 本地数据库：`~/.skillsmanage/db.sqlite`
 
 ## 常用命令
@@ -40,7 +40,7 @@ pnpm tauri build
 - `just build`：跑 `pnpm tauri build`，然后把 `src-tauri/target/release/bundle/nsis/` 里最新的 Windows 安装包复制到根目录 `outputs/`。
 - `just install`：跑 `just build`，然后以 passive 模式运行根目录 `outputs/` 里的最新 NSIS 安装包。
 - 改 CI 或发布流程时，优先保持 `just ci` 和 GitHub Actions 的检查项一致，避免本地和远端两套标准。
-- GitHub Actions 的 `just-ci` 在指向 `main` 的 PR、`main` / `dev` push、手动触发和 release 上运行；跨平台 smoke package 只在手动触发或 release 上运行。
+- GitHub Actions 的 `just-ci` 在指向 `main` 的 PR、手动触发和 release 上运行；跨平台 smoke package 只在手动触发或 release 上运行。
 
 ## 修改约束
 
@@ -48,6 +48,20 @@ pnpm tauri build
 - 涉及技能安装、卸载、中央化链路时，优先复用现有 `linker.rs` 逻辑，尤其是 `ensure_centralized` 约束。
 - Windows 相关命令默认按 PowerShell 场景写，避免只适用于 bash 的写法。
 - 改打包链路时，不要只验证前端构建。要把 Tauri Windows bundle 一起看成验收范围。
+
+## Code Review Rules
+
+### 共享状态与 Central 变更
+
+- 把数据库 schema、技能 `uid` / 引用解析、导入安装服务和 Central 文件变更视为桌面端与 `skillport-cli` 的共享兼容性契约。只在 Tauri command 或只在 CLI 路径生效的修复、重新生成已持久化的 `uid`、绕过跨进程 Central mutation lock，都会造成另一入口状态错乱或用户技能丢失。安全路径：将共享行为放在 Rust service / repository 层，使用向后兼容的迁移并保留现有 `uid` 语义；Central 写操作复用现有中央化、安装和变更锁链路，中央库迁移时保留目标仅有技能且不删除旧目录。
+
+### 凭据与可移植数据边界
+
+- GitHub PAT、AI API key、SSH 密码及私钥内容不得进入 SQLite 明文、日志、错误文本、遥测或状态导出文件。安全路径：复用 `SecretStore` 边界，优先写入操作系统凭据库，Windows 仅回退到 DPAPI 保护的本地文件，持久化不可用时只留在当前会话；旧明文设置只能在受保护存储写入并回读成功后删除，所有导出和 operation log 保持脱敏。
+
+### Windows 发布与更新契约
+
+- 审查 Tauri 配置、发布 workflow、版本/依赖和产物命名变更时，保护 Windows x64 发布面：已签名 NSIS、对应 `.sig`、指向该产物的 `latest.json`，以及 MSI / ZIP 产物必须保持一致。本地 bundle 成功但签名或更新元数据缺失，仍然是发布回归。安全路径：同步更新唯一桌面发布 workflow、`latest.json` 生成器和 release preflight；本地配置继续使用占位公钥并关闭 updater artifacts，只在发布 workflow 中注入真实公钥并启用签名产物。
 
 ## 验证要求
 

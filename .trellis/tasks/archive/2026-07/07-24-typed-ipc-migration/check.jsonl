@@ -1,0 +1,5 @@
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Verify all frontend IPC still routes through the adapter and structured errors preserve fixtures, recorder behavior, and message compatibility."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Verify every fallible Tauri command uses IpcResult while domain and payload-internal error contracts remain correctly layered."}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Audit serialized errors and frontend state for credential, path, command, output, token, and content disclosure."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Verify focused checks, codegen diff/parity ratchets, full just ci, and Windows Tauri bundle evidence."}
+{"file":".trellis/tasks/07-24-typed-ipc-migration/research/typed-ipc-codegen-options.md","reason":"Check exact dependency pins, feature isolation, structured metadata export, and the absence of a generated runtime invoke path."}

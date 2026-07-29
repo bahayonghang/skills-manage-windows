@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 54
-- **Last Active**: 2026-07-20
+- **Total Sessions**: 75
+- **Last Active**: 2026-07-29
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~144 | Active |
+| `journal-2.md` | ~709 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,27 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 75 | 2026-07-29 | Repair PR #25 cross-platform CI | `0c49dcf6`, `e1a2d6f5` | `dev` |
+| 74 | 2026-07-28 | 优化 Skill Usage 页面体验 | `39f8a674` | `dev` |
+| 73 | 2026-07-28 | 完成极限审计整改父任务验收 | - | `dev` |
+| 72 | 2026-07-28 | 清偿 size budget 历史例外 | `a9a337f3` | `dev` |
+| 71 | 2026-07-28 | 完成 Typed IPC 与结构化错误边界迁移 | `9f7a719f` | `dev` |
+| 70 | 2026-07-28 | 完成 CI 跨平台与供应链加固 | `f2dcc3f78b5ac1dfcfa90476f926d89936261b62` | `dev` |
+| 69 | 2026-07-28 | 完成启动恢复状态机与前端恢复页 | `98ce97f` | `dev` |
+| 68 | 2026-07-27 | 并发作业独占 lease 与迁移协调 | `ccc70666` | `dev` |
+| 67 | 2026-07-27 | GitHub 不可变 preview snapshot | `8394e8c7` | `dev` |
+| 66 | 2026-07-27 | 完成 Settings API 域化与目标配置隔离 | `c11aa3f4` | `dev` |
+| 65 | 2026-07-27 | 完成 Release 原子发布门禁 | `3d3473b8` | `dev` |
+| 64 | 2026-07-27 | 完成 FS+DB 可恢复操作协议 | `cf7cee37` | `dev` |
+| 63 | 2026-07-26 | 完成数据库版本化迁移与外键级联 | `6594b85e298d24f2ce7dd3e0b24856a5c5d016f3` | `dev` |
+| 62 | 2026-07-26 | 完成数据库 stale 清理事务化与 orphan 修复 | `21eb82a9` | `dev` |
+| 61 | 2026-07-26 | Renderer 权限最小化与 capability drift check | `12b9b248` | `dev` |
+| 60 | 2026-07-26 | 远端路径 canonical 边界 | `83e1ba5f` | `dev` |
+| 59 | 2026-07-26 | 完成 SSH/WSL 异步进程监督 | `47359025` | `dev` |
+| 58 | 2026-07-26 | Close request-scoped TargetContext snapshot | `0e1f70c4` | `dev` |
+| 57 | 2026-07-26 | 完成 GitHub 网络边界与 SSRF 收敛 | `35e0c086` | `dev` |
+| 56 | 2026-07-21 | 整理测试目录并补齐 Rust 集成测试 | `ca97eb07`, `2bd4de4` | `dev` |
+| 55 | 2026-07-21 | Central Skills 刷新按钮与检查后自动刷新 | `f71efc2b`, `efc7096e` | `dev` |
 | 54 | 2026-07-20 | Dashboard 首页优化：驾驶舱重组 + 三个聚合 IPC + 去玻璃模糊 | `c2f45ebe`, `f31908cf`, `b6f1028a`, `e813ee9e` | `dev` |
 | 53 | 2026-07-20 | 完成标签 taxonomy 与 AI 提议父任务验收 | `0196def5` | `dev` |
 | 52 | 2026-07-20 | 完成 AI 新标签 proposal/review 子任务 | `12d546f6` | `dev` |

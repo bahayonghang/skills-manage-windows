@@ -7,10 +7,10 @@
 //! 老库迁移：早期版本 `skill_registries` / `marketplace_skills` 字段较少，
 //! 通过 [`super::super::migrations::ensure_column`] 幂等增补。
 
-use super::super::migrations::ensure_column;
-use crate::db::DbPool;
+use super::super::migrations::versions::v1::ensure_column;
+use sqlx::SqliteConnection;
 
-pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
+pub(super) async fn init(connection: &mut SqliteConnection) -> Result<(), sqlx::Error> {
     // skill_registries — remote skill sources (marketplace).
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS skill_registries (
@@ -31,7 +31,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
             created_at  TEXT NOT NULL
         )",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     // marketplace_skills — cached remote skill metadata.
@@ -48,7 +48,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
             FOREIGN KEY (registry_id) REFERENCES skill_registries(id)
         )",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     // skill_explanations — cached AI-generated skill explanations.
@@ -63,7 +63,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
             PRIMARY KEY (skill_id, lang)
         )",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     // 老库 skill_registries / marketplace_skills 缺列：逐列幂等增补。
@@ -110,7 +110,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
         ),
     ];
     for (table, column, alter_sql) in alter_specs {
-        ensure_column(pool, table, column, alter_sql).await?;
+        ensure_column(connection, table, column, alter_sql).await?;
     }
 
     Ok(())

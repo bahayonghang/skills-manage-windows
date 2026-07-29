@@ -1,0 +1,4 @@
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Review the reusable-CI DAG, stable just-ci context, smoke-package guards, full local gate, and required Windows bundle evidence."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Verify new workflow/script tests are discoverable in normal and serial Vitest layouts and do not reduce the existing contract baseline."}
+{"file":".trellis/spec/backend/shared-local-cli.md","reason":"Reject verifier changes that alter the desktop default-run, skillport-cli packaging, or existing multi-binary validation contract."}
+{"file":".trellis/tasks/07-24-release-pipeline-gate/research/release-pipeline-live-2026-07-27.md","reason":"Audit implementation against the frozen tag/SHA, exact artifact inventory, runtime-equivalent signature API, documentation, and no-remote claims."}

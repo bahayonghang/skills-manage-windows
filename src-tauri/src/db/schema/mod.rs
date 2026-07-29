@@ -1,4 +1,4 @@
-//! Schema initialization — split from `db/legacy.rs` per task_plan.md Phase 2b.
+//! Frozen migration-1 legacy schema normalization.
 //!
 //! 调度顺序按表依赖排：
 //!
@@ -27,26 +27,23 @@ pub(super) mod saved_views;
 pub(super) mod settings;
 pub(super) mod usage;
 
-use super::types::DbPool;
+use sqlx::SqliteConnection;
 
-/// 全量建表 + 增量迁移。`init_database_with_agents` 在 seed 之前调用一次。
+/// 在 migration 1 的单一事务连接上完成 legacy schema 归一化。
 ///
 /// 顺序原则：
 /// 1. 主键表 / 其他表会引用的表先建（如 `marketplace_skills` FK → `skill_registries`）
 /// 2. 同一业务域的索引与 ALTER TABLE 跟在自家 CREATE TABLE 后面，避免漂移
-/// 3. WAL：连接池构造时已设置，这里再次执行以兼容外部直接传入的池实例
-pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
-    sqlx::query("PRAGMA journal_mode=WAL").execute(pool).await?;
-
-    core::init(pool).await?;
-    collections::init(pool).await?;
-    metadata::init(pool).await?;
-    discovery::init(pool).await?;
-    settings::init(pool).await?;
-    marketplace::init(pool).await?;
-    saved_views::init(pool).await?;
-    projects::init(pool).await?;
-    usage::init(pool).await?;
+pub(super) async fn init(connection: &mut SqliteConnection) -> Result<(), sqlx::Error> {
+    core::init(connection).await?;
+    collections::init(connection).await?;
+    metadata::init(connection).await?;
+    discovery::init(connection).await?;
+    settings::init(connection).await?;
+    marketplace::init(connection).await?;
+    saved_views::init(connection).await?;
+    projects::init(connection).await?;
+    usage::init(connection).await?;
 
     Ok(())
 }

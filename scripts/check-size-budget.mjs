@@ -7,14 +7,6 @@ const MAX_LINES = 800;
 const SOURCE_ROOTS = ["src", "src-tauri/src"];
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".rs"]);
 
-const BASELINE_ALLOWLIST = new Map([
-  ["src-tauri/src/services/central_updates/core.rs", 861],
-  ["src-tauri/src/commands/collections.rs", 1033],
-  ["src-tauri/src/db/seed.rs", 810],
-  ["src/pages/CentralSkillsView.tsx", 865],
-  ["src/components/skill/UnifiedSkillCard.tsx", 840],
-]);
-
 function normalizePath(path) {
   return path.replace(/\\/g, "/");
 }
@@ -74,24 +66,12 @@ const sourceFiles = SOURCE_ROOTS.flatMap((root) =>
 );
 
 const violations = [];
-const allowlistStillOversized = [];
 
 for (const relativePath of sourceFiles) {
   const absolutePath = join(repoRoot, relativePath);
   const lines = countLines(absolutePath);
 
   if (lines <= MAX_LINES) {
-    continue;
-  }
-
-  const baselineLimit = BASELINE_ALLOWLIST.get(relativePath);
-  if (baselineLimit !== undefined) {
-    allowlistStillOversized.push({ relativePath, lines, baselineLimit });
-    if (lines > baselineLimit) {
-      violations.push(
-        `${relativePath}: ${lines} lines exceeds frozen baseline ${baselineLimit} lines`,
-      );
-    }
     continue;
   }
 
@@ -111,12 +91,3 @@ if (violations.length > 0) {
 console.log(
   `[sizecheck] Passed. Checked ${sourceFiles.length} production source files with max ${MAX_LINES} lines.`,
 );
-
-if (allowlistStillOversized.length > 0) {
-  console.log(
-    "[sizecheck] Frozen baseline exceptions (must not grow until refactored):",
-  );
-  for (const item of allowlistStillOversized) {
-    console.log(`- ${item.relativePath}: ${item.lines}/${item.baselineLimit}`);
-  }
-}

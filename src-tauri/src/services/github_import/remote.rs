@@ -1,11 +1,14 @@
 use crate::services::resource_budget::ResourceBudget;
 
 use super::*;
-pub(super) async fn cleanup_expired_preview_workspaces_for_connection(
+pub(super) async fn cleanup_expired_preview_snapshots_for_connection(
     connection: &ConnectedRemoteTarget,
 ) {
-    for workspace in prune_expired_preview_workspaces(Utc::now()) {
-        if workspace.target_id == connection.target_id() {
+    for snapshot in prune_expired_preview_snapshots(Utc::now()) {
+        let Some(workspace) = snapshot.remote_workspace() else {
+            continue;
+        };
+        if snapshot.target_id == connection.target_id() {
             let _ = connection
                 .remove_tree(&workspace.remote_workspace_dir)
                 .await;
@@ -13,12 +16,14 @@ pub(super) async fn cleanup_expired_preview_workspaces_for_connection(
     }
 }
 
+/// Create a bounded remote workspace holding the extracted repository at
+/// `pinned_repo`'s ref (a resolved commit for preview).
 pub(super) async fn create_remote_preview_workspace(
     connection: &ConnectedRemoteTarget,
-    resolved: &ResolvedGitHubRepoSource,
+    pinned_repo: &GitHubRepoRef,
     auth: Option<&str>,
 ) -> Result<GitHubPreviewWorkspace, GithubImportError> {
-    let archive_url = github_archive_url(&resolved.repo);
+    let archive_url = github_archive_url(pinned_repo);
     let script = remote_workspace_download_script(auth)?;
     let output = connection
         .run_script(
@@ -35,17 +40,10 @@ pub(super) async fn create_remote_preview_workspace(
         .ok_or(GithubImportError::RemotePreviewNoWorkspacePath)?
         .to_string();
     let remote_repo_dir = remote_join(&remote_workspace_dir, "repo");
-    let now = Utc::now();
 
     Ok(GitHubPreviewWorkspace {
-        id: format!("github-preview-{}", uuid::Uuid::new_v4()),
-        target_id: connection.target_id().to_string(),
-        repo: resolved.repo.clone(),
-        source_path: resolved.source_path.clone(),
         remote_workspace_dir,
         remote_repo_dir,
-        created_at: now,
-        expires_at: now + Duration::minutes(REMOTE_PREVIEW_WORKSPACE_TTL_MINUTES),
     })
 }
 
@@ -156,14 +154,57 @@ pub(super) fn curl_auth_header_config_line(token: &str) -> Result<String, Github
     let escaped = token.replace('\\', "\\\\").replace('"', "\\\"");
     Ok(format!("header = \"Authorization: Bearer {escaped}\""))
 }
+/// Import from a workspace this call created itself.
+///
+/// Used by the non-preview backend flows (Central repository sync, portable
+/// state import, CLI) that confirm through their own verified inventory rather
+/// than a renderer preview token.
 pub(crate) async fn import_github_repo_skills_remote_with_auth(
     pool: &DbPool,
     active_target: &ActiveTarget,
     repo_url: &str,
     selections: Vec<GitHubSkillImportSelection>,
-    preview_workspace_id: Option<&str>,
     app: Option<&AppHandle>,
     auth: Option<&str>,
+) -> Result<GitHubRepoImportResult, GithubImportError> {
+    let resolved = resolve_repo_source(repo_url, auth).await?;
+    let connection = connect_remote_target(active_target)
+        .await
+        .map_err(|e| GithubImportError::Remote(e.to_string()))?;
+    cleanup_expired_preview_snapshots_for_connection(&connection).await;
+    let workspace = create_remote_preview_workspace(&connection, &resolved.repo, auth).await?;
+
+    let result = import_github_repo_skills_remote_from_workspace(
+        pool,
+        active_target,
+        &resolved.repo,
+        resolved.source_path.as_deref(),
+        &workspace,
+        selections,
+        None,
+        app,
+    )
+    .await;
+    let _ = connection
+        .remove_tree(&workspace.remote_workspace_dir)
+        .await;
+    result
+}
+
+/// Import selected skills from an already-acquired remote workspace.
+///
+/// The workspace holds the exact bytes the caller verified; this function never
+/// re-resolves a branch or downloads another archive.
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn import_github_repo_skills_remote_from_workspace(
+    pool: &DbPool,
+    active_target: &ActiveTarget,
+    repo: &GitHubRepoRef,
+    source_path: Option<&str>,
+    workspace: &GitHubPreviewWorkspace,
+    selections: Vec<GitHubSkillImportSelection>,
+    provenance: Option<&ImportProvenance>,
+    app: Option<&AppHandle>,
 ) -> Result<GitHubRepoImportResult, GithubImportError> {
     emit_github_import_progress(
         app,
@@ -194,14 +235,11 @@ pub(crate) async fn import_github_repo_skills_remote_with_auth(
         .await
         .map_err(|e| GithubImportError::Remote(e.to_string()))?;
 
-    let resolved = resolve_repo_source(repo_url, auth).await?;
-    let workspace =
-        resolve_remote_import_workspace(&connection, &resolved, preview_workspace_id, auth).await?;
     let candidates = build_remote_repo_skill_candidates_from_workspace(
         &connection,
-        &resolved.repo,
+        repo,
         &workspace.remote_repo_dir,
-        resolved.source_path.as_deref(),
+        source_path,
     )
     .await?;
 
@@ -313,24 +351,24 @@ pub(crate) async fn import_github_repo_skills_remote_with_auth(
             file_path: skill_md_path,
             canonical_path: Some(target_dir.clone()),
             is_central: true,
-            source: Some(format!(
-                "github:{}/{}",
-                resolved.repo.owner, resolved.repo.repo
-            )),
+            source: Some(format!("github:{}/{}", repo.owner, repo.repo)),
             content: None,
             scanned_at: Utc::now().to_rfc3339(),
             fs_created_at: None,
             fs_updated_at: None,
         };
-        db::upsert_skill(pool, &db_skill).await?;
-        db::assign_github_repository_to_skill(
+        let (resolved_commit_sha, content_digest) =
+            provenance_for(provenance, &op.candidate.source_path);
+        db::upsert_skill_with_github_repository(
             pool,
-            &resolved.repo.owner,
-            &resolved.repo.repo,
-            &resolved.repo.branch,
-            &resolved.repo.normalized_url,
-            &op.final_skill_id,
+            &db_skill,
+            &repo.owner,
+            &repo.repo,
+            &repo.branch,
+            &repo.normalized_url,
             &op.candidate.source_path,
+            resolved_commit_sha.as_deref(),
+            content_digest.as_deref(),
         )
         .await?;
 
@@ -361,48 +399,11 @@ pub(crate) async fn import_github_repo_skills_remote_with_auth(
         },
     );
 
-    let _ = take_preview_workspace(&workspace.id);
-    let _ = connection
-        .remove_tree(&workspace.remote_workspace_dir)
-        .await;
-
     Ok(GitHubRepoImportResult {
-        repo: resolved.repo,
+        repo: repo.clone(),
         imported_skills,
         skipped_skills,
     })
-}
-
-pub(super) async fn resolve_remote_import_workspace(
-    connection: &ConnectedRemoteTarget,
-    resolved: &ResolvedGitHubRepoSource,
-    preview_workspace_id: Option<&str>,
-    auth: Option<&str>,
-) -> Result<GitHubPreviewWorkspace, GithubImportError> {
-    cleanup_expired_preview_workspaces_for_connection(connection).await;
-
-    if let Some(workspace_id) = preview_workspace_id {
-        if let Some(workspace) = get_preview_workspace(workspace_id) {
-            if !workspace.matches_source(
-                connection.target_id(),
-                &resolved.repo,
-                resolved.source_path.as_deref(),
-            ) {
-                return Err(GithubImportError::PreviewWorkspaceMismatch);
-            }
-            if !workspace.is_expired(Utc::now()) {
-                return Ok(workspace);
-            }
-            let _ = take_preview_workspace(workspace_id);
-            let _ = connection
-                .remove_tree(&workspace.remote_workspace_dir)
-                .await;
-        }
-    }
-
-    let workspace = create_remote_preview_workspace(connection, resolved, auth).await?;
-    register_preview_workspace(workspace.clone());
-    Ok(workspace)
 }
 
 pub(super) fn remote_skill_source_dir(
@@ -450,66 +451,13 @@ fi
 "#
 }
 
-pub(crate) async fn fetch_github_skill_markdown_from_remote_workspace(
-    state: &State<'_, AppState>,
-    workspace_id: &str,
-    source_path: Option<&str>,
-) -> Result<String, GithubImportError> {
-    let workspace =
-        get_preview_workspace(workspace_id).ok_or(GithubImportError::PreviewWorkspaceExpired)?;
-    if workspace.is_expired(Utc::now()) {
-        let _ = take_preview_workspace(workspace_id);
-        return Err(GithubImportError::PreviewWorkspaceExpired);
-    }
-    let source_path = source_path.ok_or(GithubImportError::PreviewSourcePathRequired)?;
-    let active_target = state
-        .active_target()
-        .await
-        .map_err(GithubImportError::Remote)?;
-    if active_target.is_remote_like() && active_target.id() != workspace.target_id {
-        return Err(GithubImportError::PreviewTargetChanged);
-    }
-    if !active_target.is_remote_like() {
-        return Err(GithubImportError::PreviewTargetNotRemote);
-    }
-    let skill_md_path = if source_path == "." {
-        "SKILL.md".to_string()
-    } else {
-        join_repo_path(source_path, "SKILL.md")?
-    };
-    let connection = connect_remote_target(&active_target)
-        .await
-        .map_err(|e| GithubImportError::Remote(e.to_string()))?;
-    let bytes = connection
-        .read_file(&remote_join(&workspace.remote_repo_dir, &skill_md_path))
-        .await
-        .map_err(|e| GithubImportError::Remote(e.to_string()))?;
-    ResourceBudget::default_skill()
-        .reject_file_read_size(&skill_md_path, bytes.len() as u64)
-        .map_err(GithubImportError::Budget)?;
-    String::from_utf8(bytes)
-        .map_err(|e| GithubImportError::Parse(format!("Remote SKILL.md is not valid UTF-8: {}", e)))
-}
-
-pub(crate) async fn discard_preview_workspace_for_active_target(
-    state: &State<'_, AppState>,
-    workspace_id: &str,
+/// Explicitly discard a registered preview snapshot and release its storage.
+pub(crate) async fn discard_preview_snapshot_for_target(
+    active_target: &ActiveTarget,
+    preview_id: &str,
 ) {
-    let Some(workspace) = take_preview_workspace(workspace_id) else {
+    let Some(snapshot) = discard_preview_snapshot(preview_id) else {
         return;
     };
-    let Ok(active_target) = state.active_target().await else {
-        return;
-    };
-    if !active_target.is_remote_like() {
-        return;
-    }
-    if active_target.id() != workspace.target_id {
-        return;
-    }
-    if let Ok(connection) = connect_remote_target(&active_target).await {
-        let _ = connection
-            .remove_tree(&workspace.remote_workspace_dir)
-            .await;
-    }
+    release_snapshot_storage(active_target, &snapshot).await;
 }

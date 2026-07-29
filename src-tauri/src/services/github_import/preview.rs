@@ -1,41 +1,47 @@
+use super::tree_import::{try_prepare_tree_import, TreeImportOutcome, TreeSelectionScope};
 use super::*;
 use crate::services::resource_budget::ResourceBudget;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct PreviewRepositoryFile {
-    pub(super) repo_path: String,
-    pub(super) byte_len: u64,
-}
-
+/// Remote repository inventory: one NUL-delimited record per regular file with
+/// its repository-relative path, byte length, and SHA-256.
 pub(super) const REMOTE_PREVIEW_FILE_INVENTORY_SCRIPT: &str = r#"set -eu
 repo_dir=$1
+if command -v sha256sum >/dev/null 2>&1; then
+  hash_tool=sha256sum
+elif command -v shasum >/dev/null 2>&1; then
+  hash_tool=shasum
+elif command -v openssl >/dev/null 2>&1; then
+  hash_tool=openssl
+else
+  printf 'Missing required remote tool: sha256sum\n' >&2
+  exit 127
+fi
 find "$repo_dir" -type f -exec sh -c '
 repo_dir=$1
-shift
+hash_tool=$2
+shift 2
 for file do
   relative=${file#"$repo_dir"/}
   size=$(wc -c < "$file")
-  printf "%s\0%s\0" "$relative" "$size"
+  case "$hash_tool" in
+    sha256sum) digest=$(sha256sum "$file" | cut -d" " -f1) ;;
+    shasum) digest=$(shasum -a 256 "$file" | cut -d" " -f1) ;;
+    *) digest=$(openssl dgst -sha256 "$file" | sed "s/.*= //") ;;
+  esac
+  printf "%s\0%s\0%s\0" "$relative" "$size" "$digest"
 done
-' sh "$repo_dir" {} +
+' sh "$repo_dir" "$hash_tool" {} +
 "#;
 
 pub(super) fn snapshot_preview_repository_files(
     snapshot: &GitHubRepoSnapshot,
-) -> Vec<PreviewRepositoryFile> {
-    snapshot
-        .files
-        .iter()
-        .map(|(repo_path, bytes)| PreviewRepositoryFile {
-            repo_path: repo_path.clone(),
-            byte_len: bytes.len() as u64,
-        })
-        .collect()
+) -> Vec<PreviewSnapshotFile> {
+    snapshot_files_from_local(snapshot)
 }
 
 pub(super) fn parse_remote_preview_repository_files(
     output: &str,
-) -> Result<Vec<PreviewRepositoryFile>, GithubImportError> {
+) -> Result<Vec<PreviewSnapshotFile>, GithubImportError> {
     if output.is_empty() {
         return Ok(Vec::new());
     }
@@ -44,15 +50,15 @@ pub(super) fn parse_remote_preview_repository_files(
         .strip_suffix('\0')
         .ok_or(GithubImportError::RemotePreviewInvalidFileManifest)?;
     let fields = payload.split('\0').collect::<Vec<_>>();
-    if fields.len() % 2 != 0 {
+    if fields.len() % 3 != 0 {
         return Err(GithubImportError::RemotePreviewInvalidFileManifest);
     }
 
     let budget = ResourceBudget::default_skill();
     let mut total_bytes = 0_u64;
     let mut seen_paths = HashSet::new();
-    let mut files = Vec::with_capacity(fields.len() / 2);
-    for record in fields.chunks_exact(2) {
+    let mut files = Vec::with_capacity(fields.len() / 3);
+    for record in fields.chunks_exact(3) {
         if files.len() >= budget.archive_files {
             return Err(GithubImportError::ArchiveFileBudgetExceeded(
                 budget.archive_files,
@@ -67,6 +73,7 @@ pub(super) fn parse_remote_preview_repository_files(
             .trim()
             .parse::<u64>()
             .map_err(|_| GithubImportError::RemotePreviewInvalidFileManifest)?;
+        let sha256 = parse_remote_file_sha256(record[2])?;
         budget
             .reject_archive_entry_size(&repo_path, byte_len)
             .map_err(GithubImportError::Budget)?;
@@ -76,19 +83,35 @@ pub(super) fn parse_remote_preview_repository_files(
         budget
             .reject_archive_expanded_size(total_bytes)
             .map_err(GithubImportError::Budget)?;
-        files.push(PreviewRepositoryFile {
+        files.push(PreviewSnapshotFile {
             repo_path,
             byte_len,
+            sha256,
         });
     }
-    files.sort_by(|left, right| left.repo_path.cmp(&right.repo_path));
+    files.sort_by(|left, right| left.repo_path.as_bytes().cmp(right.repo_path.as_bytes()));
     Ok(files)
+}
+
+fn parse_remote_file_sha256(raw: &str) -> Result<[u8; 32], GithubImportError> {
+    let trimmed = raw.trim();
+    if trimmed.len() != 64 || !trimmed.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return Err(GithubImportError::RemotePreviewInvalidFileManifest);
+    }
+    let mut digest = [0_u8; 32];
+    for (index, chunk) in trimmed.as_bytes().chunks_exact(2).enumerate() {
+        let text = std::str::from_utf8(chunk)
+            .map_err(|_| GithubImportError::RemotePreviewInvalidFileManifest)?;
+        digest[index] = u8::from_str_radix(text, 16)
+            .map_err(|_| GithubImportError::RemotePreviewInvalidFileManifest)?;
+    }
+    Ok(digest)
 }
 
 pub(super) async fn remote_preview_repository_files(
     connection: &ConnectedRemoteTarget,
     remote_repo_dir: &str,
-) -> Result<Vec<PreviewRepositoryFile>, GithubImportError> {
+) -> Result<Vec<PreviewSnapshotFile>, GithubImportError> {
     let output = connection
         .run_script(REMOTE_PREVIEW_FILE_INVENTORY_SCRIPT, &[remote_repo_dir])
         .await
@@ -96,10 +119,13 @@ pub(super) async fn remote_preview_repository_files(
     parse_remote_preview_repository_files(&output)
 }
 
+/// Attach the per-candidate file manifest (path + byte length + SHA-256) and
+/// return the candidate content digests recorded in the registered snapshot.
 pub(super) fn attach_preview_file_manifests(
     skills: &mut [GitHubSkillPreview],
-    repository_files: &[PreviewRepositoryFile],
-) -> Result<(), GithubImportError> {
+    repository_files: &[PreviewSnapshotFile],
+) -> Result<Vec<PreviewSnapshotCandidate>, GithubImportError> {
+    let mut candidates = Vec::with_capacity(skills.len());
     for skill in skills {
         let mut files = repository_files
             .iter()
@@ -108,19 +134,24 @@ pub(super) fn attach_preview_file_manifests(
                     GitHubSkillPreviewFile {
                         path,
                         byte_len: file.byte_len,
+                        sha256: encode_file_digest(&file.sha256),
                     }
                 })
             })
             .collect::<Vec<_>>();
-        files.sort_by(|left, right| left.path.cmp(&right.path));
+        files.sort_by(|left, right| left.path.as_bytes().cmp(right.path.as_bytes()));
         if !files.iter().any(|file| file.path == "SKILL.md") {
             return Err(GithubImportError::PreviewFileManifestIncomplete(
                 skill.source_path.clone(),
             ));
         }
+        candidates.push(PreviewSnapshotCandidate {
+            source_path: skill.source_path.clone(),
+            content_digest: candidate_content_digest(&files)?,
+        });
         skill.files = Some(files);
     }
-    Ok(())
+    Ok(candidates)
 }
 
 #[allow(dead_code)]
@@ -133,82 +164,21 @@ pub(crate) async fn preview_github_repo_import_impl(
     preview_github_repo_import_with_auth(pool, repo_url, auth.as_deref()).await
 }
 
-/// Outcome of attempting the tree-manifest fast-path for preview acquisition.
-/// The dispatcher (`preview_github_repo_import_with_auth`) matches on this to
-/// decide between TreeRaw and Archive without re-running candidate discovery.
-pub(super) enum TreeFastPathOutcome {
-    /// Tree fast-path succeeded: candidates and preview files are ready.
-    Ready {
-        candidates: Vec<RemoteSkillCandidate>,
-        repository_files: Vec<PreviewRepositoryFile>,
-    },
-    /// Acquisition failed with a typed reason; fall back to archive. The
-    /// reason is recorded by Commit 3 acquisition diagnostics; Commit 2 only
-    /// matches on the variant to drive the archive fallback.
-    #[allow(dead_code)]
-    Fallback(tree_manifest::FallbackReason),
-}
-
 pub(super) struct TreeCandidateInspection {
     pub(super) inspected: InspectedGitHubRepoSkills,
     pub(super) fetched_files: HashMap<String, Vec<u8>>,
 }
 
-/// Build preview candidates and repository file manifests from the Git tree
-/// API fast-path.
-///
-/// Reuses the shared path/plugin/frontmatter discovery so candidate identity,
-/// plugin grouping, and file-manifest output stay equivalent to the archive
-/// path. Acquisition failures (tree fetch/parse, raw download, budget,
-/// integrity) return `Ok(Fallback(reason))` so the dispatcher can switch to
-/// archive acquisition; domain failures (invalid candidate) return `Err` and
-/// are surfaced directly because the archive path would produce the same
-/// domain error.
-pub(super) async fn try_build_preview_from_tree_manifest(
-    client: &reqwest::Client,
-    repo: &GitHubRepoRef,
-    source_path: Option<&str>,
-    auth: Option<&str>,
-) -> Result<TreeFastPathOutcome, GithubImportError> {
-    let manifest = match tree_manifest::try_fetch_tree_manifest(client, repo, auth).await {
-        Ok(manifest) => manifest,
-        Err(error) => {
-            return Ok(map_acquisition_error_to_outcome(error));
-        }
-    };
-
-    // Repository file manifest is derived directly from the parsed tree — no
-    // raw downloads needed. Sorted by repo_path for deterministic manifest
-    // attachment (same ordering as `snapshot_preview_repository_files`).
-    let repository_files = manifest_to_preview_repository_files(&manifest);
-
-    let inspection =
-        match inspect_tree_candidates_from_manifest(client, &manifest, repo, source_path, auth)
-            .await
-        {
-            Ok(inspection) => inspection,
-            Err(error) => return Ok(map_acquisition_error_to_outcome(error)),
-        };
-    if let Some(invalid) = inspection.inspected.invalid_candidates.first() {
-        return Err(GithubImportError::InvalidCandidate(invalid.detail.clone()));
-    }
-    let candidates = inspection.inspected.valid_candidates;
-
-    Ok(TreeFastPathOutcome::Ready {
-        candidates,
-        repository_files,
-    })
-}
-
 pub(super) async fn inspect_tree_candidates_from_manifest(
     client: &reqwest::Client,
     manifest: &tree_manifest::RepositoryManifest,
-    repo: &GitHubRepoRef,
+    pinned_repo: &GitHubRepoRef,
+    display_repo: &GitHubRepoRef,
     source_path: Option<&str>,
     auth: Option<&str>,
 ) -> Result<TreeCandidateInspection, GithubImportError> {
     let (plugin_discovery, mut fetched_files) =
-        build_tree_plugin_discovery(client, manifest, repo, source_path, auth).await?;
+        build_tree_plugin_discovery(client, manifest, pinned_repo, source_path, auth).await?;
     let manifests = discover_skill_manifests_from_paths_with_plugin_discovery(
         manifest.regular_paths(),
         source_path,
@@ -223,8 +193,8 @@ pub(super) async fn inspect_tree_candidates_from_manifest(
         let raw = if let Some(bytes) = fetched_files.get(&skill_manifest.skill_md_path) {
             bytes.clone()
         } else {
-            let url = raw_file_url(direct_endpoint, repo, &skill_manifest.skill_md_path);
-            let bytes = fetch_raw_bytes(client, &url, auth).await?;
+            let bytes =
+                fetch_raw_bytes(client, pinned_repo, &skill_manifest.skill_md_path, auth).await?;
             fetched_files.insert(skill_manifest.skill_md_path.clone(), bytes.clone());
             bytes
         };
@@ -232,7 +202,7 @@ pub(super) async fn inspect_tree_candidates_from_manifest(
             .reject_file_read_size(&skill_manifest.skill_md_path, raw.len() as u64)
             .map_err(GithubImportError::Budget)?;
 
-        match build_remote_skill_candidate(repo, &skill_manifest, raw, direct_endpoint) {
+        match build_remote_skill_candidate(display_repo, &skill_manifest, raw, direct_endpoint) {
             Ok(candidate) => {
                 if is_generic_remote_skill_candidate(&candidate) {
                     continue;
@@ -253,52 +223,12 @@ pub(super) async fn inspect_tree_candidates_from_manifest(
 
     Ok(TreeCandidateInspection {
         inspected: InspectedGitHubRepoSkills {
-            repo: repo.clone(),
+            repo: display_repo.clone(),
             valid_candidates,
             invalid_candidates,
         },
         fetched_files,
     })
-}
-
-/// Convert an acquisition-layer error into a `Fallback` outcome when the
-/// classifier recognizes it, otherwise surface it as a domain error. Used at
-/// every acquisition step of the tree fast-path so the dispatcher's fallback
-/// decision is centralized.
-pub(super) fn map_acquisition_error_to_outcome(error: GithubImportError) -> TreeFastPathOutcome {
-    match tree_manifest::fallback_reason_for(&error) {
-        Some(reason) => TreeFastPathOutcome::Fallback(reason),
-        None => {
-            // Unrecognized error — propagate. In practice this branch is
-            // unreachable for acquisition steps (the classifier covers all
-            // HTTP/budget/integrity/parse variants they can emit), but kept
-            // for safety so a future domain variant is not silently swallowed.
-            // We cannot return `Err` from this helper without changing the
-            // call sites, so encode the error as a `Fallback` to keep the
-            // dispatcher safe (archive acquisition will re-surface it if it
-            // is a real domain error that archive would also hit).
-            TreeFastPathOutcome::Fallback(tree_manifest::FallbackReason::Transport)
-        }
-    }
-}
-
-/// Build the preview repository file list from the parsed tree manifest. The
-/// output mirrors `snapshot_preview_repository_files` so the preview file
-/// manifest attachment (`attach_preview_file_manifests`) produces the same
-/// `GitHubSkillPreviewFile` set as the archive path.
-pub(super) fn manifest_to_preview_repository_files(
-    manifest: &tree_manifest::RepositoryManifest,
-) -> Vec<PreviewRepositoryFile> {
-    let mut files: Vec<_> = manifest
-        .regular_files
-        .iter()
-        .map(|file| PreviewRepositoryFile {
-            repo_path: file.repo_path.clone(),
-            byte_len: file.byte_len,
-        })
-        .collect();
-    files.sort_by(|left, right| left.repo_path.cmp(&right.repo_path));
-    files
 }
 
 /// Resolve plugin manifest discovery from raw bytes fetched through the tree
@@ -352,10 +282,48 @@ async fn fetch_optional_manifest_bytes(
     if !exists {
         return Ok(None);
     }
-    let endpoint = GITHUB_MIRROR_ENDPOINTS.first().expect("github endpoint");
-    let url = raw_file_url(endpoint, repo, path);
-    let bytes = fetch_raw_bytes(client, &url, auth).await?;
+    let bytes = fetch_raw_bytes(client, repo, path, auth).await?;
     Ok(Some(bytes))
+}
+
+/// Acquire a complete, retained repository snapshot at a pinned commit.
+///
+/// The tree fast-path downloads only the discovered candidate subtrees; the
+/// archive fallback retains the whole bounded tarball snapshot. Either way the
+/// returned snapshot owns every byte the preview will display and the import
+/// will write, so import never re-resolves the branch.
+async fn acquire_pinned_preview_snapshot(
+    client: &reqwest::Client,
+    pinned_repo: &GitHubRepoRef,
+    display_repo: &GitHubRepoRef,
+    source_path: Option<&str>,
+    auth: Option<&str>,
+) -> Result<(GitHubRepoSnapshot, Vec<RemoteSkillCandidate>), GithubImportError> {
+    match try_prepare_tree_import(
+        client,
+        pinned_repo,
+        display_repo,
+        source_path,
+        TreeSelectionScope::AllCandidates,
+        auth,
+        false,
+    )
+    .await?
+    {
+        TreeImportOutcome::Ready {
+            snapshot,
+            inspected,
+        } => Ok((snapshot, inspected.valid_candidates)),
+        TreeImportOutcome::Fallback(_) => {
+            let snapshot = download_repo_snapshot(client, pinned_repo, auth).await?;
+            let candidates = build_repo_skill_candidates_from_snapshot_at_path(
+                display_repo,
+                &snapshot,
+                source_path,
+            )?;
+            Ok((snapshot, candidates))
+        }
+    }
 }
 
 pub(crate) async fn preview_github_repo_import_with_auth(
@@ -365,47 +333,43 @@ pub(crate) async fn preview_github_repo_import_with_auth(
 ) -> Result<GitHubRepoPreview, GithubImportError> {
     let resolved = resolve_repo_source(repo_url, auth).await?;
     let client = github_client()?;
+    let resolved_commit_sha = resolve_commit_sha(&client, &resolved.repo, auth).await?;
+    let pinned_repo = pinned_repo_ref(&resolved.repo, &resolved_commit_sha);
 
-    // Try the tree-manifest fast-path first. Acquisition failures fall back to
-    // the existing archive path; domain failures (invalid candidate) are
-    // surfaced directly because archive acquisition would produce the same
-    // domain error (discovery + frontmatter interpretation are shared).
-    let (candidates, repository_files) = match try_build_preview_from_tree_manifest(
+    let (snapshot, candidates) = acquire_pinned_preview_snapshot(
         &client,
+        &pinned_repo,
         &resolved.repo,
         resolved.source_path.as_deref(),
         auth,
     )
-    .await
-    {
-        Ok(TreeFastPathOutcome::Ready {
-            candidates,
-            repository_files,
-        }) => (candidates, repository_files),
-        Ok(TreeFastPathOutcome::Fallback(_)) => {
-            let snapshot = download_repo_snapshot(&client, &resolved.repo, auth).await?;
-            let candidates = build_repo_skill_candidates_from_snapshot_at_path(
-                &resolved.repo,
-                &snapshot,
-                resolved.source_path.as_deref(),
-            )?;
-            (candidates, snapshot_preview_repository_files(&snapshot))
-        }
-        Err(error) => return Err(error),
-    };
+    .await?;
 
     let mut skills = build_preview_skills(pool, &candidates).await?;
-
     if skills.is_empty() {
         return Err(GithubImportError::NoImportableSkills);
     }
-    attach_preview_file_manifests(&mut skills, &repository_files)?;
+    let repository_files = snapshot_preview_repository_files(&snapshot);
+    let snapshot_candidates = attach_preview_file_manifests(&mut skills, &repository_files)?;
 
-    Ok(GitHubRepoPreview {
-        repo: resolved.repo,
-        skills,
-        preview_workspace_id: None,
-    })
+    let now = Utc::now();
+    let snapshot = PreviewSnapshot {
+        id: new_preview_id(),
+        target_id: ActiveTarget::Local.id().to_string(),
+        target_kind: TargetKind::Local,
+        repo: resolved.repo.clone(),
+        source_path: resolved.source_path.clone(),
+        resolved_commit_sha: resolved_commit_sha.clone(),
+        snapshot_digest: repository_snapshot_digest(&repository_files),
+        files: repository_files,
+        candidates: snapshot_candidates,
+        created_at: now,
+        expires_at: now + Duration::minutes(REMOTE_PREVIEW_WORKSPACE_TTL_MINUTES),
+        storage: PreviewSnapshotStorage::Local(Arc::new(snapshot)),
+    };
+    let preview = preview_dto_from_snapshot(&snapshot, skills);
+    register_preview_snapshot(snapshot);
+    Ok(preview)
 }
 
 pub(crate) async fn preview_github_repo_import_remote_with_auth(
@@ -415,12 +379,16 @@ pub(crate) async fn preview_github_repo_import_remote_with_auth(
     auth: Option<&str>,
 ) -> Result<GitHubRepoPreview, GithubImportError> {
     let resolved = resolve_repo_source(repo_url, auth).await?;
+    let client = github_client()?;
+    let resolved_commit_sha = resolve_commit_sha(&client, &resolved.repo, auth).await?;
+    let pinned_repo = pinned_repo_ref(&resolved.repo, &resolved_commit_sha);
+
     let connection = connect_remote_target(active_target)
         .await
         .map_err(|e| GithubImportError::Remote(e.to_string()))?;
-    cleanup_expired_preview_workspaces_for_connection(&connection).await;
+    cleanup_expired_preview_snapshots_for_connection(&connection).await;
 
-    let workspace = create_remote_preview_workspace(&connection, &resolved, auth).await?;
+    let workspace = create_remote_preview_workspace(&connection, &pinned_repo, auth).await?;
     let preview_result = async {
         let candidates = build_remote_repo_skill_candidates_from_workspace(
             &connection,
@@ -435,19 +403,31 @@ pub(crate) async fn preview_github_repo_import_remote_with_auth(
         }
         let repository_files =
             remote_preview_repository_files(&connection, &workspace.remote_repo_dir).await?;
-        attach_preview_file_manifests(&mut skills, &repository_files)?;
-        Ok(skills)
+        let snapshot_candidates = attach_preview_file_manifests(&mut skills, &repository_files)?;
+        Ok((skills, repository_files, snapshot_candidates))
     }
     .await;
 
     match preview_result {
-        Ok(skills) => {
-            register_preview_workspace(workspace.clone());
-            Ok(GitHubRepoPreview {
-                repo: resolved.repo,
-                skills,
-                preview_workspace_id: Some(workspace.id),
-            })
+        Ok((skills, repository_files, snapshot_candidates)) => {
+            let now = Utc::now();
+            let snapshot = PreviewSnapshot {
+                id: new_preview_id(),
+                target_id: active_target.id().to_string(),
+                target_kind: active_target.kind(),
+                repo: resolved.repo.clone(),
+                source_path: resolved.source_path.clone(),
+                resolved_commit_sha,
+                snapshot_digest: repository_snapshot_digest(&repository_files),
+                files: repository_files,
+                candidates: snapshot_candidates,
+                created_at: now,
+                expires_at: now + Duration::minutes(REMOTE_PREVIEW_WORKSPACE_TTL_MINUTES),
+                storage: PreviewSnapshotStorage::Remote(workspace),
+            };
+            let preview = preview_dto_from_snapshot(&snapshot, skills);
+            register_preview_snapshot(snapshot);
+            Ok(preview)
         }
         Err(error) => {
             let _ = connection
@@ -455,5 +435,23 @@ pub(crate) async fn preview_github_repo_import_remote_with_auth(
                 .await;
             Err(error)
         }
+    }
+}
+
+pub(super) fn new_preview_id() -> String {
+    format!("github-preview-{}", Uuid::new_v4())
+}
+
+pub(super) fn preview_dto_from_snapshot(
+    snapshot: &PreviewSnapshot,
+    skills: Vec<GitHubSkillPreview>,
+) -> GitHubRepoPreview {
+    GitHubRepoPreview {
+        repo: snapshot.repo.clone(),
+        skills,
+        preview_id: snapshot.id.clone(),
+        resolved_commit_sha: snapshot.resolved_commit_sha.clone(),
+        snapshot_digest: snapshot.snapshot_digest.clone(),
+        expires_at: snapshot.expires_at.to_rfc3339(),
     }
 }

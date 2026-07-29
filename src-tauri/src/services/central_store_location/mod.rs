@@ -26,16 +26,21 @@ use crate::targets::ActiveTarget;
 
 const CENTRAL_AGENT_ID: &str = "central";
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralStoreLocationPreview {
     pub source_path: String,
     pub target_path: String,
+    #[cfg_attr(feature = "ipc-codegen", specta(type = specta_typescript::Number))]
     pub skills_to_copy: usize,
+    #[cfg_attr(feature = "ipc-codegen", specta(type = specta_typescript::Number))]
     pub skills_to_overwrite: usize,
+    #[cfg_attr(feature = "ipc-codegen", specta(type = specta_typescript::Number))]
     pub target_only_skills: usize,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralStoreLocationSymlinkFailure {
@@ -46,14 +51,19 @@ pub struct CentralStoreLocationSymlinkFailure {
     pub error: String,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralStoreLocationChangeResult {
     pub source_path: String,
     pub target_path: String,
+    #[cfg_attr(feature = "ipc-codegen", specta(type = specta_typescript::Number))]
     pub copied: usize,
+    #[cfg_attr(feature = "ipc-codegen", specta(type = specta_typescript::Number))]
     pub overwritten: usize,
+    #[cfg_attr(feature = "ipc-codegen", specta(type = specta_typescript::Number))]
     pub target_only_imported: usize,
+    #[cfg_attr(feature = "ipc-codegen", specta(type = specta_typescript::Number))]
     pub symlink_rebuild_failed: usize,
     pub symlink_failures: Vec<CentralStoreLocationSymlinkFailure>,
     pub completed_at: String,

@@ -1,0 +1,4 @@
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Preserve the stable just-ci check, local/remote command parity, event matrix, and Windows packaging acceptance while replacing release.published semantics."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Place workflow and release-script contract tests under the existing Vitest contracts/scripts taxonomy and keep recursive discovery intact."}
+{"file":".trellis/spec/backend/shared-local-cli.md","reason":"A release-only Rust verifier adds a package binary; preserve default-run, existing desktop/skillport-cli entrypoints, locked builds, and Windows bundle checks."}
+{"file":".trellis/tasks/07-24-release-pipeline-gate/research/release-pipeline-live-2026-07-27.md","reason":"Use the rechecked workflow lines, asset names, updater crypto API, docs drift, and no-remote boundary instead of stale audit assumptions."}

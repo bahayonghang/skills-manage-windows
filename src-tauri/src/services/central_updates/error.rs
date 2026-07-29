@@ -28,6 +28,9 @@ pub enum CentralUpdatesError {
     #[error("{0}")]
     CentralMutation(String),
 
+    #[error(transparent)]
+    CentralOperation(#[from] crate::services::central_operation::CentralOperationError),
+
     /// GitHub snapshot download / auth / repo resolution via the
     /// github_import domain.
     #[error(transparent)]

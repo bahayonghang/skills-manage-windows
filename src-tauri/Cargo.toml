@@ -7,6 +7,15 @@ authors = ["iamzhihuix"]
 license = "Apache-2.0"
 edition = "2021"
 
+[features]
+default = []
+ipc-codegen = [
+  "dep:specta",
+  "dep:specta-serde",
+  "dep:specta-typescript",
+  "dep:tauri-specta",
+]
+
 [lib]
 name = "skillport_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
@@ -16,8 +25,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
-tauri-plugin-sql = { version = "2", features = ["sqlite"] }
-tauri-plugin-fs = "2"
+tauri-plugin-sql = { version = "2", default-features = false, features = ["sqlite"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-updater = "2.10.1"
@@ -27,12 +35,12 @@ tauri-plugin-single-instance = "2.4.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_norway = "0.9.42"
-sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
+sqlx = { version = "0.8", default-features = false, features = ["sqlite", "runtime-tokio", "derive"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"] }
 futures-util = "0.3"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+tokio = { version = "1", features = ["io-util", "macros", "process", "rt-multi-thread", "sync", "time"] }
 flate2 = "1"
 tar = "0.4"
 keyring = "3"
@@ -42,6 +50,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 sha2 = "0.10"
 thiserror = "2"
 async-trait = "0.1"
+base64 = "0.22.1"
+minisign-verify = "0.2.5"
 walkdir = "2"
 regex = "1"
 urlencoding = "2"
@@ -51,6 +61,17 @@ clap = { version = "4", features = ["derive"] }
 # Local archive (ZIP) skill import: pure-Rust reader, no shell extraction.
 # License: MIT OR Apache-2.0. Used by `services::local_archive_import`.
 zip = { version = "2", default-features = false, features = ["deflate"] }
+specta = { version = "=2.0.0-rc.25", features = ["derive", "function", "tokio"], optional = true }
+specta-serde = { version = "=0.0.12", optional = true }
+specta-typescript = { version = "=0.0.12", optional = true }
+tauri-specta = { version = "=2.0.0-rc.25", features = ["derive"], optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

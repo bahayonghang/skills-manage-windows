@@ -1,0 +1,12 @@
+{"file":".trellis/spec/backend/target-context.md","reason":"Reject target identity, DB pool, transport, log, or recovery work derived from different snapshots."}
+{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"Verify Local legacy lock compatibility, per-target isolation, cross-process contention, and crash release."}
+{"file":".trellis/spec/backend/central-update-batching.md","reason":"Check that normal, force, and mirror updates still share one orchestrator and bounded remote calls."}
+{"file":".trellis/spec/backend/database-migrations.md","reason":"Verify migration-3 checksum, five fixture upgrades, backup/restore behavior, and current reopen idempotency."}
+{"file":".trellis/spec/backend/skill-deletion-integrity.md","reason":"Check delete Saga commits only the skills parent and lets seven owned relations cascade without touching independent history."}
+{"file":".trellis/spec/backend/best-effort-writes.md","reason":"Reject best-effort journal transitions or silently discarded recovery failures."}
+{"file":".trellis/spec/backend/spawn-blocking-io.md","reason":"Reject recursive synchronous Local FS work on async workers and Windows AppHandle capture in blocking closures."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Check typed recovery, collision, lease, DB, and transport variants through service and IPC boundaries."}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Audit journal payload containment and prove logs, exports, tracing, IPC errors, and diagnostics remain redacted."}
+{"file":".trellis/spec/backend/test-support.md","reason":"Check crash helpers, fake remote runners, and DB fixtures are centralized and deterministic."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Verify pending state and retry behavior survive backend-to-frontend round trips for Local, SSH, and WSL."}
+{"file":".trellis/tasks/07-24-fs-db-operation-journal/research/operation-journal-live-2026-07-26.md","reason":"Compare the final implementation against every live failure window and the commit-order proof."}

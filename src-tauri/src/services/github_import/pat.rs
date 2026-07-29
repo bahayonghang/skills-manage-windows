@@ -1,9 +1,12 @@
 use super::*;
 use crate::secrets::{SecretStorageState, SecretStore, GITHUB_PAT_SECRET_KEY};
 use serde_json::json;
+use std::time::Duration;
 
 pub(super) const LEGACY_GITHUB_PAT_SETTING_KEY: &str = "github_pat";
 pub(super) const GITHUB_PAT_MIGRATION_SETTING_KEY: &str = "github_pat_keyring_migration_v1";
+pub(super) const GITHUB_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+pub(super) const GITHUB_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub(super) fn normalize_github_pat(value: impl AsRef<str>) -> Option<String> {
     let token = value.as_ref().trim().to_string();
@@ -37,7 +40,11 @@ pub(super) async fn record_github_pat_migration_failure(pool: &DbPool, error: &s
 
 pub(crate) fn github_client() -> Result<reqwest::Client, GithubImportError> {
     match GITHUB_SHARED_CLIENT.get_or_init(|| {
-        let builder = reqwest::Client::builder().user_agent(crate::commands::APP_USER_AGENT);
+        let builder = reqwest::Client::builder()
+            .user_agent(crate::commands::APP_USER_AGENT)
+            .connect_timeout(GITHUB_CONNECT_TIMEOUT)
+            .timeout(GITHUB_REQUEST_TIMEOUT)
+            .redirect(reqwest::redirect::Policy::none());
         #[cfg(test)]
         let builder = builder.no_proxy();
         builder.build()
@@ -229,13 +236,6 @@ pub(crate) async fn get_github_pat_state_impl(
             })
         }
     }
-}
-
-pub(crate) async fn reveal_github_pat_impl(
-    pool: &DbPool,
-    secrets: &dyn SecretStore,
-) -> Result<Option<String>, GithubImportError> {
-    github_direct_auth_from_secret_store(pool, secrets).await
 }
 
 pub(crate) async fn set_github_pat_impl(

@@ -45,7 +45,7 @@ interface LocalArchiveImportState {
 
 ## Quality Check
 
-- `pnpm vitest run src/test/LocalArchiveImportWizard.test.tsx src/test/CentralSkillsView.shell.test.tsx src/test/CentralSkillsView.github-import-preview.test.tsx`
+- `pnpm vitest run src/test/components/central/LocalArchiveImportWizard.test.tsx src/test/pages/CentralSkillsView.shell.test.tsx src/test/pages/CentralSkillsView.github-import-preview.test.tsx`
 - `pnpm typecheck`
 - `pnpm lint`
 - 搜索 `LocalArchiveImportWizard`，确认组件不直接 import IPC adapter/function。

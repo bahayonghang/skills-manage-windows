@@ -18,6 +18,8 @@ CentralFs::refresh_copy_installs_cancellable(
 ) -> Vec<CopyRefreshOutcome>
 ```
 
+`write_skill_dirs_atomic_cancellable` is retained only under `#[cfg(test)]` for the legacy batching contract. Production update writes use operation-scoped `build/stage/swap/rollback/finalize` hooks from `update_skills_batch` and persist one journal row per skill.
+
 Normal update, force update, and force mirror must route through `update_skills_batch`; do not add a second per-skill production loop.
 
 ## 3. Contracts
@@ -26,6 +28,8 @@ Normal update, force update, and force mirror must route through `update_skills_
 - Remote copy refresh uses chunks of 32 and deduplicates installed targets before execution.
 - Batch archives contain `.skillport-manifest.tsv` plus one generated numeric directory per skill.
 - Remote execution remains behind `ConnectedRemoteTarget` and `CommandRunner`.
+- Each skill receives a durable operation ID and manifest before staging. Cancellation before staging returns cancelled; after staging starts the Saga settles or leaves a recoverable row.
+- Skill/repository persistence and `db_committed` share one SQLite transaction. Copy plans are persisted before refresh; incomplete copies remain `copies_pending` and are retried without reapplying canonical contents.
 - Archive construction and Local recursive IO run through `run_blocking_fs_with`.
 - Operation Logs store total action duration and non-sensitive counts only. Phase spans may record target kind, counts, chunk counts, and payload bytes, never host, username, credentials, contents, or full paths.
 
@@ -38,6 +42,8 @@ Normal update, force update, and force mirror must route through `update_skills_
 | One staging/backup/swap failure | Return `ERR` for that skill, restore its backup when present, continue unrelated rows |
 | Missing or malformed result row | Convert every affected item to a typed `CentralUpdatesError::Batch` failure |
 | Cancel flag between chunks | Start no later chunk; return `BatchCancelled` for unstarted rows |
+| Cancel or transport failure after durable staging starts | Roll back staged artifacts or retain a pending journal row; never report an unjournaled cancellation |
+| Copy refresh fails after DB commit | Preserve canonical new state and exact incomplete projection plan in `copies_pending` |
 | Copy target basename differs from skill id | Return `CopyInstallOutsideSkillDir` without executing that target |
 
 ## 5. Good / Base / Bad Cases

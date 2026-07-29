@@ -377,7 +377,7 @@ export function SkillDetailView({
       }
       toast.success(t("central.updateCheckOneFinished"));
     } catch (err) {
-      toast.error(t("central.updateCheckError", { error: String(err) }));
+      toast.error(t("central.updateCheckError", { error: formatBackendError(err, t) }));
     }
   }, [checkSkillUpdates, skillId, t]);
 
@@ -408,7 +408,7 @@ export function SkillDetailView({
       setIsUpdateConfirmOpen(false);
       setPendingUpdateStates([]);
     } catch (err) {
-      toast.error(t("central.updateError", { error: String(err) }));
+      toast.error(t("central.updateError", { error: formatBackendError(err, t) }));
       throw err;
     }
   }, [detailRequest, loadDetail, t, updateSkills]);

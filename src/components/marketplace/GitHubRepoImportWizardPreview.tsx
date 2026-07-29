@@ -104,7 +104,7 @@ interface GitHubRepoImportPreviewWorkspaceProps {
     skill: GitHubSkillPreview,
     next: Partial<SelectionState>,
   ) => void;
-  onRetryMarkdown: (sourcePath: string, downloadUrl: string) => void;
+  onRetryMarkdown: (sourcePath: string) => void;
   onRegenerateAiSummary: (
     sourcePath: string,
     skillName: string,
@@ -386,7 +386,7 @@ interface GitHubRepoImportPreviewDetailPaneProps {
     skill: GitHubSkillPreview,
     next: Partial<SelectionState>,
   ) => void;
-  onRetryMarkdown: (sourcePath: string, downloadUrl: string) => void;
+  onRetryMarkdown: (sourcePath: string) => void;
   onRegenerateAiSummary: (
     sourcePath: string,
     skillName: string,
@@ -674,12 +674,7 @@ function GitHubRepoImportPreviewDetailPane({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() =>
-                    onRetryMarkdown(
-                      selectedPreviewSkill.sourcePath,
-                      selectedPreviewSkill.downloadUrl,
-                    )
-                  }
+                  onClick={() => onRetryMarkdown(selectedPreviewSkill.sourcePath)}
                 >
                   <RefreshCw className="size-3.5" />
                   <span>{t("marketplace.githubImportMarkdownRetry")}</span>

@@ -528,8 +528,8 @@ const MAX_CENTRAL_TOP_TAGS_LIMIT: u32 = 50;
 
 /// 中央库（`is_central = 1`）技能的 tag 使用 Top-N。
 ///
-/// - 只统计能 JOIN 到 central skill 的 link：非 central 副本与孤儿 link
-///   （skill_id 已不存在；link 表无外键约束）都不计入；
+/// - 只统计能 JOIN 到 central skill 的 link：非 central 副本与迁移前遗留的
+///   orphan link 都不计入；
 /// - 排除占位 tag `uncategorized`（`UNCATEGORIZED_TAG_ID`）；
 /// - 排序 `count DESC, name ASC`，并列确定性，前端直接渲染。
 pub async fn list_central_top_tags(
@@ -566,7 +566,7 @@ pub async fn list_central_top_tags(
 mod tests {
     use super::*;
     use crate::db::{upsert_skill, UNCATEGORIZED_TAG_ID};
-    use crate::test_support::{central_skill_row, mem_pool};
+    use crate::test_support::{central_skill_row, mem_pool, mem_pool_single_conn};
     use std::path::Path;
 
     async fn add_skill(pool: &DbPool, id: &str, is_central: bool) {
@@ -590,13 +590,18 @@ mod tests {
 
     #[tokio::test]
     async fn central_top_tags_excludes_non_central_and_orphan_links() {
-        let pool = mem_pool().await;
+        let pool = mem_pool_single_conn().await;
         let alpha = create_skill_tag(&pool, "alpha", None, None).await.unwrap();
         add_skill(&pool, "central-one", true).await;
         add_skill(&pool, "platform-copy", false).await;
         link_tag(&pool, "central-one", &alpha.id).await;
         link_tag(&pool, "platform-copy", &alpha.id).await;
-        // 孤儿 link：skill_id 在 skills 表不存在（link 表无外键约束）。
+        // Semantic corruption fixture: migrated production connections keep FK
+        // enabled, so disable it explicitly on this single test connection.
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(&pool)
+            .await
+            .unwrap();
         link_tag(&pool, "ghost-skill", &alpha.id).await;
 
         let top = list_central_top_tags(&pool, 10).await.unwrap();

@@ -4,56 +4,11 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+pub use crate::db::SkillUpdateStatus;
 use crate::db::{Skill, SkillRepositoryAssignment, SkillUpdateState};
 use crate::services::github_import::{GitHubRepoRef, RemoteSkillCandidate};
 
 use super::fs::RemoteSkillFile;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SkillUpdateStatus {
-    UpToDate,
-    UpdateAvailable,
-    Unsupported,
-    RemoteMissing,
-    Error,
-    Cancelled,
-}
-
-impl SkillUpdateStatus {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::UpToDate => "up_to_date",
-            Self::UpdateAvailable => "update_available",
-            Self::Unsupported => "unsupported",
-            Self::RemoteMissing => "remote_missing",
-            Self::Error => "error",
-            Self::Cancelled => "cancelled",
-        }
-    }
-}
-
-impl std::fmt::Display for SkillUpdateStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-impl std::str::FromStr for SkillUpdateStatus {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "up_to_date" => Self::UpToDate,
-            "update_available" => Self::UpdateAvailable,
-            "unsupported" => Self::Unsupported,
-            "remote_missing" => Self::RemoteMissing,
-            "error" => Self::Error,
-            "cancelled" => Self::Cancelled,
-            other => return Err(format!("unknown SkillUpdateStatus: {other}")),
-        })
-    }
-}
 
 /// Cache policy for GitHub repository snapshots during update checks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,6 +20,7 @@ pub enum SnapshotCachePolicy {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralSkillUpdateProgressPayload {
+    pub job_id: String,
     pub phase: String,
     pub status: String,
     pub total: usize,
@@ -162,5 +118,30 @@ impl RemoteSkillLoadError {
         match self {
             Self::RemoteMissing(message) | Self::Other(message) => message,
         }
+    }
+}
+
+#[cfg(test)]
+mod progress_payload_tests {
+    use super::*;
+
+    #[test]
+    fn progress_payload_serializes_job_id_as_camel_case() {
+        let payload = CentralSkillUpdateProgressPayload {
+            job_id: "update-job".to_string(),
+            phase: "checking".to_string(),
+            status: "started".to_string(),
+            total: 0,
+            completed: 0,
+            succeeded: 0,
+            failed: 0,
+            skipped: 0,
+            skill_id: None,
+            skill_name: None,
+            error: None,
+        };
+        let value = serde_json::to_value(payload).unwrap();
+        assert_eq!(value["jobId"], "update-job");
+        assert!(value.get("job_id").is_none());
     }
 }

@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use sqlx::Row;
+use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::db::repos::skills_repo::upsert_skill_in_transaction;
@@ -283,19 +283,30 @@ pub async fn delete_empty_skill_repository(
     Ok(result.rows_affected() > 0)
 }
 
-pub async fn prune_empty_skill_repositories(pool: &DbPool) -> Result<u64, sqlx::Error> {
-    let result = sqlx::query(
-        "DELETE FROM skill_repositories
+const PRUNE_EMPTY_SKILL_REPOSITORIES_SQL: &str = "DELETE FROM skill_repositories
          WHERE id <> ?
            AND is_unknown = 0
            AND NOT EXISTS (
              SELECT 1 FROM skill_repository_members
              WHERE repository_id = skill_repositories.id
-           )",
-    )
-    .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
-    .execute(pool)
-    .await?;
+           )";
+
+pub(crate) async fn prune_empty_skill_repositories_in_transaction(
+    transaction: &mut Transaction<'_, Sqlite>,
+) -> Result<u64, sqlx::Error> {
+    let result = sqlx::query(PRUNE_EMPTY_SKILL_REPOSITORIES_SQL)
+        .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
+        .execute(&mut **transaction)
+        .await?;
+
+    Ok(result.rows_affected())
+}
+
+pub async fn prune_empty_skill_repositories(pool: &DbPool) -> Result<u64, sqlx::Error> {
+    let result = sqlx::query(PRUNE_EMPTY_SKILL_REPOSITORIES_SQL)
+        .bind(LOCAL_UNKNOWN_REPOSITORY_ID)
+        .execute(pool)
+        .await?;
 
     Ok(result.rows_affected())
 }
@@ -394,6 +405,11 @@ pub async fn assign_github_repository_to_skill(
 /// upsert and repository membership in one transaction prevents a half-state
 /// where the Central skill row exists without source metadata (or vice versa)
 /// if the second write fails.
+///
+/// `resolved_commit_sha` / `content_digest` carry per-skill provenance from an
+/// immutable preview snapshot. Callers without a confirmed snapshot pass `None`,
+/// which preserves the existing membership provenance (or leaves it NULL for a
+/// new row, read as "provenance unknown").
 #[allow(clippy::too_many_arguments)]
 pub async fn upsert_skill_with_github_repository(
     pool: &DbPool,
@@ -403,10 +419,39 @@ pub async fn upsert_skill_with_github_repository(
     branch: &str,
     url: &str,
     source_path: &str,
+    resolved_commit_sha: Option<&str>,
+    content_digest: Option<&str>,
 ) -> Result<(), sqlx::Error> {
     let mut transaction = pool.begin().await?;
 
-    upsert_skill_in_transaction(&mut transaction, skill).await?;
+    upsert_skill_with_github_repository_in_transaction(
+        &mut transaction,
+        skill,
+        owner,
+        repo,
+        branch,
+        url,
+        source_path,
+        resolved_commit_sha,
+        content_digest,
+    )
+    .await?;
+    transaction.commit().await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn upsert_skill_with_github_repository_in_transaction(
+    transaction: &mut Transaction<'_, Sqlite>,
+    skill: &Skill,
+    owner: &str,
+    repo: &str,
+    branch: &str,
+    url: &str,
+    source_path: &str,
+    resolved_commit_sha: Option<&str>,
+    content_digest: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    upsert_skill_in_transaction(transaction, skill).await?;
 
     let repository_id = github_repository_id(owner, repo, branch);
     let repository_name = format!("{owner}/{repo}");
@@ -435,28 +480,56 @@ pub async fn upsert_skill_with_github_repository(
     .bind(url)
     .bind(&now)
     .bind(&now)
-    .execute(&mut *transaction)
+    .execute(&mut **transaction)
     .await
     ?;
 
     sqlx::query(
         "INSERT INTO skill_repository_members
-         (skill_id, repository_id, source_path, added_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)
+         (skill_id, repository_id, source_path, resolved_commit_sha, content_digest, added_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(skill_id) DO UPDATE SET
            repository_id = excluded.repository_id,
            source_path = COALESCE(excluded.source_path, skill_repository_members.source_path),
+           resolved_commit_sha = COALESCE(excluded.resolved_commit_sha, skill_repository_members.resolved_commit_sha),
+           content_digest = COALESCE(excluded.content_digest, skill_repository_members.content_digest),
            updated_at = excluded.updated_at",
     )
     .bind(&skill.id)
     .bind(&repository_id)
     .bind(source_path)
+    .bind(resolved_commit_sha)
+    .bind(content_digest)
     .bind(&now)
     .bind(&now)
-    .execute(&mut *transaction)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
+}
+
+/// Read the per-skill GitHub import provenance recorded at import time.
+///
+/// `None` values mean "provenance unknown" (pre-migration rows or imports that
+/// did not run through a confirmed preview snapshot).
+pub async fn get_skill_repository_provenance(
+    pool: &DbPool,
+    skill_id: &str,
+) -> Result<Option<(Option<String>, Option<String>)>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT resolved_commit_sha, content_digest
+         FROM skill_repository_members
+         WHERE skill_id = ?",
+    )
+    .bind(skill_id)
+    .fetch_optional(pool)
     .await?;
 
-    transaction.commit().await
+    Ok(row.map(|row| {
+        (
+            row.get::<Option<String>, _>("resolved_commit_sha"),
+            row.get::<Option<String>, _>("content_digest"),
+        )
+    }))
 }
 
 pub async fn set_skill_repository_pinned(

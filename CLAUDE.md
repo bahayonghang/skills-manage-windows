@@ -12,7 +12,7 @@ pnpm dev                  # 启动 Vite 开发服务器（端口 24200，单独�
 pnpm build                # TypeScript 编译 + Vite 构建
 pnpm test                 # Vitest 原生单次运行全部测试
 pnpm test:serial          # 逐文件串行 Vitest 回退/隔离排障
-pnpm test -- src/test/skillStore.test.ts  # 运行单个测试文件
+pnpm test -- src/test/stores/skillStore.test.ts  # 运行单个测试文件
 pnpm test:watch           # Vitest 监听模式
 pnpm typecheck            # tsc --noEmit 类型检查
 pnpm lint                 # ESLint 检查
@@ -143,7 +143,7 @@ commands/   —— IPC 壳层：171 个 #[tauri::command]（24 个文件），�
 - **主题系统**：6 套主题（Catppuccin Mocha/Macchiato/Frappe/Latte + Claude Light/Claude Dark），14 种 accent 配色，通过 `data-theme` 和 `data-accent` HTML 属性切换。`src/index.css` 顶部的 `@custom-variant dark` 把 Tailwind `dark:` 变体映射到 4 套暗色主题（mocha/macchiato/frappe/claude-dark）
 - **语义状态色**：success/warning/info/error 四态统一走 `src/lib/statusTone.ts` 的类名工具（token 随主题换肤），禁止写 `dark:text-amber-300` 这类明暗二元适配，也不要直接用原生 Tailwind 调色板表达状态色
 - **国际化**：中英双语（`src/i18n/`），所有用户可见文本必须走 i18n
-- **测试**：Vitest + jsdom + React Testing Library，setup 在 `src/test/setup.ts`；Tauri `invoke` 在测试中通过 `window.__TAURI_INTERNALS__` mock
+- **测试**：Vitest + jsdom + React Testing Library，setup 在 `src/test/support/setup.ts`；Tauri `invoke` 在测试中通过 `window.__TAURI_INTERNALS__` mock
 - **未使用变量**：ESLint 规则允许 `_` 前缀的未使用参数和变量
 - **Rust 后端**：所有 IPC 命令函数签名中通过 `State<AppState>` 注入数据库连接池；不使用 `sqlx::query_as!` 宏（需要 DATABASE_URL），统一使用 `sqlx::query()` + 手动 `Row::get()` 映射
 - **错误处理（分层契约）**：`db/repos/*` 返回 `Result<T, sqlx::Error>` 直接透传；`services/<domain>` 返回该域的 thiserror 错误枚举（一域一枚举，定义在 `services/<domain>/error.rs`，db 错误经 `#[from] sqlx::Error` 透传）；`commands/*` 返回 `Result<T, String>`，是唯一允许字符串错误的层（调用点 `.map_err(|e| e.to_string())`）。新增 services 函数禁止返回 `Result<T, String>`；调用方需区分错误类别时加语义化变体用 `matches!` 分支，禁止 `error.contains("...")` 字符串嗅探；`#[error(...)]` 文案逐字保留（前端 toast 直接展示 Display 输出）。详见 `.trellis/spec/backend/domain-error-enums.md`

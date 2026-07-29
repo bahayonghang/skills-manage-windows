@@ -36,12 +36,22 @@ Run the complete local gate before you submit a PR:
 
 ```bash
 just ci
+just audit
 ```
 
-This runs frontend type checking, linting, source-size contracts, Vitest, and the production build in parallel with Rust entrypoint contracts, formatting, all-target Clippy, and locked tests. GitHub runs the same gate as the required `just-ci` check for pull requests targeting `main`.
+`just ci` runs frontend type checking, linting, source-size contracts, Vitest,
+and the production build in parallel with Rust entrypoint contracts, formatting,
+all-target Clippy, and locked tests. `just audit` checks production pnpm
+high/critical advisories and Cargo vulnerabilities against the exact,
+time-bounded exceptions in `security/dependency-audit-exceptions.json`.
 
-- Keep production source files under `src/` and `src-tauri/src/` at or below 800 lines whenever practical.
-- The repository currently carries a small frozen allowlist of oversized production files; `pnpm sizecheck` fails if a new file crosses 800 lines or if an allowlisted file grows further.
+GitHub first runs the same source checks on Ubuntu and macOS plus the dependency
+audit. The Windows `just-ci` required check then runs the complete local gate and
+fails if either prerequisite job failed. Routine pull requests do not build
+installers; package smoke remains a manual/release workflow concern.
+
+- Keep production source files under `src/` and `src-tauri/src/` at or below 800 lines.
+- `pnpm sizecheck` enforces the 800-line limit uniformly; no production file has a per-file allowlist bypass.
 - Components must not call Tauri `invoke()` directly. Route IPC through stores or service-layer helpers so UI code stays testable and platform boundaries remain explicit.
 
 If your change touches UI behavior, include screenshots or a short screen recording in the pull request.

@@ -66,6 +66,7 @@ pub struct CentralRepositorySyncSummary {
     pub skipped_remote_added: usize,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralRepositorySyncFailure {
@@ -85,14 +86,18 @@ pub struct CentralRepositorySyncPreview {
     pub failed_repositories: Vec<CentralRepositorySyncFailure>,
 }
 
+/// Central repository sync confirms additions through its own verified
+/// inventory snapshot, not through a renderer preview token. It therefore
+/// carries no `previewId` and must never fabricate one.
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralRepositoryAddedSkillSelection {
     pub repository_id: String,
     pub selections: Vec<GitHubSkillImportSelection>,
-    pub preview_workspace_id: Option<String>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralRepositoryAdditionSkipRequest {
@@ -102,6 +107,7 @@ pub struct CentralRepositoryAdditionSkipRequest {
     pub skill_name: String,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralRepositoryAdditionUnskipRequest {
@@ -115,6 +121,7 @@ pub(crate) struct CentralRemoteAddedCollection {
     pub skipped_remote_added: Vec<CentralRemoteAddedSkill>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralRepositorySyncDecisions {
@@ -127,6 +134,7 @@ pub struct CentralRepositorySyncDecisions {
     pub unskip_additions: Vec<CentralRepositoryAdditionUnskipRequest>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CentralRepositorySyncApplyResult {
@@ -142,6 +150,7 @@ pub struct CentralRepositorySyncApplyResult {
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn check_central_repository_sync_impl(
     app: Option<&AppHandle>,
+    job_id: &str,
     pool: &DbPool,
     fs: &CentralFs,
     cancel: &AtomicBool,
@@ -168,9 +177,11 @@ pub(crate) async fn check_central_repository_sync_impl(
     let mut counters = UpdateCounters::default();
     let mut states = Vec::with_capacity(total);
     let mut failed_repositories = Vec::new();
+    let mut cancelled = false;
 
-    cancel.store(false, Ordering::SeqCst);
-    emit_update_progress(app, "checking", "started", total, &counters, None, None);
+    emit_update_progress(
+        app, job_id, "checking", "started", total, &counters, None, None,
+    );
 
     let prepared = prepare_skill_updates(pool, fs, skills, auth_token, false).await?;
     let mut snapshot_repos = prepared
@@ -192,6 +203,7 @@ pub(crate) async fn check_central_repository_sync_impl(
         if cancel.load(Ordering::SeqCst) {
             emit_update_progress(
                 app,
+                job_id,
                 "checking",
                 SkillUpdateStatus::Cancelled.as_str(),
                 total,
@@ -199,11 +211,13 @@ pub(crate) async fn check_central_repository_sync_impl(
                 None,
                 None,
             );
+            cancelled = true;
             break;
         }
 
         emit_update_progress(
             app,
+            job_id,
             "checking",
             "running",
             total,
@@ -227,8 +241,9 @@ pub(crate) async fn check_central_repository_sync_impl(
         update_counters_for_state(&mut counters, &state_result);
         emit_update_progress(
             app,
+            job_id,
             "checking",
-            &state_result.status,
+            state_result.status.as_str(),
             total,
             &counters,
             Some(skill),
@@ -237,7 +252,18 @@ pub(crate) async fn check_central_repository_sync_impl(
         states.push(state_result);
     }
 
-    emit_update_progress(app, "checking", "completed", total, &counters, None, None);
+    if !cancelled {
+        emit_update_progress(
+            app,
+            job_id,
+            "checking",
+            "completed",
+            total,
+            &counters,
+            None,
+            None,
+        );
+    }
 
     let remote_additions = collect_remote_added_skills(
         pool,
@@ -249,7 +275,7 @@ pub(crate) async fn check_central_repository_sync_impl(
     .await?;
     let remote_missing_states = states
         .iter()
-        .filter(|state| state.status == SkillUpdateStatus::RemoteMissing.as_str())
+        .filter(|state| state.status == SkillUpdateStatus::RemoteMissing)
         .cloned()
         .collect::<Vec<_>>();
     let remote_missing = build_remote_missing_skills(&repo_by_id, remote_missing_states);
@@ -400,7 +426,6 @@ pub(crate) async fn apply_central_repository_sync_impl(
                     active_target,
                     &repo_url,
                     import_selections,
-                    addition.preview_workspace_id.as_deref(),
                     app,
                     auth_token,
                 )

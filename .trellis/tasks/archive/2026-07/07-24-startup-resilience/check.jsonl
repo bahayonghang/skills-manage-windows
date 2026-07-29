@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/database-migrations.md","reason":"Verify startup recovery does not weaken migration ordering, backup validation, or restore behavior."}
+{"file":".trellis/spec/backend/test-support.md","reason":"Verify Rust fault-injection tests use the owned database fixtures and correct integration boundaries."}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Audit Runtime Log, IPC, and DOM evidence for raw errors, paths, SQL, or credentials."}
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Verify typed command registration, store-only invocation, browser fixtures, and command coverage."}
+{"file":".trellis/spec/frontend/async-ui-test-stability.md","reason":"Check recovery interactions with stable surface-scoped async assertions."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Place and discover new frontend and Rust tests under their owning modules."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Run the repository's complete local acceptance gate before closeout."}
+{"file":".trellis/tasks/07-24-startup-resilience/prd.md","reason":"Check every classified failure, recovery, safety, UX, and validation acceptance criterion."}

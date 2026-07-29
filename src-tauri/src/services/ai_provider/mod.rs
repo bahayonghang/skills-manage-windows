@@ -35,7 +35,7 @@ pub use error::{AiProviderError, ExplanationErrorInfo, ExplanationErrorKind};
 pub use prompt::ExplanationApiProtocol;
 pub use secret::{
     clear_ai_api_key_impl, get_ai_api_key_state_impl, migrate_ai_api_key_on_startup,
-    reveal_ai_api_key_impl, set_ai_api_key_impl, AiApiKeyState,
+    set_ai_api_key_impl, AiApiKeyState,
 };
 pub use stream::{ExplanationChunkPayload, ExplanationCompletePayload};
 

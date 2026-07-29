@@ -10,9 +10,9 @@
 //! 真实 target id。所有写入路径走「事务内 DELETE WHERE target_id=? + INSERT」
 //! 的原子替换，避免读端拿到半成品。
 
-use crate::db::DbPool;
+use sqlx::SqliteConnection;
 
-pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
+pub(super) async fn init(connection: &mut SqliteConnection) -> Result<(), sqlx::Error> {
     // skill_calls：单次 skill 调用记录。timestamp_ms 是 Unix epoch 毫秒，
     // 与 skilled 一致；这样按时间排序、计算 16 周热力图时不需要解析 TEXT。
     sqlx::query(
@@ -26,7 +26,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
             source       TEXT NOT NULL
         )",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     // skill 名是高频聚合 key，索引必须有；source 用于按 provider 过滤；
@@ -36,42 +36,42 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
         "CREATE INDEX IF NOT EXISTS idx_skill_calls_skill
          ON skill_calls(skill)",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_calls_source
          ON skill_calls(source)",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_calls_ts
          ON skill_calls(timestamp_ms)",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_calls_target
          ON skill_calls(target_id)",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_calls_target_ts
          ON skill_calls(target_id, timestamp_ms)",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_calls_target_skill_ts
          ON skill_calls(target_id, skill, timestamp_ms)",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     // skill_call_providers：每个 (target, provider) 的最近健康状态。
@@ -87,7 +87,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
             PRIMARY KEY (target_id, provider_id)
         )",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     // skill_call_scan_state：每个 target 上一次完整扫描的时间戳。
@@ -98,7 +98,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
             last_full_scan_ms  INTEGER NOT NULL
         )",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     // skill_usage_metadata：按 target + provider 原始 skill 名缓存保守身份解析
@@ -120,14 +120,14 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
             )
         )",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_skill_usage_metadata_resolved
          ON skill_usage_metadata(target_id, resolved_skill_id)",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     Ok(())

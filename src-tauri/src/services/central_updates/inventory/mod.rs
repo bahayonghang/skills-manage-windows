@@ -228,8 +228,8 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
             }
         };
 
-        match state_result.status.parse::<SkillUpdateStatus>().ok() {
-            Some(SkillUpdateStatus::UpdateAvailable) => {
+        match state_result.status {
+            SkillUpdateStatus::UpdateAvailable => {
                 let repository_id = repository_id_for_state(&repo_by_id, &state_result);
                 let diagnostics = Some(diagnostic_from_state(&state_result, cache_policy, false));
                 updatable.push(UpdatableSkill {
@@ -238,7 +238,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
                     diagnostics,
                 });
             }
-            Some(SkillUpdateStatus::RemoteMissing) => {
+            SkillUpdateStatus::RemoteMissing => {
                 remote_missing_states.push(state_result);
             }
             _ => {
@@ -371,6 +371,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn apply_skill_update_decisions_impl(
     app: Option<&AppHandle>,
+    job_id: &str,
     pool: &DbPool,
     active_target: &ActiveTarget,
     fs: &CentralFs,
@@ -462,7 +463,6 @@ pub(crate) async fn apply_skill_update_decisions_impl(
                     active_target,
                     &repo_url,
                     import_selections,
-                    addition.preview_workspace_id.as_deref(),
                     app,
                     auth_token,
                 )
@@ -500,6 +500,7 @@ pub(crate) async fn apply_skill_update_decisions_impl(
     if !decisions.updates.is_empty() {
         match update_central_skills_impl(
             app,
+            job_id,
             pool,
             fs,
             cancel,

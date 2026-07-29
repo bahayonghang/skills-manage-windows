@@ -4,6 +4,7 @@ import type {
   OperationLogEntry,
   OperationLogFilter,
   OperationLogPage,
+  PendingFsDbOperation,
 } from "@/types";
 
 const DEFAULT_LIMIT = 100;
@@ -43,6 +44,20 @@ const fixtureLogEntries: OperationLogEntry[] = [
     errorSummary: "One target platform was unavailable.",
     detailsJson: JSON.stringify({ succeeded: 3, failed: 1 }, null, 2),
     durationMs: 1080,
+  },
+];
+
+const fixturePendingOperations: PendingFsDbOperation[] = [
+  {
+    operationId: "fixture-recovery-update",
+    targetId: "local",
+    targetKind: "local",
+    operationKind: "central_update",
+    skillId: "fixture-skill",
+    phase: "copies_pending",
+    errorCode: "copy_refresh",
+    errorMessage: "Copy projection remains pending",
+    updatedAt: "2026-04-27T10:05:00Z",
   },
 ];
 
@@ -149,6 +164,8 @@ export function registerOperationLogFixtures(): void {
       fixtureLogEntries.find((item) => item.id === logId) ?? null,
     get_daily_operation_counts: ({ days }) =>
       fixtureDailyOperationCounts(days),
+    list_pending_fs_db_operations: () => fixturePendingOperations,
+    retry_fs_db_operation: () => [],
     clear_operation_logs: ({ filter }) =>
       fixtureLogEntries.filter((entry) =>
         matchesFixture(entry, normalizeFilter(filter)),

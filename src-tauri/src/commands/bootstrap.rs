@@ -205,25 +205,40 @@ async fn get_skill_counts_summary_impl(pool: &DbPool) -> Result<SkillCountsSumma
 #[tauri::command]
 pub async fn get_skill_counts_summary(
     state: State<'_, AppState>,
-) -> Result<SkillCountsSummary, String> {
-    let pool = state.active_db().await?;
-    get_skill_counts_summary_impl(&pool).await
+) -> crate::ipc_error::IpcResult<SkillCountsSummary> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            get_skill_counts_summary_impl(&pool).await
+        }
+        .await
+    )
 }
 
 #[tauri::command]
 pub async fn get_dashboard_central_summary(
     state: State<'_, AppState>,
-) -> Result<DashboardCentralSummary, String> {
-    let pool = state.active_db().await?;
-    get_dashboard_central_summary_impl(&pool).await
+) -> crate::ipc_error::IpcResult<DashboardCentralSummary> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            get_dashboard_central_summary_impl(&pool).await
+        }
+        .await
+    )
 }
 
 #[tauri::command]
 pub async fn get_bootstrap_snapshot(
     state: State<'_, AppState>,
-) -> Result<BootstrapSnapshot, String> {
-    let pool = state.active_db().await?;
-    get_bootstrap_snapshot_impl(&pool).await
+) -> crate::ipc_error::IpcResult<BootstrapSnapshot> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            get_bootstrap_snapshot_impl(&pool).await
+        }
+        .await
+    )
 }
 
 async fn get_bootstrap_snapshot_impl(pool: &DbPool) -> Result<BootstrapSnapshot, String> {

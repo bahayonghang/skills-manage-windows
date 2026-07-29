@@ -1,0 +1,3 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/quality/index.md", "reason": "质量检查规范入口"}
+{"file": ".trellis/spec/frontend/async-ui-test-stability.md", "reason": "新增/更新的 Vitest 用例涉及异步 UI 断言"}

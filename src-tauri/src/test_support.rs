@@ -11,8 +11,6 @@
 
 use std::path::{Path, PathBuf};
 
-use sqlx::sqlite::SqlitePoolOptions;
-use sqlx::SqlitePool;
 use tempfile::TempDir;
 
 use crate::db::{self, DbPool, Skill};
@@ -22,7 +20,7 @@ use crate::db::{self, DbPool, Skill};
 /// In-memory pool with the full schema initialised and built-in seeds
 /// (agents / scan directories / registries) in place.
 pub async fn mem_pool() -> DbPool {
-    let pool = SqlitePool::connect(":memory:")
+    let pool = db::create_memory_pool()
         .await
         .expect("connect in-memory SQLite pool");
     db::init_database(&pool).await.expect("init test database");
@@ -32,9 +30,7 @@ pub async fn mem_pool() -> DbPool {
 /// `max_connections(1)` variant for tests that must observe a single shared
 /// connection (e.g. concurrent tasks sharing one in-memory database).
 pub async fn mem_pool_single_conn() -> DbPool {
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect(":memory:")
+    let pool = db::create_memory_pool_single_conn()
         .await
         .expect("connect single-conn in-memory SQLite pool");
     db::init_database(&pool).await.expect("init test database");
@@ -44,7 +40,7 @@ pub async fn mem_pool_single_conn() -> DbPool {
 /// In-memory pool whose built-in agents point at a POSIX `home`
 /// (remote-home semantics, see `db::init_database_for_remote_home`).
 pub async fn mem_pool_with_home(home: &str) -> DbPool {
-    let pool = SqlitePool::connect(":memory:")
+    let pool = db::create_memory_pool()
         .await
         .expect("connect in-memory SQLite pool");
     db::init_database_for_remote_home(&pool, home)
@@ -53,16 +49,15 @@ pub async fn mem_pool_with_home(home: &str) -> DbPool {
     pool
 }
 
-/// File-backed pool (WAL mode via `db::create_pool`) inside a fresh
-/// [`TempDir`] — for tests that need cross-connection visibility or real
-/// files on disk. Keep the returned `TempDir` alive as long as the pool.
+/// File-backed database opened through the production migration boundary
+/// inside a fresh [`TempDir`]. Keep the returned directory alive as long as
+/// the pool.
 pub async fn file_pool() -> (DbPool, TempDir) {
     let dir = TempDir::new().expect("create tempdir for file-backed pool");
     let db_path = dir.path().join("test.sqlite");
-    let pool = db::create_pool(&db_path.to_string_lossy())
+    let pool = db::open_database(&db_path)
         .await
-        .expect("create file-backed pool");
-    db::init_database(&pool).await.expect("init test database");
+        .expect("open file-backed database");
     (pool, dir)
 }
 
@@ -150,6 +145,7 @@ pub struct RecordedCommand {
     pub program: String,
     pub args: Vec<String>,
     pub stdin: Option<Vec<u8>>,
+    pub(crate) policy: crate::targets::ProcessPolicy,
 }
 
 /// In-memory [`crate::targets::CommandRunner`]: records every command and
@@ -205,7 +201,7 @@ impl FakeRunner {
         self.responses
             .lock()
             .unwrap()
-            .push_back(FakeResponse::Error(crate::targets::RunnerError {
+            .push_back(FakeResponse::Error(crate::targets::RunnerError::Io {
                 phase,
                 source: std::io::Error::other(message.to_string()),
             }));
@@ -217,19 +213,26 @@ impl FakeRunner {
     }
 }
 
+#[async_trait::async_trait]
 impl crate::targets::CommandRunner for FakeRunner {
-    fn run(
+    async fn run(
         &self,
-        command: std::process::Command,
-        stdin: Option<&[u8]>,
+        request: crate::targets::ProcessRequest<'_>,
     ) -> Result<std::process::Output, crate::targets::RunnerError> {
+        let crate::targets::ProcessRequest {
+            command,
+            stdin,
+            policy,
+            cancellation: _,
+        } = request;
         self.calls.lock().unwrap().push(RecordedCommand {
             program: command.get_program().to_string_lossy().into_owned(),
             args: command
                 .get_args()
                 .map(|arg| arg.to_string_lossy().into_owned())
                 .collect(),
-            stdin: stdin.map(<[u8]>::to_vec),
+            stdin,
+            policy,
         });
         match self
             .responses

@@ -1,11 +1,19 @@
+use super::super::types::GitHubUpdateSource;
+use super::state::{
+    find_remote_skill_candidate, is_fresh_update_available_state, reused_or_prepared_local_hash,
+};
 use super::*;
 use crate::db::SkillRepository;
-use crate::services::central_updates::collect_remote_added_skills;
-use crate::services::central_updates::fs::RemoteSkillFile;
+use crate::services::central_updates::fs::{
+    collect_remote_skill_files, ensure_remote_skill_manifest, RemoteSkillFile,
+};
 use crate::services::central_updates::repository_sync::build_remote_missing_skills;
+use crate::services::central_updates::{collect_remote_added_skills, repo_cache_key};
+use crate::services::github_import::{GitHubRepoRef, GitHubRepoSnapshot};
 use crate::test_support::mem_pool as setup_test_db;
-use chrono::Duration as ChronoDuration;
+use chrono::{Duration as ChronoDuration, Utc};
 use sqlx::SqlitePool;
+use std::path::Path;
 use tempfile::TempDir;
 
 async fn setup_remote_test_db(remote_home: &Path) -> SqlitePool {
@@ -108,7 +116,7 @@ fn update_counters_count_remote_missing_as_skipped() {
         latest_remote_hash: None,
         last_checked_at: Some(Utc::now().to_rfc3339()),
         last_updated_at: None,
-        status: SkillUpdateStatus::RemoteMissing.to_string(),
+        status: SkillUpdateStatus::RemoteMissing,
         error: Some("removed remotely".to_string()),
     };
 
@@ -270,7 +278,7 @@ fn remote_missing_skills_include_repository_display_metadata() {
         latest_remote_hash: None,
         last_checked_at: Some(Utc::now().to_rfc3339()),
         last_updated_at: None,
-        status: SkillUpdateStatus::RemoteMissing.to_string(),
+        status: SkillUpdateStatus::RemoteMissing,
         error: Some("removed remotely".to_string()),
     };
     let repo_by_id = HashMap::from([(repository.id.clone(), repository)]);
@@ -302,7 +310,7 @@ fn remote_missing_skills_allow_unmapped_repository_source() {
         latest_remote_hash: None,
         last_checked_at: Some(Utc::now().to_rfc3339()),
         last_updated_at: None,
-        status: SkillUpdateStatus::RemoteMissing.to_string(),
+        status: SkillUpdateStatus::RemoteMissing,
         error: Some("removed remotely".to_string()),
     };
 
@@ -347,7 +355,7 @@ async fn keep_remote_missing_detaches_source_without_deleting_skill() {
             latest_remote_hash: None,
             last_checked_at: Some(Utc::now().to_rfc3339()),
             last_updated_at: None,
-            status: SkillUpdateStatus::RemoteMissing.to_string(),
+            status: SkillUpdateStatus::RemoteMissing,
             error: Some("removed remotely".to_string()),
         },
     )
@@ -408,7 +416,7 @@ async fn keep_remote_missing_rejects_non_remote_missing_state() {
             latest_remote_hash: Some("fnv1a64:new".to_string()),
             last_checked_at: Some(Utc::now().to_rfc3339()),
             last_updated_at: None,
-            status: SkillUpdateStatus::UpdateAvailable.to_string(),
+            status: SkillUpdateStatus::UpdateAvailable,
             error: None,
         },
     )
@@ -522,7 +530,7 @@ async fn prepare_skill_updates_reuses_fresh_update_available_local_hash() {
             latest_remote_hash: Some("sha256-manifest:remote".to_string()),
             last_checked_at: Some(Utc::now().to_rfc3339()),
             last_updated_at: None,
-            status: SkillUpdateStatus::UpdateAvailable.to_string(),
+            status: SkillUpdateStatus::UpdateAvailable,
             error: None,
         },
     )
@@ -552,7 +560,7 @@ fn stale_update_available_state_does_not_reuse_local_hash() {
         latest_remote_hash: Some("sha256-manifest:new".to_string()),
         last_checked_at: Some((Utc::now() - ChronoDuration::minutes(11)).to_rfc3339()),
         last_updated_at: None,
-        status: SkillUpdateStatus::UpdateAvailable.to_string(),
+        status: SkillUpdateStatus::UpdateAvailable,
         error: None,
     };
 

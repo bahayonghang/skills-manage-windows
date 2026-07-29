@@ -112,6 +112,7 @@ export function CentralSkillDialogs({
   loadCentralSkills,
   pendingUpdateStates,
   previewSkillportStateImport,
+  previewSkillportStateImportFile,
   remoteMissingError,
   remoteMissingPreview,
   remoteMissingStates,
@@ -134,6 +135,7 @@ export function CentralSkillDialogs({
   setIsPortabilityOpen,
   t,
   exportSkillportState,
+  saveSkillportStateExport,
   portabilityJob,
   cancelSkillportStatePortability,
   platformManagement,
@@ -199,9 +201,12 @@ export function CentralSkillDialogs({
   isResolvingRemoteMissing: boolean;
   isUpdatingSkills: boolean;
   isUpdateConfirmDialogOpen: boolean;
-  loadCentralSkills: () => Promise<void>;
+  loadCentralSkills: (options?: { throwOnError?: boolean }) => Promise<void>;
   pendingUpdateStates: CentralSkillUpdateState[];
   previewSkillportStateImport: (json: string) => Promise<SkillportStateImportPreview>;
+  previewSkillportStateImportFile: (
+    path: string,
+  ) => Promise<{ json: string; preview: SkillportStateImportPreview }>;
   remoteMissingError: string | null;
   remoteMissingPreview: BatchDeleteCentralSkillPreviewResult | null;
   remoteMissingStates: CentralSkillUpdateState[];
@@ -232,6 +237,7 @@ export function CentralSkillDialogs({
   setIsPortabilityOpen: (open: boolean) => void;
   t: TFunction;
   exportSkillportState: () => Promise<string>;
+  saveSkillportStateExport: (path: string, json: string) => Promise<void>;
   portabilityJob: SkillportStatePortabilityJob;
   cancelSkillportStatePortability: () => Promise<void>;
   platformManagement: PlatformManagementProps;
@@ -483,7 +489,9 @@ export function CentralSkillDialogs({
             onOpenChange={setIsPortabilityOpen}
             activeTarget={activeTarget}
             exportState={exportSkillportState}
+            saveExport={saveSkillportStateExport}
             previewImport={previewSkillportStateImport}
+            previewImportFile={previewSkillportStateImportFile}
             importState={importSkillportState}
             portabilityJob={portabilityJob}
             onCancelJob={cancelSkillportStatePortability}

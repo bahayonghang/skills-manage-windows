@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Keep db/repos helpers on Result<T, sqlx::Error> and avoid new string errors outside commands."}
+{"file":".trellis/spec/backend/best-effort-writes.md","reason":"The orphan audit is correctness-critical and must fail the shared repair transaction rather than use a best-effort logging helper."}
+{"file":".trellis/spec/backend/test-support.md","reason":"Use the shared Rust DB fixtures except for explicit bare-pool legacy/orphan migration tests."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Centralize the owned-relation list and reuse it across manual, batch, scanner, and startup repair paths."}
+{"file":".trellis/tasks/07-24-db-stale-cleanup-fix/research/live-db-integrity-2026-07-26.md","reason":"Use the live ownership and orphan inventory evidence, especially the observation exclusion."}

@@ -40,7 +40,7 @@ export const useLocalRemoteSyncStore = create<LocalRemoteSyncState>((set) => ({
     ensureTauriRuntime();
     set({ isPreviewing: true, error: null, result: null });
     try {
-      const preview = await invoke<LocalRemoteSyncPreview>("preview_local_remote_sync", {
+      const preview = await invoke("preview_local_remote_sync", {
         request,
       });
       set({ preview, isPreviewing: false });
@@ -55,7 +55,7 @@ export const useLocalRemoteSyncStore = create<LocalRemoteSyncState>((set) => ({
     ensureTauriRuntime();
     set({ isApplying: true, error: null });
     try {
-      const result = await invoke<LocalRemoteSyncApplyResult>("apply_local_remote_sync", {
+      const result = await invoke("apply_local_remote_sync", {
         request,
       });
       set({ result, isApplying: false });

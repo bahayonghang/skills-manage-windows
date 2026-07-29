@@ -43,6 +43,8 @@ export interface CentralSkillsState {
   portabilityJob: SkillportStatePortabilityJob;
   aiTaggingAvailable: boolean;
   isLoading: boolean;
+  /** 已有列表数据时的后台重取中（保留旧内容，不触发整页加载空态）。 */
+  isRefreshingList: boolean;
   isInstalling: boolean;
   isDeleting: boolean;
   isMetadataUpdating: boolean;
@@ -54,7 +56,7 @@ export interface CentralSkillsState {
   error: string | null;
 
   // Actions
-  loadCentralSkills: () => Promise<void>;
+  loadCentralSkills: (options?: { throwOnError?: boolean }) => Promise<void>;
   previewCentralStoreLocationChange: (
     targetPath: string,
   ) => Promise<CentralStoreLocationPreview>;
@@ -127,9 +129,13 @@ export interface CentralSkillsState {
   subscribePortabilityProgress: () => Promise<() => void>;
   cancelSkillportStatePortability: () => Promise<void>;
   exportSkillportState: () => Promise<string>;
+  saveSkillportStateExport: (path: string, json: string) => Promise<void>;
   previewSkillportStateImport: (
     json: string,
   ) => Promise<SkillportStateImportPreview>;
+  previewSkillportStateImportFile: (
+    path: string,
+  ) => Promise<{ json: string; preview: SkillportStateImportPreview }>;
   importSkillportState: (
     json: string,
     resolutions: SkillportStateImportResolution[],

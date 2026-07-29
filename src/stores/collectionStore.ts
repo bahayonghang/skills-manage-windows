@@ -229,7 +229,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
   batchInstallCollection: async (collectionId: string, agentIds: string[]) => {
     set({ error: null });
     try {
-      const result = await invoke<CollectionBatchInstallResult>("batch_install_collection", {
+      const result = await invoke("batch_install_collection", {
         collectionId,
         agentIds,
       });
@@ -258,7 +258,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
   importCollection: async (json: string) => {
     set({ error: null });
     try {
-      const collection = await invoke<Collection>("import_collection", { json });
+      const collection = await invoke("import_collection", { json });
       // Refresh collections list.
       const collections = await invoke<Collection[]>("get_collections");
       set({ collections: collections ?? [] });

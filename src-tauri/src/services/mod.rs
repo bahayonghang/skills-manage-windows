@@ -7,10 +7,12 @@
 pub mod ai_provider;
 pub mod ai_tagging;
 pub mod central_mutation;
+pub mod central_operation;
 pub mod central_skills;
 pub mod central_store_location;
 pub mod central_updates;
 pub mod deep_link;
+pub mod exclusive_job;
 pub mod github_import;
 pub mod installation;
 pub mod local_archive_import;
@@ -21,4 +23,5 @@ pub mod portable_state;
 pub mod projects;
 pub mod resource_budget;
 pub mod scanner;
+pub mod startup;
 pub mod usage;

@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
-import { Server } from "lucide-react";
+import { AlertTriangle, Server } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { SettingsSection } from "@/components/settings/SettingsSection";
-import type { TargetSummary } from "@/types";
+import type { TargetConfigQuarantineStatus, TargetSummary } from "@/types";
 
 import { RemoteTargetRow, SshTargetForm, WslTargetForm } from "./RemoteTargetsSettingsControls";
 import type {
@@ -54,6 +54,8 @@ interface RemoteTargetsSettingsSectionProps {
   sshTargetForm: SshTargetFormState;
   sshTargetPasswordUpdates: Record<string, string>;
   targetMessage: TargetMessage;
+  quarantineStatus: TargetConfigQuarantineStatus | null;
+  quarantineStatusError: string | null;
   targets: TargetSummary[];
   testingTargetId: string | null;
   updatingPasswordTargetId: string | null;
@@ -107,6 +109,8 @@ export function RemoteTargetsSettingsSection({
   sshTargetForm,
   sshTargetPasswordUpdates,
   targetMessage,
+  quarantineStatus,
+  quarantineStatusError,
   targets,
   testingTargetId,
   updatingPasswordTargetId,
@@ -150,6 +154,54 @@ export function RemoteTargetsSettingsSection({
       icon={<Server className="size-5 shrink-0 text-muted-foreground" />}
     >
       <div className="space-y-4">
+        {quarantineStatusError ? (
+          <div
+            className="border-l-2 border-warning bg-warning/10 px-3 py-2.5 text-xs text-foreground"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+              <p className="text-muted-foreground">
+                {t("targets.quarantine.statusUnavailable")}
+              </p>
+            </div>
+          </div>
+        ) : null}
+        {quarantineStatus && quarantineStatus.incidents.length > 0 ? (
+          <div
+            className="border-l-2 border-warning bg-warning/10 px-3 py-2.5 text-xs text-foreground"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+              <div className="min-w-0 space-y-1.5">
+                <p className="font-medium">{t("targets.quarantine.title")}</p>
+                <p className="text-muted-foreground">
+                  {t("targets.quarantine.description")}
+                </p>
+                <ul className="space-y-1">
+                  {quarantineStatus.incidents.map((incident) => (
+                    <li key={incident.domain} className="break-words font-mono text-ui-meta">
+                      {t("targets.quarantine.incident", {
+                        domain: t(`targets.kind.${incident.domain}`),
+                        time: formatQuarantineTime(incident.detectedAt),
+                        bytes: incident.sourceBytes.toLocaleString(),
+                        digest: incident.sourceSha256.slice(0, 12),
+                      })}
+                    </li>
+                  ))}
+                </ul>
+                {quarantineStatus.activeTargetReset ? (
+                  <p className="text-muted-foreground">
+                    {t("targets.quarantine.localFallback")}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
         {targetMessage && (
           <p
             className={`text-xs ${targetMessage.type === "success" ? "text-primary" : "text-destructive-text"}`}
@@ -235,4 +287,9 @@ export function RemoteTargetsSettingsSection({
       </div>
     </SettingsSection>
   );
+}
+
+function formatQuarantineTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }

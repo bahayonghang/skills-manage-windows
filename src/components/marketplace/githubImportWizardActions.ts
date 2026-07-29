@@ -176,7 +176,7 @@ export function createGitHubImportWizardActions({
         await onAfterImportSuccess?.(importResult);
       }
     } catch (err) {
-      if (looksLikeMissingSshPassword(String(err))) {
+      if (looksLikeMissingSshPassword(err)) {
         setSshPasswordRepairMessage(null);
         await loadTargets().catch(() => undefined);
       }

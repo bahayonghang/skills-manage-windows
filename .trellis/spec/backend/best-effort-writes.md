@@ -6,6 +6,7 @@
 
 - **禁止**裸 `let _ = db::xxx(...)` 丢弃错误——失败完全不可见，排障无从下手。
 - **必须**走带 tracing 日志的 `*_best_effort` 辅助函数，失败时 `tracing::warn!` 记录 key 与错误。
+- **恢复协议例外**：operation journal insert/transition/error marker、manifest 更新、rollback、restore 与 finalize 都是正确性路径，禁止 best effort，也禁止用原始 `%error` tracing 代替传播。任何失败必须保留非终态证据并返回调用方。
 
 ## 现有实现
 

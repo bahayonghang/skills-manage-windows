@@ -29,6 +29,7 @@ import type {
   LocalRemoteSyncPreview,
   ScanDirectory,
   TargetSummary,
+  TargetConfigQuarantineStatus,
   WslDistributionSummary,
 } from "@/types";
 import type {
@@ -101,6 +102,8 @@ export interface SettingsPageSectionsProps {
   sshTargetPasswordUpdates: Record<string, string>;
   switchingTargetId: string | null;
   targetMessage: { type: "success" | "error"; text: string } | null;
+  quarantineStatus: TargetConfigQuarantineStatus | null;
+  quarantineStatusError: string | null;
   targets: TargetSummary[];
   testingTargetId: string | null;
   updatingPasswordTargetId: string | null;
@@ -138,8 +141,6 @@ export interface SettingsPageSectionsProps {
   onPreviewLocalRemoteSync: () => void;
   onProviderChange: (id: string) => void;
   onRefreshWslDistributions: () => void;
-  onRevealAiApiKey: (providerId: string) => Promise<string | null>;
-  onRevealGitHubPat: () => Promise<string | null>;
   onRemoveDirectory: (path: string) => void;
   onRemovePlatform: (agentId: string) => void;
   onSaveGitHubPat: () => void;
@@ -252,6 +253,8 @@ function SettingsConnectionsPage(props: SettingsPageSectionsProps) {
         sshTargetForm={props.sshTargetForm}
         sshTargetPasswordUpdates={props.sshTargetPasswordUpdates}
         targetMessage={props.targetMessage}
+        quarantineStatus={props.quarantineStatus}
+        quarantineStatusError={props.quarantineStatusError}
         targets={props.targets}
         testingTargetId={props.testingTargetId}
         updatingPasswordTargetId={props.updatingPasswordTargetId}
@@ -325,7 +328,6 @@ function SettingsIntegrationsPage(props: SettingsPageSectionsProps) {
           isTestingGitHubPat={props.isTestingGitHubPat}
           onClear={props.onClearGitHubPat}
           onInputChange={props.onGitHubPatInputChange}
-          onReveal={props.onRevealGitHubPat}
           onSave={props.onSaveGitHubPat}
           onTest={props.onTestGitHubPat}
         />
@@ -344,7 +346,6 @@ function SettingsIntegrationsPage(props: SettingsPageSectionsProps) {
           showAiTestDetails={props.showAiTestDetails}
           onClearApiKey={props.onClearAiApiKey}
           onProviderChange={props.onProviderChange}
-          onRevealApiKey={props.onRevealAiApiKey}
           onSetShowAiTestDetails={props.onSetShowAiTestDetails}
           onTestConnection={props.onTestAiConnection}
           onUpdateAiSettings={props.onUpdateAiSettings}

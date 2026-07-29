@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { Toaster } from "sonner";
 import App from "./App";
+import { StartupGate } from "@/components/startup/StartupGate";
 import "./index.css";
 // Initialize i18n before rendering the app
 import "./i18n";
@@ -46,7 +47,9 @@ installRuntimeLogger();
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
-      <App />
+      <StartupGate>
+        <App />
+      </StartupGate>
       <Toaster position="bottom-right" richColors />
     </BrowserRouter>
   </React.StrictMode>,

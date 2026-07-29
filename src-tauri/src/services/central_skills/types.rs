@@ -109,6 +109,7 @@ pub struct DirectoryTreeEntry {
     pub children: Vec<DirectoryTreeEntry>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeleteCentralSkillResult {
     pub removed_central_path: String,
@@ -125,6 +126,7 @@ pub struct DeleteCentralSkillPreview {
     pub auto_removed_agent_ids: Vec<String>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FailedCentralSkillDelete {
     pub skill_id: String,
@@ -137,12 +139,14 @@ pub struct BatchDeleteCentralSkillPreviewResult {
     pub failed: Vec<FailedCentralSkillDelete>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BatchDeleteCentralSkillRequest {
     pub skill_id: String,
     pub remove_agent_ids: Vec<String>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BatchDeleteCentralSkillSuccess {
     pub skill_id: String,
@@ -151,6 +155,7 @@ pub struct BatchDeleteCentralSkillSuccess {
     pub retained_agent_ids: Vec<String>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BatchDeleteCentralSkillResult {
     pub succeeded: Vec<BatchDeleteCentralSkillSuccess>,
@@ -163,6 +168,7 @@ pub struct DeleteSkillRepositoryPreview {
     pub delete_preview: BatchDeleteCentralSkillPreviewResult,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeleteSkillRepositoryResult {
     pub repository: SkillRepository,

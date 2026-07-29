@@ -9,86 +9,118 @@ use crate::services::obsidian::{self, ObsidianImportResult, ObsidianSkill, Obsid
 use crate::AppState;
 
 #[tauri::command]
-pub async fn get_obsidian_vaults(state: State<'_, AppState>) -> Result<Vec<ObsidianVault>, String> {
-    if state.active_target().await?.is_remote_like() {
-        return Ok(Vec::new());
-    }
-    obsidian::get_obsidian_vaults_impl(&state.db)
+pub async fn get_obsidian_vaults(
+    state: State<'_, AppState>,
+) -> crate::ipc_error::IpcResult<Vec<ObsidianVault>> {
+    crate::ipc_boundary!(
+        async move {
+            if state.active_target().await?.is_remote_like() {
+                return Ok(Vec::new());
+            }
+            obsidian::get_obsidian_vaults_impl(&state.db)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
 pub async fn get_obsidian_vault_skills(
     state: State<'_, AppState>,
     vault_id: String,
-) -> Result<Vec<ObsidianSkill>, String> {
-    if state.active_target().await?.is_remote_like() {
-        return Ok(Vec::new());
-    }
-    obsidian::get_obsidian_vault_skills_impl(&state.db, &vault_id)
+) -> crate::ipc_error::IpcResult<Vec<ObsidianSkill>> {
+    crate::ipc_boundary!(
+        async move {
+            if state.active_target().await?.is_remote_like() {
+                return Ok(Vec::new());
+            }
+            obsidian::get_obsidian_vault_skills_impl(&state.db, &vault_id)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
-pub async fn open_obsidian_path(state: State<'_, AppState>, path: String) -> Result<(), String> {
-    if state.active_target().await?.is_remote_like() {
-        return Err(
-            "Remote Obsidian paths cannot be opened in the local file manager.".to_string(),
-        );
-    }
+pub async fn open_obsidian_path(
+    state: State<'_, AppState>,
+    path: String,
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary!(
+        async move {
+            if state.active_target().await?.is_remote_like() {
+                return Err(
+                    "Remote Obsidian paths cannot be opened in the local file manager.".to_string(),
+                );
+            }
 
-    let candidate = canonicalize_existing_path(&path)?;
-    let vaults = obsidian::get_obsidian_vaults_impl(&state.db)
+            let candidate = canonicalize_existing_path(&path)?;
+            let vaults = obsidian::get_obsidian_vaults_impl(&state.db)
+                .await
+                .map_err(|e| e.to_string())?;
+            let allowed = vaults
+                .iter()
+                .filter_map(|vault| PathBuf::from(&vault.path).canonicalize().ok())
+                .any(|vault_root| candidate == vault_root || candidate.starts_with(&vault_root));
+
+            if !allowed {
+                return Err(format!(
+                    "Refusing to open '{}': path is not under a detected Obsidian vault.",
+                    candidate.display()
+                ));
+            }
+
+            open_local_path_in_file_manager(&candidate)
+        }
         .await
-        .map_err(|e| e.to_string())?;
-    let allowed = vaults
-        .iter()
-        .filter_map(|vault| PathBuf::from(&vault.path).canonicalize().ok())
-        .any(|vault_root| candidate == vault_root || candidate.starts_with(&vault_root));
-
-    if !allowed {
-        return Err(format!(
-            "Refusing to open '{}': path is not under a detected Obsidian vault.",
-            candidate.display()
-        ));
-    }
-
-    open_local_path_in_file_manager(&candidate)
+    )
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn import_obsidian_skill_to_central(
     state: State<'_, AppState>,
     dir_path: String,
-) -> Result<ObsidianImportResult, String> {
-    if state.active_target().await?.is_remote_like() {
-        return Err("Remote Obsidian import is not supported in this version.".to_string());
-    }
-    obsidian::import_obsidian_skill_to_central_impl(&state.db, &dir_path)
+) -> crate::ipc_error::IpcResult<ObsidianImportResult> {
+    crate::ipc_boundary!(
+        async move {
+            if state.active_target().await?.is_remote_like() {
+                return Err("Remote Obsidian import is not supported in this version.".to_string());
+            }
+            obsidian::import_obsidian_skill_to_central_impl(&state.db, &dir_path)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn import_obsidian_skill_to_platform(
     state: State<'_, AppState>,
     dir_path: String,
     agent_id: String,
     method: Option<String>,
-) -> Result<ObsidianImportResult, String> {
-    if state.active_target().await?.is_remote_like() {
-        return Err("Remote Obsidian import is not supported in this version.".to_string());
-    }
-    obsidian::import_obsidian_skill_to_platform_impl(
-        &state.db,
-        &dir_path,
-        &agent_id,
-        method.as_deref(),
+) -> crate::ipc_error::IpcResult<ObsidianImportResult> {
+    crate::ipc_boundary!(
+        async move {
+            if state.active_target().await?.is_remote_like() {
+                return Err("Remote Obsidian import is not supported in this version.".to_string());
+            }
+            obsidian::import_obsidian_skill_to_platform_impl(
+                &state.db,
+                &dir_path,
+                &agent_id,
+                method.as_deref(),
+            )
+            .await
+            .map_err(|e| e.to_string())
+        }
+        .await
     )
-    .await
-    .map_err(|e| e.to_string())
 }
 
 fn canonicalize_existing_path(path: &str) -> Result<PathBuf, String> {

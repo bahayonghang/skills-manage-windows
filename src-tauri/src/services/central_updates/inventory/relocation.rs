@@ -119,7 +119,7 @@ pub(crate) async fn reconcile_relocated_remote_skills(
         )
         .await?;
 
-        if relocated_state.status == SkillUpdateStatus::UpdateAvailable.as_str() {
+        if relocated_state.status == SkillUpdateStatus::UpdateAvailable {
             ctx.updatable.push(UpdatableSkill {
                 state: relocated_state,
                 repository_id: Some(item.repository_id.clone()),

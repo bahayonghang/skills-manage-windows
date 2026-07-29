@@ -121,7 +121,7 @@ export function createSettingsViewActions({
   testGitHubPat: () => Promise<GitHubPatTestResult>;
   rescan: () => Promise<void>;
   refreshCounts: () => Promise<void>;
-  loadCentralSkills: () => Promise<void>;
+  loadCentralSkills: (options?: { throwOnError?: boolean }) => Promise<void>;
   loadMarketplaceRegistries: () => Promise<void>;
   loadMarketplaceSkills: (registryId: string) => Promise<void>;
   createSshTarget: (request: CreateSshTargetRequest) => Promise<TargetSummary>;

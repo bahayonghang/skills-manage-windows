@@ -7,6 +7,7 @@ import {
   type UnlistenFn,
 } from "@tauri-apps/api/event";
 import type { CommandArgs, CommandResult, IpcCommandMap } from "./commandMap";
+import { normalizeIpcRejection, sanitizeIpcFailureArgs } from "./errors";
 import { dispatchIpcFixture } from "./fixtures";
 import { isTauriRuntime } from "./runtime";
 
@@ -53,17 +54,21 @@ export function invoke<T>(command: string, args?: unknown): Promise<T> {
   const result = dispatch<T>(command, args);
 
   // 测试里 invoke 可能被 mock 成返回 undefined 的 vi.fn，需守住 .catch 可用
-  if (
-    command !== "record_frontend_runtime_log" &&
-    result &&
-    typeof result.catch === "function"
-  ) {
-    result.catch((error) => {
-      ipcFailureRecorder?.(command, args, error);
-    });
+  if (!result || typeof result.catch !== "function") {
+    return result;
   }
 
-  return result;
+  return result.catch((error) => {
+    const normalized = normalizeIpcRejection(error);
+    if (command !== "record_frontend_runtime_log") {
+      ipcFailureRecorder?.(
+        command,
+        sanitizeIpcFailureArgs(args),
+        normalized,
+      );
+    }
+    throw normalized;
+  });
 }
 
 /**

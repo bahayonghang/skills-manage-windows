@@ -22,6 +22,7 @@ pub const GITHUB_PAT_SECRET_KEY: &str = "github_pat";
 /// Secret key for the AI provider API key.
 pub const AI_API_KEY_SECRET_KEY: &str = "ai_api_key";
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum SecretStorageState {

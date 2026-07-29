@@ -10,6 +10,7 @@ use crate::targets::{
 use super::common::run_blocking_fs;
 use super::error::CentralSkillsError;
 use super::query::get_skill_detail_with_row_impl;
+use super::remote_path::resolve_remote_allowed_path;
 use super::types::DirectoryTreeEntry;
 
 #[derive(Debug, Clone)]
@@ -233,17 +234,12 @@ async fn list_remote_directory_tree_impl(
     path: &str,
     access_root: &str,
 ) -> Result<Vec<DirectoryTreeEntry>, CentralSkillsError> {
-    let allowed_path = normalize_remote_allowed_path(access_root, path)?;
+    let allowed_path = resolve_remote_allowed_path(connection, access_root, path).await?;
     let info = connection
         .inspect_path(&allowed_path)
         .await
         .map_err(|e| CentralSkillsError::Remote(e.to_string()))?
         .ok_or_else(|| CentralSkillsError::RemotePathMissing(allowed_path.clone()))?;
-    if info.file_type == "symlink" {
-        return Err(CentralSkillsError::RemoteSymlinkTraversalRefused(
-            allowed_path,
-        ));
-    }
     if !remote_file_type_is_dir(&info.file_type) {
         return Err(CentralSkillsError::RemotePathNotDirectory(allowed_path));
     }
@@ -386,15 +382,12 @@ async fn read_remote_file_by_path_impl(
     access_root: &str,
 ) -> Result<String, CentralSkillsError> {
     let budget = ResourceBudget::default_skill();
-    let allowed_path = normalize_remote_allowed_path(access_root, path)?;
+    let allowed_path = resolve_remote_allowed_path(connection, access_root, path).await?;
     let info = connection
         .inspect_path(&allowed_path)
         .await
         .map_err(|e| CentralSkillsError::Remote(e.to_string()))?
         .ok_or_else(|| CentralSkillsError::RemotePathMissing(allowed_path.clone()))?;
-    if info.file_type == "symlink" {
-        return Err(CentralSkillsError::RemoteSymlinkReadRefused(allowed_path));
-    }
     if info.file_type != "file" {
         return Err(CentralSkillsError::RemotePathNotFile(allowed_path));
     }
@@ -460,69 +453,36 @@ fn resolve_local_allowed_path(
     Ok(candidate_canonical)
 }
 
-fn normalize_remote_allowed_path(
-    access_root: &str,
-    requested_path: &str,
-) -> Result<String, CentralSkillsError> {
-    let root = normalize_remote_posix_path(access_root)?;
-    let requested = requested_path.trim();
-    let candidate = if requested.is_empty() {
-        root.clone()
-    } else if requested.starts_with('/') {
-        normalize_remote_posix_path(requested)?
-    } else {
-        normalize_remote_posix_path(&format!("{}/{}", root.trim_end_matches('/'), requested))?
-    };
-    if !remote_path_is_within(&root, &candidate) {
-        return Err(CentralSkillsError::PathEscapesSkillRoot {
-            path: candidate,
-            root,
-        });
-    }
-    Ok(candidate)
-}
-
-fn normalize_remote_posix_path(path: &str) -> Result<String, CentralSkillsError> {
-    let trimmed = path.trim();
-    if trimmed.is_empty() {
-        return Err(CentralSkillsError::SkillPathContextEmpty);
-    }
-    if trimmed.contains('\\') {
-        return Err(CentralSkillsError::RemotePathBackslash(trimmed.to_string()));
-    }
-    let is_absolute = trimmed.starts_with('/');
-    let mut segments = Vec::new();
-    for segment in trimmed.split('/') {
-        if segment.is_empty() || segment == "." {
-            continue;
-        }
-        if segment == ".." {
-            return Err(CentralSkillsError::RemoteParentTraversal(
-                trimmed.to_string(),
-            ));
-        }
-        segments.push(segment);
-    }
-    let joined = segments.join("/");
-    Ok(match (is_absolute, joined.is_empty()) {
-        (true, true) => "/".to_string(),
-        (true, false) => format!("/{}", joined),
-        (false, true) => ".".to_string(),
-        (false, false) => joined,
-    })
-}
-
-fn remote_path_is_within(root: &str, candidate: &str) -> bool {
-    if root == "/" {
-        return candidate.starts_with('/');
-    }
-    candidate == root || candidate.starts_with(&format!("{root}/"))
-}
-
 #[cfg(test)]
 mod path_guard_tests {
+    use std::sync::Arc;
+
+    use crate::targets::{
+        ConnectedRemoteTarget, ConnectedSshTarget, RemoteTargetConfig, SshAuthMethod,
+    };
+    use crate::test_support::FakeRunner;
+
     use super::*;
     use tempfile::TempDir;
+
+    fn fake_remote_connection(runner: Arc<FakeRunner>) -> ConnectedRemoteTarget {
+        let target = RemoteTargetConfig {
+            id: "ssh-test".to_string(),
+            label: "SSH test".to_string(),
+            host: "example.invalid".to_string(),
+            username: "alice".to_string(),
+            port: 22,
+            auth_method: SshAuthMethod::Key,
+            key_path: "~/.ssh/id_ed25519".to_string(),
+            credential_key: None,
+            protected_password: None,
+            password: None,
+            remote_home: "/home/alice".to_string(),
+            remote_os: "Linux".to_string(),
+            symlink_enabled: true,
+        };
+        ConnectedRemoteTarget::Ssh(ConnectedSshTarget::for_tests_with_runner(target, runner))
+    }
 
     #[test]
     fn local_guard_allows_file_within_skill_root() {
@@ -575,25 +535,145 @@ mod path_guard_tests {
         assert!(error.to_string().contains("escapes skill root"));
     }
 
+    #[cfg(unix)]
     #[test]
-    fn remote_guard_blocks_parent_traversal() {
-        let error = normalize_remote_allowed_path(
-            "/home/alice/.claude/skills/demo",
-            "/home/alice/.claude/skills/../.ssh/id_rsa",
-        )
-        .unwrap_err();
+    fn local_guard_allows_contained_final_and_intermediate_symlinks() {
+        use std::os::unix::fs::symlink;
 
-        assert!(error.to_string().contains("parent traversal"));
+        let temp = TempDir::new().unwrap();
+        let skill_dir = temp.path().join("skill");
+        let real_dir = skill_dir.join("real");
+        std::fs::create_dir_all(&real_dir).unwrap();
+        let real_file = real_dir.join("README.md");
+        std::fs::write(&real_file, "contained").unwrap();
+        let final_link = skill_dir.join("final-link.md");
+        let intermediate_link = skill_dir.join("docs");
+        symlink(&real_file, &final_link).unwrap();
+        symlink(&real_dir, &intermediate_link).unwrap();
+
+        assert_eq!(
+            read_file_by_path_impl(&final_link.to_string_lossy(), &skill_dir.to_string_lossy())
+                .unwrap(),
+            "contained"
+        );
+        assert_eq!(
+            read_file_by_path_impl("docs/README.md", &skill_dir.to_string_lossy()).unwrap(),
+            "contained"
+        );
     }
 
+    #[cfg(unix)]
     #[test]
-    fn remote_guard_allows_file_within_skill_root() {
-        let allowed = normalize_remote_allowed_path(
-            "/home/alice/.claude/skills/demo",
-            "/home/alice/.claude/skills/demo/docs/README.md",
-        )
-        .unwrap();
+    fn local_guard_blocks_intermediate_symlink_escape() {
+        use std::os::unix::fs::symlink;
 
-        assert_eq!(allowed, "/home/alice/.claude/skills/demo/docs/README.md");
+        let temp = TempDir::new().unwrap();
+        let skill_dir = temp.path().join("skill");
+        let outside_dir = temp.path().join("outside");
+        std::fs::create_dir_all(&skill_dir).unwrap();
+        std::fs::create_dir_all(&outside_dir).unwrap();
+        std::fs::write(outside_dir.join("secret.txt"), "secret").unwrap();
+        symlink(&outside_dir, skill_dir.join("docs")).unwrap();
+
+        let error =
+            read_file_by_path_impl("docs/secret.txt", &skill_dir.to_string_lossy()).unwrap_err();
+
+        assert!(matches!(
+            error,
+            CentralSkillsError::PathEscapesSkillRoot { .. }
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_guard_allows_symlink_root_and_explicit_contained_directory_link() {
+        use std::os::unix::fs::symlink;
+
+        let temp = TempDir::new().unwrap();
+        let canonical_root = temp.path().join("canonical-skill");
+        let real_docs = canonical_root.join("real-docs");
+        std::fs::create_dir_all(&real_docs).unwrap();
+        std::fs::write(real_docs.join("README.md"), "docs").unwrap();
+        let install_root = temp.path().join("installed-skill");
+        symlink(&canonical_root, &install_root).unwrap();
+        symlink(&real_docs, canonical_root.join("docs")).unwrap();
+
+        assert_eq!(
+            read_file_by_path_impl("docs/README.md", &install_root.to_string_lossy()).unwrap(),
+            "docs"
+        );
+
+        let explicit = list_directory_tree_impl("docs", &install_root.to_string_lossy()).unwrap();
+        assert_eq!(explicit.len(), 1);
+        assert_eq!(explicit[0].name, "README.md");
+
+        let discovered = list_directory_tree_impl("", &install_root.to_string_lossy()).unwrap();
+        let link = discovered
+            .iter()
+            .find(|entry| entry.name == "docs")
+            .unwrap();
+        assert_eq!(link.file_type, "symlink");
+        assert!(link.children.is_empty());
+    }
+
+    #[tokio::test]
+    async fn remote_read_uses_canonical_candidate_for_inspect_and_read() {
+        let runner = Arc::new(FakeRunner::new());
+        runner.push_success("/canonical/skill/docs/README.md\0");
+        runner.push_success("file\t\n");
+        runner.push_success("canonical content");
+        let connection = fake_remote_connection(runner.clone());
+
+        let content =
+            read_remote_file_by_path_impl(&connection, "docs-link/README.md", "/install/skill")
+                .await
+                .unwrap();
+
+        assert_eq!(content, "canonical content");
+        let calls = runner.calls();
+        assert_eq!(calls.len(), 3);
+        for call in &calls[1..] {
+            let command = call.args.last().unwrap();
+            assert!(command.contains("/canonical/skill/docs/README.md"));
+            assert!(!command.contains("docs-link"));
+        }
+    }
+
+    #[tokio::test]
+    async fn remote_directory_entrypoint_uses_canonical_candidate() {
+        let runner = Arc::new(FakeRunner::new());
+        runner.push_success("/canonical/skill/docs\0");
+        runner.push_success("dir\t\n");
+        runner.push_success("README.md\tfile\t\n");
+        let connection = fake_remote_connection(runner.clone());
+
+        let entries = list_remote_directory_tree_impl(&connection, "docs-link", "/install/skill")
+            .await
+            .unwrap();
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].path, "/canonical/skill/docs/README.md");
+        let calls = runner.calls();
+        assert_eq!(calls.len(), 3);
+        for call in &calls[1..] {
+            let command = call.args.last().unwrap();
+            assert!(command.contains("/canonical/skill/docs"));
+            assert!(!command.contains("docs-link"));
+        }
+    }
+
+    #[tokio::test]
+    async fn remote_canonical_escape_prevents_inspect_and_read() {
+        let runner = Arc::new(FakeRunner::new());
+        runner.push_output(44, "", "sensitive resolver detail");
+        let connection = fake_remote_connection(runner.clone());
+
+        let error = read_remote_file_by_path_impl(&connection, "docs/passwd", "/install/skill")
+            .await
+            .unwrap_err();
+
+        assert!(matches!(error, CentralSkillsError::RemoteCanonicalEscape));
+        assert_eq!(runner.calls().len(), 1);
+        assert!(!error.to_string().contains("sensitive"));
     }
 }

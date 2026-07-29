@@ -20,9 +20,15 @@ mod util;
 #[cfg(test)]
 mod tests;
 
-pub use pool::*;
+pub(crate) use migrations::{
+    inspect_database_integrity, open_database_for_startup, DatabaseOpenFailure, DatabaseOpenStage,
+};
+pub use migrations::{open_database, open_database_for_remote_home};
+#[cfg(test)]
+pub(crate) use pool::{create_memory_pool, create_memory_pool_single_conn, create_pool};
 pub use repos::agents_repo::*;
 pub use repos::collections_repo::*;
+pub use repos::fs_db_operations_repo::*;
 pub use repos::installations_repo::*;
 pub use repos::observations_repo::*;
 pub use repos::operation_logs_repo::*;
@@ -32,6 +38,9 @@ pub use repos::repositories_repo::*;
 pub use repos::saved_views_repo::*;
 pub use repos::scan_dirs_repo::*;
 pub use repos::settings_repo::*;
+pub use repos::skill_relations_repo::{
+    repair_orphan_skill_relations, OrphanRelationReport, OrphanRepairReport,
+};
 pub use repos::skills_repo::*;
 pub use repos::tag_groups_repo::*;
 pub use repos::tags_repo::*;

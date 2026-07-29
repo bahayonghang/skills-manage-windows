@@ -449,7 +449,6 @@ pub fn remote_repos_root(remote_home: &str) -> String {
 mod tests {
     use super::*;
     use std::ffi::OsString;
-    #[cfg(any(windows, target_os = "macos"))]
     use tempfile::TempDir;
 
     #[cfg(windows)]

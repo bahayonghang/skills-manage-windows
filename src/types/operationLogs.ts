@@ -44,3 +44,20 @@ export interface OperationLogPage {
   limit: number;
   offset: number;
 }
+
+export interface PendingFsDbOperation {
+  operationId: string;
+  targetId: string;
+  targetKind: OperationLogTargetKind;
+  operationKind: "central_delete" | "central_update";
+  skillId: string;
+  phase:
+    | "prepared"
+    | "fs_staged"
+    | "fs_swapped"
+    | "db_committed"
+    | "copies_pending";
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  updatedAt: string;
+}

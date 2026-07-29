@@ -5,7 +5,7 @@
 //! service inputs and operation-log entries.
 
 use serde_json::json;
-use std::sync::{atomic::Ordering, Arc};
+use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 use tauri::{AppHandle, State};
 
@@ -16,7 +16,8 @@ use crate::services::github_import;
 use crate::services::portable_state::{
     build_remote_catalog, emit_portability_progress, export_skillport_state_impl,
     import_skillport_state_for_target, parse_manifest, preview_skillport_state_import_impl,
-    PortabilityProgressUpdate, PortableStateError, PortableStateTargetContext,
+    read_skillport_state_file, write_skillport_state_file, PortabilityProgressUpdate,
+    PortableStateError, PortableStateTargetContext,
 };
 use crate::targets::{ActiveTarget, TargetKind};
 use crate::AppState;
@@ -31,21 +32,34 @@ pub use crate::services::portable_state::{
     SkillportStateSkillPreview, SkillportStateSourcePreview, SourcePreviewStatus,
 };
 
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillportStateImportFilePreview {
+    pub json: String,
+    pub preview: SkillportStateImportPreview,
+}
+
 #[tauri::command]
 pub async fn export_skillport_state(
     app: AppHandle,
     state: State<'_, AppState>,
+    job_id: String,
     _options: Option<SkillportStateExportOptions>,
-) -> Result<String, String> {
-    state.portable_state_cancel.store(false, Ordering::SeqCst);
-    let cancel = Arc::clone(&state.portable_state_cancel);
+) -> crate::ipc_error::IpcResult<String> {
+    crate::ipc_boundary!(async move {
+    let lease = state
+        .portable_state_jobs
+        .acquire(&job_id)
+        .map_err(|e| e.to_string())?;
     let started_at = Instant::now();
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
     let export_target = portable_state_target_context(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     emit_portability_progress(
         &app,
+        lease.job_id(),
         PortabilityProgressUpdate {
             phase: SkillportStatePortabilityPhase::Exporting,
             status: SkillportStatePortabilityStatus::Running,
@@ -56,12 +70,19 @@ pub async fn export_skillport_state(
             error: None,
         },
     );
-    let result =
-        export_skillport_state_impl(&pool, Some(&export_target), Some(&app), Some(&cancel)).await;
+    let result = export_skillport_state_impl(
+        &pool,
+        Some(&export_target),
+        lease.job_id(),
+        Some(&app),
+        Some(lease.cancel_flag()),
+    )
+    .await;
     match &result {
         Ok(payload) => {
             emit_portability_progress(
                 &app,
+                lease.job_id(),
                 PortabilityProgressUpdate {
                     phase: SkillportStatePortabilityPhase::Exporting,
                     status: SkillportStatePortabilityStatus::Completed,
@@ -101,6 +122,7 @@ pub async fn export_skillport_state(
             };
             emit_portability_progress(
                 &app,
+                lease.job_id(),
                 PortabilityProgressUpdate {
                     phase: SkillportStatePortabilityPhase::Exporting,
                     status,
@@ -128,22 +150,52 @@ pub async fn export_skillport_state(
         }
     }
     result.map_err(|e| e.to_string())
+
+    }
+    .await)
 }
 
 #[tauri::command]
 pub async fn preview_skillport_state_import(
     app: AppHandle,
     state: State<'_, AppState>,
+    job_id: String,
     json: String,
+) -> crate::ipc_error::IpcResult<SkillportStateImportPreview> {
+    crate::ipc_boundary!(
+        async move {
+            let lease = state
+                .portable_state_jobs
+                .acquire(&job_id)
+                .map_err(|e| e.to_string())?;
+            preview_skillport_state_import_established(
+                &app,
+                state.inner(),
+                json,
+                lease.job_id(),
+                lease.cancel_flag(),
+            )
+            .await
+        }
+        .await
+    )
+}
+
+async fn preview_skillport_state_import_established(
+    app: &AppHandle,
+    state: &AppState,
+    json: String,
+    job_id: &str,
+    cancel: &AtomicBool,
 ) -> Result<SkillportStateImportPreview, String> {
-    state.portable_state_cancel.store(false, Ordering::SeqCst);
-    let cancel = Arc::clone(&state.portable_state_cancel);
     let started_at = Instant::now();
-    let active_target = state.active_target().await?;
+    let request_context = state.resolve_target_context().await?;
+    let active_target = request_context.target().clone();
     let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
+    let pool = request_context.db().clone();
     emit_portability_progress(
-        &app,
+        app,
+        job_id,
         PortabilityProgressUpdate {
             phase: SkillportStatePortabilityPhase::Previewing,
             status: SkillportStatePortabilityStatus::Running,
@@ -160,8 +212,9 @@ pub async fn preview_skillport_state_import(
                 &state.db,
                 state.secrets.as_ref(),
                 &manifest,
-                Some(&app),
-                Some(&cancel),
+                job_id,
+                Some(app),
+                Some(cancel),
             )
             .await
             {
@@ -169,8 +222,9 @@ pub async fn preview_skillport_state_import(
                     &pool,
                     &manifest,
                     Some(&remote_catalog),
-                    Some(&app),
-                    Some(&cancel),
+                    job_id,
+                    Some(app),
+                    Some(cancel),
                 )
                 .await
                 {
@@ -185,7 +239,8 @@ pub async fn preview_skillport_state_import(
     match &result {
         Ok(preview) => {
             emit_portability_progress(
-                &app,
+                app,
+                job_id,
                 PortabilityProgressUpdate {
                     phase: SkillportStatePortabilityPhase::Previewing,
                     status: SkillportStatePortabilityStatus::Completed,
@@ -221,7 +276,8 @@ pub async fn preview_skillport_state_import(
                 SkillportStatePortabilityStatus::Failed
             };
             emit_portability_progress(
-                &app,
+                app,
+                job_id,
                 PortabilityProgressUpdate {
                     phase: SkillportStatePortabilityPhase::Previewing,
                     status,
@@ -252,161 +308,230 @@ pub async fn preview_skillport_state_import(
 }
 
 #[tauri::command]
+pub async fn preview_skillport_state_import_file(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    job_id: String,
+    path: String,
+) -> crate::ipc_error::IpcResult<SkillportStateImportFilePreview> {
+    crate::ipc_boundary!(
+        async move {
+            let lease = state
+                .portable_state_jobs
+                .acquire(&job_id)
+                .map_err(|e| e.to_string())?;
+            let json = read_skillport_state_file(path.into())
+                .await
+                .map_err(|error| error.to_string())?;
+            let preview = preview_skillport_state_import_established(
+                &app,
+                state.inner(),
+                json.clone(),
+                lease.job_id(),
+                lease.cancel_flag(),
+            )
+            .await?;
+            Ok(SkillportStateImportFilePreview { json, preview })
+        }
+        .await
+    )
+}
+
+#[tauri::command]
+pub async fn save_skillport_state_export(
+    path: String,
+    json: String,
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary!(
+        async move {
+            write_skillport_state_file(path.into(), json)
+                .await
+                .map_err(|error| error.to_string())
+        }
+        .await
+    )
+}
+
+#[tauri::command]
 pub async fn import_skillport_state(
     app: AppHandle,
     state: State<'_, AppState>,
+    job_id: String,
     json: String,
     resolutions: Vec<SkillportStateImportResolution>,
-) -> Result<SkillportStateImportResult, String> {
-    state.portable_state_cancel.store(false, Ordering::SeqCst);
-    let cancel = Arc::clone(&state.portable_state_cancel);
-    let started_at = Instant::now();
-    let active_target = state.active_target().await?;
-    let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
-    emit_portability_progress(
-        &app,
-        PortabilityProgressUpdate {
-            phase: SkillportStatePortabilityPhase::Importing,
-            status: SkillportStatePortabilityStatus::Running,
-            total: 1,
-            completed: 0,
-            message: Some("Preparing SkillPort state import"),
-            current_item: None,
-            error: None,
-        },
-    );
-    let result = match parse_manifest(&json) {
-        Ok(manifest) => {
-            let auth = github_import::github_direct_auth_from_secret_store(
-                &state.db,
-                state.secrets.as_ref(),
-            )
-            .await
-            .map_err(PortableStateError::GithubImport);
-            match auth {
-                Ok(auth) => {
-                    import_skillport_state_for_target(
-                        &pool,
-                        &active_target,
-                        auth.as_deref(),
-                        &manifest,
-                        resolutions,
-                        Some(&app),
-                        Some(&cancel),
-                    )
-                    .await
-                }
-                Err(error) => Err(error),
-            }
-        }
-        Err(error) => Err(error),
-    };
-    match &result {
-        Ok(import_result) => {
-            let status = if import_result.cancelled {
-                "cancelled"
-            } else {
-                match (
-                    import_result.imported_skills.len() + import_result.sources_added,
-                    import_result.failed_skills.len(),
-                ) {
-                    (_, 0) => "succeeded",
-                    (0, _) => "failed",
-                    _ => "partial",
-                }
-            };
+) -> crate::ipc_error::IpcResult<SkillportStateImportResult> {
+    crate::ipc_boundary!(
+        async move {
+            let lease = state
+                .portable_state_jobs
+                .acquire(&job_id)
+                .map_err(|e| e.to_string())?;
+            let started_at = Instant::now();
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let target_context = target_context_from_active_target(&active_target);
+            let pool = request_context.db().clone();
             emit_portability_progress(
                 &app,
+                lease.job_id(),
                 PortabilityProgressUpdate {
                     phase: SkillportStatePortabilityPhase::Importing,
-                    status: if import_result.cancelled {
-                        SkillportStatePortabilityStatus::Cancelled
-                    } else if import_result.failed_skills.is_empty() {
-                        SkillportStatePortabilityStatus::Completed
-                    } else {
-                        SkillportStatePortabilityStatus::Failed
-                    },
-                    total: import_result.imported_skills.len()
-                        + import_result.failed_skills.len()
-                        + import_result.skipped_skills.len(),
-                    completed: import_result.imported_skills.len()
-                        + import_result.failed_skills.len()
-                        + import_result.skipped_skills.len(),
-                    message: Some("SkillPort state import finished"),
+                    status: SkillportStatePortabilityStatus::Running,
+                    total: 1,
+                    completed: 0,
+                    message: Some("Preparing SkillPort state import"),
                     current_item: None,
                     error: None,
                 },
             );
-            record_operation_log_best_effort(
-                &state.db,
-                target_context.clone(),
-                OperationLogEvent::new(
-                    "import_export",
-                    "state.import",
-                    status,
-                    format!(
-                        "Imported {} skill(s), {} failed",
-                        import_result.imported_skills.len(),
-                        import_result.failed_skills.len()
-                    ),
-                )
-                .subject("state", "skillport", "SkillPort state")
-                .details(json!({
-                    "sourcesAdded": import_result.sources_added,
-                    "sourcesSkipped": import_result.sources_skipped,
-                    "importedSkills": &import_result.imported_skills,
-                    "skippedSkills": &import_result.skipped_skills,
-                    "failedSkills": &import_result.failed_skills,
-                    "tagsRestored": import_result.tags_restored,
-                    "cancelled": import_result.cancelled,
-                }))
-                .duration_ms(started_at.elapsed().as_millis() as i64),
-            )
-            .await;
-        }
-        Err(error) => {
-            let error_text = error.to_string();
-            let status = if matches!(error, PortableStateError::Cancelled) {
-                SkillportStatePortabilityStatus::Cancelled
-            } else {
-                SkillportStatePortabilityStatus::Failed
+            let result = match parse_manifest(&json) {
+                Ok(manifest) => {
+                    let auth = github_import::github_direct_auth_from_secret_store(
+                        &state.db,
+                        state.secrets.as_ref(),
+                    )
+                    .await
+                    .map_err(PortableStateError::GithubImport);
+                    match auth {
+                        Ok(auth) => {
+                            import_skillport_state_for_target(
+                                &pool,
+                                &active_target,
+                                auth.as_deref(),
+                                &manifest,
+                                resolutions,
+                                lease.job_id(),
+                                Some(&app),
+                                Some(lease.cancel_flag()),
+                            )
+                            .await
+                        }
+                        Err(error) => Err(error),
+                    }
+                }
+                Err(error) => Err(error),
             };
-            emit_portability_progress(
-                &app,
-                PortabilityProgressUpdate {
-                    phase: SkillportStatePortabilityPhase::Importing,
-                    status,
-                    total: 1,
-                    completed: 0,
-                    message: None,
-                    current_item: None,
-                    error: Some(&error_text),
-                },
-            );
-            record_operation_log_best_effort(
-                &state.db,
-                target_context,
-                OperationLogEvent::new(
-                    "import_export",
-                    "state.import",
-                    "failed",
-                    "Failed to import portable SkillPort state",
-                )
-                .subject("state", "skillport", "SkillPort state")
-                .error(&error_text)
-                .duration_ms(started_at.elapsed().as_millis() as i64),
-            )
-            .await;
+            match &result {
+                Ok(import_result) => {
+                    let status = if import_result.cancelled {
+                        "cancelled"
+                    } else {
+                        match (
+                            import_result.imported_skills.len() + import_result.sources_added,
+                            import_result.failed_skills.len(),
+                        ) {
+                            (_, 0) => "succeeded",
+                            (0, _) => "failed",
+                            _ => "partial",
+                        }
+                    };
+                    emit_portability_progress(
+                        &app,
+                        lease.job_id(),
+                        PortabilityProgressUpdate {
+                            phase: SkillportStatePortabilityPhase::Importing,
+                            status: if import_result.cancelled {
+                                SkillportStatePortabilityStatus::Cancelled
+                            } else if import_result.failed_skills.is_empty() {
+                                SkillportStatePortabilityStatus::Completed
+                            } else {
+                                SkillportStatePortabilityStatus::Failed
+                            },
+                            total: import_result.imported_skills.len()
+                                + import_result.failed_skills.len()
+                                + import_result.skipped_skills.len(),
+                            completed: import_result.imported_skills.len()
+                                + import_result.failed_skills.len()
+                                + import_result.skipped_skills.len(),
+                            message: Some("SkillPort state import finished"),
+                            current_item: None,
+                            error: None,
+                        },
+                    );
+                    record_operation_log_best_effort(
+                        &state.db,
+                        target_context.clone(),
+                        OperationLogEvent::new(
+                            "import_export",
+                            "state.import",
+                            status,
+                            format!(
+                                "Imported {} skill(s), {} failed",
+                                import_result.imported_skills.len(),
+                                import_result.failed_skills.len()
+                            ),
+                        )
+                        .subject("state", "skillport", "SkillPort state")
+                        .details(json!({
+                            "sourcesAdded": import_result.sources_added,
+                            "sourcesSkipped": import_result.sources_skipped,
+                            "importedSkills": &import_result.imported_skills,
+                            "skippedSkills": &import_result.skipped_skills,
+                            "failedSkills": &import_result.failed_skills,
+                            "tagsRestored": import_result.tags_restored,
+                            "cancelled": import_result.cancelled,
+                        }))
+                        .duration_ms(started_at.elapsed().as_millis() as i64),
+                    )
+                    .await;
+                }
+                Err(error) => {
+                    let error_text = error.to_string();
+                    let status = if matches!(error, PortableStateError::Cancelled) {
+                        SkillportStatePortabilityStatus::Cancelled
+                    } else {
+                        SkillportStatePortabilityStatus::Failed
+                    };
+                    emit_portability_progress(
+                        &app,
+                        lease.job_id(),
+                        PortabilityProgressUpdate {
+                            phase: SkillportStatePortabilityPhase::Importing,
+                            status,
+                            total: 1,
+                            completed: 0,
+                            message: None,
+                            current_item: None,
+                            error: Some(&error_text),
+                        },
+                    );
+                    record_operation_log_best_effort(
+                        &state.db,
+                        target_context,
+                        OperationLogEvent::new(
+                            "import_export",
+                            "state.import",
+                            "failed",
+                            "Failed to import portable SkillPort state",
+                        )
+                        .subject("state", "skillport", "SkillPort state")
+                        .error(&error_text)
+                        .duration_ms(started_at.elapsed().as_millis() as i64),
+                    )
+                    .await;
+                }
+            }
+            result.map_err(|e| e.to_string())
         }
-    }
-    result.map_err(|e| e.to_string())
+        .await
+    )
 }
 
 #[tauri::command]
-pub async fn cancel_skillport_state_portability(state: State<'_, AppState>) -> Result<(), String> {
-    state.portable_state_cancel.store(true, Ordering::SeqCst);
-    Ok(())
+pub async fn cancel_skillport_state_portability(
+    state: State<'_, AppState>,
+    job_id: String,
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary!(
+        async move {
+            state
+                .portable_state_jobs
+                .cancel(&job_id)
+                .map_err(|e| e.to_string())?;
+            Ok(())
+        }
+        .await
+    )
 }
 
 fn portable_state_target_context(active_target: &ActiveTarget) -> PortableStateTargetContext {

@@ -2,13 +2,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::db::{self, DbPool};
-use crate::targets::{
-    connect_remote_target, ActiveTarget, ConnectedRemoteTarget, RemoteTargetConfig,
-};
+use crate::targets::{connect_remote_target, ActiveTarget, RemoteTargetConfig};
 
-use super::common::{
-    installation_details, run_blocking_fs, shared_root_agent_ids, unique_agent_ids,
-};
+use super::common::{installation_details, shared_root_agent_ids, unique_agent_ids};
 use super::error::CentralSkillsError;
 use super::types::{
     BatchDeleteCentralSkillPreviewResult, BatchDeleteCentralSkillRequest,
@@ -23,16 +19,6 @@ pub use repository::{
     delete_skill_repository_ssh_impl, preview_delete_skill_repository_impl,
     preview_delete_skill_repository_ssh_impl,
 };
-
-#[cfg(windows)]
-fn remove_symlink_path(path: &Path) -> Result<(), CentralSkillsError> {
-    std::fs::remove_dir(path).map_err(|e| CentralSkillsError::io("Failed to remove symlink", e))
-}
-
-#[cfg(not(windows))]
-fn remove_symlink_path(path: &Path) -> Result<(), CentralSkillsError> {
-    std::fs::remove_file(path).map_err(|e| CentralSkillsError::io("Failed to remove symlink", e))
-}
 
 fn skill_delete_dir(skill: &db::Skill) -> Result<PathBuf, CentralSkillsError> {
     skill
@@ -63,15 +49,9 @@ fn ensure_child_path(root: &Path, child: &Path, label: &str) -> Result<(), Centr
     Ok(())
 }
 
-fn remove_skill_dir(path: &Path) -> Result<(), CentralSkillsError> {
+fn validate_skill_dir_removal(path: &Path) -> Result<(), CentralSkillsError> {
     match std::fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.file_type().is_symlink() => remove_symlink_path(path),
-        Ok(metadata) if metadata.is_dir() => std::fs::remove_dir_all(path).map_err(|e| {
-            CentralSkillsError::io(
-                format!("Failed to remove skill directory '{}'", path.display()),
-                e,
-            )
-        }),
+        Ok(metadata) if metadata.file_type().is_symlink() || metadata.is_dir() => Ok(()),
         Ok(_) => Err(CentralSkillsError::NotADirectoryDeleteRefused(
             path.display().to_string(),
         )),
@@ -83,23 +63,13 @@ fn remove_skill_dir(path: &Path) -> Result<(), CentralSkillsError> {
     }
 }
 
-fn remove_installation_path(
+fn validate_installation_removal(
     installation: &db::SkillInstallation,
 ) -> Result<(), CentralSkillsError> {
     let path = Path::new(&installation.installed_path);
     match std::fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.file_type().is_symlink() => remove_symlink_path(path),
-        Ok(metadata) if metadata.is_dir() && installation.link_type == "copy" => {
-            std::fs::remove_dir_all(path).map_err(|e| {
-                CentralSkillsError::io(
-                    format!(
-                        "Failed to remove copied skill directory '{}'",
-                        path.display()
-                    ),
-                    e,
-                )
-            })
-        }
+        Ok(metadata) if metadata.file_type().is_symlink() => Ok(()),
+        Ok(metadata) if metadata.is_dir() && installation.link_type == "copy" => Ok(()),
         Ok(metadata) if metadata.is_dir() => Err(CentralSkillsError::NotAManagedCopy(
             path.display().to_string(),
         )),
@@ -143,6 +113,61 @@ fn normalize_remote_path(path: &str) -> Result<String, CentralSkillsError> {
     } else {
         Ok(format!("/{}", segments.join("/")))
     }
+}
+
+async fn insert_delete_operation(
+    pool: &DbPool,
+    target: &ActiveTarget,
+    skill_id: &str,
+    batch_id: Option<&str>,
+    operation_id: &str,
+    manifest: &crate::services::central_operation::DeleteManifest,
+) -> Result<(), CentralSkillsError> {
+    let manifest_json = serde_json::to_string(
+        &crate::services::central_operation::OperationManifest::Delete(manifest.clone()),
+    )
+    .map_err(|error| {
+        crate::services::central_operation::CentralOperationError::InvalidManifest(
+            error.to_string(),
+        )
+    })?;
+    let target_kind = match target {
+        ActiveTarget::Local => "local",
+        ActiveTarget::Ssh(_) => "ssh",
+        ActiveTarget::Wsl(_) => "wsl",
+    };
+    let old_fingerprint = manifest
+        .paths
+        .iter()
+        .find_map(|path| path.fingerprint.as_deref());
+    db::insert_fs_db_operation(
+        pool,
+        db::NewFsDbOperation {
+            id: operation_id,
+            batch_id,
+            target_id: target.id(),
+            target_kind,
+            operation_kind: crate::services::central_operation::OperationKind::CentralDelete
+                .as_str(),
+            skill_id,
+            manifest_version: crate::services::central_operation::MANIFEST_VERSION,
+            manifest_json: &manifest_json,
+            old_fingerprint,
+            new_fingerprint: None,
+        },
+    )
+    .await?;
+    Ok(())
+}
+
+async fn record_recovery_error(
+    pool: &DbPool,
+    operation_id: &str,
+    error: &crate::services::central_operation::CentralOperationError,
+) -> Result<(), CentralSkillsError> {
+    db::record_fs_db_operation_error(pool, operation_id, error.code(), &error.redacted_message())
+        .await?;
+    Ok(())
 }
 
 pub(super) fn ensure_remote_child_path(
@@ -265,31 +290,31 @@ pub async fn preview_delete_central_skills_ssh_impl(
     Ok(BatchDeleteCentralSkillPreviewResult { previews, failed })
 }
 
-async fn remove_remote_installation_path(
-    connection: &ConnectedRemoteTarget,
-    installation: &db::SkillInstallation,
-    agents_by_id: &HashMap<String, db::Agent>,
-) -> Result<(), CentralSkillsError> {
-    let agent = agents_by_id
-        .get(&installation.agent_id)
-        .ok_or_else(|| CentralSkillsError::AgentNotFound(installation.agent_id.clone()))?;
-    let path = ensure_remote_child_path(
-        &agent.global_skills_dir,
-        &installation.installed_path,
-        &installation.agent_id,
-    )?;
-    connection
-        .remove_tree(&path)
-        .await
-        .map_err(|e| CentralSkillsError::Remote(e.to_string()))
-}
-
 pub async fn delete_central_skill_remote_impl(
     pool: &DbPool,
     active_target: &ActiveTarget,
     skill_id: &str,
     remove_agent_ids: &[String],
 ) -> Result<DeleteCentralSkillResult, CentralSkillsError> {
+    delete_central_skill_remote_with_batch(pool, active_target, skill_id, remove_agent_ids, None)
+        .await
+}
+
+async fn delete_central_skill_remote_with_batch(
+    pool: &DbPool,
+    active_target: &ActiveTarget,
+    skill_id: &str,
+    remove_agent_ids: &[String],
+    batch_id: Option<&str>,
+) -> Result<DeleteCentralSkillResult, CentralSkillsError> {
+    let _mutation_guard = crate::services::central_mutation::acquire_target_mutation_guard(
+        active_target,
+        "delete Central skill",
+        crate::services::central_mutation::DEFAULT_CENTRAL_MUTATION_TIMEOUT,
+    )
+    .await?;
+    crate::services::central_operation::recover_pending_operations_under_guard(pool, active_target)
+        .await?;
     let skill = db::get_skill_by_id(pool, skill_id)
         .await?
         .ok_or_else(|| CentralSkillsError::SkillNotFound(skill_id.to_string()))?;
@@ -332,15 +357,30 @@ pub async fn delete_central_skill_remote_impl(
 
     let mut removed_agent_ids = Vec::new();
     let mut retained_agent_ids = Vec::new();
+    let mut removable_paths = Vec::new();
     for installation in &installations {
         match installation.link_type.as_str() {
             "copy" if remove_agent_set.contains(&installation.agent_id) => {
-                remove_remote_installation_path(&connection, installation, &agents_by_id).await?;
+                let agent = agents_by_id.get(&installation.agent_id).ok_or_else(|| {
+                    CentralSkillsError::AgentNotFound(installation.agent_id.clone())
+                })?;
+                removable_paths.push(ensure_remote_child_path(
+                    &agent.global_skills_dir,
+                    &installation.installed_path,
+                    &installation.agent_id,
+                )?);
                 removed_agent_ids.push(installation.agent_id.clone());
             }
             "copy" => retained_agent_ids.push(installation.agent_id.clone()),
             "symlink" => {
-                remove_remote_installation_path(&connection, installation, &agents_by_id).await?;
+                let agent = agents_by_id.get(&installation.agent_id).ok_or_else(|| {
+                    CentralSkillsError::AgentNotFound(installation.agent_id.clone())
+                })?;
+                removable_paths.push(ensure_remote_child_path(
+                    &agent.global_skills_dir,
+                    &installation.installed_path,
+                    &installation.agent_id,
+                )?);
                 removed_agent_ids.push(installation.agent_id.clone());
             }
             "native" => {
@@ -351,12 +391,38 @@ pub async fn delete_central_skill_remote_impl(
             }
         }
     }
-
-    connection
-        .remove_tree(&central_path)
-        .await
-        .map_err(|e| CentralSkillsError::Remote(e.to_string()))?;
-    db::delete_skill(pool, skill_id).await?;
+    removable_paths.push(central_path.clone());
+    let operation_id = uuid::Uuid::new_v4().to_string();
+    let manifest = crate::services::central_operation::build_remote_delete_manifest(
+        &connection,
+        &operation_id,
+        removable_paths,
+    )
+    .await?;
+    insert_delete_operation(
+        pool,
+        active_target,
+        skill_id,
+        batch_id,
+        &operation_id,
+        &manifest,
+    )
+    .await?;
+    if let Err(error) =
+        crate::services::central_operation::stage_delete_remote(&connection, &manifest).await
+    {
+        record_recovery_error(pool, &operation_id, &error).await?;
+        return Err(error.into());
+    }
+    db::transition_fs_db_operation(pool, &operation_id, "prepared", "fs_staged").await?;
+    db::commit_delete_fs_db_operation(pool, &operation_id, skill_id).await?;
+    if let Err(error) =
+        crate::services::central_operation::finalize_delete_remote(&connection, &manifest).await
+    {
+        record_recovery_error(pool, &operation_id, &error).await?;
+        return Err(error.into());
+    }
+    db::transition_fs_db_operation(pool, &operation_id, "db_committed", "completed").await?;
 
     Ok(DeleteCentralSkillResult {
         removed_central_path: central_path,
@@ -401,12 +467,14 @@ pub async fn delete_central_skills_remote_impl(
 
     let mut succeeded = Vec::new();
     let mut failed = Vec::new();
+    let batch_id = uuid::Uuid::new_v4().to_string();
     for request in ordered_requests {
-        match delete_central_skill_remote_impl(
+        match delete_central_skill_remote_with_batch(
             pool,
             active_target,
             &request.skill_id,
             &request.remove_agent_ids,
+            Some(&batch_id),
         )
         .await
         {
@@ -511,9 +579,25 @@ pub async fn delete_central_skill_impl(
     skill_id: &str,
     remove_agent_ids: &[String],
 ) -> Result<DeleteCentralSkillResult, CentralSkillsError> {
-    let _mutation_guard = crate::services::central_mutation::acquire_central_mutation_guard(
+    delete_central_skill_with_batch(pool, skill_id, remove_agent_ids, None).await
+}
+
+async fn delete_central_skill_with_batch(
+    pool: &DbPool,
+    skill_id: &str,
+    remove_agent_ids: &[String],
+    batch_id: Option<&str>,
+) -> Result<DeleteCentralSkillResult, CentralSkillsError> {
+    let active_target = ActiveTarget::Local;
+    let _mutation_guard = crate::services::central_mutation::acquire_target_mutation_guard(
+        &active_target,
         "delete Central skill",
         crate::services::central_mutation::DEFAULT_CENTRAL_MUTATION_TIMEOUT,
+    )
+    .await?;
+    crate::services::central_operation::recover_pending_operations_under_guard(
+        pool,
+        &active_target,
     )
     .await?;
     let skill = db::get_skill_by_id(pool, skill_id)
@@ -547,36 +631,54 @@ pub async fn delete_central_skill_impl(
         }
     }
 
-    let central_skill_dir_for_remove = central_skill_dir.clone();
-    let (removed_agent_ids, retained_agent_ids) =
-        run_blocking_fs("central skill deletion", move || {
-            let mut removed_agent_ids = Vec::new();
-            let mut retained_agent_ids = Vec::new();
-            for installation in &installations {
-                match installation.link_type.as_str() {
-                    "copy" if remove_agent_set.contains(&installation.agent_id) => {
-                        remove_installation_path(installation)?;
-                        removed_agent_ids.push(installation.agent_id.clone());
-                    }
-                    "copy" => retained_agent_ids.push(installation.agent_id.clone()),
-                    "symlink" => {
-                        remove_installation_path(installation)?;
-                        removed_agent_ids.push(installation.agent_id.clone());
-                    }
-                    "native" => {
-                        removed_agent_ids.push(installation.agent_id.clone());
-                    }
-                    _ => {
-                        retained_agent_ids.push(installation.agent_id.clone());
-                    }
-                }
+    let mut removed_agent_ids = Vec::new();
+    let mut retained_agent_ids = Vec::new();
+    let mut removable_paths = Vec::new();
+    for installation in &installations {
+        match installation.link_type.as_str() {
+            "copy" if remove_agent_set.contains(&installation.agent_id) => {
+                validate_installation_removal(installation)?;
+                removable_paths.push(PathBuf::from(&installation.installed_path));
+                removed_agent_ids.push(installation.agent_id.clone());
             }
-
-            remove_skill_dir(&central_skill_dir_for_remove)?;
-            Ok((removed_agent_ids, retained_agent_ids))
-        })
-        .await?;
-    db::delete_skill(pool, skill_id).await?;
+            "copy" => retained_agent_ids.push(installation.agent_id.clone()),
+            "symlink" => {
+                validate_installation_removal(installation)?;
+                removable_paths.push(PathBuf::from(&installation.installed_path));
+                removed_agent_ids.push(installation.agent_id.clone());
+            }
+            "native" => removed_agent_ids.push(installation.agent_id.clone()),
+            _ => retained_agent_ids.push(installation.agent_id.clone()),
+        }
+    }
+    validate_skill_dir_removal(&central_skill_dir)?;
+    removable_paths.push(central_skill_dir.clone());
+    let operation_id = uuid::Uuid::new_v4().to_string();
+    let manifest = crate::services::central_operation::build_local_delete_manifest(
+        &operation_id,
+        removable_paths,
+    )
+    .await?;
+    insert_delete_operation(
+        pool,
+        &active_target,
+        skill_id,
+        batch_id,
+        &operation_id,
+        &manifest,
+    )
+    .await?;
+    if let Err(error) = crate::services::central_operation::stage_delete_local(&manifest).await {
+        record_recovery_error(pool, &operation_id, &error).await?;
+        return Err(error.into());
+    }
+    db::transition_fs_db_operation(pool, &operation_id, "prepared", "fs_staged").await?;
+    db::commit_delete_fs_db_operation(pool, &operation_id, skill_id).await?;
+    if let Err(error) = crate::services::central_operation::finalize_delete_local(&manifest).await {
+        record_recovery_error(pool, &operation_id, &error).await?;
+        return Err(error.into());
+    }
+    db::transition_fs_db_operation(pool, &operation_id, "db_committed", "completed").await?;
 
     Ok(DeleteCentralSkillResult {
         removed_central_path: central_skill_dir.to_string_lossy().into_owned(),
@@ -610,8 +712,16 @@ pub async fn delete_central_skills_impl(
 
     let mut succeeded = Vec::new();
     let mut failed = Vec::new();
+    let batch_id = uuid::Uuid::new_v4().to_string();
     for request in ordered_requests {
-        match delete_central_skill_impl(pool, &request.skill_id, &request.remove_agent_ids).await {
+        match delete_central_skill_with_batch(
+            pool,
+            &request.skill_id,
+            &request.remove_agent_ids,
+            Some(&batch_id),
+        )
+        .await
+        {
             Ok(result) => succeeded.push(BatchDeleteCentralSkillSuccess {
                 skill_id: request.skill_id,
                 removed_central_path: result.removed_central_path,

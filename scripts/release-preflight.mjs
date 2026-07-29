@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -7,8 +8,8 @@ const PLACEHOLDER_PUBKEY = "TAURI_UPDATER_PUBLIC_KEY_PLACEHOLDER_REPLACE_IN_RELE
 
 export function parseArgs(argv) {
   const args = {
-    version: process.env.RELEASE_VERSION || process.env.GITHUB_REF_NAME?.replace(/^v/, "") || "",
-    tag: process.env.RELEASE_TAG || process.env.GITHUB_REF_NAME || "",
+    version: process.env.RELEASE_VERSION || "",
+    tag: process.env.RELEASE_TAG || "",
     assetDir: "release-assets",
     config: "release-updater-config.json",
     repo: process.env.GITHUB_REPOSITORY || "bahayonghang/skills-manage-windows",
@@ -41,7 +42,7 @@ export function parseArgs(argv) {
   }
 
   if (!args.version) {
-    throw new Error("Missing release version. Pass --version or set RELEASE_VERSION/GITHUB_REF_NAME.");
+    throw new Error("Missing release version. Pass --version or set RELEASE_VERSION.");
   }
   if (!args.tag) {
     args.tag = `v${args.version}`;
@@ -68,12 +69,13 @@ function ensureNonPlaceholderPubkey(pubkey) {
 
 function findNsisAsset(assetDir) {
   const files = fs.readdirSync(assetDir).filter((file) => /windows_x64_nsis\.exe$/i.test(file));
-  files.sort();
-  const asset = files.at(-1);
-  if (!asset) {
+  if (files.length !== 1) {
+    if (files.length > 1) {
+      throw new Error(`Expected exactly one Windows x64 NSIS asset, found ${files.length}.`);
+    }
     throw new Error(`Windows x64 NSIS asset not found in ${assetDir}.`);
   }
-  return asset;
+  return files[0];
 }
 
 function readSignature(assetDir, assetName) {
@@ -89,6 +91,9 @@ function readSignature(assetDir, assetName) {
 }
 
 export function validateReleasePreflight(args) {
+  if (args.tag !== `v${args.version}`) {
+    throw new Error(`Release tag/version mismatch: expected v${args.version}, got ${args.tag}.`);
+  }
   const config = readJson(args.config, "Release updater config");
   if (config?.bundle?.createUpdaterArtifacts !== true) {
     throw new Error("Release updater config must set bundle.createUpdaterArtifacts=true.");
@@ -100,14 +105,25 @@ export function validateReleasePreflight(args) {
   const latestJsonPath = path.join(args.assetDir, "latest.json");
   const latest = readJson(latestJsonPath, "latest.json");
 
-  if (latest.version !== args.version) {
+  if (!latest || typeof latest !== "object" || Array.isArray(latest)) {
+    throw new Error("latest.json must contain a JSON object.");
+  }
+  if (typeof latest.version !== "string" || latest.version !== args.version) {
     throw new Error(`latest.json version mismatch: expected ${args.version}, got ${latest.version ?? "<missing>"}.`);
   }
+  if (!latest.platforms || typeof latest.platforms !== "object" || Array.isArray(latest.platforms)) {
+    throw new Error("latest.json platforms must be an object.");
+  }
 
+  const platformKeys = ["windows-x86_64-nsis", "windows-x86_64"];
+  const actualPlatformKeys = Object.keys(latest.platforms).sort();
+  if (JSON.stringify(actualPlatformKeys) !== JSON.stringify([...platformKeys].sort())) {
+    throw new Error(`latest.json platform keys mismatch: ${actualPlatformKeys.join(", ")}.`);
+  }
   const expectedUrl = `https://github.com/${args.repo}/releases/download/${args.tag}/${assetName}`;
-  for (const platformKey of ["windows-x86_64-nsis", "windows-x86_64"]) {
+  for (const platformKey of platformKeys) {
     const platform = latest?.platforms?.[platformKey];
-    if (!platform) {
+    if (!platform || typeof platform !== "object" || Array.isArray(platform)) {
       throw new Error(`latest.json is missing platforms.${platformKey}.`);
     }
     if (platform.url !== expectedUrl) {
@@ -123,13 +139,44 @@ export function validateReleasePreflight(args) {
   return {
     assetName,
     latestJsonPath,
+    publicKey: config.plugins.updater.pubkey,
   };
+}
+
+export function verifyUpdaterSignature(args, assetName) {
+  const result = spawnSync(
+    "cargo",
+    [
+      "run",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--locked",
+      "--quiet",
+      "--bin",
+      "release-signature-verifier",
+      "--",
+      "--installer",
+      path.join(args.assetDir, assetName),
+      "--signature",
+      path.join(args.assetDir, `${assetName}.sig`),
+      "--config",
+      args.config,
+    ],
+    { encoding: "utf8", windowsHide: true },
+  );
+  if (result.error) {
+    throw new Error(`Failed to start release signature verifier: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    throw new Error(`Updater signature verification failed: ${result.stderr.trim() || "unknown verifier error"}`);
+  }
 }
 
 const entryPath = process.argv[1] ? path.resolve(process.argv[1]) : "";
 if (entryPath && import.meta.url === pathToFileURL(entryPath).href) {
   const args = parseArgs(process.argv.slice(2));
   const result = validateReleasePreflight(args);
+  verifyUpdaterSignature(args, result.assetName);
   console.log(
     `Release preflight passed for ${args.tag}: ${result.assetName} + ${path.relative(process.cwd(), result.latestJsonPath)}`,
   );

@@ -5,12 +5,14 @@ import {
   OperationLogEntry,
   OperationLogFilter,
   OperationLogPage,
+  PendingFsDbOperation,
 } from "@/types";
 
 const DEFAULT_LIMIT = 100;
 
 // latest-wins 令牌：旧响应不得覆盖新结果（参照 platformStore refreshToken 模式）。
 let dailyCountsToken = 0;
+let pendingOperationsToken = 0;
 
 interface OperationLogState {
   entries: OperationLogEntry[];
@@ -27,12 +29,18 @@ interface OperationLogState {
   dailyCounts: DailyOperationCount[];
   isDailyCountsLoading: boolean;
   dailyCountsError: string | null;
+  pendingOperations: PendingFsDbOperation[];
+  isPendingOperationsLoading: boolean;
+  retryingOperationId: string | null;
+  pendingOperationsError: string | null;
 
   loadLogs: (
     filter?: OperationLogFilter,
     reset?: boolean,
   ) => Promise<OperationLogPage>;
   loadDailyCounts: (days: number) => Promise<void>;
+  loadPendingOperations: () => Promise<void>;
+  retryPendingOperation: (operationId: string) => Promise<void>;
   loadMore: () => Promise<OperationLogPage | null>;
   loadLogDetail: (logId: string) => Promise<OperationLogEntry | null>;
   setFilter: (partial: Partial<OperationLogFilter>) => void;
@@ -83,6 +91,10 @@ export const useOperationLogStore = create<OperationLogState>((set, get) => ({
   dailyCounts: [],
   isDailyCountsLoading: false,
   dailyCountsError: null,
+  pendingOperations: [],
+  isPendingOperationsLoading: false,
+  retryingOperationId: null,
+  pendingOperationsError: null,
 
   loadLogs: async (filter, reset = true) => {
     const nextFilter = normalizeFilter({
@@ -132,6 +144,53 @@ export const useOperationLogStore = create<OperationLogState>((set, get) => ({
       if (currentToken === dailyCountsToken) {
         set({ dailyCountsError: String(err), isDailyCountsLoading: false });
       }
+    }
+  },
+
+  loadPendingOperations: async () => {
+    const currentToken = ++pendingOperationsToken;
+    set({
+      pendingOperations: [],
+      isPendingOperationsLoading: true,
+      retryingOperationId: null,
+      pendingOperationsError: null,
+    });
+    try {
+      const pendingOperations = await invoke("list_pending_fs_db_operations");
+      if (currentToken === pendingOperationsToken) {
+        set({
+          pendingOperations: pendingOperations ?? [],
+          isPendingOperationsLoading: false,
+        });
+      }
+    } catch (err) {
+      if (currentToken === pendingOperationsToken) {
+        set({
+          pendingOperationsError: String(err),
+          isPendingOperationsLoading: false,
+        });
+      }
+    }
+  },
+
+  retryPendingOperation: async (operationId) => {
+    const currentToken = ++pendingOperationsToken;
+    set({ retryingOperationId: operationId, pendingOperationsError: null });
+    try {
+      const pendingOperations = await invoke("retry_fs_db_operation", {
+        operationId,
+      });
+      if (currentToken === pendingOperationsToken) {
+        set({ pendingOperations, retryingOperationId: null });
+      }
+    } catch (err) {
+      if (currentToken === pendingOperationsToken) {
+        set({
+          pendingOperationsError: String(err),
+          retryingOperationId: null,
+        });
+      }
+      throw err;
     }
   },
 

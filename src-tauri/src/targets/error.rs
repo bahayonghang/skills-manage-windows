@@ -50,6 +50,31 @@ pub enum TargetsError {
     #[error("Failed to inspect remote path '{path}': {detail}")]
     RemoteInspectFailed { path: String, detail: String },
 
+    #[error("{transport} command timed out after {timeout_ms} ms ({class}).")]
+    ProcessTimedOut {
+        transport: &'static str,
+        class: &'static str,
+        timeout_ms: u128,
+    },
+
+    #[error("{0} command was cancelled.")]
+    ProcessCancelled(&'static str),
+
+    #[error("{transport} {stream} exceeded the {limit}-byte output limit.")]
+    ProcessOutputLimitExceeded {
+        transport: &'static str,
+        stream: &'static str,
+        limit: usize,
+    },
+
+    #[error("Failed to terminate {transport} process tree after {trigger}: {source}")]
+    ProcessTerminationFailed {
+        transport: &'static str,
+        trigger: &'static str,
+        #[source]
+        source: std::io::Error,
+    },
+
     // ── WSL command transport ───────────────────────────────────────────────
     #[error("WSL command failed with status {status}: {detail}")]
     WslCommandFailed {

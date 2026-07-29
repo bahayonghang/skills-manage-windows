@@ -12,6 +12,59 @@
 5. **标记不统一是有意为之**：`[redacted]`（Operation Log，DB 历史行沿用）与 `[REDACTED]`（Runtime Log，前端 fixture 依赖）由模块内部封装，调用方与前端不得依赖对方层的标记字面量。
 6. **前端防线**：`src/lib/runtimeLogger.ts` 的 `SENSITIVE_KEY_PATTERN` 在敏感值过 IPC 前预脱敏，词表须与后端保持同步（后端权威，前端 belt-and-suspenders）。
 7. **两层日志模型勿混**：Operation Log 是持久化前脱敏；Runtime Log 是读取/导出时脱敏（磁盘文件保留原文）。改动脱敏时机属于行为变更，需独立评审。
+8. **Recovery journal 是第三类受控存储**：`fs_db_operations.manifest_json` 可保存恢复所需完整路径和 fingerprint，但不得进入 Operation Log、Runtime Log、IPC summary、状态导出或 telemetry。IPC/Operation Log 仅暴露 operation/target/kind/phase、稳定 error code 与 `CentralOperationError::redacted_message()`；tracing 禁止格式化含 source/path 的原始 recovery error。
+
+## Scenario: Structured IPC Error Payload
+
+### 1. Scope / Trigger
+
+- command error mapper、`IpcError`、frontend failure recorder 或状态导出发生变化时适用。
+
+### 2. Signatures
+
+```text
+IpcError { code: String, message: String, retryable: bool }
+failure recorder { command, sanitized args, normalized public error }
+```
+
+### 3. Contracts
+
+- payload 只允许稳定 code、已审查 public message 和 retryable；不附带 source/details。
+- PAT、AI key、SSH password/private key、绝对/相对路径、命令/env、stdout/stderr、
+  snapshot token/digest 和文件内容不得进入 IPC error、failure recorder 或状态导出。
+- frontend recorder 保留对象/数组 shape 与非字符串 scalar，所有字符串参数替换为
+  `[REDACTED]`；未知 rejection 的 message 固定化。
+
+### 4. Validation & Error Matrix
+
+| Input | Required output |
+| --- | --- |
+| reviewed stable domain variant | fixed code/message |
+| known legacy coded family | canonical message; raw details dropped |
+| unknown Display/string/object | `internal.unexpected` fixed message |
+| args containing any string | same shape, string replaced |
+
+### 5. Good / Base / Bad Cases
+
+- Good: mapper selects a static public summary and logs diagnostics only through the existing redaction boundary.
+- Base: unknown helper error loses historical text and fails closed.
+- Bad: `IpcError { message: error.to_string(), .. }` or recorder stores raw args.
+
+### 6. Tests Required
+
+- Serialize adversarial seeds and assert exact seed absence.
+- Assert recorder args contain no original string at any nesting depth.
+- Assert existing coded AI/GitHub/local-archive behavior retains only canonical public meaning.
+
+### 7. Wrong vs Correct
+
+```rust
+// Wrong
+IpcError::new("storage.unavailable", Box::leak(error.to_string().into_boxed_str()), false)
+
+// Correct
+IpcError::new("storage.unavailable", "Storage is unavailable.", false)
+```
 
 ## 来源
 

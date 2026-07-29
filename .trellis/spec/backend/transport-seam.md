@@ -5,7 +5,7 @@
 跨 Local/SSH/WSL 三种目标的**安装类操作**（install / uninstall 及其批量形态）：
 
 - **一份编排**：业务骨架只写一次（`services/installation/install.rs`），禁止按 transport 复制 `_impl` / `_ssh_impl` / `_remote` 平行实现。差异下沉到 `InstallTransport` 的 per-transport hook。
-- **一次解析、不再分支**：命令层用 `InstallTransport::for_target(&active_target)` 把 `ActiveTarget` 解析成 transport（SSH/WSL 在此打开一条连接，批量调用整个循环复用），之后任何代码不得再 `match ActiveTarget`。
+- **一次快照、一次解析、不再分支**：命令层先用 `resolve_target_context()` 冻结 target 与 DB，再用 `InstallTransport::for_target(context.target())` 把该 `ActiveTarget` 解析成 transport（SSH/WSL 在此打开一条连接，批量调用整个循环复用），之后任何代码不得重读 active target 或再 `match ActiveTarget`。
 - **单点拍平**：`TargetsError` 进入 installation 域只能经 `transport::transport_error`（→ `InstallationError::Remote(String)`）。禁止在各调用点各自 `.map_err(|e| ...)` 造第二种文案。
 
 ## Signatures
@@ -48,18 +48,24 @@ hook 是**复合动作**（plan/execute 切分），不是 FS 原语。远程侧
 
 ```rust
 // targets/runner.rs
-pub(crate) trait CommandRunner: Send + Sync {
-    fn run(&self, command: Command, stdin: Option<&[u8]>) -> Result<Output, RunnerError>;
+pub(crate) struct ProcessRequest<'a> {
+    command: Command,
+    stdin: Option<Vec<u8>>,
+    policy: ProcessPolicy,
+    cancellation: ProcessCancellation<'a>,
 }
-pub(crate) struct ProcessRunner; // 生产默认，两种执行形态字节等价保留
+pub(crate) trait CommandRunner: Send + Sync {
+    async fn run(&self, request: ProcessRequest<'_>) -> Result<Output, RunnerError>;
+}
+pub(crate) struct ProcessRunner; // 生产默认，统一 async supervision
 ```
 
 - `ConnectedSshTarget` / `ConnectedWslTarget` 持 `runner: Arc<dyn CommandRunner>`；`base_command()` 纯构建器不动，进程执行一律走 `self.runner.run(...)`。
-- 新增远程原语禁止直接 `Command::spawn()` / `.output()`——那会绕开测试缝。
+- 新增远程原语禁止直接 `Command::spawn()` / `.output()`——那会绕开测试缝与 timeout/cancel/bounded-output/process-tree 契约。完整生命周期见 `process-supervision.md`。
 
 ## Tests Required
 
-- targets 执行半边：`ConnectedSshTarget::for_tests_with_runner` / 直构 `ConnectedWslTarget { runner }` + `test_support::FakeRunner`（记录 program/args/stdin，FIFO 弹响应）。断言点：完整命令行字符串、stdin 字节、退出码分支、RunnerPhase 错误映射。
+- targets 执行半边：`ConnectedSshTarget::for_tests_with_runner` / 直构 `ConnectedWslTarget { runner }` + `test_support::FakeRunner`（记录 program/args/stdin/policy，FIFO 弹响应）。断言点：完整命令行字符串、stdin 字节、policy class、退出码分支、RunnerPhase/监督错误映射。
 - installation 远程路径：`FakeRunner` 假连接 + `mem_pool_with_home("/home/…")`，不需要真 SSH。样板见 `services/installation/tests.rs` 的 `fake_ssh_transport`；断言点：脚本六参顺序（canonical/source/target/agent_dir/method/managed_copy）、stdin == `REMOTE_CENTRAL_INSTALL_SCRIPT`、DB 记账行。
 
 ## Wrong vs Correct
@@ -71,9 +77,10 @@ match active_target {
     _ => install_skill_to_agent_remote_impl(...).await,   // 第二份实现必然漂移
 }
 
-// Correct：解析一次，编排一份
-let transport = InstallTransport::for_target(&active_target).await?;
-installation::install_skill(&pool, &transport, &skill_id, &agent_id, method).await
+// Correct：冻结一个 request context，解析一次，编排一份
+let context = state.resolve_target_context().await?;
+let transport = InstallTransport::for_target(context.target()).await?;
+installation::install_skill(context.db(), &transport, &skill_id, &agent_id, method).await
 ```
 
 ## 推广边界

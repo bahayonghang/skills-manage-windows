@@ -1,5 +1,4 @@
 import { KeyRound, Loader2, ShieldCheck, Zap } from "lucide-react";
-import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { GitHubPatState, SecretStorageState } from "@/types";
 
@@ -22,7 +21,6 @@ interface GitHubPatSettingsSectionProps {
   isTestingGitHubPat: boolean;
   onClear: () => void;
   onInputChange: (value: string) => void;
-  onReveal: () => Promise<string | null>;
   onSave: () => void;
   onTest: () => void;
 }
@@ -36,30 +34,16 @@ export function GitHubPatSettingsSection({
   isTestingGitHubPat,
   onClear,
   onInputChange,
-  onReveal,
   onSave,
   onTest,
 }: GitHubPatSettingsSectionProps) {
   const { t } = useTranslation();
-  const [revealError, setRevealError] = useState<string | null>(null);
   const storageLabel =
     githubPatState.configured || githubPatState.storageState === "unreadable"
       ? t(`settings.githubPatStorageState.${githubPatState.storageState}`)
       : t("settings.githubPatNotConfigured");
   const storageTone = githubPatStorageTone(githubPatState.storageState);
-  const effectiveMessage =
-    githubPatMessage ??
-    (revealError
-      ? {
-          type: "error" as const,
-          text: t("settings.githubPatRevealFailed"),
-          detail: revealError,
-        }
-      : null);
-
-  useEffect(() => {
-    setRevealError(null);
-  }, [githubPatState.configured, githubPatInput]);
+  const effectiveMessage = githubPatMessage;
 
   return (
     <SettingsSection
@@ -77,17 +61,9 @@ export function GitHubPatSettingsSection({
             configured={githubPatState.configured}
             disabled={isLoadingGitHubPat || isSavingGitHubPat}
             placeholder={t("settings.githubPatPlaceholder")}
-            revealScopeKey="github-pat"
-            inputShowLabel={t("settings.githubPatShowInput")}
-            inputHideLabel={t("settings.githubPatHideInput")}
-            savedRevealLabel={t("settings.githubPatRevealSaved")}
-            savedHideLabel={t("settings.githubPatHideSaved")}
-            savedHiddenHint={t("settings.githubPatSavedHiddenHint")}
-            savedRevealedHint={t("settings.githubPatSavedRevealedHint")}
+            savedHiddenHint={t("settings.githubPatConfiguredNoReveal")}
             inputReplacementHint={t("settings.githubPatWillReplace")}
             onChange={onInputChange}
-            onRevealSaved={onReveal}
-            onRevealError={setRevealError}
           />
         </div>
 

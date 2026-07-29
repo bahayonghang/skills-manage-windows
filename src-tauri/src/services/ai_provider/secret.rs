@@ -10,6 +10,7 @@ const LEGACY_AI_API_KEY_SETTING_KEY: &str = AI_API_KEY_SECRET_KEY;
 const DEFAULT_AI_PROVIDER: &str = "claude";
 const AI_API_KEY_MIGRATION_SETTING_KEY: &str = "ai_api_key_keyring_migration_v1";
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AiApiKeyState {
@@ -421,15 +422,6 @@ pub async fn get_ai_api_key_state_impl(
             .filter(|_| state_error.is_none()),
         error: migration_error.or(state_error),
     })
-}
-
-pub async fn reveal_ai_api_key_impl(
-    pool: &DbPool,
-    secrets: &dyn SecretStore,
-    provider: Option<&str>,
-) -> Result<Option<String>, AiProviderError> {
-    let provider_id = resolve_operation_provider(pool, provider).await;
-    ai_api_key_from_secret_store(pool, secrets, Some(&provider_id)).await
 }
 
 pub async fn set_ai_api_key_impl(

@@ -13,6 +13,54 @@ use sqlx::{FromRow, SqlitePool};
 /// Connection pool alias —— 整个 crate 内统一以 `DbPool` 引用 SQLite 池。
 pub type DbPool = SqlitePool;
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(rename_all = "snake_case")]
+pub enum SkillUpdateStatus {
+    UpToDate,
+    UpdateAvailable,
+    Unsupported,
+    RemoteMissing,
+    Error,
+    Cancelled,
+}
+
+impl SkillUpdateStatus {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::UpToDate => "up_to_date",
+            Self::UpdateAvailable => "update_available",
+            Self::Unsupported => "unsupported",
+            Self::RemoteMissing => "remote_missing",
+            Self::Error => "error",
+            Self::Cancelled => "cancelled",
+        }
+    }
+}
+
+impl std::fmt::Display for SkillUpdateStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for SkillUpdateStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "up_to_date" => Self::UpToDate,
+            "update_available" => Self::UpdateAvailable,
+            "unsupported" => Self::Unsupported,
+            "remote_missing" => Self::RemoteMissing,
+            "error" => Self::Error,
+            "cancelled" => Self::Cancelled,
+            other => return Err(format!("unknown SkillUpdateStatus: {other}")),
+        })
+    }
+}
+
 /// Global Universal Agents targets share the user-level `~/.agents/skills` directory.
 ///
 /// Google-branded global targets are intentionally not part of this set:
@@ -182,6 +230,7 @@ pub struct Agent {
 
 // ─── Collection ──────────────────────────────────────────────────────────────
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Collection {
     pub id: String,
@@ -193,6 +242,7 @@ pub struct Collection {
 
 // ─── Repository ──────────────────────────────────────────────────────────────
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct SkillRepository {
     pub id: String,
@@ -299,6 +349,7 @@ pub struct SkillUpdateInventoryEntry {
 
 // ─── Update State ────────────────────────────────────────────────────────────
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct SkillUpdateState {
     pub skill_id: String,
@@ -311,7 +362,7 @@ pub struct SkillUpdateState {
     pub latest_remote_hash: Option<String>,
     pub last_checked_at: Option<String>,
     pub last_updated_at: Option<String>,
-    pub status: String,
+    pub status: SkillUpdateStatus,
     pub error: Option<String>,
 }
 
@@ -485,6 +536,7 @@ pub struct Project {
 }
 
 /// 项目下某个 agent 目录中登记的 skill 安装。
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct ProjectSkillInstallation {
     pub project_id: String,

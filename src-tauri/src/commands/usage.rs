@@ -121,7 +121,8 @@ async fn build_refresh_page(
 pub async fn usage_refresh(
     state: State<'_, AppState>,
     force: bool,
-) -> Result<UsageRefreshResult, String> {
+) -> crate::ipc_error::IpcResult<UsageRefreshResult> {
+    crate::ipc_boundary!(async move {
     let target = active_usage_target(&state).await?;
 
     if target.is_remote && !force {
@@ -208,6 +209,9 @@ pub async fn usage_refresh(
             }
         }
     }
+
+    }
+    .await)
 }
 
 #[tauri::command]
@@ -215,12 +219,17 @@ pub async fn usage_get_overview(
     state: State<'_, AppState>,
     top_skills_limit: Option<usize>,
     source: Option<String>,
-) -> Result<UsageOverview, String> {
-    let target = active_usage_target(&state).await?;
-    let limit = top_skills_limit.unwrap_or(0);
-    usage::build_overview(&state.db, &target.target_id, source.as_deref(), limit)
+) -> crate::ipc_error::IpcResult<UsageOverview> {
+    crate::ipc_boundary!(
+        async move {
+            let target = active_usage_target(&state).await?;
+            let limit = top_skills_limit.unwrap_or(0);
+            usage::build_overview(&state.db, &target.target_id, source.as_deref(), limit)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
@@ -228,22 +237,32 @@ pub async fn usage_get_recent(
     state: State<'_, AppState>,
     limit: Option<i64>,
     source: Option<String>,
-) -> Result<Vec<RecentSkillCall>, String> {
-    let n = limit.unwrap_or(20).max(1);
-    let target = active_usage_target(&state).await?;
-    usage::list_recent_usage(&state.db, &target.target_id, source.as_deref(), n)
+) -> crate::ipc_error::IpcResult<Vec<RecentSkillCall>> {
+    crate::ipc_boundary!(
+        async move {
+            let n = limit.unwrap_or(20).max(1);
+            let target = active_usage_target(&state).await?;
+            usage::list_recent_usage(&state.db, &target.target_id, source.as_deref(), n)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
 pub async fn usage_get_providers(
     state: State<'_, AppState>,
-) -> Result<Vec<ProviderHealth>, String> {
-    let target = active_usage_target(&state).await?;
-    usage::list_provider_health(&state.db, &target.target_id)
+) -> crate::ipc_error::IpcResult<Vec<ProviderHealth>> {
+    crate::ipc_boundary!(
+        async move {
+            let target = active_usage_target(&state).await?;
+            usage::list_provider_health(&state.db, &target.target_id)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
@@ -251,11 +270,16 @@ pub async fn usage_get_skill_detail(
     state: State<'_, AppState>,
     skill: String,
     source: Option<String>,
-) -> Result<SkillUsageDetail, String> {
-    let target = active_usage_target(&state).await?;
-    usage::build_skill_detail(&state.db, &target.target_id, &skill, source.as_deref())
+) -> crate::ipc_error::IpcResult<SkillUsageDetail> {
+    crate::ipc_boundary!(
+        async move {
+            let target = active_usage_target(&state).await?;
+            usage::build_skill_detail(&state.db, &target.target_id, &skill, source.as_deref())
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 /// 给 PlatformView / CentralSkillsView 的 skill 卡片注入 "近 N 天 K 次" 徽章。
@@ -265,25 +289,30 @@ pub async fn usage_get_skill_counts(
     state: State<'_, AppState>,
     skills: Vec<String>,
     days: u32,
-) -> Result<HashMap<String, i64>, String> {
-    if skills.is_empty() {
-        return Ok(HashMap::new());
-    }
-    let target = active_usage_target(&state).await?;
-    let cutoff = (Utc::now() - chrono::Duration::days(days as i64)).timestamp_millis();
-    let mut out: HashMap<String, i64> = HashMap::new();
-    // 提前用 0 占位，让前端拿到完整 keyset 不用做 fallback
-    for s in &skills {
-        out.insert(s.clone(), 0);
-    }
-    for (skill, count) in
-        crate::db::list_skill_counts_since(&state.db, &target.target_id, &skills, cutoff)
-            .await
-            .map_err(|e| e.to_string())?
-    {
-        out.insert(skill, count);
-    }
-    Ok(out)
+) -> crate::ipc_error::IpcResult<HashMap<String, i64>> {
+    crate::ipc_boundary!(
+        async move {
+            if skills.is_empty() {
+                return Ok(HashMap::new());
+            }
+            let target = active_usage_target(&state).await?;
+            let cutoff = (Utc::now() - chrono::Duration::days(days as i64)).timestamp_millis();
+            let mut out: HashMap<String, i64> = HashMap::new();
+            // 提前用 0 占位，让前端拿到完整 keyset 不用做 fallback
+            for s in &skills {
+                out.insert(s.clone(), 0);
+            }
+            for (skill, count) in
+                crate::db::list_skill_counts_since(&state.db, &target.target_id, &skills, cutoff)
+                    .await
+                    .map_err(|e| e.to_string())?
+            {
+                out.insert(skill, count);
+            }
+            Ok(out)
+        }
+        .await
+    )
 }
 
 /// 名字匹配中央库 skill_id —— 给 SkillBarChart 点击跳 `/skill/:id`。
@@ -292,11 +321,16 @@ pub async fn usage_get_skill_counts(
 pub async fn usage_resolve_skill_id(
     state: State<'_, AppState>,
     skill_name: String,
-) -> Result<Option<String>, String> {
-    let target = active_usage_target(&state).await?;
-    usage::resolve_skill_id(&state.db, &target.target_id, &skill_name)
+) -> crate::ipc_error::IpcResult<Option<String>> {
+    crate::ipc_boundary!(
+        async move {
+            let target = active_usage_target(&state).await?;
+            usage::resolve_skill_id(&state.db, &target.target_id, &skill_name)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 /// 给 UI 显示「上次扫描时间」用的格式化辅助。time-ago 由前端 i18n 处理，
@@ -324,10 +358,17 @@ pub struct UsageScopeInfo {
 }
 
 #[tauri::command]
-pub async fn usage_get_scope_info(state: State<'_, AppState>) -> Result<UsageScopeInfo, String> {
-    let target = active_usage_target(&state).await?;
-    // 只读 getter 不做 SSH/WSL 建连；显式 refresh 返回权威 reachability。
-    Ok(scope_info_for_target(&target, None))
+pub async fn usage_get_scope_info(
+    state: State<'_, AppState>,
+) -> crate::ipc_error::IpcResult<UsageScopeInfo> {
+    crate::ipc_boundary!(
+        async move {
+            let target = active_usage_target(&state).await?;
+            // 只读 getter 不做 SSH/WSL 建连；显式 refresh 返回权威 reachability。
+            Ok(scope_info_for_target(&target, None))
+        }
+        .await
+    )
 }
 
 #[cfg(test)]

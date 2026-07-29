@@ -101,7 +101,7 @@ export function createMarketplaceSkillsShSlice({
       }
 
       try {
-        const importedSkillId = await invoke<string>("install_from_skills_sh", {
+        const importedSkillId = await invoke("install_from_skills_sh", {
           source,
           skillId,
         });

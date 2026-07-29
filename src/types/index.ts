@@ -92,7 +92,7 @@ export interface ScannedSkill {
   id: string;
   row_id?: string;
   name: string;
-  description?: string;
+  description: string | null;
   file_path: string;
   dir_path: string;
   link_type: string;
@@ -275,7 +275,7 @@ export interface DeleteSkillRepositoryResult {
 export interface Collection {
   id: string;
   name: string;
-  description?: string;
+  description: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -300,10 +300,10 @@ export interface SkillRepository {
   id: string;
   name: string;
   source_type: string;
-  owner?: string;
-  repo?: string;
-  branch?: string;
-  url?: string;
+  owner: string | null;
+  repo: string | null;
+  branch: string | null;
+  url: string | null;
   pinned: boolean;
   is_unknown: boolean;
   created_at: string;
@@ -402,7 +402,8 @@ export type CentralSkillUpdateStatus =
   | "update_available"
   | "unsupported"
   | "remote_missing"
-  | "error";
+  | "error"
+  | "cancelled";
 
 export interface CentralSkillUpdateState {
   skill_id: string;
@@ -434,6 +435,7 @@ export type CentralSkillUpdateJobStatus =
   | "cancelled";
 
 export interface CentralSkillUpdateJob {
+  jobId: string | null;
   phase: "checking" | "updating" | null;
   status: CentralSkillUpdateJobStatus;
   total: number;
@@ -447,6 +449,7 @@ export interface CentralSkillUpdateJob {
 }
 
 export interface CentralSkillUpdateProgressPayload {
+  jobId: string;
   phase: "checking" | "updating";
   skillId?: string;
   skillName?: string;
@@ -487,6 +490,7 @@ export type {
   OperationLogPage,
   OperationLogStatus,
   OperationLogTargetKind,
+  PendingFsDbOperation,
 } from "./operationLogs";
 
 export type * from "./runtimeLogs";
@@ -501,6 +505,9 @@ export type {
   SshAuthMethod,
   SshTargetTestResult,
   TargetCredentialStatus,
+  TargetConfigDomain,
+  TargetConfigQuarantineIncident,
+  TargetConfigQuarantineStatus,
   TargetKind,
   TargetSummary,
   TestSshTargetRequest,
@@ -662,6 +669,7 @@ export type SkillportStatePortabilityPhase =
   | null;
 
 export interface SkillportStatePortabilityJob {
+  jobId: string | null;
   phase: SkillportStatePortabilityPhase;
   status: SkillportStatePortabilityJobStatus;
   total: number;
@@ -672,6 +680,7 @@ export interface SkillportStatePortabilityJob {
 }
 
 export interface SkillportStatePortabilityProgressPayload {
+  jobId: string;
   phase: Exclude<SkillportStatePortabilityPhase, null>;
   status: Exclude<SkillportStatePortabilityJobStatus, "idle" | "cancelling">;
   total: number;
@@ -779,3 +788,9 @@ export type {
   LocalArchivePreviewSkill,
   LocalSkillConflict,
 } from "./localArchiveImport";
+
+export type {
+  StartupDiagnostic,
+  StartupIssue,
+  StartupStatus,
+} from "./startup";

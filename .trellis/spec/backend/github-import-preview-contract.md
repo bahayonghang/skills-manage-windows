@@ -1,5 +1,125 @@
 # GitHub Import Preview Contract
 
+## Scenario: Structured Markdown Fetch Boundary
+
+### 1. Scope / Trigger
+
+Apply this contract when GitHub preview Markdown loading, the shared GitHub HTTP
+client, raw/API endpoint construction, or remote preview workspace reuse changes.
+The renderer may choose a previewed repository and repository-relative skill
+path, but it must never choose the request scheme, authority, port, IP address,
+redirect target, or authentication destination.
+
+### 2. Signatures
+
+```rust
+#[tauri::command]
+pub async fn fetch_github_skill_markdown(
+    state: State<'_, AppState>,
+    preview_id: String,
+    repo: GitHubRepoRef,
+    source_path: String,
+) -> Result<String, String>;
+
+pub(crate) async fn fetch_github_skill_markdown_from_snapshot(
+    active_target: &ResolvedTarget,
+    preview_id: &str,
+    repo: &GitHubRepoRef,
+    source_path: &str,
+) -> Result<String, GithubImportError>;
+```
+
+```ts
+fetchGitHubSkillMarkdown(repo: GitHubRepoRef, sourcePath: string): Promise<void>;
+```
+
+### 3. Contracts
+
+- The IPC payload contains `previewId`, `repo`, and `sourcePath`; it never
+  accepts `downloadUrl` as request authority. `previewId` is required — there is
+  no unauthenticated Markdown read path.
+- Markdown is served **only** from the registered preview snapshot. No transport
+  re-downloads `SKILL.md` at read time; the raw-HTTP `fetch_skill_markdown`
+  helper was deleted so this cannot regress. See
+  _Immutable Preview Snapshot Lifecycle_ for binding and digest rules.
+- Acquisition-time raw/API requests (issued during preview, not during read)
+  still validate `owner`, `repo`, `branch`, and `sourcePath` and construct
+  `<sourcePath>/SKILL.md` under the fixed `GITHUB_MIRROR_ENDPOINTS`.
+  `normalizedUrl` is display/reference data and is not used for HTTP routing.
+- Every production API/raw request is HTTPS, uses the endpoint's exact host and
+  base-path prefix, has no userinfo or fragment, and uses the standard HTTPS
+  port. Bearer auth is sent only to the direct GitHub endpoint.
+- The shared client has a 5-second connect timeout, a 30-second total timeout,
+  and `redirect::Policy::none()`. A 3xx response cannot select a second URL.
+- Raw response bodies are checked against `content_length` when present and are
+  then accumulated with checked arithmetic through `bytes_stream()`. The budget
+  is checked before each chunk is appended.
+
+### 4. Validation & Error Matrix
+
+| Condition                                                            | Required behavior                                   |
+| -------------------------------------------------------------------- | --------------------------------------------------- |
+| Invalid owner, repo, or branch component                             | Return `InvalidRepoComponent`; issue no request     |
+| Unsafe or empty repository-relative path                             | Return `UnsupportedRepoPath`; issue no request      |
+| URL falls outside a built-in endpoint's scheme/host/port/path policy | Return `InvalidUrl`; issue no request               |
+| Snapshot repo/source/target differs from submitted values            | Return `PreviewWorkspaceMismatch`; read no file     |
+| `previewId` unknown, expired, or target changed                      | Preserve the typed snapshot lifecycle error         |
+| Snapshot file bytes no longer match the registered `sha256`          | Return `PreviewSnapshotIntegrity`; return no bytes  |
+| 3xx points to another host or private address                        | Do not follow; classify/fallback as an HTTP attempt |
+| Declared or streamed body exceeds its budget                         | Return `Budget` before appending excess bytes       |
+| Mirror fallback follows a direct denial/transport failure            | Never forward the direct GitHub bearer token        |
+
+### 5. Good / Base / Bad Cases
+
+- Good: the wizard submits its `previewId`, the `repo` from `GitHubRepoPreview`,
+  and `skills/demo`; the backend returns the `skills/demo/SKILL.md` bytes held
+  in the snapshot and issues no network request.
+- Base: the user expands the same candidate twice; both reads return byte-identical
+  content and neither consumes the token.
+- Bad: the renderer submits `file://`, a metadata IP, a lookalike GitHub host,
+  or a crafted `downloadUrl`; such authority is absent from the IPC contract and
+  cannot reach the HTTP client.
+- Bad: a read falls back to raw HTTP because the snapshot expired — the branch may
+  have moved, so the user would preview bytes that import will not write.
+
+### 6. Tests Required
+
+- Backend pure tests for repository component injection and the SSRF URL matrix:
+  non-HTTPS schemes, loopback/private/link-local IPs, lookalike hosts, userinfo,
+  fragments, and nonstandard ports.
+- A policy test that every API/raw URL generated for every built-in endpoint
+  satisfies that endpoint's declared policy.
+- HTTP fixtures proving redirects are not followed, mirror fallback remains
+  functional, direct PAT auth is not forwarded, and a chunked cap-plus-one body
+  returns `Budget` before EOF.
+- A snapshot binding test asserting a mismatched repo returns
+  `PreviewWorkspaceMismatch`.
+- A test proving repeated reads return the preview bytes and never consume the
+  token (`snapshot_reads_return_preview_bytes_and_never_consume_the_token`).
+- Frontend store and IPC coverage tests asserting `previewId`, `repo`, and
+  `sourcePath` are present and `downloadUrl` is absent.
+- Full gate: `just ci`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```rust
+fetch_raw_text(&client, &renderer_supplied_download_url, auth).await
+```
+
+This lets renderer data choose the network authority and redirect surface.
+
+#### Correct
+
+```rust
+fetch_github_skill_markdown_from_snapshot(active_target, &preview_id, &repo, &source_path).await
+```
+
+The service validates the snapshot binding and returns bytes the user already
+confirmed. Acquisition-time requests, issued during preview only, are built from
+structured repository identity and built-in endpoints — never from renderer URLs.
+
 ## Scenario: Plugin Manifest Grouping
 
 ### 1. Scope / Trigger
@@ -65,16 +185,16 @@ source/update metadata.
 
 ### 4. Validation & Error Matrix
 
-| Condition | Required behavior |
-| --- | --- |
-| Missing or invalid manifest JSON | Continue legacy discovery with no grouping |
-| Manifest path has traversal, absolute path, backslash, URL, or remote object source | Ignore that path or entry |
-| Manifest hint has no `SKILL.md` | Drop hint, keep preview/import working |
-| Manifest hint has invalid `SKILL.md` | Drop hint, keep preview/import working |
-| Same invalid skill is discovered by legacy heuristics | Preserve existing invalid-candidate failure |
-| At least one preview skill has `pluginName` | Frontend renders grouped sections and puts ungrouped skills under localized `Other` |
-| No preview skill has `pluginName` | Frontend renders the existing flat preview list |
-| User imports grouped preview | Import selection payload stays flat and keyed by `sourcePath` |
+| Condition                                                                           | Required behavior                                                                   |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Missing or invalid manifest JSON                                                    | Continue legacy discovery with no grouping                                          |
+| Manifest path has traversal, absolute path, backslash, URL, or remote object source | Ignore that path or entry                                                           |
+| Manifest hint has no `SKILL.md`                                                     | Drop hint, keep preview/import working                                              |
+| Manifest hint has invalid `SKILL.md`                                                | Drop hint, keep preview/import working                                              |
+| Same invalid skill is discovered by legacy heuristics                               | Preserve existing invalid-candidate failure                                         |
+| At least one preview skill has `pluginName`                                         | Frontend renders grouped sections and puts ungrouped skills under localized `Other` |
+| No preview skill has `pluginName`                                                   | Frontend renders the existing flat preview list                                     |
+| User imports grouped preview                                                        | Import selection payload stays flat and keyed by `sourcePath`                       |
 
 ### 5. Good / Base / Bad Cases
 
@@ -176,16 +296,16 @@ are internal policy, not frontend or persistence contracts.
 
 ### 4. Validation & Error Matrix
 
-| Condition | Required behavior |
-| --- | --- |
-| One nested skill | Download only that source subtree |
-| Overlapping multi-selection | Download the file union once |
-| Root skill | Use archive |
-| More than 64 selected files or more than 8 MiB | Use archive |
-| Candidate/plugin metadata belongs to selection | Reuse bytes; no duplicate raw request |
-| Raw 404 or tree/raw byte-size mismatch | Integrity fallback before staging |
-| Denial, transport or budget failure | Typed archive fallback; preserve actionable final error |
-| Partial import includes invalid selection | Report existing per-skill failure and import valid selections only |
+| Condition                                      | Required behavior                                                  |
+| ---------------------------------------------- | ------------------------------------------------------------------ |
+| One nested skill                               | Download only that source subtree                                  |
+| Overlapping multi-selection                    | Download the file union once                                       |
+| Root skill                                     | Use archive                                                        |
+| More than 64 selected files or more than 8 MiB | Use archive                                                        |
+| Candidate/plugin metadata belongs to selection | Reuse bytes; no duplicate raw request                              |
+| Raw 404 or tree/raw byte-size mismatch         | Integrity fallback before staging                                  |
+| Denial, transport or budget failure            | Typed archive fallback; preserve actionable final error            |
+| Partial import includes invalid selection      | Report existing per-skill failure and import valid selections only |
 
 ### 5. Good / Base / Bad Cases
 
@@ -264,15 +384,15 @@ Bare `github`, bare `settings`, or embedded character sequences such as the
 
 ### 4. Validation & Error Matrix
 
-| Condition | Required behavior |
-| --- | --- |
-| Repository contains valid top-level `skill/SKILL.md` | Preview one candidate using the normalized repository ID |
-| Same repository is addressed through `tree/<branch>/skill` | Return the same candidate identity and source path |
-| Repository contains only deep `.../skill/SKILL.md` wrappers | Preserve generic-candidate filtering |
-| `NoImportableSkills` text contains `subpaths` | Render the error without PAT guidance |
-| URL validation text contains `github.com` | Render the error without PAT guidance |
-| Backend reports rate limiting or unauthenticated access denial | Render the generic PAT settings guidance |
-| Backend reports a configured token access denial | Render the configured-token guidance |
+| Condition                                                      | Required behavior                                        |
+| -------------------------------------------------------------- | -------------------------------------------------------- |
+| Repository contains valid top-level `skill/SKILL.md`           | Preview one candidate using the normalized repository ID |
+| Same repository is addressed through `tree/<branch>/skill`     | Return the same candidate identity and source path       |
+| Repository contains only deep `.../skill/SKILL.md` wrappers    | Preserve generic-candidate filtering                     |
+| `NoImportableSkills` text contains `subpaths`                  | Render the error without PAT guidance                    |
+| URL validation text contains `github.com`                      | Render the error without PAT guidance                    |
+| Backend reports rate limiting or unauthenticated access denial | Render the generic PAT settings guidance                 |
+| Backend reports a configured token access denial               | Render the configured-token guidance                     |
 
 ### 5. Tests Required
 
@@ -328,13 +448,13 @@ pub(crate) fn repo_file_relative_to_source(
 
 ### 4. Validation Matrix
 
-| Condition | Required behavior |
-| --- | --- |
-| Root snapshot has `SKILL.md` plus `assets/`, `references/`, or `scripts/` descendants | Import every file with its original relative path |
-| Existing root package lacks descendants | Fresh inventory reports an update and update restores descendants |
-| Root upstream deletes a file | Atomic replacement removes the stale local file |
-| Source is `skills/agent-browser` | Import only that subtree, never repository root or sibling directories |
-| Update write fails | Restore the previous directory and leak no staging/backup directory |
+| Condition                                                                             | Required behavior                                                      |
+| ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Root snapshot has `SKILL.md` plus `assets/`, `references/`, or `scripts/` descendants | Import every file with its original relative path                      |
+| Existing root package lacks descendants                                               | Fresh inventory reports an update and update restores descendants      |
+| Root upstream deletes a file                                                          | Atomic replacement removes the stale local file                        |
+| Source is `skills/agent-browser`                                                      | Import only that subtree, never repository root or sibling directories |
+| Update write fails                                                                    | Restore the previous directory and leak no staging/backup directory    |
 
 ### 5. Good / Base / Bad Cases
 
@@ -434,14 +554,14 @@ metadata.
 
 ### 4. Validation & Error Matrix
 
-| Condition | Required behavior |
-| --- | --- |
-| Candidate manifest contains root-relative `SKILL.md` | Return the stable manifest and allow review |
-| Manifest is missing, empty, duplicated, unsafe, structurally conflicting, or lacks `SKILL.md` | Fail closed; do not present an empty tree as trustworthy or allow review |
-| Remote record delimiter or byte length is malformed | Fail preview and remove the unregistered preview workspace |
-| Remote inventory exceeds archive file, entry-size, or expanded-size budget | Return the existing resource-budget error |
-| Generic CLI, Marketplace, or Central caller builds a preview DTO | Omit `files`; do not incur repository inventory cost |
-| User renames a conflicting skill | Change only the visual root and selection rename field; keep manifest paths unchanged |
+| Condition                                                                                     | Required behavior                                                                     |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Candidate manifest contains root-relative `SKILL.md`                                          | Return the stable manifest and allow review                                           |
+| Manifest is missing, empty, duplicated, unsafe, structurally conflicting, or lacks `SKILL.md` | Fail closed; do not present an empty tree as trustworthy or allow review              |
+| Remote record delimiter or byte length is malformed                                           | Fail preview and remove the unregistered preview workspace                            |
+| Remote inventory exceeds archive file, entry-size, or expanded-size budget                    | Return the existing resource-budget error                                             |
+| Generic CLI, Marketplace, or Central caller builds a preview DTO                              | Omit `files`; do not incur repository inventory cost                                  |
+| User renames a conflicting skill                                                              | Change only the visual root and selection rename field; keep manifest paths unchanged |
 
 ### 5. Good / Base / Bad Cases
 
@@ -472,7 +592,9 @@ metadata.
 
 ```ts
 // Re-implementing sourcePath membership in the UI can diverge from import.
-const files = repositoryFiles.filter((file) => file.path.startsWith(sourcePath));
+const files = repositoryFiles.filter((file) =>
+  file.path.startsWith(sourcePath),
+);
 ```
 
 #### Correct
@@ -560,20 +682,20 @@ pub(crate) async fn preview_github_repo_import_with_auth(
 
 ### 4. Validation & Error Matrix
 
-| Condition | Required behavior |
-| --- | --- |
-| Nested skill repo, tree API available | Preview built from tree manifest; no tarball request |
-| Tree response `truncated: true` | Typed `Truncated` fallback → archive acquisition |
-| Unknown mode/type entry | Typed `UnsupportedMode` fallback → archive acquisition |
-| Regular blob missing `size` | Typed `MissingSize` fallback → archive acquisition |
-| Tree entries exceed `tree_entries` budget | `Budget` fallback → archive |
-| Tree response body exceeds `tree_response_bytes` | `Budget` fallback before serde allocation |
-| Raw blob 404 after tree listed it | `RepoFileGone` → `Transport` fallback (integrity gap) |
-| 401/403/429 on tree or raw | `Denied` fallback → archive (or final denial) |
-| 5xx / mirror transport failure | `Transport` fallback → archive |
-| Invalid candidate `SKILL.md` (bad frontmatter/UTF-8) | Domain error surfaced directly; no fallback |
-| Plugin manifest missing in tree | Continue with no grouping (parity with archive) |
-| Plugin manifest raw fetch fails | Acquisition fallback (archive reads it from tarball) |
+| Condition                                            | Required behavior                                      |
+| ---------------------------------------------------- | ------------------------------------------------------ |
+| Nested skill repo, tree API available                | Preview built from tree manifest; no tarball request   |
+| Tree response `truncated: true`                      | Typed `Truncated` fallback → archive acquisition       |
+| Unknown mode/type entry                              | Typed `UnsupportedMode` fallback → archive acquisition |
+| Regular blob missing `size`                          | Typed `MissingSize` fallback → archive acquisition     |
+| Tree entries exceed `tree_entries` budget            | `Budget` fallback → archive                            |
+| Tree response body exceeds `tree_response_bytes`     | `Budget` fallback before serde allocation              |
+| Raw blob 404 after tree listed it                    | `RepoFileGone` → `Transport` fallback (integrity gap)  |
+| 401/403/429 on tree or raw                           | `Denied` fallback → archive (or final denial)          |
+| 5xx / mirror transport failure                       | `Transport` fallback → archive                         |
+| Invalid candidate `SKILL.md` (bad frontmatter/UTF-8) | Domain error surfaced directly; no fallback            |
+| Plugin manifest missing in tree                      | Continue with no grouping (parity with archive)        |
+| Plugin manifest raw fetch fails                      | Acquisition fallback (archive reads it from tarball)   |
 
 ### 5. Good / Base / Bad Cases
 
@@ -630,3 +752,212 @@ if kind == Some(RepositoryFileKind::RegularBlob) {
     return Err(GithubImportError::TreeManifestUnsupportedMode { /* .. */ });
 }
 ```
+
+## Scenario: Immutable Preview Snapshot Lifecycle
+
+### 1. Scope / Trigger
+
+Apply this contract whenever GitHub preview acquisition, the preview snapshot
+registry, `import_github_repo_skills`, snapshot Markdown reads, or per-skill
+import provenance changes. It exists because the upstream branch can move between
+preview and import: without a pinned immutable snapshot the user confirms one set
+of bytes and Central receives another.
+
+Scope is the renderer-driven GitHub repo import wizard only (Local, SSH, and WSL
+targets). Central update sync, portable state, and `skills.sh` build their own
+workspace from their own verified inventory and are explicitly out of scope.
+
+### 2. Signatures
+
+```rust
+#[tauri::command]
+pub async fn import_github_repo_skills(
+    app: AppHandle,
+    state: State<AppState>,
+    preview_id: String,
+    repo_url: String,
+    selections: Vec<GitHubSkillImportSelection>,
+) -> Result<GitHubRepoImportResult, String>;
+
+#[tauri::command]
+pub async fn discard_github_repo_preview_snapshot(
+    state: State<AppState>,
+    preview_id: String,
+) -> Result<(), String>;
+```
+
+Registry (module-private, session-scoped, never persisted across restarts):
+
+```rust
+fn register_preview_snapshot(snapshot: PreviewSnapshot);
+fn lookup_preview_snapshot(preview_id: &str, now: DateTime<Utc>)
+    -> Result<Arc<PreviewSnapshot>, GithubImportError>;
+fn acquire_import_lease(preview_id: &str, now: DateTime<Utc>)
+    -> Result<Arc<PreviewSnapshot>, GithubImportError>;
+fn release_import_lease(preview_id: &str) -> Option<Arc<PreviewSnapshot>>;
+fn consume_preview_snapshot(preview_id: &str) -> Option<Arc<PreviewSnapshot>>;
+fn discard_preview_snapshot(preview_id: &str) -> Option<Arc<PreviewSnapshot>>;
+fn prune_expired_preview_snapshots(now: DateTime<Utc>) -> Vec<Arc<PreviewSnapshot>>;
+```
+
+Digest v1 (`services/github_import/digest.rs`):
+
+```rust
+fn aggregate_digest(domain: &str, entries: &[DigestFileEntry]) -> String;
+// domains: skillport.github.repository-snapshot.v1 | skillport.github.skill-content.v1
+// framing: domain_len:u64be | domain | count:u64be
+//          | repeat(path_len:u64be | path | byte_len:u64be | sha256_raw[32])
+// output:  sha256-v1:<lowercase hex>
+```
+
+### 3. Contracts
+
+DTO fields, required on both sides — none of these are optional:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `GitHubRepoPreview.previewId` | `String` | Snapshot token; required by import and Markdown read |
+| `GitHubRepoPreview.resolvedCommitSha` | `String` | Commit the snapshot was acquired at |
+| `GitHubRepoPreview.snapshotDigest` | `String` | `sha256-v1:<hex>` over the retained repository files |
+| `GitHubRepoPreview.expiresAt` | `String` | RFC 3339; TTL is `REMOTE_PREVIEW_WORKSPACE_TTL_MINUTES` |
+| `GitHubSkillPreviewFile.sha256` | `String` | Per-file `sha256-v1:<hex>`; display/evidence only |
+
+- Preview pins the tip once via `/repos/{owner}/{repo}/commits/{ref}`. Tree, raw
+  blob, and tarball requests (local and remote) all use that resolved SHA.
+  Candidate display data and `downloadUrl` keep the user-facing branch —
+  `pinned_repo_ref` replaces only the acquisition ref, never display metadata.
+- Preview retains real bytes. The tree fast-path downloads all candidate subtrees
+  (`TreeSelectionScope::AllCandidates`); root candidates and over-threshold
+  selections fall back to archive. Per-file SHA-256 and "no second acquisition"
+  cannot both hold without retained bytes.
+- `aggregate_digest` sorts entries by UTF-8 byte order inside the function and
+  frames every field with a `u64` big-endian length, so the value cannot depend on
+  `HashMap` iteration order and `a/b` + `c` cannot collide with `a` + `b/c`.
+- Import is the only mutating consumer and takes a required `preview_id`.
+  `import_github_repo_skills_from_preview` performs lease, then binding, then
+  selection, then digest verification before any FS or DB mutation. There is no
+  branch re-fetch, no fresh-workspace fallback, and no local HTTP re-download:
+  `resolve_remote_import_workspace` and `fetch_skill_markdown` were deleted, and a
+  structural test forbids acquisition symbols inside `snapshot_import.rs`.
+- The lease is single-holder. `Ready` + acquire becomes `Importing`; failure
+  releases back to `Ready` so the same token can be retried; success consumes the
+  entry atomically; a discard requested during a lease is deferred to release.
+- Expiry is enforced on every `lookup_preview_snapshot` and
+  `acquire_import_lease`, so a stale token can never reach storage. Storage
+  reclamation for expired entries only runs via
+  `cleanup_expired_preview_snapshots_for_connection` (remote preview creation), so
+  a Local-only session may retain at most about one snapshot directory until the
+  renderer discards it. Prune-on-lookup was tried and reverted: the registry is
+  process-global and parallel Rust tests encode expiry on the entry, so
+  prune-on-access created cross-test coupling.
+- The renderer must discard explicitly on reset, on replacement by a new preview,
+  on target change, and on wizard close.
+- Per-skill provenance is written in the same transaction as the skill upsert and
+  repository assignment, onto `skill_repository_members` — not
+  `skill_repositories`, whose rows are shared by every skill from one repo. Writes
+  use `COALESCE(excluded.…, existing)`, so a later provenance-less writer (Central
+  update, CLI, portable state) cannot erase a known commit/digest. `NULL` means
+  "unknown", including for every pre-v4 row. See
+  [Versioned SQLite Migration Contract](./database-migrations.md).
+- `snapshot_digest` is only ever compared against itself. The local tree fast-path
+  retains candidate subtrees while a remote workspace holds the whole repo, so the
+  value differs by transport for the same repo; per-candidate manifests stay
+  identical.
+- `to_ipc_error()` emits `github_import.<code>:<fixed English summary>` for the six
+  lifecycle variants only (`preview_missing`, `preview_expired`,
+  `preview_mismatch`, `preview_integrity`, `preview_busy`,
+  `preview_commit_unresolved`). Every other variant keeps its historical Display
+  text so PAT guidance and existing toasts are unchanged. No code path logs or
+  serializes a token, workspace path, digest, or file content.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+| --- | --- |
+| `previewId` absent from the payload | Reject at deserialization; there is no optional fallback |
+| Token unknown / registry lost it | `PreviewSnapshotMissing` -> `github_import.preview_missing` |
+| Token past `expiresAt` | `PreviewWorkspaceExpired` -> `github_import.preview_expired` |
+| Snapshot repo, source root, or target differs from the request | `PreviewWorkspaceMismatch` / `PreviewTargetChanged` -> `github_import.preview_mismatch` |
+| Retained bytes no longer match the registered per-file `sha256` | `PreviewSnapshotIntegrity` -> `github_import.preview_integrity`; no mutation |
+| A second import already leases the same token | `PreviewSnapshotBusy` -> `github_import.preview_busy`; fail closed |
+| Tip commit cannot be resolved during preview | `PreviewCommitUnresolved` -> `github_import.preview_commit_unresolved` |
+| Selection names a `sourcePath` absent from the snapshot | Fail before mutation |
+| Import fails after the lease is taken | Release lease, keep the snapshot, allow retry with the same token |
+| Import succeeds | Consume the token atomically and release storage |
+
+Every one of these fails before FS or DB mutation. All six coded variants map to a
+bilingual "preview again" state in the renderer.
+
+### 5. Good / Base / Bad Cases
+
+- Good: preview a repo, the branch receives a new commit, then import — Central
+  receives the previewed bytes, provenance records the previewed commit, and no
+  second download occurs.
+- Base: preview then import immediately; the token is consumed and a subsequent
+  import with the same token returns `preview_missing`.
+- Good: import fails on a disk error; the same token still imports on retry.
+- Bad: import silently re-resolves the branch because the token expired. The user
+  confirmed a diff they will not receive.
+- Bad: putting `resolved_commit_sha` on `skill_repositories`; two skills imported
+  from different snapshots of the same repo would overwrite each other.
+- Bad: digesting a `HashMap` in iteration order, or concatenating
+  `path + len + hash` without length framing.
+
+### 6. Tests Required
+
+- Digest purity: `digest_is_stable_and_independent_of_input_order`,
+  `repository_digest_ignores_hashmap_insertion_order`,
+  `digest_framing_prevents_path_boundary_collisions`.
+- Registry lifecycle: unknown/expired rejection,
+  `import_lease_is_exclusive_and_released_for_retry`, deferred discard under
+  lease, `expiry_pruning_removes_only_unleased_snapshots`.
+- Immutability: `import_uses_preview_bytes_and_persists_per_skill_provenance`
+  (branch bytes change after preview) plus the structural guard
+  `preview_import_module_cannot_acquire_repository_content`.
+- Binding: `import_fails_closed_on_binding_mismatch_and_keeps_the_token`.
+- Pinning: `pinned_repo_ref_only_replaces_the_acquisition_ref`.
+- Provenance: `renamed_import_records_provenance_and_skip_writes_nothing` and
+  `test_github_provenance_is_written_once_and_preserved_by_later_writers` (the
+  `COALESCE` contract).
+- Redaction:
+  `snapshot_lifecycle_errors_use_stable_ipc_codes_without_leaking_details`
+  asserting no `github-preview-`, `/tmp/`, `sha256-v1:`, or `ghp_` substring.
+- Cross-transport parity:
+  `remote_inventory_digest_matches_the_local_snapshot_digest` and
+  `tree_selection_repository_files_match_archive_for_candidate_subtrees`.
+- Renderer contract: `src/test/contracts/githubPreviewSnapshotContract.test.ts`
+  proving zero `previewWorkspaceId` references and a single
+  `invoke("import_github_repo_skills")` call site.
+- Full gate: `just ci`.
+
+> **Known gap**: `connect_remote_target` has no injection seam, so real SSH/WSL
+> snapshot read/import is not covered end to end. FakeRunner covers the remote
+> inventory protocol and digest parity instead. Adding a transport seam for
+> `connect_remote_target` is a separate refactor — see
+> [Transport Seam](./transport-seam.md).
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```rust
+// Optional token with a "helpful" fallback: when the token is gone we quietly
+// re-resolve the branch, so import writes bytes the user never confirmed.
+let workspace = match preview_workspace_id {
+    Some(id) => take_preview_workspace(&id).unwrap_or(create_fresh_workspace(&repo).await?),
+    None => create_fresh_workspace(&repo).await?,
+};
+```
+
+#### Correct
+
+```rust
+// Required token, fail closed, verify before mutating.
+let snapshot = acquire_import_lease(preview_id, Utc::now())?;
+snapshot.validate_binding(active_target, &repo, &source)?;
+snapshot.verify_integrity(&selections)?;
+// ... only now may FS/DB mutation begin
+```
+
+A lost or moved snapshot is a user-visible "preview again", never a silent
+re-fetch.

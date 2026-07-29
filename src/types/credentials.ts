@@ -2,6 +2,21 @@ export type TargetKind = "local" | "ssh" | "wsl";
 export type SshAuthMethod = "key" | "password";
 export type TargetCredentialStatus = "stored" | "session" | "missing" | "unreadable";
 export type SecretStorageState = "stored" | "session" | "missing" | "unreadable";
+export type TargetConfigDomain = "ssh" | "wsl";
+
+export interface TargetConfigQuarantineIncident {
+  domain: TargetConfigDomain;
+  detectedAt: string;
+  reasonCode: string;
+  sourceBytes: number;
+  sourceSha256: string;
+}
+
+export interface TargetConfigQuarantineStatus {
+  version: 1;
+  incidents: TargetConfigQuarantineIncident[];
+  activeTargetReset: boolean;
+}
 
 export interface TargetSummary {
   id: string;

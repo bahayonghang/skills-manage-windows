@@ -870,6 +870,52 @@ async fn test_batch_delete_central_skills_dedupes_and_merges_copy_agents() {
 }
 
 #[tokio::test]
+async fn test_batch_delete_journal_rows_share_one_batch_id() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let central_root = temp.path().join("central");
+    fs::create_dir_all(&central_root).unwrap();
+    set_test_central_root(&pool, &central_root).await;
+    for skill_id in ["batch-delete-a", "batch-delete-b"] {
+        let central_dir = central_root.join(skill_id);
+        write_test_skill_dir(&central_dir);
+        db::upsert_skill(
+            &pool,
+            &make_central_skill_at(skill_id, skill_id, &central_dir),
+        )
+        .await
+        .unwrap();
+    }
+
+    let result = delete_central_skills_impl(
+        &pool,
+        &[
+            BatchDeleteCentralSkillRequest {
+                skill_id: "batch-delete-a".to_string(),
+                remove_agent_ids: Vec::new(),
+            },
+            BatchDeleteCentralSkillRequest {
+                skill_id: "batch-delete-b".to_string(),
+                remove_agent_ids: Vec::new(),
+            },
+        ],
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(result.succeeded.len(), 2);
+    let rows = sqlx::query_as::<_, (String, Option<String>)>(
+        "SELECT skill_id, batch_id FROM fs_db_operations ORDER BY skill_id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].1, rows[1].1);
+    assert!(rows[0].1.is_some());
+}
+
+#[tokio::test]
 async fn test_delete_skill_repository_removes_repository_skills_and_record() {
     let pool = setup_test_db().await;
     let temp = TempDir::new().unwrap();

@@ -3,9 +3,9 @@
 //! 与 metadata.tags 的差异：tags 是本地分类标签（含 AI 建议），collections 是
 //! 用户显式批量管理 / 导入导出的容器。两者解耦，UI 上分开展示。
 
-use crate::db::DbPool;
+use sqlx::SqliteConnection;
 
-pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
+pub(super) async fn init(connection: &mut SqliteConnection) -> Result<(), sqlx::Error> {
     // collections table
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS collections (
@@ -16,7 +16,7 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
             updated_at  TEXT NOT NULL
         )",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     // collection_skills table
@@ -28,14 +28,14 @@ pub(super) async fn init(pool: &DbPool) -> Result<(), sqlx::Error> {
             PRIMARY KEY (collection_id, skill_id)
         )",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_collection_skills_skill_id
          ON collection_skills(skill_id)",
     )
-    .execute(pool)
+    .execute(&mut *connection)
     .await?;
 
     Ok(())

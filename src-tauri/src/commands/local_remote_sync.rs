@@ -17,21 +17,29 @@ use crate::targets::ActiveTarget;
 use crate::AppState;
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn preview_local_remote_sync(
     state: State<'_, AppState>,
     request: LocalRemoteSyncPreviewRequest,
-) -> Result<LocalRemoteSyncPreview, String> {
-    let active_target = selected_remote_target(&state, &request.target_id).await?;
-    preview_local_remote_sync_impl(active_target, request.repo_path)
+) -> crate::ipc_error::IpcResult<LocalRemoteSyncPreview> {
+    crate::ipc_boundary!(
+        async move {
+            let active_target = selected_remote_target(&state, &request.target_id).await?;
+            preview_local_remote_sync_impl(active_target, request.repo_path)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn apply_local_remote_sync(
     state: State<'_, AppState>,
     request: LocalRemoteSyncApplyRequest,
-) -> Result<LocalRemoteSyncApplyResult, String> {
+) -> crate::ipc_error::IpcResult<LocalRemoteSyncApplyResult> {
+    crate::ipc_boundary!(async move {
     let active_target = selected_remote_target(&state, &request.target_id).await?;
     let target_context = target_context_from_active_target(&active_target);
     let mut result = apply_local_remote_sync_impl(active_target.clone(), request.repo_path)
@@ -91,6 +99,9 @@ pub async fn apply_local_remote_sync(
     }
 
     result
+
+    }
+    .await)
 }
 
 async fn selected_remote_target(

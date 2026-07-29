@@ -1,4 +1,13 @@
-import type { GitHubSkillPreviewFile } from "@/types";
+/**
+ * Minimal file-manifest entry the read-only import tree needs.
+ *
+ * Both GitHub preview manifests (which additionally carry `sha256`) and local
+ * archive manifests satisfy this shape, so the tree stays source-agnostic.
+ */
+export interface GitHubImportFileEntry {
+  path: string;
+  byteLen: number;
+}
 
 export type GitHubImportFileManifestIssue =
   | "missing"
@@ -49,7 +58,7 @@ function pathSegments(path: string): string[] | null {
 }
 
 export function getGitHubImportFileManifestIssue(
-  files: GitHubSkillPreviewFile[] | null | undefined,
+  files: GitHubImportFileEntry[] | null | undefined,
 ): GitHubImportFileManifestIssue | null {
   if (!Array.isArray(files)) return "missing";
   if (files.length === 0) return "empty";
@@ -104,7 +113,7 @@ function aggregateDirectory(node: GitHubImportFileTreeNode): void {
 }
 
 export function buildGitHubImportFileTree(
-  files: GitHubSkillPreviewFile[],
+  files: GitHubImportFileEntry[],
 ): GitHubImportFileTreeModel {
   const issue = getGitHubImportFileManifestIssue(files);
   if (issue) {

@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronUp,
   Download,
@@ -34,6 +35,7 @@ import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
 import { Input } from "@/components/ui/input";
 import { RuntimeLogsPanel } from "@/components/logs/RuntimeLogsPanel";
 import { useOperationLogStore } from "@/stores/operationLogStore";
+import { useTargetStore } from "@/stores/targetStore";
 import { OperationLogEntry, OperationLogFilter } from "@/types";
 
 function downloadText(payload: string, fileName: string, type: string) {
@@ -79,6 +81,86 @@ function loadDensity(): LogsListDensity {
   if (typeof window === "undefined") return "comfortable";
   const stored = window.localStorage.getItem(LOG_DENSITY_STORAGE_KEY);
   return stored === "compact" ? "compact" : "comfortable";
+}
+
+function PendingRecoveryBand() {
+  const { t } = useTranslation();
+  const activeTargetId = useTargetStore((state) => state.activeTarget.id);
+  const pending = useOperationLogStore((state) => state.pendingOperations);
+  const isLoading = useOperationLogStore(
+    (state) => state.isPendingOperationsLoading,
+  );
+  const retryingId = useOperationLogStore(
+    (state) => state.retryingOperationId,
+  );
+  const error = useOperationLogStore((state) => state.pendingOperationsError);
+  const load = useOperationLogStore((state) => state.loadPendingOperations);
+  const retry = useOperationLogStore((state) => state.retryPendingOperation);
+
+  useEffect(() => {
+    load();
+  }, [activeTargetId, load]);
+
+  if (!isLoading && pending.length === 0 && !error) return null;
+
+  return (
+    <section
+      aria-label={t("logs.recovery.title")}
+      className="shrink-0 border-b border-amber-500/30 bg-amber-500/8 px-5 py-3"
+    >
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          {isLoading ? (
+            <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-amber-700 dark:text-amber-300" />
+          ) : (
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-300" />
+          )}
+          <div className="min-w-0">
+            <div className="text-sm font-medium">{t("logs.recovery.title")}</div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {error
+                ? t("logs.recovery.error", { error })
+                : isLoading
+                  ? t("logs.recovery.loading")
+                  : t("logs.recovery.summary", { count: pending.length })}
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {pending.map((operation) => (
+            <Button
+              key={operation.operationId}
+              variant="outline"
+              size="sm"
+              disabled={retryingId !== null}
+              onClick={() =>
+                retry(operation.operationId).catch((err) =>
+                  toast.error(t("logs.recovery.error", { error: String(err) })),
+                )
+              }
+              title={operation.errorMessage ?? operation.phase}
+            >
+              {retryingId === operation.operationId ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RotateCcw className="size-4" />
+              )}
+              <span className="max-w-40 truncate">{operation.skillId}</span>
+            </Button>
+          ))}
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={isLoading || retryingId !== null}
+            onClick={load}
+            title={t("common.refresh")}
+          >
+            <RefreshCw className="size-4" />
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function OperationLogsPanel() {
@@ -198,6 +280,7 @@ function OperationLogsPanel() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      <PendingRecoveryBand />
       <div className="shrink-0 border-b border-border px-5 py-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>

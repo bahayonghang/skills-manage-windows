@@ -2,6 +2,31 @@
   "app": {
     "name": "SkillPort"
   },
+  "startup": {
+    "loading": "正在检查本地数据...",
+    "recoveryTitle": "本地数据需要恢复",
+    "fatalTitle": "SkillPort 无法完成启动",
+    "retry": "重新检查",
+    "retrying": "正在重新检查",
+    "rebuild": "备份并重建数据库",
+    "rebuilding": "正在备份并重建",
+    "exit": "退出 SkillPort",
+    "backupCreated": "原数据库已保留在独立恢复备份中。",
+    "actionError": "操作未完成。当前数据未被静默覆盖，请重试或退出 SkillPort。",
+    "issues": {
+      "dataDirectoryUnavailable": "应用数据目录无法创建或写入。请检查目录权限和可用磁盘空间后重试。",
+      "databaseOpenFailed": "本地数据库无法打开。你可以先重新检查，或保留原数据库后创建一个新的数据库。",
+      "schemaInitializationFailed": "数据库结构检查或升级未完成。现有数据库不会被静默覆盖。",
+      "databaseRecoveryFailed": "数据库恢复未能安全完成。SkillPort 已停止继续启动，避免混用新旧数据。",
+      "stateUnavailable": "无法读取启动状态。请重新检查；如果问题持续，请退出后重新启动 SkillPort。"
+    },
+    "diagnostics": {
+      "notRun": "当前没有可用的数据库完整性诊断。",
+      "healthy": "数据库文件可读取，但结构初始化未通过。",
+      "corrupt": "完整性检查表明数据库文件已损坏。",
+      "unavailable": "无法完成数据库完整性检查。详细诊断已写入本地运行日志。"
+    }
+  },
   "common": {
     "install": "安装",
     "uninstall": "卸载",
@@ -40,6 +65,13 @@
     "disabled": "禁用"
   },
   "backendErrors": {
+    "job": {
+      "central_update_busy": "已有 Central 更新任务正在运行，请等待完成或先取消当前任务。",
+      "portability_busy": "已有 SkillPort 状态导入或导出任务正在运行。",
+      "id_mismatch": "该取消请求属于较早的任务，已忽略。",
+      "invalid_id": "任务标识无效，请重试此操作。",
+      "registry_unavailable": "任务协调暂时不可用，请重启 SkillPort 后重试。"
+    },
     "ai": {
       "missing_api_key": "请先在设置中配置 AI API Key，再使用 AI 功能。",
       "rate_limit": "AI 服务触发速率限制。请在设置中降低 AI Tag 并发或增大请求间隔。",
@@ -56,6 +88,14 @@
       "tls": "AI 服务端点 TLS 或证书校验失败。",
       "network": "AI 网络请求失败。",
       "empty_response": "模型没有返回可显示的解释正文。"
+    },
+    "github_import": {
+      "preview_missing": "仓库预览已失效，请重新预览后再导入。",
+      "preview_expired": "仓库预览已过期，请重新预览以确认当前内容。",
+      "preview_mismatch": "仓库预览与当前目标或仓库不一致，请重新预览。",
+      "preview_integrity": "预览的仓库内容已变化，请重新预览并确认更新。",
+      "preview_busy": "该预览正在导入中，请等待完成后重试。",
+      "preview_commit_unresolved": "无法解析仓库提交，请重新预览。"
     },
     "local_archive": {
       "archive_not_found": "未找到所选 ZIP 压缩包。",
@@ -149,6 +189,13 @@
     "symlinkDisabled": "远程目标默认使用 copy 安装。",
     "projectModeUnsupported": "此目标不支持项目级安装。",
     "centralUpdatesUnsupported": "首版远程目标不支持中央库更新检查。",
+    "quarantine": {
+      "title": "已隔离无效的目标配置",
+      "description": "受影响的目标域已整体清空。这里只保留诊断元数据，不提供原始配置或凭据。",
+      "statusUnavailable": "无法读取目标恢复状态。在状态可用前，无法确认目标配置是否安全。",
+      "incident": "{{domain}} · {{time}} · {{bytes}} 字节 · SHA-256 {{digest}}…",
+      "localFallback": "原当前目标已失效，应用已回退到本机。"
+    },
     "pathCopied": "远程路径已复制",
     "quickSwitch": {
       "trigger": "切换当前目标",
@@ -196,6 +243,7 @@
     "notDetected": "未检测到",
     "unavailable": "不可用",
     "showingCachedAfterError": "刷新失败，正在显示上次成功扫描的数据",
+    "scanning": "正在扫描各平台会话日志…",
     "range": {
       "allRecorded": "全部已记录历史",
       "latestCalls": "最新 {{count}} 条",
@@ -226,7 +274,9 @@
       "placeholder": "暂无数据，刷新后此处会显示统计内容。",
       "title": "尚未发现技能调用",
       "noData": "请刷新或展开数据源状态，确认受支持平台存在可读取的会话日志。",
-      "noActivity": "此时间范围内没有活动"
+      "noActivity": "此时间范围内没有活动",
+      "filteredTitle": "没有符合筛选条件的技能",
+      "filteredHint": "切回「全部」可查看所有已记录技能。"
     },
     "sort": {
       "label": "技能排序",
@@ -235,7 +285,14 @@
       "recent": "按最近",
       "name": "按名称"
     },
+    "matchFilter": {
+      "label": "按安装状态筛选",
+      "all": "全部",
+      "installed": "已安装",
+      "unlinked": "未关联"
+    },
     "rankingCount": "{{count}} 个技能",
+    "rankingFiltered": "{{count}} / {{total}} 个技能",
     "columns": {
       "skill": "技能",
       "match": "中央库匹配",
@@ -365,6 +422,12 @@
   "logs": {
     "title": "操作日志",
     "description": "仅保存在本机的操作历史，覆盖扫描、目标、安装、删除、设置和导入导出。",
+    "recovery": {
+      "title": "Central 待恢复操作",
+      "loading": "正在检查当前目标中断的变更...",
+      "summary": "当前有 {{count}} 个操作需要恢复，恢复前该目标不能继续写入。",
+      "error": "操作仍需恢复：{{error}}"
+    },
     "detailTitle": "日志详情",
     "searchPlaceholder": "搜索摘要、错误、对象或动作...",
     "loading": "正在加载日志...",
@@ -1132,7 +1195,8 @@
       "update_available": "有更新",
       "unsupported": "不支持",
       "remote_missing": "远端已删除",
-      "error": "检查失败"
+      "error": "检查失败",
+      "cancelled": "已取消"
     },
     "portabilityOpen": "导入 / 导出",
     "portabilityTitle": "导入导出中央库状态",
@@ -1809,14 +1873,7 @@
     "githubPatRateLimitChip": "提高 GitHub 限流额度",
     "githubPatAppWideHint": "该令牌是应用级配置。SSH 目标会复用它访问 GitHub，但不会写入远程目标缓存库。",
     "githubPatConfiguredNoReveal": "已配置 GitHub 令牌。只有需要替换时才在这里输入新令牌；已保存的令牌不会回显。",
-    "githubPatSavedHiddenHint": "已保存令牌默认隐藏。点击眼睛即可查看当前保存的 PAT，仅在本次界面中显示。",
-    "githubPatSavedRevealedHint": "已保存令牌仅在当前界面中显示。切页前建议再次隐藏。",
     "githubPatWillReplace": "保存后将替换当前已保存令牌。",
-    "githubPatRevealSaved": "显示已保存令牌",
-    "githubPatHideSaved": "隐藏已保存令牌",
-    "githubPatShowInput": "显示本次输入的令牌",
-    "githubPatHideInput": "隐藏本次输入的令牌",
-    "githubPatRevealFailed": "显示 GitHub 令牌失败。",
     "githubPatNotConfigured": "未配置",
     "githubPatStorageState": {
       "stored": "已保存到安全存储",
@@ -1851,7 +1908,7 @@
       "intl": "国际"
     },
     "aiProviderLabel": "提供商",
-    "aiProviderConsoleHint": "可在同页切换提供商。已保存密钥默认保持隐藏，只有显式点击眼睛才会读取。",
+    "aiProviderConsoleHint": "可在同页切换提供商。已保存密钥不会返回到当前界面。",
     "aiRegionLabel": "区域",
     "aiApiKeyLabel": "API Key",
     "aiApiKeyGetLink": "获取 Key",
@@ -1866,11 +1923,6 @@
     "aiApiKeyWillReplace": "保存后将替换当前 {{provider}} Key。",
     "aiApiKeyFingerprint": "Key 指纹：{{fingerprint}}",
     "aiApiKeyConfiguredNoReveal": "已配置 AI API Key。只有需要替换时才在这里输入新 key；已保存的 key 不会回显。",
-    "aiApiKeySavedHiddenHint": "{{provider}} Key 默认隐藏。点击眼睛即可查看当前已保存 Key，仅在本次界面中显示。",
-    "aiApiKeySavedRevealedHint": "{{provider}} Key 仅在当前界面中显示。切换 provider 或保存前建议再次隐藏。",
-    "aiApiKeyRevealSaved": "显示已保存 API Key",
-    "aiApiKeyHideSaved": "隐藏已保存 API Key",
-    "aiApiKeyRevealFailed": "显示 AI API Key 失败：{{error}}",
     "aiApiKeyNotConfigured": "未配置",
     "aiApiKeyStorageState": {
       "stored": "已保存到安全存储",
@@ -1879,9 +1931,6 @@
       "unreadable": "安全存储不可用"
     },
     "aiApiKeyClear": "清除 Key",
-    "aiApiKeyShow": "显示本次输入的 Key",
-    "aiApiKeyHide": "隐藏本次输入的 Key",
-    "aiApiKeySavedHidden": "已保存的 API Key 被隐藏，不能在这里查看",
     "aiApiKeyMigrationWarning": "旧 AI API Key 迁移尚未完成；已保留原 settings 值。",
     "aiSecretConsoleTitle": "密钥保险库",
     "aiRuntimeConsoleTitle": "运行路由",
@@ -1906,7 +1955,6 @@
     "aiTestSuccess": "{{provider}} 当前 Key 可用。",
     "aiTestDetails": "查看详情",
     "aiTestRegionHint": "提示：可在上方切换区域端点后重试。当前：{{region}}。",
-    "secretRevealMissing": "没有可显示的已保存密钥。",
     "about": "关于",
     "appVersion": "应用版本",
     "dbPath": "数据库路径",
@@ -2205,6 +2253,7 @@
     "searchPlaceholder": "搜索技能...",
     "addSource": "添加源",
     "installSuccess": "技能安装成功",
+    "previewSkillDisappeared": "刷新仓库预览后已找不到技能“{{skill}}”。",
     "installError": "安装失败: {{error}}",
     "update": "使用缓存更新",
     "forceRefresh": "强制刷新",
@@ -2269,7 +2318,11 @@
     "githubImportToolbarLabel": "预览工作台",
     "githubImportToolbarSelected": "已选 {{count}} 个",
     "githubImportRemoteWorkspaceHint": "预览工作区位于当前 SSH 目标。",
+    "githubImportSnapshotCommit": "提交 {{sha}}",
+    "githubImportSnapshotExpires": "预览有效期至 {{time}}",
+    "githubImportPreviewRequired": "请先预览仓库再导入。",
     "githubImportRepreview": "重新预览",
+    "githubImportRepreviewHint": "请重新预览仓库，确认当前内容后再导入。",
     "githubImportSelectionTitle": "预览技能",
     "githubImportSelectionDesc": "在左侧选择要查看的技能，并决定哪些技能参与导入。",
     "githubImportPluginGroupOther": "其他",

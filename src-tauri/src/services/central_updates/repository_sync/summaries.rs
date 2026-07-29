@@ -23,14 +23,14 @@ pub(super) fn build_repository_sync_summaries(
             continue;
         };
         *checked_by_repo.entry(repo_id.clone()).or_default() += 1;
-        match state.status.parse::<SkillUpdateStatus>().ok() {
-            Some(SkillUpdateStatus::UpdateAvailable) => {
+        match state.status {
+            SkillUpdateStatus::UpdateAvailable => {
                 *update_available_by_repo.entry(repo_id).or_default() += 1;
             }
-            Some(SkillUpdateStatus::Unsupported) => {
+            SkillUpdateStatus::Unsupported => {
                 *unsupported_by_repo.entry(repo_id).or_default() += 1;
             }
-            Some(SkillUpdateStatus::Error) => {
+            SkillUpdateStatus::Error => {
                 *failed_by_repo.entry(repo_id).or_default() += 1;
             }
             _ => {}

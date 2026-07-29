@@ -24,11 +24,16 @@ pub use crate::services::ai_tagging::{
 #[tauri::command]
 pub async fn get_skill_repositories(
     state: State<'_, AppState>,
-) -> Result<Vec<SkillRepositoryWithStats>, String> {
-    let pool = state.active_db().await?;
-    db::get_skill_repositories_with_stats(&pool)
+) -> crate::ipc_error::IpcResult<Vec<SkillRepositoryWithStats>> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            db::get_skill_repositories_with_stats(&pool)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
@@ -43,21 +48,26 @@ pub async fn create_or_update_skill_repository(
     branch: Option<String>,
     url: Option<String>,
     is_unknown: Option<bool>,
-) -> Result<SkillRepository, String> {
-    let pool = state.active_db().await?;
-    db::create_or_update_skill_repository(
-        &pool,
-        id.as_deref(),
-        &name,
-        source_type.as_deref().unwrap_or("manual"),
-        owner.as_deref(),
-        repo.as_deref(),
-        branch.as_deref(),
-        url.as_deref(),
-        is_unknown.unwrap_or(false),
+) -> crate::ipc_error::IpcResult<SkillRepository> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            db::create_or_update_skill_repository(
+                &pool,
+                id.as_deref(),
+                &name,
+                source_type.as_deref().unwrap_or("manual"),
+                owner.as_deref(),
+                repo.as_deref(),
+                branch.as_deref(),
+                url.as_deref(),
+                is_unknown.unwrap_or(false),
+            )
+            .await
+            .map_err(|e| e.to_string())
+        }
+        .await
     )
-    .await
-    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -65,11 +75,16 @@ pub async fn assign_skills_to_repository(
     state: State<'_, AppState>,
     repository_id: String,
     skill_ids: Vec<String>,
-) -> Result<(), String> {
-    let pool = state.active_db().await?;
-    db::assign_skills_to_repository(&pool, &repository_id, &skill_ids, None)
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            db::assign_skills_to_repository(&pool, &repository_id, &skill_ids, None)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
@@ -77,17 +92,29 @@ pub async fn set_skill_repository_pinned(
     state: State<'_, AppState>,
     repository_id: String,
     pinned: bool,
-) -> Result<SkillRepository, String> {
-    let pool = state.active_db().await?;
-    db::set_skill_repository_pinned(&pool, &repository_id, pinned)
+) -> crate::ipc_error::IpcResult<SkillRepository> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            db::set_skill_repository_pinned(&pool, &repository_id, pinned)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
-pub async fn get_skill_tags(state: State<'_, AppState>) -> Result<Vec<SkillTag>, String> {
-    let pool = state.active_db().await?;
-    db::get_skill_tags(&pool).await.map_err(|e| e.to_string())
+pub async fn get_skill_tags(
+    state: State<'_, AppState>,
+) -> crate::ipc_error::IpcResult<Vec<SkillTag>> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            db::get_skill_tags(&pool).await.map_err(|e| e.to_string())
+        }
+        .await
+    )
 }
 
 /// 仪表盘中央库热门标签 Top-N：`limit` 由 repo 层 clamp 到 1..=50。
@@ -95,11 +122,16 @@ pub async fn get_skill_tags(state: State<'_, AppState>) -> Result<Vec<SkillTag>,
 pub async fn get_central_top_tags(
     state: State<'_, AppState>,
     limit: u32,
-) -> Result<Vec<CentralTopTag>, String> {
-    let pool = state.active_db().await?;
-    db::list_central_top_tags(&pool, limit)
+) -> crate::ipc_error::IpcResult<Vec<CentralTopTag>> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            db::list_central_top_tags(&pool, limit)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
@@ -108,11 +140,16 @@ pub async fn create_skill_tag(
     name: String,
     description: Option<String>,
     color: Option<String>,
-) -> Result<SkillTag, String> {
-    let pool = state.active_db().await?;
-    db::create_skill_tag(&pool, &name, description.as_deref(), color.as_deref())
+) -> crate::ipc_error::IpcResult<SkillTag> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            db::create_skill_tag(&pool, &name, description.as_deref(), color.as_deref())
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
@@ -120,33 +157,49 @@ pub async fn assign_skill_tags(
     state: State<'_, AppState>,
     skill_ids: Vec<String>,
     tag_ids: Vec<String>,
-) -> Result<(), String> {
-    let pool = state.active_db().await?;
-    db::assign_skill_tags(&pool, &skill_ids, &tag_ids, "manual", None, None)
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            db::assign_skill_tags(&pool, &skill_ids, &tag_ids, "manual", None, None)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn unassign_skill_tags(
     state: State<'_, AppState>,
     skill_id: String,
     tag_ids: Vec<String>,
-) -> Result<(), String> {
-    let pool = state.active_db().await?;
-    db::unassign_skill_tags(&pool, &skill_id, &tag_ids)
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            db::unassign_skill_tags(&pool, &skill_id, &tag_ids)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
 pub async fn get_pending_ai_tag_reviews(
     state: State<'_, AppState>,
-) -> Result<Vec<SkillAiTagReview>, String> {
-    let pool = state.active_db().await?;
-    db::get_pending_ai_tag_reviews(&pool)
+) -> crate::ipc_error::IpcResult<Vec<SkillAiTagReview>> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            db::get_pending_ai_tag_reviews(&pool)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
@@ -154,33 +207,48 @@ pub async fn accept_ai_tag_review(
     state: State<'_, AppState>,
     skill_id: String,
     tag_ids: Vec<String>,
-) -> Result<(), String> {
-    let pool = state.active_db().await?;
-    db::accept_ai_tag_reviews(&pool, &skill_id, &tag_ids)
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            db::accept_ai_tag_reviews(&pool, &skill_id, &tag_ids)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
 pub async fn skip_ai_tag_review(
     state: State<'_, AppState>,
     skill_id: String,
-) -> Result<(), String> {
-    let pool = state.active_db().await?;
-    db::skip_ai_tag_reviews(&pool, &skill_id)
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            db::skip_ai_tag_reviews(&pool, &skill_id)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
 pub async fn suggest_skill_tags(
     state: State<'_, AppState>,
     skill_id: String,
-) -> Result<Vec<SkillTagSuggestion>, String> {
-    let pool = state.active_db().await?;
-    ai_tagging::suggest_skill_tags_for_skill_id(&pool, state.secrets.as_ref(), skill_id)
+) -> crate::ipc_error::IpcResult<Vec<SkillTagSuggestion>> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            ai_tagging::suggest_skill_tags_for_skill_id(&pool, state.secrets.as_ref(), skill_id)
+                .await
+                .map_err(|e| e.to_string())
+        }
         .await
-        .map_err(|e| e.to_string())
+    )
 }
 
 #[tauri::command]
@@ -188,31 +256,44 @@ pub async fn bulk_suggest_skill_tags(
     app: AppHandle,
     state: State<'_, AppState>,
     skill_ids: Vec<String>,
-) -> Result<Vec<SkillTagSuggestionResult>, String> {
-    let app = Arc::new(app);
-    let job_id = Uuid::new_v4().to_string();
-    let cancel_flag = state.ai_tag_jobs.register(&job_id);
-    let pool = state.active_db().await?;
-    let result = ai_tagging::bulk_suggest_skill_tags_impl(
-        &pool,
-        state.secrets.as_ref(),
-        skill_ids,
-        job_id.clone(),
-        cancel_flag,
-        move |payload| {
-            let _ = app.emit(AI_TAG_PROGRESS_EVENT, payload);
-        },
+) -> crate::ipc_error::IpcResult<Vec<SkillTagSuggestionResult>> {
+    crate::ipc_boundary!(
+        async move {
+            let app = Arc::new(app);
+            let job_id = Uuid::new_v4().to_string();
+            let cancel_flag = state.ai_tag_jobs.register(&job_id);
+            let pool = state.active_db().await?;
+            let result = ai_tagging::bulk_suggest_skill_tags_impl(
+                &pool,
+                state.secrets.as_ref(),
+                skill_ids,
+                job_id.clone(),
+                cancel_flag,
+                move |payload| {
+                    let _ = app.emit(AI_TAG_PROGRESS_EVENT, payload);
+                },
+            )
+            .await;
+            state.ai_tag_jobs.finish(&job_id);
+            result.map_err(|e| e.to_string())
+        }
+        .await
     )
-    .await;
-    state.ai_tag_jobs.finish(&job_id);
-    result.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn cancel_ai_tag_job(state: State<'_, AppState>, job_id: String) -> Result<(), String> {
-    if state.ai_tag_jobs.cancel(&job_id) {
-        Ok(())
-    } else {
-        Err(format!("AI tag job '{}' not found", job_id))
-    }
+pub async fn cancel_ai_tag_job(
+    state: State<'_, AppState>,
+    job_id: String,
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary!(
+        async move {
+            if state.ai_tag_jobs.cancel(&job_id) {
+                Ok(())
+            } else {
+                Err(format!("AI tag job '{}' not found", job_id))
+            }
+        }
+        .await
+    )
 }

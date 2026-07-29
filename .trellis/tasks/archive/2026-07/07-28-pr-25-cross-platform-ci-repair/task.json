@@ -1,0 +1,32 @@
+{
+  "id": "pr-25-cross-platform-ci-repair",
+  "name": "pr-25-cross-platform-ci-repair",
+  "title": "Repair PR 25 cross-platform CI failures",
+  "description": "Repair the macOS ProcessRunner fixture failure and Windows generated-artifact and frozen-migration-fixture line-ending drift, then verify and monitor PR #25 to green.",
+  "status": "completed",
+  "dev_type": "bugfix",
+  "scope": "PR #25 cross-platform CI failures",
+  "package": null,
+  "priority": "P0",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-07-28",
+  "completedAt": "2026-07-29",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    ".gitattributes",
+    "src-tauri/src/targets/runner.rs",
+    ".trellis/spec/backend/process-supervision.md",
+    ".trellis/spec/backend/database-migrations.md",
+    ".trellis/spec/quality/ci-quality-gate.md"
+  ],
+  "notes": "",
+  "meta": {}
+}

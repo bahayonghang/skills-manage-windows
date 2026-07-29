@@ -23,9 +23,9 @@ export const UNIVERSAL_INSTALL_AGENT_ORDER: readonly string[];     // installPre
 export const DEFAULT_ENABLED_PLATFORM_IDS: readonly [...];         // 默认启用平台
 ```
 
-**新增平台 #N 的操作**：只改 `platformRegistry.ts`（若属 Universal 分组则加一行；默认启用则进 `DEFAULT_ENABLED_PLATFORM_IDS`），同步更新 `src/test/platformRegistry.test.ts` 的基准期望。后端侧平台定义在 `db/seed.rs`（与本约定正交）。
+**新增平台 #N 的操作**：只改 `platformRegistry.ts`（若属 Universal 分组则加一行；默认启用则进 `DEFAULT_ENABLED_PLATFORM_IDS`），同步更新 `src/test/lib/platformRegistry.test.ts` 的基准期望。后端侧平台定义在 `db/seed.rs`（与本约定正交）。
 
-**测试锁**：`src/test/platformRegistry.test.ts` 锁推导列表与不变量（id 唯一 / installPreference 唯一 / install 候选 ⊆ 全集）。
+**测试锁**：`src/test/lib/platformRegistry.test.ts` 锁推导列表与不变量（id 唯一 / installPreference 唯一 / install 候选 ⊆ 全集）。
 
 **Wrong vs Correct**：
 

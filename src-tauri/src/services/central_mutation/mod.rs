@@ -5,19 +5,26 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use fs2::FileExt;
+use sha2::{Digest, Sha256};
 
 use crate::fs_util::run_blocking_fs_with;
+use crate::targets::{ActiveTarget, TargetKind};
 
 pub use error::CentralMutationError;
 
 const RETRY_INTERVAL: Duration = Duration::from_millis(25);
 pub const DEFAULT_CENTRAL_MUTATION_TIMEOUT: Duration = Duration::from_secs(10);
 
+#[cfg(test)]
+static DEFAULT_LOCK_TEST_MUTEX: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 #[derive(Debug)]
 pub struct CentralMutationGuard {
     file: File,
     operation: &'static str,
     waited: Duration,
+    #[cfg(test)]
+    _test_guard: Option<tokio::sync::MutexGuard<'static, ()>>,
 }
 
 impl CentralMutationGuard {
@@ -42,12 +49,68 @@ pub async fn acquire_central_mutation_guard(
     operation: &'static str,
     timeout: Duration,
 ) -> Result<CentralMutationGuard, CentralMutationError> {
-    acquire_central_mutation_guard_at(
+    acquire_default_mutation_guard_at(
         crate::paths::central_mutation_lock_path(),
         operation,
         timeout,
     )
     .await
+}
+
+pub async fn acquire_target_mutation_guard(
+    target: &ActiveTarget,
+    operation: &'static str,
+    timeout: Duration,
+) -> Result<CentralMutationGuard, CentralMutationError> {
+    acquire_target_mutation_guard_by_id(target.id(), target.kind(), operation, timeout).await
+}
+
+pub(crate) async fn acquire_target_mutation_guard_by_id(
+    target_id: &str,
+    target_kind: TargetKind,
+    operation: &'static str,
+    timeout: Duration,
+) -> Result<CentralMutationGuard, CentralMutationError> {
+    let path = target_mutation_lock_path(target_id, target_kind);
+    acquire_default_mutation_guard_at(path, operation, timeout).await
+}
+
+#[cfg(not(test))]
+async fn acquire_default_mutation_guard_at(
+    path: PathBuf,
+    operation: &'static str,
+    timeout: Duration,
+) -> Result<CentralMutationGuard, CentralMutationError> {
+    acquire_central_mutation_guard_at(path, operation, timeout).await
+}
+
+#[cfg(test)]
+async fn acquire_default_mutation_guard_at(
+    path: PathBuf,
+    operation: &'static str,
+    timeout: Duration,
+) -> Result<CentralMutationGuard, CentralMutationError> {
+    let test_guard = DEFAULT_LOCK_TEST_MUTEX.lock().await;
+    let mut guard = acquire_central_mutation_guard_at(path, operation, timeout).await?;
+    guard._test_guard = Some(test_guard);
+    Ok(guard)
+}
+
+fn target_mutation_lock_path(target_id: &str, target_kind: TargetKind) -> PathBuf {
+    if matches!(target_kind, TargetKind::Local) {
+        return crate::paths::central_mutation_lock_path();
+    }
+
+    let kind = match target_kind {
+        TargetKind::Local => "local",
+        TargetKind::Ssh => "ssh",
+        TargetKind::Wsl => "wsl",
+    };
+    let digest = format!("{:x}", Sha256::digest(target_id.as_bytes()));
+    crate::paths::central_mutation_lock_path()
+        .parent()
+        .expect("Central mutation lock path always has a locks directory")
+        .join(format!("central-mutation-{kind}-{digest}.lock"))
 }
 
 pub(crate) async fn acquire_central_mutation_guard_at(
@@ -99,6 +162,8 @@ fn acquire_lock_blocking(
                     file,
                     operation,
                     waited,
+                    #[cfg(test)]
+                    _test_guard: None,
                 });
             }
             Err(error) if is_lock_contention(&error) => {
@@ -201,6 +266,39 @@ mod tests {
         child.wait().unwrap();
         let _guard =
             acquire_central_mutation_guard_at(lock_path, "after crash", Duration::from_secs(2))
+                .await
+                .unwrap();
+    }
+
+    #[test]
+    fn remote_target_lock_paths_are_digest_scoped_and_local_stays_compatible() {
+        assert_eq!(
+            target_mutation_lock_path("local", TargetKind::Local),
+            crate::paths::central_mutation_lock_path()
+        );
+        let ssh_a = target_mutation_lock_path("ssh-a", TargetKind::Ssh);
+        let ssh_a_again = target_mutation_lock_path("ssh-a", TargetKind::Ssh);
+        let ssh_b = target_mutation_lock_path("ssh-b", TargetKind::Ssh);
+        let wsl_a = target_mutation_lock_path("ssh-a", TargetKind::Wsl);
+        assert_eq!(ssh_a, ssh_a_again);
+        assert_ne!(ssh_a, ssh_b);
+        assert_ne!(ssh_a, wsl_a);
+        let filename = ssh_a.file_name().unwrap().to_string_lossy();
+        assert!(!filename.contains("ssh-a"));
+        assert!(filename.starts_with("central-mutation-ssh-"));
+    }
+
+    #[tokio::test]
+    async fn different_target_guards_do_not_contend() {
+        let temp = tempfile::tempdir().unwrap();
+        let first = temp.path().join("target-a.lock");
+        let second = temp.path().join("target-b.lock");
+        let _first =
+            acquire_central_mutation_guard_at(first, "target a", Duration::from_millis(100))
+                .await
+                .unwrap();
+        let _second =
+            acquire_central_mutation_guard_at(second, "target b", Duration::from_millis(100))
                 .await
                 .unwrap();
     }

@@ -1,0 +1,10 @@
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Job identity flows through command args, Rust progress events, IPC types, Zustand state, and visible UI errors."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"The task must distinguish reusable registry/error patterns from AI-tag and GitHub-preview domain-specific lifecycles."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Registry and migration failures stay typed in services while commands preserve Result<T, String> and coded envelopes."}
+{"file":".trellis/spec/backend/spawn-blocking-io.md","reason":"Legacy recursive copy and cleanup must run through the single blocking filesystem wrapper without AppHandle capture."}
+{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"Legacy Local migration must reuse the existing cross-process Central mutation boundary and avoid a second lock."}
+{"file":".trellis/spec/backend/target-context.md","reason":"Affected commands must freeze one target context after acquiring their process-local job lease."}
+{"file":".trellis/spec/backend/central-update-inventory-progress.md","reason":"Renderer-generated operation IDs and stale-event filtering are the established correlation pattern."}
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Affected invokes, command typing, fixtures, and tests must stay behind the single IPC adapter."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Busy and mismatch failures need visible localized feedback at the active dialog or workflow boundary."}
+{"file":".trellis/spec/frontend/async-ui-test-stability.md","reason":"Concurrent job and stale-event UI tests must use scoped async waits and survive the full parallel gate."}

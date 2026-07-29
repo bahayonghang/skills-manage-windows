@@ -2,6 +2,31 @@
   "app": {
     "name": "SkillPort"
   },
+  "startup": {
+    "loading": "Checking local data...",
+    "recoveryTitle": "Local data needs recovery",
+    "fatalTitle": "SkillPort could not finish starting",
+    "retry": "Check again",
+    "retrying": "Checking again",
+    "rebuild": "Back up and rebuild database",
+    "rebuilding": "Backing up and rebuilding",
+    "exit": "Exit SkillPort",
+    "backupCreated": "The previous database is preserved in a separate recovery backup.",
+    "actionError": "The action did not finish. Existing data was not silently overwritten. Retry or exit SkillPort.",
+    "issues": {
+      "dataDirectoryUnavailable": "The application data directory cannot be created or written. Check its permissions and available disk space, then retry.",
+      "databaseOpenFailed": "The local database cannot be opened. Check again, or preserve it and create a new database.",
+      "schemaInitializationFailed": "The database structure check or upgrade did not finish. The existing database will not be silently overwritten.",
+      "databaseRecoveryFailed": "Database recovery could not finish safely. SkillPort stopped startup to avoid mixing old and new data.",
+      "stateUnavailable": "The startup status could not be read. Check again, or exit and restart SkillPort if the problem continues."
+    },
+    "diagnostics": {
+      "notRun": "No database integrity diagnosis is available.",
+      "healthy": "The database file is readable, but schema initialization did not pass.",
+      "corrupt": "The integrity check reports that the database file is damaged.",
+      "unavailable": "The database integrity check could not finish. Diagnostic details were written to the local runtime log."
+    }
+  },
   "common": {
     "install": "Install",
     "uninstall": "Uninstall",
@@ -40,6 +65,13 @@
     "disabled": "Disabled"
   },
   "backendErrors": {
+    "job": {
+      "central_update_busy": "A Central update is already running. Wait for it to finish or cancel it first.",
+      "portability_busy": "A SkillPort state import or export is already running.",
+      "id_mismatch": "This cancellation request belongs to an older job and was ignored.",
+      "invalid_id": "The job identifier is invalid. Retry the operation.",
+      "registry_unavailable": "Job coordination is temporarily unavailable. Restart SkillPort and try again."
+    },
     "ai": {
       "missing_api_key": "Configure an AI API key in Settings before using AI features.",
       "rate_limit": "The AI provider rate limit was reached. Lower AI Tag concurrency or increase the request interval in Settings.",
@@ -56,6 +88,14 @@
       "tls": "TLS or certificate validation failed for the AI provider endpoint.",
       "network": "The AI network request failed.",
       "empty_response": "The model returned no displayable explanation text."
+    },
+    "github_import": {
+      "preview_missing": "The repository preview is no longer available. Preview the repository again before importing.",
+      "preview_expired": "The repository preview expired. Preview the repository again to confirm the current contents.",
+      "preview_mismatch": "The repository preview no longer matches the active target or repository. Preview the repository again.",
+      "preview_integrity": "The previewed repository contents changed. Preview the repository again and review the update.",
+      "preview_busy": "This preview is already being imported. Wait for it to finish before retrying.",
+      "preview_commit_unresolved": "The repository commit could not be resolved. Preview the repository again."
     },
     "local_archive": {
       "archive_not_found": "The selected ZIP archive was not found.",
@@ -149,6 +189,13 @@
     "symlinkDisabled": "This remote target does not support symlink install.",
     "projectModeUnsupported": "Project-scoped install is not available for this target.",
     "centralUpdatesUnsupported": "Remote Central update checks are not available in this version.",
+    "quarantine": {
+      "title": "Invalid target configuration was isolated",
+      "description": "The affected target domain was reset as a whole. Only diagnostic metadata is retained; the original configuration and credentials are not available here.",
+      "statusUnavailable": "Target recovery status could not be loaded. Target configuration safety cannot be confirmed until the status is available.",
+      "incident": "{{domain}} · {{time}} · {{bytes}} bytes · SHA-256 {{digest}}…",
+      "localFallback": "The active target was reset to Local because it was no longer valid."
+    },
     "pathCopied": "Remote path copied",
     "quickSwitch": {
       "trigger": "Switch active target",
@@ -196,6 +243,7 @@
     "notDetected": "not detected",
     "unavailable": "Unavailable",
     "showingCachedAfterError": "Refresh failed; showing the last successful scan",
+    "scanning": "Scanning session logs across platforms…",
     "range": {
       "allRecorded": "All recorded history",
       "latestCalls": "Latest {{count}}",
@@ -226,7 +274,9 @@
       "placeholder": "No data yet. Refresh to populate this panel.",
       "title": "No skill calls detected",
       "noData": "Refresh or open provider health to check for readable session logs from supported platforms.",
-      "noActivity": "No activity in this period"
+      "noActivity": "No activity in this period",
+      "filteredTitle": "No skills match this filter",
+      "filteredHint": "Switch back to “All” to see every recorded skill."
     },
     "sort": {
       "label": "Sort skills",
@@ -235,7 +285,14 @@
       "recent": "recent",
       "name": "name"
     },
+    "matchFilter": {
+      "label": "Filter by install state",
+      "all": "All",
+      "installed": "Installed",
+      "unlinked": "Unlinked"
+    },
     "rankingCount": "{{count}} skills",
+    "rankingFiltered": "{{count}} / {{total}} skills",
     "columns": {
       "skill": "Skill",
       "match": "Central match",
@@ -365,6 +422,12 @@
   "logs": {
     "title": "Operation Logs",
     "description": "Local-only operation history for scans, targets, installs, deletes, settings, and imports.",
+    "recovery": {
+      "title": "Pending Central recovery",
+      "loading": "Checking the active target for interrupted changes...",
+      "summary": "{{count}} operation(s) must recover before this target can be changed again.",
+      "error": "Recovery is still required: {{error}}"
+    },
     "detailTitle": "Log details",
     "searchPlaceholder": "Search summary, error, subject, or action...",
     "loading": "Loading logs...",
@@ -1132,7 +1195,8 @@
       "update_available": "Update available",
       "unsupported": "Unsupported",
       "remote_missing": "Removed remotely",
-      "error": "Check failed"
+      "error": "Check failed",
+      "cancelled": "Cancelled"
     },
     "portabilityOpen": "Import / Export",
     "portabilityTitle": "Import / export Central state",
@@ -1809,14 +1873,7 @@
     "githubPatRateLimitChip": "Higher GitHub rate limits",
     "githubPatAppWideHint": "This is an app-wide token. SSH targets reuse it for GitHub requests, but it is not stored in remote target caches.",
     "githubPatConfiguredNoReveal": "A GitHub token is configured. Enter a new token here only when you want to replace it; the saved token is not revealed.",
-    "githubPatSavedHiddenHint": "Saved token hidden. Click the eye to reveal the currently saved PAT for this session.",
-    "githubPatSavedRevealedHint": "Saved token revealed for this view only. Hide it again before switching pages.",
     "githubPatWillReplace": "Saving will replace the current saved token.",
-    "githubPatRevealSaved": "Reveal saved token",
-    "githubPatHideSaved": "Hide saved token",
-    "githubPatShowInput": "Show this input token",
-    "githubPatHideInput": "Hide this input token",
-    "githubPatRevealFailed": "Failed to reveal GitHub token.",
     "githubPatNotConfigured": "Not configured",
     "githubPatStorageState": {
       "stored": "Saved in secure storage",
@@ -1851,7 +1908,7 @@
       "intl": "International"
     },
     "aiProviderLabel": "Provider",
-    "aiProviderConsoleHint": "Switch providers without leaving the page. Saved secrets stay hidden until you explicitly reveal them.",
+    "aiProviderConsoleHint": "Switch providers without leaving the page. Saved secrets are never returned to this view.",
     "aiRegionLabel": "Region",
     "aiApiKeyLabel": "API Key",
     "aiApiKeyGetLink": "Get key",
@@ -1866,11 +1923,6 @@
     "aiApiKeyWillReplace": "Saving will replace the current {{provider}} key.",
     "aiApiKeyFingerprint": "Key fingerprint: {{fingerprint}}",
     "aiApiKeyConfiguredNoReveal": "An AI API key is configured. Enter a new key here only when you want to replace it; the saved key is not revealed.",
-    "aiApiKeySavedHiddenHint": "{{provider}} key hidden. Click the eye to reveal the saved key for this session only.",
-    "aiApiKeySavedRevealedHint": "{{provider}} key revealed for this view only. Hide it again before changing provider or saving.",
-    "aiApiKeyRevealSaved": "Reveal saved API key",
-    "aiApiKeyHideSaved": "Hide saved API key",
-    "aiApiKeyRevealFailed": "Failed to reveal AI API key: {{error}}",
     "aiApiKeyNotConfigured": "Not configured",
     "aiApiKeyStorageState": {
       "stored": "Saved in secure storage",
@@ -1879,9 +1931,6 @@
       "unreadable": "Secure storage unavailable"
     },
     "aiApiKeyClear": "Clear key",
-    "aiApiKeyShow": "Show this input key",
-    "aiApiKeyHide": "Hide this input key",
-    "aiApiKeySavedHidden": "Saved API key is hidden and cannot be revealed here",
     "aiApiKeyMigrationWarning": "Legacy AI API key migration is pending; the old setting was retained.",
     "aiSecretConsoleTitle": "Secret vault",
     "aiRuntimeConsoleTitle": "Runtime routing",
@@ -1906,7 +1955,6 @@
     "aiTestSuccess": "{{provider}} current key is usable.",
     "aiTestDetails": "Details",
     "aiTestRegionHint": "Tip: try switching the region endpoint above. Current: {{region}}.",
-    "secretRevealMissing": "No saved secret is available to reveal.",
     "about": "About",
     "appVersion": "App Version",
     "dbPath": "Database Path",
@@ -2205,6 +2253,7 @@
     "searchPlaceholder": "Search skills...",
     "addSource": "Add Source",
     "installSuccess": "Skill installed successfully",
+    "previewSkillDisappeared": "The skill '{{skill}}' is no longer present in the refreshed repository preview.",
     "installError": "Install failed: {{error}}",
     "update": "Update",
     "forceRefresh": "Force Refresh",
@@ -2269,7 +2318,11 @@
     "githubImportToolbarLabel": "Preview workspace",
     "githubImportToolbarSelected": "{{count}} selected",
     "githubImportRemoteWorkspaceHint": "Preview workspace is on the active SSH target.",
+    "githubImportSnapshotCommit": "Commit {{sha}}",
+    "githubImportSnapshotExpires": "Preview valid until {{time}}",
+    "githubImportPreviewRequired": "Preview the repository before importing.",
     "githubImportRepreview": "Re-preview",
+    "githubImportRepreviewHint": "Preview the repository again to confirm the current contents before importing.",
     "githubImportSelectionTitle": "Previewed skills",
     "githubImportSelectionDesc": "Choose which skill to inspect and which skills to import.",
     "githubImportPluginGroupOther": "Other",

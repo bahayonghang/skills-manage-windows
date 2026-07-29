@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/central-update-batching.md","reason":"Preserve the Central update orchestration and FS+DB Saga boundary while moving only source/state helpers."}
+{"file":".trellis/spec/backend/test-support.md","reason":"Keep moved Rust unit tests on the existing fixture and module-test conventions."}
+{"file":".trellis/spec/frontend/skill-card-scenarios.md","reason":"Preserve the UnifiedSkillCard discriminated-union API and single-renderer constraint."}
+{"file":".trellis/spec/frontend/async-ui-test-stability.md","reason":"Keep CentralSkillsView dialog and action regression tests stable after hook extraction."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"The task changes the production sizecheck exception policy and must retain the repository gate."}

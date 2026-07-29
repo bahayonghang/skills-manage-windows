@@ -17,7 +17,7 @@ SkillPort is a three-layer desktop application: a React UI talks to a Rust backe
 │ Rust + Tauri v2 (src-tauri/src/)                                 │
 │   commands/*  thin IPC handlers                                  │
 │   services/*  business logic (scanner / installation / projects) │
-│   targets/*   local + SSH execution adapters                     │
+│   targets/*   local + SSH + WSL execution adapters               │
 │   db/*        sqlx pool + schema + repos                         │
 └──────────────┬─────────────────────────┬─────────────────────────┘
                │                         │
@@ -36,7 +36,7 @@ SkillPort is a three-layer desktop application: a React UI talks to a Rust backe
 | `src/components/` | Reusable UI | Stores via hooks |
 | `src-tauri/src/commands/` | `#[tauri::command]` handlers | `services/*`, `db/*`, `targets/*` |
 | `src-tauri/src/services/` | Pure business logic | `db/repos`, OS, HTTP |
-| `src-tauri/src/targets/` | Local + SSH execution | OS, `ssh` binary |
+| `src-tauri/src/targets/` | Local + SSH + WSL execution and request target snapshots | OS, `ssh` / `wsl` binaries |
 | `src-tauri/src/db/` | Schema + sqlx repos | SQLite pool |
 
 Components never call `invoke()` directly. Stores own the IPC surface so test mocks can hook a single layer.
@@ -82,7 +82,7 @@ src-tauri/src/
 │   ├── marketplace/   registry sync + cache
 │   ├── central_skills/ canonical store services
 │   └── ai_provider/   Claude / OpenAI-compatible streaming
-├── targets/           local + SSH execution adapters
+├── targets/           local + SSH + WSL adapters and TargetContext
 ├── db/                schema, migrations, repos, seed
 └── lib.rs             Tauri builder with the full invoke_handler list
 ```
@@ -91,6 +91,6 @@ src-tauri/src/
 
 - **State sync.** The backend emits `system://migration-progress` during startup so the UI can show a banner without polling.
 - **Observability.** User actions write structured `operation_logs` rows for the Operation layer, while frontend/backend diagnostics write bounded `skillport-YYYY-MM-DD.log` files for the Runtime layer. The `/logs` console reads both through `commands::logs`; see [Runtime Observability](./runtime-observability.md).
-- **Active target.** All commands resolve `AppState::active_db()` first so SSH-bound calls hit the remote SQLite cache instead of the local one.
+- **Active target.** Commands that need target-scoped state resolve one owned `TargetContext`, which binds the active target identity to its matching SQLite pool. Active-target switches affect only later commands; in-flight operations keep their frozen target, DB, remote-resource, event, and operation-log identity.
 
-Last reviewed: 2026-06-03
+Last reviewed: 2026-07-26

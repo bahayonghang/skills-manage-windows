@@ -1,21 +1,31 @@
+#[cfg(test)]
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+#[cfg(test)]
 use flate2::{write::GzEncoder, Compression};
+#[cfg(test)]
 use tracing::Instrument;
+#[cfg(test)]
 use uuid::Uuid;
 
 use crate::fs_util::run_blocking_fs_with;
-use crate::targets::{remote_parent, shell_quote, ConnectedRemoteTarget};
+#[cfg(test)]
+use crate::targets::shell_quote;
+use crate::targets::{remote_parent, ConnectedRemoteTarget};
 
-use super::remote_scripts::{REMOTE_BATCH_REFRESH_COPY_SCRIPT, REMOTE_CENTRAL_BATCH_UPDATE_SCRIPT};
+use super::remote_scripts::REMOTE_BATCH_REFRESH_COPY_SCRIPT;
+#[cfg(test)]
+use super::remote_scripts::REMOTE_CENTRAL_BATCH_UPDATE_SCRIPT;
+#[cfg(test)]
+use super::write_skill_dir_atomic_local;
 use super::{
-    is_safe_relative_path, posix_path, refresh_copy_install_local, write_skill_dir_atomic_local,
-    CentralFs, RemoteSkillFile,
+    is_safe_relative_path, posix_path, refresh_copy_install_local, CentralFs, RemoteSkillFile,
 };
 use crate::services::central_updates::error::CentralUpdatesError;
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) const REMOTE_WRITE_CHUNK_SIZE: usize = 16;
 pub(crate) const REMOTE_COPY_CHUNK_SIZE: usize = 32;
 
@@ -26,8 +36,10 @@ pub(crate) struct CentralSkillWrite {
     pub(crate) files: Vec<RemoteSkillFile>,
 }
 
+#[cfg(test)]
 #[derive(Debug)]
 pub(crate) struct CentralSkillWriteOutcome {
+    #[allow(dead_code)]
     pub(crate) skill_id: String,
     pub(crate) result: Result<(), CentralUpdatesError>,
 }
@@ -41,6 +53,7 @@ pub(crate) struct CopyRefreshRequest {
 
 #[derive(Debug)]
 pub(crate) struct CopyRefreshOutcome {
+    #[allow(dead_code)]
     pub(crate) skill_id: String,
     pub(crate) target: String,
     pub(crate) result: Result<(), CentralUpdatesError>,
@@ -58,6 +71,7 @@ impl CentralFs {
             write_chunks = writes.len().div_ceil(REMOTE_WRITE_CHUNK_SIZE)
         )
     )]
+    #[cfg(test)]
     pub(crate) async fn write_skill_dirs_atomic_cancellable(
         &self,
         writes: Vec<CentralSkillWrite>,
@@ -89,7 +103,7 @@ impl CentralFs {
         }
     }
 
-    pub(super) fn target_kind(&self) -> &'static str {
+    pub(crate) fn target_kind(&self) -> &'static str {
         match self {
             Self::Local => "local",
             Self::Remote(connected) => match connected.as_ref() {
@@ -100,6 +114,7 @@ impl CentralFs {
     }
 }
 
+#[cfg(test)]
 async fn write_skill_dirs_atomic_local(
     writes: Vec<CentralSkillWrite>,
 ) -> Vec<CentralSkillWriteOutcome> {
@@ -133,6 +148,7 @@ async fn write_skill_dirs_atomic_local(
     }
 }
 
+#[cfg(test)]
 async fn write_skill_dirs_atomic_remote(
     conn: &ConnectedRemoteTarget,
     writes: Vec<CentralSkillWrite>,
@@ -202,7 +218,10 @@ async fn write_skill_dirs_atomic_remote(
                 }
             };
             let command = remote_batch_update_command(&batch_root);
-            match conn.run_command_with_stdin_bytes(&command, &archive) {
+            match conn
+                .run_command_with_stdin_bytes_cancellable(&command, &archive, cancel)
+                .await
+            {
                 Ok(stdout) => match parse_batch_rows(&stdout, &skill_ids, "Central write") {
                     Ok(results) => {
                         outcomes.extend(results.into_iter().map(|(skill_id, result)| {
@@ -300,7 +319,7 @@ async fn refresh_copy_installs_remote(
             .map(|copy| copy.skill_id.clone())
             .collect::<Vec<_>>();
         match conn
-            .run_script(REMOTE_BATCH_REFRESH_COPY_SCRIPT, &arg_refs)
+            .run_script_cancellable(REMOTE_BATCH_REFRESH_COPY_SCRIPT, &arg_refs, cancel)
             .await
         {
             Ok(stdout) => match parse_batch_rows(stdout.as_bytes(), &skill_ids, "Copy refresh") {
@@ -331,6 +350,7 @@ async fn refresh_copy_installs_remote(
     outcomes
 }
 
+#[cfg(test)]
 pub(super) fn build_skill_batch_archive(
     writes: &[CentralSkillWrite],
 ) -> Result<Vec<u8>, CentralUpdatesError> {
@@ -369,6 +389,7 @@ pub(super) fn build_skill_batch_archive(
         .map_err(|error| CentralUpdatesError::io("Failed to compress batch update archive", error))
 }
 
+#[cfg(test)]
 fn append_archive_bytes<W: std::io::Write>(
     builder: &mut tar::Builder<W>,
     path: &str,
@@ -381,7 +402,9 @@ fn append_archive_bytes<W: std::io::Write>(
     builder.append_data(&mut header, path, bytes)
 }
 
-fn validate_central_skill_write(write: &CentralSkillWrite) -> Result<(), CentralUpdatesError> {
+pub(super) fn validate_central_skill_write(
+    write: &CentralSkillWrite,
+) -> Result<(), CentralUpdatesError> {
     if write.skill_id.is_empty()
         || !write
             .skill_id
@@ -412,6 +435,7 @@ fn validate_central_skill_write(write: &CentralSkillWrite) -> Result<(), Central
     Ok(())
 }
 
+#[cfg(test)]
 fn remote_batch_update_command(batch_root: &str) -> String {
     format!(
         "sh -c {} -- {}",
@@ -466,6 +490,7 @@ pub(super) fn parse_batch_rows(
         .collect()
 }
 
+#[cfg(test)]
 fn batch_error_outcomes(skill_ids: Vec<String>, message: String) -> Vec<CentralSkillWriteOutcome> {
     skill_ids
         .into_iter()
@@ -476,6 +501,7 @@ fn batch_error_outcomes(skill_ids: Vec<String>, message: String) -> Vec<CentralS
         .collect()
 }
 
+#[cfg(test)]
 fn cancelled_write_outcomes(skill_ids: Vec<String>) -> Vec<CentralSkillWriteOutcome> {
     skill_ids
         .into_iter()

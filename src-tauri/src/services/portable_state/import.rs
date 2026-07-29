@@ -36,6 +36,7 @@ pub(crate) async fn import_skillport_state_impl(
     secrets: &dyn SecretStore,
     manifest: &SkillportStateManifest,
     resolutions: Vec<SkillportStateImportResolution>,
+    job_id: &str,
     app: Option<&AppHandle>,
     cancel: Option<&CancelFlag>,
 ) -> Result<SkillportStateImportResult, PortableStateError> {
@@ -49,18 +50,21 @@ pub(crate) async fn import_skillport_state_impl(
         auth.as_deref(),
         manifest,
         resolutions,
+        job_id,
         app,
         cancel,
     )
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn import_skillport_state_for_target(
     pool: &DbPool,
     active_target: &ActiveTarget,
     auth: Option<&str>,
     manifest: &SkillportStateManifest,
     resolutions: Vec<SkillportStateImportResolution>,
+    job_id: &str,
     app: Option<&AppHandle>,
     cancel: Option<&CancelFlag>,
 ) -> Result<SkillportStateImportResult, PortableStateError> {
@@ -71,6 +75,7 @@ pub(crate) async fn import_skillport_state_for_target(
         ensure_github_sources(pool, &manifest.github_sources).await?;
     emit_portability_step(
         app,
+        job_id,
         SkillportStatePortabilityPhase::Importing,
         manifest.central_skills.len().max(1),
         0,
@@ -112,6 +117,7 @@ pub(crate) async fn import_skillport_state_for_target(
             completed_import_items = total_import_items;
             emit_portability_step(
                 app,
+                job_id,
                 SkillportStatePortabilityPhase::Importing,
                 total_import_items,
                 completed_import_items,
@@ -124,6 +130,7 @@ pub(crate) async fn import_skillport_state_for_target(
         let selected_paths = group.selected_paths();
         emit_portability_step(
             app,
+            job_id,
             SkillportStatePortabilityPhase::Importing,
             total_import_items,
             completed_import_items,
@@ -176,6 +183,7 @@ pub(crate) async fn import_skillport_state_for_target(
             (completed_import_items + selected_paths.len()).min(total_import_items);
         emit_portability_step(
             app,
+            job_id,
             SkillportStatePortabilityPhase::Importing,
             total_import_items,
             completed_import_items,
@@ -223,7 +231,6 @@ async fn import_group_for_target(
                 active_target,
                 &group.repo_url,
                 group.selections.clone(),
-                None,
                 app,
                 auth,
             )

@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend guideline index and pre-development checklist for the owning Rust service."}
+{"file":".trellis/spec/backend/path-policy.md","reason":"Canonical source for local/remote path semantics and containment rules."}
+{"file":".trellis/spec/backend/process-supervision.md","reason":"Required runner, timeout and bounded-output contract for the remote script."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Typed Central Skills error and transport-mapping requirements."}
+{"file":".trellis/spec/backend/test-support.md","reason":"Required FakeRunner and shared Rust fixture conventions."}
+{"file":".trellis/tasks/07-24-remote-path-canonical/research/remote-canonical-path.md","reason":"Repository evidence, canonical security conclusion and portable protocol constraints."}

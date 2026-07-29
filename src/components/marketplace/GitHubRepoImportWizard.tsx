@@ -263,16 +263,18 @@ export function GitHubRepoImportWizard({
     if (step !== "preview") return;
     if (detailTab !== "overview") return;
     if (browserMode) return;
+    if (!preview) return;
     if (!previewState.selectedPreviewSkill) return;
 
     fetchGitHubSkillMarkdown(
+      preview.repo,
       previewState.selectedPreviewSkill.sourcePath,
-      previewState.selectedPreviewSkill.downloadUrl,
     );
   }, [
     browserMode,
     detailTab,
     fetchGitHubSkillMarkdown,
+    preview,
     previewState.selectedPreviewSkill,
     step,
   ]);
@@ -389,8 +391,8 @@ export function GitHubRepoImportWizard({
                 onCancelRenameEditing={cancelRenameEditing}
                 onConfirmRenameEditing={confirmRenameEditing}
                 onUpdateSelection={updateSelection}
-                onRetryMarkdown={(sourcePath, downloadUrl) => {
-                  void fetchGitHubSkillMarkdown(sourcePath, downloadUrl);
+                onRetryMarkdown={(sourcePath) => {
+                  void fetchGitHubSkillMarkdown(preview.repo, sourcePath);
                 }}
                 onRegenerateAiSummary={(sourcePath, skillName, content) => {
                   void generateGitHubImportAiSummary(

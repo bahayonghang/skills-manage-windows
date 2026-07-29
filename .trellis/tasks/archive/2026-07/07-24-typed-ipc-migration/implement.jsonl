@@ -1,0 +1,5 @@
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Preserve the single @/lib/ipc runtime path, typed map shape, browser fixtures, and failure recorder while adding structured rejection normalization."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Migrate the existing command-boundary Result<T, String> exception to IpcResult<T> without weakening typed service errors."}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Keep credentials, paths, command text, captured output, and recovery details out of the new IPC error payload."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Integrate deterministic codegen drift, registry parity, raw-error, and allowlist ratchets into the canonical just ci gate."}
+{"file":".trellis/tasks/07-24-typed-ipc-migration/research/typed-ipc-codegen-options.md","reason":"Use the pinned tauri-specta metadata plus repository-owned adapter-compatible exporter decision and avoid a second runtime invoke client."}

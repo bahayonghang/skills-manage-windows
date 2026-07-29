@@ -12,27 +12,31 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::io::{Cursor, Read};
 use std::path::{Component, Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
-use tauri::{AppHandle, Emitter, State};
+use std::sync::{Arc, Mutex, OnceLock};
+use tauri::{AppHandle, Emitter};
 use tokio::time::{sleep, Duration as TokioDuration, Instant};
 use uuid::Uuid;
 
 use crate::{
     db::{self, DbPool, Skill},
-    targets::{connect_remote_target, remote_join, ActiveTarget, ConnectedRemoteTarget},
-    AppState,
+    targets::{
+        connect_remote_target, remote_join, ActiveTarget, ConnectedRemoteTarget, TargetKind,
+    },
 };
 
 mod archive;
+mod digest;
 mod error;
 mod import;
 mod pat;
 mod plugin_manifest;
 mod preview;
-mod preview_workspace;
 mod progress;
 mod raw_http;
 mod remote;
+mod snapshot;
+mod snapshot_import;
+mod snapshot_registry;
 mod source;
 #[cfg(test)]
 mod tests;
@@ -42,14 +46,15 @@ mod types;
 
 #[cfg(test)]
 use archive::*;
+use digest::*;
 use import::*;
 use plugin_manifest::*;
-#[cfg(test)]
 use preview::*;
-use preview_workspace::*;
 use progress::*;
 use raw_http::*;
 use remote::*;
+use snapshot::*;
+use snapshot_registry::*;
 use source::*;
 use types::*;
 
@@ -64,8 +69,8 @@ pub(crate) use import::{
 };
 pub(crate) use pat::{
     clear_github_pat_impl, get_github_pat_state_impl, github_client,
-    github_direct_auth_from_secret_store, migrate_github_pat_on_startup, reveal_github_pat_impl,
-    set_github_pat_impl, test_github_pat_impl,
+    github_direct_auth_from_secret_store, migrate_github_pat_on_startup, set_github_pat_impl,
+    test_github_pat_impl,
 };
 #[cfg(test)]
 use pat::{GITHUB_PAT_MIGRATION_SETTING_KEY, LEGACY_GITHUB_PAT_SETTING_KEY};
@@ -73,10 +78,10 @@ pub(crate) use preview::{
     preview_github_repo_import_remote_with_auth, preview_github_repo_import_with_auth,
 };
 pub(crate) use raw_http::fetch_raw_text;
+pub(crate) use remote::discard_preview_snapshot_for_target;
 pub(crate) use remote::import_github_repo_skills_remote_with_auth;
-pub(crate) use remote::{
-    discard_preview_workspace_for_active_target, fetch_github_skill_markdown_from_remote_workspace,
-};
+pub(crate) use snapshot::fetch_github_skill_markdown_from_snapshot;
+pub(crate) use snapshot_import::import_github_repo_skills_from_preview;
 pub(crate) use source::{
     build_repo_skill_candidates_from_snapshot_at_path, fetch_repo_skill_candidates_from_source,
     inspect_github_repo_skills_with_auth, inspect_repo_skill_candidates_from_snapshot_at_path,

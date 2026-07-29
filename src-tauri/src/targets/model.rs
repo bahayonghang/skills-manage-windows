@@ -6,6 +6,7 @@ pub(super) const SSH_PASSWORD_SERVICE: &str = "SkillPort SSH Targets";
 pub(super) const SSH_ASKPASS_HELPER_ENV: &str = "SKILLPORT_SSH_ASKPASS_HELPER";
 pub(super) const SSH_PASSWORD_ENV: &str = "SKILLPORT_SSH_PASSWORD";
 pub const LOCAL_TARGET_ID: &str = "local";
+pub(super) const TARGET_CONFIG_QUARANTINE_SETTING_KEY: &str = "target_config_quarantine_v1";
 #[cfg(windows)]
 pub(super) const CREATE_NO_WINDOW: u32 = 0x08000000;
 
@@ -245,5 +246,72 @@ impl ActiveTarget {
             ActiveTarget::Ssh(_) => TargetKind::Ssh,
             ActiveTarget::Wsl(_) => TargetKind::Wsl,
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum TargetConfigDomain {
+    Ssh,
+    Wsl,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetConfigQuarantineIncident {
+    pub domain: TargetConfigDomain,
+    pub detected_at: String,
+    pub reason_code: String,
+    pub source_bytes: u64,
+    pub source_sha256: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetConfigQuarantineStatus {
+    pub version: u8,
+    pub incidents: Vec<TargetConfigQuarantineIncident>,
+    pub active_target_reset: bool,
+}
+
+impl Default for TargetConfigQuarantineStatus {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            incidents: Vec::new(),
+            active_target_reset: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TargetContext {
+    target: ActiveTarget,
+    db: DbPool,
+}
+
+impl TargetContext {
+    pub(crate) fn new(target: ActiveTarget, db: DbPool) -> Self {
+        Self { target, db }
+    }
+
+    pub fn target(&self) -> &ActiveTarget {
+        &self.target
+    }
+
+    pub fn db(&self) -> &DbPool {
+        &self.db
+    }
+
+    pub fn id(&self) -> &str {
+        self.target.id()
+    }
+
+    pub fn label(&self) -> &str {
+        self.target.label()
+    }
+
+    pub fn kind(&self) -> TargetKind {
+        self.target.kind()
     }
 }

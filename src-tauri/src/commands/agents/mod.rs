@@ -350,74 +350,102 @@ pub async fn set_agent_enabled_impl(
 }
 
 #[tauri::command]
-pub async fn get_agents(state: State<'_, AppState>) -> Result<Vec<AgentWithStatus>, String> {
-    let active_target = state.active_target().await?;
-    let pool = state.active_db().await?;
-    match active_target {
-        ActiveTarget::Local => get_agents_impl(&pool).await,
-        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => get_agents_cached_impl(&pool).await,
-    }
+pub async fn get_agents(
+    state: State<'_, AppState>,
+) -> crate::ipc_error::IpcResult<Vec<AgentWithStatus>> {
+    crate::ipc_boundary!(
+        async move {
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let pool = request_context.db().clone();
+            match active_target {
+                ActiveTarget::Local => get_agents_impl(&pool).await,
+                ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => get_agents_cached_impl(&pool).await,
+            }
+        }
+        .await
+    )
 }
 
 #[tauri::command]
 pub async fn list_platform_paths(
     state: State<'_, AppState>,
-) -> Result<std::collections::HashMap<String, ResolvedPlatformPaths>, String> {
-    let active_target = state.active_target().await?;
-    let pool = state.active_db().await?;
-    let remote_home = active_target.remote_home();
-    list_platform_paths_impl(&pool, remote_home).await
+) -> crate::ipc_error::IpcResult<std::collections::HashMap<String, ResolvedPlatformPaths>> {
+    crate::ipc_boundary!(
+        async move {
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let pool = request_context.db().clone();
+            let remote_home = active_target.remote_home();
+            list_platform_paths_impl(&pool, remote_home).await
+        }
+        .await
+    )
 }
 
 #[tauri::command]
-pub async fn detect_agents(state: State<'_, AppState>) -> Result<Vec<AgentWithStatus>, String> {
-    let active_target = state.active_target().await?;
-    let pool = state.active_db().await?;
-    match active_target {
-        ActiveTarget::Local => detect_agents_impl(&pool).await,
-        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
-            detect_remote_agents_impl(&pool, &active_target).await
+pub async fn detect_agents(
+    state: State<'_, AppState>,
+) -> crate::ipc_error::IpcResult<Vec<AgentWithStatus>> {
+    crate::ipc_boundary!(
+        async move {
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let pool = request_context.db().clone();
+            match active_target {
+                ActiveTarget::Local => detect_agents_impl(&pool).await,
+                ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+                    detect_remote_agents_impl(&pool, &active_target).await
+                }
+            }
         }
-    }
+        .await
+    )
 }
 
 #[tauri::command]
 pub async fn add_custom_agent(
     state: State<'_, AppState>,
     config: CustomAgentConfig,
-) -> Result<AgentWithStatus, String> {
-    let active_target = state.active_target().await?;
-    let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
-    let remote_home = active_target.remote_home();
-    let display_name = config.display_name.clone();
-    let global_skills_dir = config.global_skills_dir.clone();
-    let started_at = Instant::now();
-    let result = add_custom_agent_impl_for_home(&pool, config, remote_home).await;
+) -> crate::ipc_error::IpcResult<AgentWithStatus> {
+    crate::ipc_boundary!(
+        async move {
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let target_context = target_context_from_active_target(&active_target);
+            let pool = request_context.db().clone();
+            let remote_home = active_target.remote_home();
+            let display_name = config.display_name.clone();
+            let global_skills_dir = config.global_skills_dir.clone();
+            let started_at = Instant::now();
+            let result = add_custom_agent_impl_for_home(&pool, config, remote_home).await;
 
-    let status = if result.is_ok() {
-        "succeeded"
-    } else {
-        "failed"
-    };
-    let summary = match &result {
-        Ok(agent) => format!("Added custom platform {}", agent.display_name),
-        Err(_) => format!("Failed to add custom platform {}", display_name),
-    };
-    let mut event = OperationLogEvent::new("platform", "platform.add", status, summary)
-        .details(json!({
-            "display_name": &display_name,
-            "global_skills_dir": &global_skills_dir,
-        }))
-        .duration_ms(started_at.elapsed().as_millis() as i64);
-    if let Ok(agent) = &result {
-        event = event.subject("platform", &agent.id, &agent.display_name);
-    }
-    if let Err(error) = &result {
-        event = event.error(error);
-    }
-    record_operation_log_best_effort(&pool, target_context, event).await;
-    result
+            let status = if result.is_ok() {
+                "succeeded"
+            } else {
+                "failed"
+            };
+            let summary = match &result {
+                Ok(agent) => format!("Added custom platform {}", agent.display_name),
+                Err(_) => format!("Failed to add custom platform {}", display_name),
+            };
+            let mut event = OperationLogEvent::new("platform", "platform.add", status, summary)
+                .details(json!({
+                    "display_name": &display_name,
+                    "global_skills_dir": &global_skills_dir,
+                }))
+                .duration_ms(started_at.elapsed().as_millis() as i64);
+            if let Ok(agent) = &result {
+                event = event.subject("platform", &agent.id, &agent.display_name);
+            }
+            if let Err(error) = &result {
+                event = event.error(error);
+            }
+            record_operation_log_best_effort(&pool, target_context, event).await;
+            result
+        }
+        .await
+    )
 }
 
 #[tauri::command]
@@ -425,68 +453,81 @@ pub async fn update_custom_agent(
     state: State<'_, AppState>,
     agent_id: String,
     config: UpdateCustomAgentConfig,
-) -> Result<AgentWithStatus, String> {
-    let active_target = state.active_target().await?;
-    let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
-    let remote_home = active_target.remote_home();
-    let display_name = config.display_name.clone();
-    let global_skills_dir = config.global_skills_dir.clone();
-    let started_at = Instant::now();
-    let result = update_custom_agent_impl_for_home(&pool, &agent_id, config, remote_home).await;
+) -> crate::ipc_error::IpcResult<AgentWithStatus> {
+    crate::ipc_boundary!(
+        async move {
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let target_context = target_context_from_active_target(&active_target);
+            let pool = request_context.db().clone();
+            let remote_home = active_target.remote_home();
+            let display_name = config.display_name.clone();
+            let global_skills_dir = config.global_skills_dir.clone();
+            let started_at = Instant::now();
+            let result =
+                update_custom_agent_impl_for_home(&pool, &agent_id, config, remote_home).await;
 
-    let status = if result.is_ok() {
-        "succeeded"
-    } else {
-        "failed"
-    };
-    let summary = match &result {
-        Ok(agent) => format!("Updated custom platform {}", agent.display_name),
-        Err(_) => format!("Failed to update custom platform {}", agent_id),
-    };
-    let mut event = OperationLogEvent::new("platform", "platform.update", status, summary)
-        .subject("platform", &agent_id, &display_name)
-        .details(json!({
-            "display_name": &display_name,
-            "global_skills_dir": &global_skills_dir,
-        }))
-        .duration_ms(started_at.elapsed().as_millis() as i64);
-    if let Err(error) = &result {
-        event = event.error(error);
-    }
-    record_operation_log_best_effort(&pool, target_context, event).await;
-    result
+            let status = if result.is_ok() {
+                "succeeded"
+            } else {
+                "failed"
+            };
+            let summary = match &result {
+                Ok(agent) => format!("Updated custom platform {}", agent.display_name),
+                Err(_) => format!("Failed to update custom platform {}", agent_id),
+            };
+            let mut event = OperationLogEvent::new("platform", "platform.update", status, summary)
+                .subject("platform", &agent_id, &display_name)
+                .details(json!({
+                    "display_name": &display_name,
+                    "global_skills_dir": &global_skills_dir,
+                }))
+                .duration_ms(started_at.elapsed().as_millis() as i64);
+            if let Err(error) = &result {
+                event = event.error(error);
+            }
+            record_operation_log_best_effort(&pool, target_context, event).await;
+            result
+        }
+        .await
+    )
 }
 
 #[tauri::command]
 pub async fn remove_custom_agent(
     state: State<'_, AppState>,
     agent_id: String,
-) -> Result<(), String> {
-    let active_target = state.active_target().await?;
-    let target_context = target_context_from_active_target(&active_target);
-    let pool = state.active_db().await?;
-    let started_at = Instant::now();
-    let result = remove_custom_agent_impl(&pool, &agent_id).await;
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary!(
+        async move {
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let target_context = target_context_from_active_target(&active_target);
+            let pool = request_context.db().clone();
+            let started_at = Instant::now();
+            let result = remove_custom_agent_impl(&pool, &agent_id).await;
 
-    let status = if result.is_ok() {
-        "succeeded"
-    } else {
-        "failed"
-    };
-    let summary = if result.is_ok() {
-        format!("Removed custom platform {}", agent_id)
-    } else {
-        format!("Failed to remove custom platform {}", agent_id)
-    };
-    let mut event = OperationLogEvent::new("platform", "platform.remove", status, summary)
-        .subject("platform", &agent_id, &agent_id)
-        .duration_ms(started_at.elapsed().as_millis() as i64);
-    if let Err(error) = &result {
-        event = event.error(error);
-    }
-    record_operation_log_best_effort(&pool, target_context, event).await;
-    result
+            let status = if result.is_ok() {
+                "succeeded"
+            } else {
+                "failed"
+            };
+            let summary = if result.is_ok() {
+                format!("Removed custom platform {}", agent_id)
+            } else {
+                format!("Failed to remove custom platform {}", agent_id)
+            };
+            let mut event = OperationLogEvent::new("platform", "platform.remove", status, summary)
+                .subject("platform", &agent_id, &agent_id)
+                .duration_ms(started_at.elapsed().as_millis() as i64);
+            if let Err(error) = &result {
+                event = event.error(error);
+            }
+            record_operation_log_best_effort(&pool, target_context, event).await;
+            result
+        }
+        .await
+    )
 }
 
 #[tauri::command]
@@ -494,9 +535,14 @@ pub async fn set_agent_enabled(
     state: State<'_, AppState>,
     agent_id: String,
     is_enabled: bool,
-) -> Result<AgentWithStatus, String> {
-    let pool = state.active_db().await?;
-    set_agent_enabled_impl(&pool, &agent_id, is_enabled).await
+) -> crate::ipc_error::IpcResult<AgentWithStatus> {
+    crate::ipc_boundary!(
+        async move {
+            let pool = state.active_db().await?;
+            set_agent_enabled_impl(&pool, &agent_id, is_enabled).await
+        }
+        .await
+    )
 }
 
 #[cfg(test)]

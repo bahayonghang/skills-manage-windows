@@ -53,13 +53,16 @@ pub(crate) async fn resolve_repo_source(
         .to_string();
     let branch = parsed.branch.unwrap_or(branch);
 
+    let repo_ref = GitHubRepoRef {
+        owner: owner.clone(),
+        repo: repo.clone(),
+        branch,
+        normalized_url: format!("https://github.com/{owner}/{repo}"),
+    };
+    validate_repo_ref(&repo_ref)?;
+
     Ok(ResolvedGitHubRepoSource {
-        repo: GitHubRepoRef {
-            owner: owner.clone(),
-            repo: repo.clone(),
-            branch,
-            normalized_url: format!("https://github.com/{owner}/{repo}"),
-        },
+        repo: repo_ref,
         source_path: parsed.source_path,
     })
 }
@@ -87,6 +90,14 @@ pub(super) fn parse_github_source(url: &str) -> Result<ParsedGitHubSource, Githu
 
     if parsed.scheme() != "https" {
         return Err(GithubImportError::RepoUrlNotHttps);
+    }
+    if !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.fragment().is_some()
+        || parsed.query().is_some()
+        || parsed.port_or_known_default() != Some(443)
+    {
+        return Err(GithubImportError::InvalidRepoUrl);
     }
     let host = parsed.host_str().unwrap_or_default();
     if host != "github.com" && host != "www.github.com" {
@@ -127,6 +138,14 @@ pub(super) fn parse_github_source(url: &str) -> Result<ParsedGitHubSource, Githu
         None => (None, &segments[2..]),
     };
     let source_path = normalize_repo_subpath(source_segments)?;
+
+    let validation_ref = GitHubRepoRef {
+        owner: (*owner).to_string(),
+        repo: repo.to_string(),
+        branch: branch.clone().unwrap_or_else(|| "main".to_string()),
+        normalized_url: String::new(),
+    };
+    validate_repo_ref(&validation_ref)?;
 
     Ok(ParsedGitHubSource {
         owner: owner.to_lowercase(),

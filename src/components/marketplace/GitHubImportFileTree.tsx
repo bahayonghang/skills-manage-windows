@@ -15,11 +15,11 @@ import {
   buildGitHubImportFileTree,
   flattenGitHubImportFileTree,
   getGitHubImportFileManifestIssue,
+  type GitHubImportFileEntry,
 } from "@/lib/githubImportFileTree";
-import type { GitHubSkillPreviewFile } from "@/types";
 
 interface GitHubImportFileTreeProps {
-  files: GitHubSkillPreviewFile[] | null | undefined;
+  files: GitHubImportFileEntry[] | null | undefined;
   rootName: string;
 }
 
@@ -57,9 +57,7 @@ export function GitHubImportFileTree({
 
   const visibleRows = useMemo(
     () =>
-      model
-        ? flattenGitHubImportFileTree(model.roots, expandedPaths)
-        : [],
+      model ? flattenGitHubImportFileTree(model.roots, expandedPaths) : [],
     [expandedPaths, model],
   );
 

@@ -3,12 +3,10 @@ import { create } from "zustand";
 import { invoke, isTauriRuntime, listen } from "@/lib/ipc";
 import type {
   ActiveRefreshRepository,
-  DeletedPlatformCopyGroup,
   ForceRepositoryMirrorRequest,
   ForceRepositoryMirrorResult,
   ForceSkillUpdateRequest,
   ForceSkillUpdateResult,
-  PlatformDuplicateGroup,
   SkillRefreshScope,
   SkillRefreshMode,
   SkillUpdateApplyResult,
@@ -253,13 +251,10 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
           });
         },
       );
-      const inventory = await invoke<SkillUpdateInventory>(
-        "refresh_skill_update_inventory",
-        {
-          scope: { ...scope, cachePolicy: scope.cachePolicy ?? "bypass" },
-          operationId,
-        },
-      );
+      const inventory = await invoke("refresh_skill_update_inventory", {
+        scope: { ...scope, cachePolicy: scope.cachePolicy ?? "bypass" },
+        operationId,
+      });
       set({
         inventory,
         lastRefreshedAt: new Date().toISOString(),
@@ -284,10 +279,16 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
   },
 
   async apply(decisions, scope) {
+    if (get().isApplying) {
+      throw new Error("job.central_update_busy:A Central update job is already running.");
+    }
+    const jobId = globalThis.crypto?.randomUUID?.()
+      ?? `job-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     set({ isApplying: true, error: null });
     try {
       const result = isTauriRuntime()
         ? await invoke<SkillUpdateApplyResult>("apply_skill_update_decisions", {
+            jobId,
             decisions,
           })
         : emptyApplyResult();
@@ -312,16 +313,13 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
       set({ inventory: emptyInventory() });
       return;
     }
-    const inventory = await invoke<SkillUpdateInventory>(
-      "get_skill_update_inventory",
-      { scope: scope ?? null },
-    );
+    const inventory = await invoke("get_skill_update_inventory", { scope: scope ?? null });
     set({ inventory });
   },
 
   async scanDuplicates(agentIds) {
     if (!isTauriRuntime()) return;
-    const platformDuplicates = await invoke<PlatformDuplicateGroup[]>(
+    const platformDuplicates = await invoke(
       "scan_platform_duplicate_skills",
       { agentIds: agentIds ?? null },
     );
@@ -334,7 +332,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
 
   async scanDeletedPlatformCopies(agentIds) {
     if (!isTauriRuntime()) return;
-    const deletedPlatformCopies = await invoke<DeletedPlatformCopyGroup[]>(
+    const deletedPlatformCopies = await invoke(
       "scan_deleted_platform_copies",
       { agentIds: agentIds ?? null },
     );
@@ -349,7 +347,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
     set({ isForcing: true, error: null });
     try {
       const result = isTauriRuntime()
-        ? await invoke<ForceSkillUpdateResult>("force_update_central_skills", {
+        ? await invoke("force_update_central_skills", {
             request,
           })
         : { overwritten: [], skipped: [], failed: [] };
@@ -366,7 +364,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
     set({ isForcing: true, error: null });
     try {
       const result = isTauriRuntime()
-        ? await invoke<ForceRepositoryMirrorResult>(
+        ? await invoke(
             "force_mirror_central_repositories",
             { request },
           )

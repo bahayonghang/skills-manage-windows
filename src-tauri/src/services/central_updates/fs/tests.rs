@@ -1,8 +1,8 @@
 use super::batch::{build_skill_batch_archive, parse_batch_rows};
 use super::*;
 use crate::targets::{
-    CommandRunner, ConnectedRemoteTarget, ConnectedSshTarget, RemoteTargetConfig, RunnerError,
-    SshAuthMethod,
+    CommandRunner, ConnectedRemoteTarget, ConnectedSshTarget, ConnectedWslTarget,
+    RemoteTargetConfig, RunnerError, SshAuthMethod, WslTargetConfig,
 };
 use crate::test_support::FakeRunner;
 use std::collections::HashMap;
@@ -34,6 +34,33 @@ fn fake_remote_fs() -> (Arc<FakeRunner>, CentralFs) {
     )
 }
 
+fn fake_remote_update_filesystems() -> Vec<(Arc<FakeRunner>, CentralFs)> {
+    let (ssh_runner, ssh) = fake_remote_fs();
+    let wsl_runner = Arc::new(FakeRunner::new());
+    let wsl = ConnectedWslTarget::for_tests_with_runner(
+        WslTargetConfig {
+            id: "test-wsl".to_string(),
+            label: "Test WSL".to_string(),
+            distribution: "TestDistro".to_string(),
+            remote_home: "/home/tester".to_string(),
+            remote_os: "linux".to_string(),
+            symlink_enabled: true,
+        },
+        wsl_runner.clone(),
+    );
+    vec![
+        (ssh_runner, ssh),
+        (
+            wsl_runner,
+            CentralFs::Remote(Box::new(ConnectedRemoteTarget::Wsl(wsl))),
+        ),
+    ]
+}
+
+fn remote_hash_output(root: &str, file_digest: &str) -> String {
+    format!("ROOT\t{root}\n{file_digest}\tSKILL.md\nEND\t{root}\n")
+}
+
 fn sample_write(index: usize) -> CentralSkillWrite {
     let skill_id = format!("demo-{index}");
     CentralSkillWrite {
@@ -53,6 +80,38 @@ fn successful_rows(start: usize, count: usize) -> String {
         .collect()
 }
 
+fn operation_stage(index: usize) -> OperationUpdateStage {
+    let write = sample_write(index);
+    let operation_id = format!("op-{index}");
+    let parent = "/home/tester/.skillsmanage/skills";
+    let file_digest = format!("{:x}", Sha256::digest(&write.files[0].bytes));
+    OperationUpdateStage {
+        manifest: crate::services::central_operation::UpdateManifest {
+            version: crate::services::central_operation::MANIFEST_VERSION,
+            operation_id: operation_id.clone(),
+            target: posix_path(&write.target_dir),
+            staging: format!("{parent}/.skillport-update-staging-{operation_id}"),
+            backup: format!("{parent}/.skillport-update-backup-{operation_id}"),
+            marker: format!("{parent}/.skillport-operation-marker-{operation_id}"),
+            had_target: false,
+            old_fingerprint: None,
+            new_fingerprint: hash_entries(vec![("SKILL.md".to_string(), file_digest)]),
+            copies: Vec::new(),
+        },
+        write,
+    }
+}
+
+fn successful_stage_hashes(stages: &[OperationUpdateStage]) -> String {
+    stages
+        .iter()
+        .map(|stage| {
+            let digest = format!("{:x}", Sha256::digest(&stage.write.files[0].bytes));
+            remote_hash_output(&stage.manifest.staging, &digest)
+        })
+        .collect()
+}
+
 struct CancellingRunner {
     inner: FakeRunner,
     cancel: Arc<AtomicBool>,
@@ -69,13 +128,13 @@ async fn cleanup_remote_root(fs: &CentralFs, root: &str) {
         .unwrap();
 }
 
+#[async_trait::async_trait]
 impl CommandRunner for CancellingRunner {
-    fn run(
+    async fn run(
         &self,
-        command: std::process::Command,
-        stdin: Option<&[u8]>,
+        request: crate::targets::ProcessRequest<'_>,
     ) -> Result<std::process::Output, RunnerError> {
-        let result = self.inner.run(command, stdin);
+        let result = self.inner.run(request).await;
         self.cancel.store(true, Ordering::SeqCst);
         result
     }
@@ -225,6 +284,150 @@ fn batch_row_parser_preserves_partial_success() {
 }
 
 #[tokio::test]
+async fn ssh_and_wsl_fake_runners_cover_update_stage_swap_and_phase_loss_rollback() {
+    use crate::services::central_operation::{UpdateManifest, MANIFEST_VERSION};
+
+    let old_file_digest = format!("{:x}", Sha256::digest(b"old"));
+    let new_file_digest = format!("{:x}", Sha256::digest(b"new"));
+    let old_fingerprint = hash_entries(vec![("SKILL.md".to_string(), old_file_digest.clone())]);
+    let new_fingerprint = hash_entries(vec![("SKILL.md".to_string(), new_file_digest.clone())]);
+    for (runner, fs) in fake_remote_update_filesystems() {
+        let target = "/home/tester/.skillsmanage/skills/demo";
+        let staging = "/home/tester/.skillsmanage/skills/.skillport-update-staging-op-demo";
+        let backup = "/home/tester/.skillsmanage/skills/.skillport-update-backup-op-demo";
+        let marker = "/home/tester/.skillsmanage/skills/.skillport-operation-marker-op-demo";
+        let manifest = UpdateManifest {
+            version: MANIFEST_VERSION,
+            operation_id: "op-demo".to_string(),
+            target: target.to_string(),
+            staging: staging.to_string(),
+            backup: backup.to_string(),
+            marker: marker.to_string(),
+            had_target: true,
+            old_fingerprint: Some(old_fingerprint.clone()),
+            new_fingerprint: new_fingerprint.clone(),
+            copies: Vec::new(),
+        };
+        let write = CentralSkillWrite {
+            skill_id: "demo".to_string(),
+            target_dir: PathBuf::from(target),
+            files: vec![RemoteSkillFile {
+                repo_path: "SKILL.md".to_string(),
+                relative_path: "SKILL.md".to_string(),
+                bytes: b"new".to_vec(),
+            }],
+        };
+
+        runner.push_success("STAGED\n");
+        runner.push_success(&remote_hash_output(staging, &new_file_digest));
+        runner.push_success(&remote_hash_output(staging, &new_file_digest));
+        runner.push_success(&remote_hash_output(target, &old_file_digest));
+        runner.push_success("SWAPPED\n");
+        runner.push_success("");
+        runner.push_success("");
+        runner.push_output(1, "", "");
+        runner.push_success(&remote_hash_output(target, &new_file_digest));
+        runner.push_success(&remote_hash_output(backup, &old_file_digest));
+        runner.push_success("ROLLED_BACK\n");
+
+        fs.stage_operation_update(&manifest, &write).await.unwrap();
+        fs.swap_operation_update(&manifest).await.unwrap();
+        fs.rollback_operation_update(
+            &manifest,
+            crate::services::central_operation::OperationPhase::FsStaged,
+        )
+        .await
+        .unwrap();
+        assert_eq!(runner.calls().len(), 11);
+    }
+}
+
+#[tokio::test]
+async fn ssh_and_wsl_remote_update_finalize_is_idempotent_after_cleanup() {
+    use crate::services::central_operation::{UpdateManifest, MANIFEST_VERSION};
+
+    let file_digest = format!("{:x}", Sha256::digest(b"new"));
+    let new_fingerprint = hash_entries(vec![("SKILL.md".to_string(), file_digest.clone())]);
+    for (runner, fs) in fake_remote_update_filesystems() {
+        let target = "/home/tester/.skillsmanage/skills/demo";
+        let manifest = UpdateManifest {
+            version: MANIFEST_VERSION,
+            operation_id: "op-finalize".to_string(),
+            target: target.to_string(),
+            staging: "/home/tester/.skillsmanage/skills/.skillport-update-staging-op-finalize"
+                .to_string(),
+            backup: "/home/tester/.skillsmanage/skills/.skillport-update-backup-op-finalize"
+                .to_string(),
+            marker: "/home/tester/.skillsmanage/skills/.skillport-operation-marker-op-finalize"
+                .to_string(),
+            had_target: true,
+            old_fingerprint: Some(hash_entries(vec![(
+                "SKILL.md".to_string(),
+                format!("{:x}", Sha256::digest(b"old")),
+            )])),
+            new_fingerprint: new_fingerprint.clone(),
+            copies: Vec::new(),
+        };
+
+        for _ in 0..2 {
+            runner.push_success(&remote_hash_output(target, &file_digest));
+            runner.push_output(1, "", "");
+            runner.push_success("FINALIZED\n");
+            fs.finalize_operation_update(&manifest).await.unwrap();
+        }
+
+        let calls = runner.calls();
+        assert_eq!(calls.len(), 6);
+        let finalize_calls = calls
+            .iter()
+            .filter(|call| {
+                call.stdin.as_deref().is_some_and(|stdin| {
+                    String::from_utf8_lossy(stdin).contains("[ ! -e \"$marker\" ]")
+                })
+            })
+            .count();
+        assert_eq!(finalize_calls, 2);
+    }
+}
+
+#[tokio::test]
+async fn ssh_and_wsl_rollback_restores_backup_when_failed_swap_left_target_missing() {
+    use crate::services::central_operation::{OperationPhase, UpdateManifest, MANIFEST_VERSION};
+
+    let old_file_digest = format!("{:x}", Sha256::digest(b"old"));
+    let old_fingerprint = hash_entries(vec![("SKILL.md".to_string(), old_file_digest.clone())]);
+    let new_fingerprint = hash_entries(vec![(
+        "SKILL.md".to_string(),
+        format!("{:x}", Sha256::digest(b"new")),
+    )]);
+    for (runner, fs) in fake_remote_update_filesystems() {
+        let manifest = UpdateManifest {
+            version: MANIFEST_VERSION,
+            operation_id: "op-missing-target".to_string(),
+            target: "/home/tester/.skillsmanage/skills/demo".to_string(),
+            staging: "/home/tester/.skillsmanage/skills/.skillport-update-staging".to_string(),
+            backup: "/home/tester/.skillsmanage/skills/.skillport-update-backup".to_string(),
+            marker: "/home/tester/.skillsmanage/skills/.skillport-operation-marker".to_string(),
+            had_target: true,
+            old_fingerprint: Some(old_fingerprint.clone()),
+            new_fingerprint: new_fingerprint.clone(),
+            copies: Vec::new(),
+        };
+
+        runner.push_success("");
+        runner.push_output(1, "", "");
+        runner.push_success("");
+        runner.push_success(&remote_hash_output(&manifest.backup, &old_file_digest));
+        runner.push_success("ROLLED_BACK\n");
+
+        fs.rollback_operation_update(&manifest, OperationPhase::FsStaged)
+            .await
+            .unwrap();
+        assert_eq!(runner.calls().len(), 5);
+    }
+}
+
+#[tokio::test]
 async fn remote_batch_writes_use_one_process_per_sixteen_skills() {
     let (runner, fs) = fake_remote_fs();
     runner.push_success(&successful_rows(0, 16));
@@ -240,6 +443,39 @@ async fn remote_batch_writes_use_one_process_per_sixteen_skills() {
     let calls = runner.calls();
     assert_eq!(calls.len(), 3);
     assert!(calls.iter().all(|call| call.stdin.is_some()));
+    assert!(calls
+        .iter()
+        .all(|call| call.policy.class.label() == "bulk_transfer"));
+}
+
+#[tokio::test]
+async fn remote_durable_staging_uses_one_archive_process_per_sixteen_skills() {
+    let (runner, fs) = fake_remote_fs();
+    let stages = (0..33).map(operation_stage).collect::<Vec<_>>();
+    runner.push_success(&successful_rows(0, 16));
+    runner.push_success(&successful_rows(16, 16));
+    runner.push_success(&successful_rows(32, 1));
+    runner.push_success(&successful_stage_hashes(&stages[..32]));
+    runner.push_success(&successful_stage_hashes(&stages[32..]));
+
+    let outcomes = fs.stage_operation_updates(stages, None).await;
+
+    assert_eq!(outcomes.len(), 33);
+    assert!(outcomes.iter().all(|outcome| outcome.result.is_ok()));
+    let calls = runner.calls();
+    assert_eq!(calls.len(), 5);
+    assert_eq!(
+        calls
+            .iter()
+            .filter(|call| {
+                call.stdin
+                    .as_deref()
+                    .is_some_and(|bytes| bytes.starts_with(&[0x1f, 0x8b]))
+            })
+            .count(),
+        3,
+        "33 durable writes must use ceil(33 / 16) archive uploads"
+    );
 }
 
 #[tokio::test]

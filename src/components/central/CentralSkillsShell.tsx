@@ -33,6 +33,7 @@ import {
   type SourceFilterValue,
 } from "@/components/central/CentralTopFilters";
 import { useUpdateCenterStore } from "@/stores/updateCenterStore";
+import { useCentralRefreshButton } from "@/components/central/useCentralRefreshButton";
 import { cn } from "@/lib/utils";
 import { useMemo } from "react";
 import { groupSkillsByMode } from "@/lib/centralGrouping";
@@ -218,6 +219,7 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
   } = props;
 
   const openUpdateCenter = useUpdateCenterStore((s) => s.openDialog);
+  const refreshButton = useCentralRefreshButton();
   const openLocalArchiveImport = useLocalArchiveImportStore(
     (state) => state.openWizard,
   );
@@ -380,6 +382,22 @@ export function CentralSkillsShell(props: CentralSkillsShellProps) {
           >
             <ListChecks className="size-3.5" />
             {t("central.updateCenter.openButton")}
+          </Button>
+
+          {/* 手动刷新列表（与计数刷新并行，刷新中保留列表内容）─── */}
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 w-9 rounded-xl transition-[scale,background-color,border-color,box-shadow,color] active:scale-[0.96]"
+            onClick={refreshButton.onClick}
+            disabled={refreshButton.disabled}
+            title={t("central.refresh")}
+            aria-label={t("central.refresh")}
+            data-testid="central-refresh-skills"
+          >
+            <RefreshCw
+              className={cn("size-3.5", refreshButton.refreshing && "animate-spin")}
+            />
           </Button>
 
           {checkModeControl}

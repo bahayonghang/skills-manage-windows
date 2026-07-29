@@ -1,7 +1,7 @@
 //! Agents table CRUD — Phase 2c.
 //!
 //! Built-in agent seeding lives in `db/legacy.rs::seed_builtin_agents`
-//! (called from `db::schema::init` indirectly via `init_database_with_agents`).
+//! (created by migration 1 and populated by the post-migration seed step).
 //! This file owns the runtime CRUD that `commands/agents.rs` calls.
 
 use crate::db::types::{Agent, DbPool};

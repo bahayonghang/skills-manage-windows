@@ -1,0 +1,17 @@
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Check end-to-end snapshot identity and error flow across backend, IPC, frontend, and DB."}
+{"file":".trellis/spec/backend/index.md","reason":"Discover every backend contract affected by the final diff."}
+{"file":".trellis/spec/backend/github-import-preview-contract.md","reason":"Verify immutable reads/import, manifest parity, resource bounds, and no branch fallback."}
+{"file":".trellis/spec/backend/local-archive-import.md","reason":"Compare digest mismatch and fail-before-mutation behavior against the established integrity model."}
+{"file":".trellis/spec/backend/database-migrations.md","reason":"Audit v4 continuity, checksum immutability, NULL compatibility, transactionality, and recovery tests."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Check stable typed variants and that stringification remains at command boundaries."}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Audit all logs, errors, operation details, and persistence for token/path/content/PAT leakage."}
+{"file":".trellis/spec/backend/target-context.md","reason":"Verify Local, SSH, and WSL token binding cannot cross a target switch."}
+{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"Check import lease ordering and Central mutation lock composition for deadlock or duplicate mutation."}
+{"file":".trellis/spec/backend/test-support.md","reason":"Review Rust fixtures and FakeRunner coverage for repository conventions and real failure evidence."}
+{"file":".trellis/spec/frontend/index.md","reason":"Discover every frontend contract affected by the final diff."}
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Check required previewId typing, fixtures, command coverage, and absence of direct invoke bypasses."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Verify invalid snapshot failures are visible, retryable, and do not open success-only UI."}
+{"file":".trellis/spec/frontend/async-ui-test-stability.md","reason":"Review wizard tests for scoped queries, local waits, and flake resistance."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Verify focused tests and the complete just ci gate are evidenced."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Check new Rust and Vitest coverage is placed in discoverable domain-owned suites."}
+{"file":".trellis/tasks/07-24-github-preview-snapshot/research/live-preview-snapshot.md","reason":"Compare implementation against the live defects and reusable seams that motivated the task."}

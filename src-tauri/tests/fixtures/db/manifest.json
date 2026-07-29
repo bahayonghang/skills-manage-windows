@@ -1,0 +1,51 @@
+{
+  "formatVersion": 1,
+  "sourceArchive": "git archive --format=tar <tag> -- src-tauri/src/db/schema",
+  "fixtures": [
+    {
+      "tag": "v0.10.9",
+      "commit": "2ad251e671982e9942161cecada37c8246e3f98c",
+      "sourceSchemaSha256": "a60352b6c1126c704cdf8c3abad0349b389f07df2078e2b236afa66f9de14293",
+      "file": "0_10_9.sql",
+      "fixtureSha256": "0e8e8cfc9da2c565f198a1b9d6cd3daad2d568099f8961b570e15550bb141f0a",
+      "tableCount": 27,
+      "absentTables": ["skill_update_inventory_runs", "skill_update_inventory_entries", "skill_usage_metadata"]
+    },
+    {
+      "tag": "v0.10.10",
+      "commit": "a7a2744255f8bfe03afd0cc6eb79b8ae56519813",
+      "sourceSchemaSha256": "9db9f0a3bd0aba9c9e8f79e24e23ec5efb9ce9ee5831a4c95d241ed292941e02",
+      "file": "0_10_10.sql",
+      "fixtureSha256": "45b699c2f918edadcfb28b89c8c552b1b14a0ce89edbe274c9e969f3c2fdd1e8",
+      "tableCount": 29,
+      "absentTables": ["skill_usage_metadata"]
+    },
+    {
+      "tag": "v0.10.12",
+      "commit": "0cf5f6431885adff7fe5ac418dc24d216fe1322d",
+      "sourceSchemaSha256": "493146853e7a9deb37fb04d2bed9682c2c73e17de5f4cb76b85592b66da36706",
+      "file": "0_10_12.sql",
+      "fixtureSha256": "c7a715e5fb187162956bb4cdd113803bc4c3bc7426c5d774d5e36d8164293212",
+      "tableCount": 29,
+      "absentTables": ["skill_usage_metadata"]
+    },
+    {
+      "tag": "v0.10.13",
+      "commit": "1ab4878a867fb1ae63efb53adb4907636e99d8b8",
+      "sourceSchemaSha256": "0b14b420e099ceed0f28a8f279f07bbcfa51b93a1ae138ee73dac803cb73ba55",
+      "file": "0_10_13.sql",
+      "fixtureSha256": "1ead8af84f1c13918fbed1870075a471005706b6d2b89d7e53a072c07da531dd",
+      "tableCount": 29,
+      "absentTables": ["skill_usage_metadata"]
+    },
+    {
+      "tag": "v0.10.14",
+      "commit": "63f37dbf8d71bbc4bc424368469d80c4d66deecd",
+      "sourceSchemaSha256": "465dd03bb0e924371b75277612d7cca0ea6cd9c0e665e3070ca7817c7356cc3d",
+      "file": "0_10_14.sql",
+      "fixtureSha256": "8095573d23f19be42513185fcf1d2da45dd275c081409084a138c9c15e5fb5da",
+      "tableCount": 30,
+      "absentTables": []
+    }
+  ]
+}

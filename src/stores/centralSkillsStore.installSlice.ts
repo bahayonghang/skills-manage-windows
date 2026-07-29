@@ -1,12 +1,9 @@
 import { invoke, isTauriRuntime } from "@/lib/ipc";
 import {
   BatchDeleteCentralSkillPreviewResult,
-  BatchDeleteCentralSkillResult,
   BatchInstallResult,
   CentralBatchInstallResult,
-  CentralSkillUpdateState,
   DeleteSkillRepositoryPreview,
-  DeleteSkillRepositoryResult,
   SkillAiTagReview,
   SkillRepositoryWithStats,
   SkillTag,
@@ -54,7 +51,7 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
     try {
       const trimmedProjectPath = projectPath?.trim() ? projectPath.trim() : null;
       const result = trimmedProjectPath
-        ? await invoke<CentralBatchInstallResult>("batch_install_central_skills", {
+        ? await invoke("batch_install_central_skills", {
             skillIds: [skillId],
             agentIds,
             method,
@@ -74,7 +71,7 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
               })),
             };
           })
-        : await invoke<BatchInstallResult>("batch_install_to_agents", {
+        : await invoke("batch_install_to_agents", {
             skillId,
             agentIds,
             method,
@@ -95,7 +92,7 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
   batchInstallSkills: async (skillIds, agentIds, method, projectPath) => {
     set({ isInstalling: true, error: null });
     try {
-      const result = await invoke<CentralBatchInstallResult>("batch_install_central_skills", {
+      const result = await invoke("batch_install_central_skills", {
         skillIds,
         agentIds,
         method,
@@ -178,7 +175,7 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
 
     set({ isDeleting: true, error: null });
     try {
-      const result = await invoke<BatchDeleteCentralSkillResult>("delete_central_skills", {
+      const result = await invoke("delete_central_skills", {
         requests,
       });
       const [skills, repositories, tags, reviews, updateStates] = await Promise.all([
@@ -186,7 +183,7 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
         invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
         invoke<SkillTag[]>("get_skill_tags"),
         invoke<SkillAiTagReview[]>("get_pending_ai_tag_reviews"),
-        invoke<CentralSkillUpdateState[]>("get_central_skill_update_states"),
+        invoke("get_central_skill_update_states"),
       ]);
       set({
         skills: skills ?? [],
@@ -210,7 +207,7 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
 
     set({ isDeleting: true, error: null });
     try {
-      const result = await invoke<DeleteSkillRepositoryResult>("delete_skill_repository", {
+      const result = await invoke("delete_skill_repository", {
         repositoryId,
         requests,
       });
@@ -219,7 +216,7 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
         invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
         invoke<SkillTag[]>("get_skill_tags"),
         invoke<SkillAiTagReview[]>("get_pending_ai_tag_reviews"),
-        invoke<CentralSkillUpdateState[]>("get_central_skill_update_states"),
+        invoke("get_central_skill_update_states"),
       ]);
       set({
         skills: skills ?? [],

@@ -1,0 +1,13 @@
+{"file":".trellis/spec/backend/target-context.md","reason":"Freeze target identity, matching cache DB, and transport inputs for every journaled mutation and recovery."}
+{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"Generalize the existing fs2 cross-process Local boundary into backward-compatible per-target mutation leases."}
+{"file":".trellis/spec/backend/central-update-batching.md","reason":"Preserve the single batch orchestrator, per-skill outcomes, remote chunk limits, and cancellation semantics."}
+{"file":".trellis/spec/backend/database-migrations.md","reason":"Append checksum-locked migration 3 without redefining released migrations or weakening backup/restore preflight."}
+{"file":".trellis/spec/backend/skill-deletion-integrity.md","reason":"Keep skill-parent FK cascade and repository pruning atomic inside the delete Saga transaction."}
+{"file":".trellis/spec/backend/best-effort-writes.md","reason":"Treat durable journal and recovery transitions as correctness-critical while keeping exportable Operation Logs best effort."}
+{"file":".trellis/spec/backend/spawn-blocking-io.md","reason":"Route recursive Local staging, rename, restore, fingerprint, and cleanup work through the shared blocking boundary."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Keep DB, service-domain, transport, recovery-collision, and IPC error boundaries typed."}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Keep secrets, file contents, recovery manifests, and full paths out of logs, exports, and error text."}
+{"file":".trellis/spec/backend/test-support.md","reason":"Reuse shared DB and target fixtures while documenting crash-process and frozen migration fixture exceptions."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Trace journal state through DB, service, command, store, i18n, and Operation Logs retry UI."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Reuse archive staging, CentralFs batching, target transport, mutation lock, and operation-log patterns instead of parallel mechanisms."}
+{"file":".trellis/tasks/07-24-fs-db-operation-journal/research/operation-journal-live-2026-07-26.md","reason":"Use current delete/update failure windows, dependency state, and recovery ordering proof."}

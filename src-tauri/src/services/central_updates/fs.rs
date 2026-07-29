@@ -8,6 +8,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{HashMap, VecDeque};
 use std::path::{Component, Path, PathBuf};
 
+#[cfg(test)]
 use uuid::Uuid;
 
 use crate::fs_util::run_blocking_fs_with;
@@ -18,9 +19,11 @@ use crate::targets::{connect_remote_target, ActiveTarget, ConnectedRemoteTarget}
 use super::error::CentralUpdatesError;
 
 mod batch;
+mod operation;
 mod remote_scripts;
 
 pub(crate) use batch::{CentralSkillWrite, CopyRefreshRequest};
+pub(crate) use operation::OperationUpdateStage;
 
 #[cfg(test)]
 mod tests;
@@ -194,6 +197,7 @@ fn write_remote_skill_files(
     Ok(())
 }
 
+#[cfg(test)]
 fn replace_target_dir(
     target_dir: &Path,
     temp_dir: &Path,
@@ -235,6 +239,7 @@ fn replace_target_dir(
     Ok(())
 }
 
+#[cfg(test)]
 fn write_skill_dir_atomic_local(
     skill_id: &str,
     target_dir: &Path,

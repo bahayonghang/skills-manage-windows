@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/central-update-batching.md","reason":"Review that state-helper extraction does not alter update batching or durable operation behavior."}
+{"file":".trellis/spec/backend/test-support.md","reason":"Review moved collections and seed coverage against the shared Rust fixture contract."}
+{"file":".trellis/spec/frontend/skill-card-scenarios.md","reason":"Review that card type exports and internal model visibility preserve the scenario contract."}
+{"file":".trellis/spec/frontend/async-ui-test-stability.md","reason":"Review CentralSkillsView interaction coverage after action binding extraction."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Review the no-exception sizecheck policy and final just ci evidence."}

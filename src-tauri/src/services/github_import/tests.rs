@@ -19,6 +19,98 @@ pub(super) mod suite {
         pool
     }
 
+    fn ssh_test_target(id: &str) -> ActiveTarget {
+        ActiveTarget::Ssh(Box::new(crate::targets::RemoteTargetConfig {
+            id: id.to_string(),
+            label: format!("SSH {id}"),
+            host: "example.com".to_string(),
+            username: "alice".to_string(),
+            port: 22,
+            auth_method: crate::targets::SshAuthMethod::Key,
+            key_path: "~/.ssh/id_ed25519".to_string(),
+            credential_key: None,
+            protected_password: None,
+            password: None,
+            remote_home: "/home/alice".to_string(),
+            remote_os: "Linux".to_string(),
+            symlink_enabled: true,
+        }))
+    }
+
+    /// A registered remote snapshot bound to `ssh-demo` / `openai/skills@main`.
+    fn remote_test_snapshot(source_path: Option<&str>) -> PreviewSnapshot {
+        let now = Utc::now();
+        PreviewSnapshot {
+            id: "github-preview-binding".to_string(),
+            target_id: "ssh-demo".to_string(),
+            target_kind: TargetKind::Ssh,
+            repo: GitHubRepoRef {
+                owner: "openai".to_string(),
+                repo: "skills".to_string(),
+                branch: "main".to_string(),
+                normalized_url: "https://github.com/openai/skills".to_string(),
+            },
+            source_path: source_path.map(str::to_string),
+            resolved_commit_sha: "a".repeat(40),
+            snapshot_digest: "sha256-v1:binding".to_string(),
+            files: Vec::new(),
+            candidates: Vec::new(),
+            created_at: now,
+            expires_at: now + Duration::minutes(30),
+            storage: PreviewSnapshotStorage::Remote(GitHubPreviewWorkspace {
+                remote_workspace_dir: "/tmp/skillport-github-preview.abc123".to_string(),
+                remote_repo_dir: "/tmp/skillport-github-preview.abc123/repo".to_string(),
+            }),
+        }
+    }
+
+    /// A registered local snapshot for the given retained repository snapshot.
+    fn local_test_snapshot(
+        repo: &GitHubRepoRef,
+        source_path: Option<&str>,
+        snapshot: GitHubRepoSnapshot,
+        candidates: Vec<PreviewSnapshotCandidate>,
+    ) -> PreviewSnapshot {
+        let now = Utc::now();
+        let files = snapshot_files_from_local(&snapshot);
+        PreviewSnapshot {
+            id: "github-preview-local".to_string(),
+            target_id: ActiveTarget::Local.id().to_string(),
+            target_kind: TargetKind::Local,
+            repo: repo.clone(),
+            source_path: source_path.map(str::to_string),
+            resolved_commit_sha: "b".repeat(40),
+            snapshot_digest: repository_snapshot_digest(&files),
+            files,
+            candidates,
+            created_at: now,
+            expires_at: now + Duration::minutes(30),
+            storage: PreviewSnapshotStorage::Local(Arc::new(snapshot)),
+        }
+    }
+
+    fn test_mirror_endpoints(direct_url: String, mirror_url: String) -> Vec<GitHubMirrorEndpoint> {
+        let direct_url: &'static str = Box::leak(direct_url.into_boxed_str());
+        let mirror_url: &'static str = Box::leak(mirror_url.into_boxed_str());
+        vec![
+            GitHubMirrorEndpoint {
+                label: "github",
+                api_base: direct_url,
+                raw_base: direct_url,
+            },
+            GitHubMirrorEndpoint {
+                label: "mirror-one",
+                api_base: mirror_url,
+                raw_base: mirror_url,
+            },
+            GitHubMirrorEndpoint {
+                label: "mirror-two",
+                api_base: mirror_url,
+                raw_base: mirror_url,
+            },
+        ]
+    }
+
     fn sample_frontmatter(name: &str, description: &str) -> String {
         format!("---\nname: {name}\ndescription: {description}\n---\n\n# {name}\n")
     }
@@ -426,6 +518,24 @@ metadata:
     }
 
     #[test]
+    fn parse_github_source_rejects_authority_and_url_suffix_controls() {
+        for source in [
+            "https://user@github.com/example/repo",
+            "https://github.com:444/example/repo",
+            "https://github.com/example/repo?download=1",
+            "https://github.com/example/repo#readme",
+        ] {
+            assert!(
+                matches!(
+                    parse_github_source(source),
+                    Err(GithubImportError::InvalidRepoUrl)
+                ),
+                "source should be rejected: {source}"
+            );
+        }
+    }
+
+    #[test]
     fn parse_github_source_rejects_unsafe_subpaths() {
         let error = parse_github_source("owner/repo/../escape").unwrap_err();
         assert!(error.to_string().contains("not supported"));
@@ -482,8 +592,11 @@ metadata:
             .get("files")
             .is_none());
 
-        attach_preview_file_manifests(&mut previews, &snapshot_preview_repository_files(&snapshot))
-            .expect("attach files");
+        let candidate_digests = attach_preview_file_manifests(
+            &mut previews,
+            &snapshot_preview_repository_files(&snapshot),
+        )
+        .expect("attach files");
 
         let files = previews[0].files.as_ref().expect("file manifest");
         assert_eq!(
@@ -499,10 +612,18 @@ metadata:
                 "scripts/run.py",
             ]
         );
+        assert_eq!(candidate_digests.len(), 1);
+        assert!(candidate_digests[0]
+            .content_digest
+            .starts_with("sha256-v1:"));
         let serialized = serde_json::to_value(&previews[0]).expect("serialize preview");
         assert_eq!(serialized["files"][0]["path"], "README.md");
         assert_eq!(serialized["files"][0]["byteLen"], 16);
         assert!(serialized["files"][0].get("byte_len").is_none());
+        assert!(serialized["files"][0]["sha256"]
+            .as_str()
+            .expect("sha256 field")
+            .starts_with("sha256-v1:"));
     }
 
     #[tokio::test]
@@ -541,47 +662,56 @@ metadata:
 
     #[test]
     fn remote_preview_file_manifest_parser_is_stable_and_budgeted() {
-        let output = "references/guide.md\x005\x00SKILL.md\x0012\x00";
-        let files = parse_remote_preview_repository_files(output).expect("parse manifest");
+        let guide_digest = "1".repeat(64);
+        let skill_digest = "2".repeat(64);
+        let output = format!(
+            "references/guide.md\x005\x00{guide_digest}\x00SKILL.md\x0012\x00{skill_digest}\x00"
+        );
+        let files = parse_remote_preview_repository_files(&output).expect("parse manifest");
 
         assert_eq!(
-            files,
-            vec![
-                PreviewRepositoryFile {
-                    repo_path: "SKILL.md".to_string(),
-                    byte_len: 12,
-                },
-                PreviewRepositoryFile {
-                    repo_path: "references/guide.md".to_string(),
-                    byte_len: 5,
-                },
-            ]
+            files
+                .iter()
+                .map(|file| (file.repo_path.as_str(), file.byte_len))
+                .collect::<Vec<_>>(),
+            vec![("SKILL.md", 12), ("references/guide.md", 5)]
         );
+        assert_eq!(files[0].sha256[0], 0x22);
+        assert_eq!(files[1].sha256[0], 0x11);
         assert!(REMOTE_PREVIEW_FILE_INVENTORY_SCRIPT.contains("find \"$repo_dir\" -type f"));
         assert!(REMOTE_PREVIEW_FILE_INVENTORY_SCRIPT.contains("wc -c < \"$file\""));
-        assert!(REMOTE_PREVIEW_FILE_INVENTORY_SCRIPT.contains("printf \"%s\\0%s\\0\""));
+        assert!(REMOTE_PREVIEW_FILE_INVENTORY_SCRIPT.contains("printf \"%s\\0%s\\0%s\\0\""));
+        assert!(REMOTE_PREVIEW_FILE_INVENTORY_SCRIPT.contains("sha256sum"));
     }
 
     #[test]
     fn remote_preview_file_manifest_parser_rejects_malformed_or_duplicate_records() {
-        assert!(matches!(
-            parse_remote_preview_repository_files("SKILL.md\x0012"),
-            Err(GithubImportError::RemotePreviewInvalidFileManifest)
-        ));
-        assert!(matches!(
-            parse_remote_preview_repository_files("SKILL.md\x0012\x00SKILL.md\x0012\x00"),
-            Err(GithubImportError::RemotePreviewInvalidFileManifest)
-        ));
-        assert!(matches!(
-            parse_remote_preview_repository_files("SKILL.md\0not-a-size\0"),
-            Err(GithubImportError::RemotePreviewInvalidFileManifest)
-        ));
+        let digest = "3".repeat(64);
+        for malformed in [
+            format!("SKILL.md\x0012\x00{digest}"),
+            format!("SKILL.md\x0012\x00{digest}\x00SKILL.md\x0012\x00{digest}\x00"),
+            format!("SKILL.md\x00not-a-size\x00{digest}\x00"),
+            "SKILL.md\x0012\x00short-digest\x00".to_string(),
+            format!("SKILL.md\x0012\x00{}\x00", "z".repeat(64)),
+        ] {
+            assert!(
+                matches!(
+                    parse_remote_preview_repository_files(&malformed),
+                    Err(GithubImportError::RemotePreviewInvalidFileManifest)
+                ),
+                "expected rejection for {malformed:?}"
+            );
+        }
     }
 
     #[tokio::test]
     async fn remote_preview_file_inventory_uses_one_fake_runner_script_call() {
         let runner = Arc::new(crate::test_support::FakeRunner::new());
-        runner.push_success("SKILL.md\x0012\x00references/guide.md\x005\x00");
+        runner.push_success(&format!(
+            "SKILL.md\x0012\x00{}\x00references/guide.md\x005\x00{}\x00",
+            "a".repeat(64),
+            "b".repeat(64)
+        ));
         let connection =
             ConnectedRemoteTarget::Ssh(crate::targets::ConnectedSshTarget::for_tests_with_runner(
                 crate::targets::RemoteTargetConfig {
@@ -633,9 +763,10 @@ metadata:
             conflict: None,
             files: None,
         }];
-        let repository_files = vec![PreviewRepositoryFile {
+        let repository_files = vec![PreviewSnapshotFile {
             repo_path: "README.md".to_string(),
             byte_len: 4,
+            sha256: [0_u8; 32],
         }];
 
         assert!(matches!(
@@ -738,21 +869,162 @@ metadata:
     }
 
     #[test]
-    fn raw_url_to_repo_path_parses_github_raw_urls() {
-        let parsed = raw_url_to_repo_path(
-            "https://raw.githubusercontent.com/owner/repo/main/skills/demo/SKILL.md",
-        )
-        .expect("parsed");
+    fn structured_raw_url_ignores_renderer_normalized_url_authority() {
+        let endpoint = GITHUB_MIRROR_ENDPOINTS.first().expect("github endpoint");
+        let repo = GitHubRepoRef {
+            owner: "owner".to_string(),
+            repo: "repo".to_string(),
+            branch: "main#fragment".to_string(),
+            normalized_url: "http://169.254.169.254/latest/meta-data".to_string(),
+        };
+        let url = raw_file_url(endpoint, &repo, "skills/demo/SKILL.md");
+        let parsed = reqwest::Url::parse(&url).expect("built raw URL");
 
-        assert_eq!(parsed.repo.owner, "owner");
-        assert_eq!(parsed.repo.repo, "repo");
-        assert_eq!(parsed.repo.branch, "main");
-        assert_eq!(parsed.file_path, "skills/demo/SKILL.md");
+        assert_eq!(parsed.scheme(), "https");
+        assert_eq!(parsed.host_str(), Some("raw.githubusercontent.com"));
+        assert!(parsed.fragment().is_none());
+        assert!(parsed.path().contains("main%23fragment"));
+        validate_github_endpoint_request(endpoint, GitHubFetchSurface::Raw, &url)
+            .expect("fixed endpoint URL");
     }
 
     #[test]
-    fn raw_url_to_repo_path_ignores_non_github_raw_hosts() {
-        assert!(raw_url_to_repo_path("https://example.com/file.txt").is_none());
+    fn endpoint_policy_rejects_ssrf_url_matrix() {
+        let endpoint = GITHUB_MIRROR_ENDPOINTS.first().expect("github endpoint");
+        for url in [
+            "http://raw.githubusercontent.com/owner/repo/main/SKILL.md",
+            "file:///etc/passwd",
+            "ftp://raw.githubusercontent.com/file",
+            "https://127.0.0.1/SKILL.md",
+            "https://[::1]/SKILL.md",
+            "https://10.0.0.1/SKILL.md",
+            "https://172.16.0.1/SKILL.md",
+            "https://192.168.0.1/SKILL.md",
+            "https://169.254.169.254/latest/meta-data",
+            "https://raw.githubusercontent.com.evil.example/SKILL.md",
+            "https://user@raw.githubusercontent.com/owner/repo/main/SKILL.md",
+            "https://raw.githubusercontent.com:444/owner/repo/main/SKILL.md",
+            "https://raw.githubusercontent.com/owner/repo/main/SKILL.md#fragment",
+        ] {
+            assert!(
+                validate_github_endpoint_request(endpoint, GitHubFetchSurface::Raw, url).is_err(),
+                "dangerous URL should be rejected: {url}"
+            );
+        }
+    }
+
+    #[test]
+    fn built_in_endpoint_urls_satisfy_their_declared_policies() {
+        let repo = GitHubRepoRef {
+            owner: "owner".to_string(),
+            repo: "repo".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/owner/repo".to_string(),
+        };
+
+        for endpoint in GITHUB_MIRROR_ENDPOINTS {
+            let api_url =
+                github_endpoint_url(endpoint, GitHubFetchSurface::Api, "/repos/owner/repo");
+            validate_github_endpoint_request(endpoint, GitHubFetchSurface::Api, &api_url)
+                .unwrap_or_else(|error| panic!("{} API URL: {error}", endpoint.label));
+
+            let raw_url = raw_file_url(endpoint, &repo, "skills/demo/SKILL.md");
+            validate_github_endpoint_request(endpoint, GitHubFetchSurface::Raw, &raw_url)
+                .unwrap_or_else(|error| panic!("{} raw URL: {error}", endpoint.label));
+        }
+    }
+
+    #[test]
+    fn structured_repo_components_reject_authority_and_path_injection() {
+        for (field, value) in [
+            ("owner", "https://127.0.0.1"),
+            ("owner", "owner/other"),
+            ("repo", "repo\\other"),
+            ("branch", "main/other"),
+            ("branch", ".."),
+        ] {
+            let mut repo = GitHubRepoRef {
+                owner: "owner".to_string(),
+                repo: "repo".to_string(),
+                branch: "main".to_string(),
+                normalized_url: "https://github.com/owner/repo".to_string(),
+            };
+            match field {
+                "owner" => repo.owner = value.to_string(),
+                "repo" => repo.repo = value.to_string(),
+                "branch" => repo.branch = value.to_string(),
+                _ => unreachable!(),
+            }
+            assert!(validate_repo_ref(&repo).is_err(), "{field}={value}");
+        }
+    }
+
+    #[tokio::test]
+    async fn github_client_does_not_follow_redirects() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let address = listener.local_addr().expect("address");
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut buffer = [0_u8; 1024];
+            let _ = stream.read(&mut buffer).expect("read request");
+            stream
+                .write_all(
+                    b"HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:9/private\r\nContent-Length: 0\r\n\r\n",
+                )
+                .expect("write redirect");
+        });
+
+        let response = github_client()
+            .expect("client")
+            .get(format!("http://{address}/redirect"))
+            .send()
+            .await
+            .expect("redirect response");
+
+        assert_eq!(response.status(), reqwest::StatusCode::FOUND);
+        server.join().expect("server join");
+    }
+
+    #[tokio::test]
+    async fn chunked_raw_body_stops_at_the_streaming_budget() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let address = listener.local_addr().expect("address");
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut buffer = [0_u8; 1024];
+            let _ = stream.read(&mut buffer).expect("read request");
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n6\r\nabcdef\r\n",
+                )
+                .expect("write first chunk");
+        });
+
+        let response = github_client()
+            .expect("client")
+            .get(format!("http://{address}/chunked"))
+            .send()
+            .await
+            .expect("chunked response");
+        assert_eq!(response.content_length(), None);
+        let budget = ResourceBudget {
+            file_bytes: 5,
+            ..ResourceBudget::default_skill()
+        };
+
+        let error =
+            read_raw_response_with_budget(response, budget, RawBytesBudget::Metadata, "SKILL.md")
+                .await
+                .expect_err("cap+1 chunk should fail before EOF");
+
+        assert!(matches!(error, GithubImportError::Budget(_)));
+        server.join().expect("server join");
     }
 
     #[test]
@@ -906,7 +1178,10 @@ metadata:
             skills: build_preview_skills(&pool, &candidates)
                 .await
                 .expect("preview skills"),
-            preview_workspace_id: None,
+            preview_id: "github-preview-test".to_string(),
+            resolved_commit_sha: "0".repeat(40),
+            snapshot_digest: "sha256-v1:test".to_string(),
+            expires_at: Utc::now().to_rfc3339(),
         };
 
         assert!(!preview.skills.is_empty());
@@ -1383,6 +1658,7 @@ metadata:
             }],
             central_root.path(),
             None,
+            None,
         )
         .await;
 
@@ -1538,7 +1814,10 @@ metadata:
             skills: build_preview_skills(&pool, &candidates)
                 .await
                 .expect("skills"),
-            preview_workspace_id: None,
+            preview_id: "github-preview-test".to_string(),
+            resolved_commit_sha: "0".repeat(40),
+            snapshot_digest: "sha256-v1:test".to_string(),
+            expires_at: Utc::now().to_rfc3339(),
         };
 
         assert!(preview
@@ -1588,7 +1867,10 @@ metadata:
             skills: build_preview_skills(&pool, &candidates)
                 .await
                 .expect("preview skills"),
-            preview_workspace_id: None,
+            preview_id: "github-preview-test".to_string(),
+            resolved_commit_sha: "0".repeat(40),
+            snapshot_digest: "sha256-v1:test".to_string(),
+            expires_at: Utc::now().to_rfc3339(),
         };
 
         assert!(preview
@@ -2065,34 +2347,78 @@ metadata:
     }
 
     #[test]
-    fn preview_workspace_reuse_requires_matching_target_repo_and_path() {
-        let repo = GitHubRepoRef {
-            owner: "openai".to_string(),
-            repo: "skills".to_string(),
-            branch: "main".to_string(),
-            normalized_url: "https://github.com/openai/skills".to_string(),
-        };
-        let now = Utc::now();
-        let workspace = GitHubPreviewWorkspace {
-            id: "workspace-1".to_string(),
-            target_id: "ssh-demo".to_string(),
-            repo: repo.clone(),
-            source_path: Some("content/skills".to_string()),
-            remote_workspace_dir: "/tmp/skillport-github-preview.abc123".to_string(),
-            remote_repo_dir: "/tmp/skillport-github-preview.abc123/repo".to_string(),
-            created_at: now,
-            expires_at: now + Duration::minutes(30),
-        };
+    fn snapshot_binding_requires_matching_target_repo_and_source_path() {
+        let snapshot = remote_test_snapshot(Some("content/skills"));
+        let ssh_demo = ssh_test_target("ssh-demo");
+        let ssh_other = ssh_test_target("ssh-other");
 
-        assert!(workspace.matches_source("ssh-demo", &repo, Some("content/skills")));
-        assert!(!workspace.matches_source("ssh-other", &repo, Some("content/skills")));
-        assert!(!workspace.matches_source("ssh-demo", &repo, Some("other")));
+        assert!(validate_snapshot_binding(
+            &snapshot,
+            &ssh_demo,
+            "https://github.com/openai/skills/tree/main/content/skills",
+        )
+        .is_ok());
+        assert!(matches!(
+            validate_snapshot_binding(
+                &snapshot,
+                &ssh_other,
+                "https://github.com/openai/skills/tree/main/content/skills",
+            ),
+            Err(GithubImportError::PreviewTargetChanged)
+        ));
+        assert!(matches!(
+            validate_snapshot_binding(
+                &snapshot,
+                &ActiveTarget::Local,
+                "https://github.com/openai/skills/tree/main/content/skills",
+            ),
+            Err(GithubImportError::PreviewTargetChanged)
+        ));
+        assert!(matches!(
+            validate_snapshot_binding(
+                &snapshot,
+                &ssh_demo,
+                "https://github.com/openai/skills/tree/main/other",
+            ),
+            Err(GithubImportError::PreviewWorkspaceMismatch)
+        ));
+        assert!(matches!(
+            validate_snapshot_binding(
+                &snapshot,
+                &ssh_demo,
+                "https://github.com/openai/other/tree/main/content/skills",
+            ),
+            Err(GithubImportError::PreviewWorkspaceMismatch)
+        ));
+        assert!(matches!(
+            validate_snapshot_binding(
+                &snapshot,
+                &ssh_demo,
+                "https://github.com/openai/skills/tree/dev/content/skills",
+            ),
+            Err(GithubImportError::PreviewWorkspaceMismatch)
+        ));
+    }
 
-        let other_repo = GitHubRepoRef {
-            repo: "other".to_string(),
-            ..repo
-        };
-        assert!(!workspace.matches_source("ssh-demo", &other_repo, Some("content/skills")));
+    #[test]
+    fn snapshot_binding_accepts_a_root_source_without_branch_segment() {
+        let snapshot = remote_test_snapshot(None);
+        let ssh_demo = ssh_test_target("ssh-demo");
+
+        assert!(validate_snapshot_binding(
+            &snapshot,
+            &ssh_demo,
+            "https://github.com/openai/skills"
+        )
+        .is_ok());
+        assert!(matches!(
+            validate_snapshot_binding(
+                &snapshot,
+                &ssh_demo,
+                "https://github.com/openai/skills/tree/main/content/skills",
+            ),
+            Err(GithubImportError::PreviewWorkspaceMismatch)
+        ));
     }
 
     #[test]
@@ -2188,6 +2514,7 @@ metadata:
                 renamed_skill_id: None,
             }],
             central_root.path(),
+            None,
             None,
         )
         .await
@@ -2336,62 +2663,6 @@ metadata:
     }
 
     #[tokio::test]
-    async fn reveal_github_pat_returns_stored_secret() {
-        let pool = setup_test_db().await;
-        let secrets = MockSecretStore::with_value(GITHUB_PAT_SECRET_KEY, " github_pat_saved ");
-
-        let revealed = reveal_github_pat_impl(&pool, &secrets)
-            .await
-            .expect("reveal token");
-
-        assert_eq!(revealed.as_deref(), Some("github_pat_saved"));
-    }
-
-    #[tokio::test]
-    async fn reveal_github_pat_returns_session_secret() {
-        let pool = setup_test_db().await;
-        let secrets = MockSecretStore::default();
-        secrets.set_next_state(SecretStorageState::Session);
-        secrets
-            .set(GITHUB_PAT_SECRET_KEY, "github_pat_session")
-            .expect("session secret");
-
-        let revealed = reveal_github_pat_impl(&pool, &secrets)
-            .await
-            .expect("reveal token");
-
-        assert_eq!(revealed.as_deref(), Some("github_pat_session"));
-    }
-
-    #[tokio::test]
-    async fn reveal_github_pat_uses_legacy_fallback_when_migration_fails() {
-        let pool = setup_test_db().await;
-        let secrets = MockSecretStore::default();
-        secrets.set_set_error(SecretError::Other("vault unavailable".to_string()));
-        db::set_setting(&pool, LEGACY_GITHUB_PAT_SETTING_KEY, " legacy-token ")
-            .await
-            .expect("set legacy token");
-
-        let revealed = reveal_github_pat_impl(&pool, &secrets)
-            .await
-            .expect("legacy fallback");
-
-        assert_eq!(revealed.as_deref(), Some("legacy-token"));
-    }
-
-    #[tokio::test]
-    async fn reveal_github_pat_returns_none_when_missing() {
-        let pool = setup_test_db().await;
-        let secrets = MockSecretStore::default();
-
-        let revealed = reveal_github_pat_impl(&pool, &secrets)
-            .await
-            .expect("reveal missing");
-
-        assert_eq!(revealed, None);
-    }
-
-    #[tokio::test]
     async fn startup_github_pat_migration_records_sanitized_failure_log() {
         let pool = setup_test_db().await;
         let secrets = MockSecretStore::default();
@@ -2496,10 +2767,12 @@ metadata:
         let client = github_client().expect("client");
         let direct_url = format!("http://{}/direct", address);
         let mirror_url = format!("http://{}/mirror", address);
+        let endpoints = test_mirror_endpoints(direct_url.clone(), mirror_url.clone());
 
-        let response = send_github_request_with_fallback(
+        let response = send_github_request_with_test_endpoints(
             &client,
             GitHubFetchSurface::Api,
+            &endpoints,
             |endpoint| {
                 if endpoint.label == "github" {
                     direct_url.clone()
@@ -2577,10 +2850,12 @@ metadata:
         let client = github_client().expect("client");
         let direct_url = format!("http://{}/raw-direct", address);
         let mirror_url = format!("http://{}/raw-mirror", address);
+        let endpoints = test_mirror_endpoints(direct_url.clone(), mirror_url.clone());
 
-        let response = send_github_request_with_fallback(
+        let response = send_github_request_with_test_endpoints(
             &client,
             GitHubFetchSurface::Raw,
+            &endpoints,
             |endpoint| {
                 if endpoint.label == "github" {
                     direct_url.clone()
@@ -2663,10 +2938,12 @@ metadata:
         let client = github_client().expect("client");
         let direct_url = format!("http://{}/direct", address);
         let mirror_url = format!("http://{}/mirror", address);
+        let endpoints = test_mirror_endpoints(direct_url.clone(), mirror_url.clone());
 
-        let response = send_github_request_with_fallback(
+        let response = send_github_request_with_test_endpoints(
             &client,
             GitHubFetchSurface::Api,
+            &endpoints,
             |endpoint| {
                 if endpoint.label == "github" {
                     direct_url.clone()
@@ -2998,10 +3275,7 @@ metadata:
             effective_source_root, plugin_manifest_discovery_from_manifest_bytes,
             plugin_manifest_discovery_from_snapshot,
         };
-        use super::super::preview::{
-            manifest_to_preview_repository_files, map_acquisition_error_to_outcome,
-            snapshot_preview_repository_files, TreeFastPathOutcome,
-        };
+        use super::super::preview::snapshot_preview_repository_files;
         use super::super::tree_import::{download_tree_selection, plan_tree_selection};
         use super::super::tree_manifest::{
             fallback_reason_for, AcquisitionMode, FallbackReason, RepositoryFileKind,
@@ -3197,58 +3471,115 @@ metadata:
         }
 
         #[test]
-        fn map_acquisition_error_to_outcome_falls_back_for_acquisition_errors() {
-            let outcome =
-                map_acquisition_error_to_outcome(GithubImportError::TreeManifestTruncated);
-            assert!(matches!(
-                outcome,
-                TreeFastPathOutcome::Fallback(FallbackReason::Truncated)
-            ));
-            let outcome =
-                map_acquisition_error_to_outcome(GithubImportError::RateLimited("rl".to_string()));
-            assert!(matches!(
-                outcome,
-                TreeFastPathOutcome::Fallback(FallbackReason::Denied)
-            ));
+        fn acquisition_errors_select_archive_fallback() {
+            assert_eq!(
+                fallback_reason_for(&GithubImportError::TreeManifestTruncated),
+                Some(FallbackReason::Truncated)
+            );
+            assert_eq!(
+                fallback_reason_for(&GithubImportError::RateLimited("rl".to_string())),
+                Some(FallbackReason::Denied)
+            );
         }
 
         #[test]
-        fn map_acquisition_error_to_outcome_routes_domain_errors_to_safe_fallback() {
-            // Domain errors are not recognized by the classifier; the helper
-            // cannot return `Err` (it would change every call site), so it
-            // encodes them as a Transport fallback. The dispatcher's archive
-            // re-acquisition then re-surfaces the real domain error.
-            let outcome = map_acquisition_error_to_outcome(GithubImportError::InvalidCandidate(
-                "bad".to_string(),
-            ));
-            assert!(matches!(
-                outcome,
-                TreeFastPathOutcome::Fallback(FallbackReason::Transport)
-            ));
+        fn domain_errors_are_not_acquisition_fallbacks() {
+            // Domain errors are not acquisition fallbacks: the archive path
+            // would surface the same failure, so the dispatcher must propagate
+            // them instead of switching acquisition mode.
+            assert_eq!(
+                fallback_reason_for(&GithubImportError::InvalidCandidate("bad".to_string())),
+                None
+            );
+            assert_eq!(
+                fallback_reason_for(&GithubImportError::NoImportableSkills),
+                None
+            );
+        }
+
+        /// Preview acquisition must retain real bytes, so the tree fast-path
+        /// downloads every candidate subtree. Feeding the fixture bytes in as
+        /// already-fetched files keeps this HTTP-free while still exercising the
+        /// real planner and its integrity checks.
+        fn tree_selection_snapshot(
+            snapshot: &GitHubRepoSnapshot,
+            manifest: &RepositoryManifest,
+            candidates: &[RemoteSkillCandidate],
+        ) -> Option<GitHubRepoSnapshot> {
+            let selections = candidates
+                .iter()
+                .map(|candidate| GitHubSkillImportSelection {
+                    source_path: candidate.source_path.clone(),
+                    resolution: DuplicateResolution::Overwrite,
+                    renamed_skill_id: None,
+                })
+                .collect::<Vec<_>>();
+            let plan =
+                plan_tree_selection(manifest, candidates, &selections).expect("selection plan");
+            if plan.mode == AcquisitionMode::Archive {
+                return None;
+            }
+            let client = reqwest::Client::new();
+            Some(
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("runtime")
+                    .block_on(download_tree_selection(
+                        &client,
+                        &sample_repo(),
+                        &plan,
+                        None,
+                        snapshot.files.clone(),
+                    ))
+                    .expect("tree selection download"),
+            )
         }
 
         #[test]
-        fn manifest_repository_files_match_snapshot_repository_files() {
+        fn tree_selection_repository_files_match_archive_for_candidate_subtrees() {
             for snapshot in [
-                root_repo_snapshot(),
-                root_package_snapshot(),
                 multi_skill_snapshot(),
                 namespaced_skill_snapshot(),
                 content_skills_snapshot(),
             ] {
                 let repo = sample_repo();
                 let manifest = tree_manifest_from_snapshot(&repo, &snapshot);
-                let mut tree_files = manifest_to_preview_repository_files(&manifest);
-                let mut archive_files = snapshot_preview_repository_files(&snapshot);
-                // `snapshot_preview_repository_files` preserves HashMap order
-                // while `manifest_to_preview_repository_files` sorts; downstream
-                // `attach_preview_file_manifests` re-sorts per skill, so only
-                // content parity (sorted) is required.
-                tree_files.sort_by(|a, b| a.repo_path.cmp(&b.repo_path));
-                archive_files.sort_by(|a, b| a.repo_path.cmp(&b.repo_path));
-                assert_eq!(
-                    tree_files, archive_files,
-                    "tree and archive repository file sets must match for parity"
+                let candidates = archive_candidates(&repo, &snapshot, None);
+                let Some(tree_snapshot) =
+                    tree_selection_snapshot(&snapshot, &manifest, &candidates)
+                else {
+                    continue;
+                };
+
+                let tree_files = snapshot_preview_repository_files(&tree_snapshot);
+                let archive_files = snapshot_preview_repository_files(&snapshot);
+                for candidate in &candidates {
+                    let mut tree_skills =
+                        preview_skills_without_conflicts(std::slice::from_ref(candidate));
+                    let mut archive_skills =
+                        preview_skills_without_conflicts(std::slice::from_ref(candidate));
+                    attach_preview_file_manifests(&mut tree_skills, &tree_files)
+                        .expect("tree attach");
+                    attach_preview_file_manifests(&mut archive_skills, &archive_files)
+                        .expect("archive attach");
+                    assert_eq!(
+                        tree_skills, archive_skills,
+                        "tree selection must reproduce the archive file manifest"
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn root_candidates_route_preview_acquisition_to_archive() {
+            for snapshot in [root_repo_snapshot(), root_package_snapshot()] {
+                let repo = sample_repo();
+                let manifest = tree_manifest_from_snapshot(&repo, &snapshot);
+                let candidates = archive_candidates(&repo, &snapshot, None);
+                assert!(
+                    tree_selection_snapshot(&snapshot, &manifest, &candidates).is_none(),
+                    "a root candidate must select archive acquisition"
                 );
             }
         }
@@ -3301,37 +3632,6 @@ metadata:
                 assert_eq!(
                     tree, archive,
                     "tree fast-path candidates must match archive candidates"
-                );
-            }
-        }
-
-        #[test]
-        fn tree_preview_file_manifests_match_archive_for_fixtures() {
-            for snapshot in [
-                root_repo_snapshot(),
-                root_package_snapshot(),
-                multi_skill_snapshot(),
-                namespaced_skill_snapshot(),
-                content_skills_snapshot(),
-            ] {
-                let repo = sample_repo();
-                let manifest = tree_manifest_from_snapshot(&repo, &snapshot);
-                let candidates = archive_candidates(&repo, &snapshot, None);
-                let mut tree_skills = preview_skills_without_conflicts(&candidates);
-                let mut archive_skills = preview_skills_without_conflicts(&candidates);
-                attach_preview_file_manifests(
-                    &mut tree_skills,
-                    &manifest_to_preview_repository_files(&manifest),
-                )
-                .expect("tree attach");
-                attach_preview_file_manifests(
-                    &mut archive_skills,
-                    &snapshot_preview_repository_files(&snapshot),
-                )
-                .expect("archive attach");
-                assert_eq!(
-                    tree_skills, archive_skills,
-                    "preview file manifests must match between tree and archive"
                 );
             }
         }
@@ -3548,5 +3848,779 @@ metadata:
         // `try_fetch_tree_manifest` reachability is enforced by `cargo check`
         // (non-test build) which fails on dead code now that the
         // `#![allow(dead_code)]` was removed from `tree_manifest.rs`.
+    }
+
+    // ── Immutable preview snapshot contract (task
+    // `07-24-github-preview-snapshot`). Covers digest v1 framing, registry
+    // lifecycle, snapshot-only reads/import, integrity fail-closed behavior,
+    // and per-skill provenance persistence.
+    mod preview_snapshot {
+        use super::*;
+
+        fn digest_entry(path: &str, bytes: &[u8]) -> DigestFileEntry {
+            DigestFileEntry {
+                path: path.to_string(),
+                byte_len: bytes.len() as u64,
+                sha256: file_sha256(bytes),
+            }
+        }
+
+        fn demo_repo() -> GitHubRepoRef {
+            GitHubRepoRef {
+                owner: "anthropics".to_string(),
+                repo: "skills".to_string(),
+                branch: "main".to_string(),
+                normalized_url: "https://github.com/anthropics/skills".to_string(),
+            }
+        }
+
+        #[test]
+        fn digest_is_stable_and_independent_of_input_order() {
+            let entries = vec![
+                digest_entry("SKILL.md", b"skill"),
+                digest_entry("references/guide.md", b"guide"),
+                digest_entry("assets/logo.png", b"logo"),
+            ];
+            let mut reversed = entries.clone();
+            reversed.reverse();
+
+            let forward = aggregate_digest(REPOSITORY_SNAPSHOT_DIGEST_DOMAIN, &entries);
+            let backward = aggregate_digest(REPOSITORY_SNAPSHOT_DIGEST_DOMAIN, &reversed);
+
+            assert_eq!(forward, backward);
+            assert!(forward.starts_with("sha256-v1:"));
+            assert_eq!(forward.len(), "sha256-v1:".len() + 64);
+        }
+
+        #[test]
+        fn digest_domains_separate_repository_and_skill_content() {
+            let entries = vec![digest_entry("SKILL.md", b"skill")];
+            assert_ne!(
+                aggregate_digest(REPOSITORY_SNAPSHOT_DIGEST_DOMAIN, &entries),
+                aggregate_digest(SKILL_CONTENT_DIGEST_DOMAIN, &entries)
+            );
+        }
+
+        #[test]
+        fn digest_framing_prevents_path_boundary_collisions() {
+            let left = vec![digest_entry("a/b", b"x"), digest_entry("c", b"y")];
+            let right = vec![digest_entry("a", b"x"), digest_entry("b/c", b"y")];
+            assert_ne!(
+                aggregate_digest(REPOSITORY_SNAPSHOT_DIGEST_DOMAIN, &left),
+                aggregate_digest(REPOSITORY_SNAPSHOT_DIGEST_DOMAIN, &right)
+            );
+        }
+
+        #[test]
+        fn digest_detects_content_and_length_tampering() {
+            let base = vec![digest_entry("SKILL.md", b"skill")];
+            let tampered_content = vec![digest_entry("SKILL.md", b"skil1")];
+            let mut tampered_length = base.clone();
+            tampered_length[0].byte_len += 1;
+
+            let baseline = aggregate_digest(REPOSITORY_SNAPSHOT_DIGEST_DOMAIN, &base);
+            assert_ne!(
+                baseline,
+                aggregate_digest(REPOSITORY_SNAPSHOT_DIGEST_DOMAIN, &tampered_content)
+            );
+            assert_ne!(
+                baseline,
+                aggregate_digest(REPOSITORY_SNAPSHOT_DIGEST_DOMAIN, &tampered_length)
+            );
+        }
+
+        #[test]
+        fn repository_digest_ignores_hashmap_insertion_order() {
+            let files = [
+                ("SKILL.md", sample_frontmatter("demo", "demo skill")),
+                ("references/guide.md", "# guide\n".to_string()),
+                ("assets/example.txt", "asset\n".to_string()),
+            ];
+            let forward = repo_snapshot(&files);
+            let mut reversed_files = files.to_vec();
+            reversed_files.reverse();
+            let backward = repo_snapshot(&reversed_files);
+
+            assert_eq!(
+                repository_snapshot_digest(&snapshot_files_from_local(&forward)),
+                repository_snapshot_digest(&snapshot_files_from_local(&backward))
+            );
+        }
+
+        #[test]
+        fn commit_sha_validation_requires_a_full_hex_sha() {
+            assert!(validate_commit_sha(&"a".repeat(40)).is_ok());
+            for invalid in ["", "abc", &"a".repeat(39), &"a".repeat(41), &"z".repeat(40)] {
+                assert!(
+                    matches!(
+                        validate_commit_sha(invalid),
+                        Err(GithubImportError::PreviewCommitUnresolved)
+                    ),
+                    "expected rejection for {invalid:?}"
+                );
+            }
+        }
+
+        #[test]
+        fn pinned_repo_ref_only_replaces_the_acquisition_ref() {
+            let repo = demo_repo();
+            let sha = "c".repeat(40);
+            let pinned = pinned_repo_ref(&repo, &sha);
+
+            assert_eq!(pinned.branch, sha);
+            assert_eq!(pinned.owner, repo.owner);
+            assert_eq!(pinned.repo, repo.repo);
+            assert_eq!(pinned.normalized_url, repo.normalized_url);
+            // The pinned ref must be usable as an acquisition ref.
+            assert!(validate_repo_ref(&pinned).is_ok());
+        }
+
+        fn register_local_snapshot(id: &str, snapshot: GitHubRepoSnapshot) -> PreviewSnapshot {
+            let mut registered = local_test_snapshot(&demo_repo(), None, snapshot, Vec::new());
+            registered.id = id.to_string();
+            register_preview_snapshot(registered.clone());
+            registered
+        }
+
+        #[test]
+        fn registry_lookup_rejects_unknown_and_expired_tokens() {
+            let id = "github-preview-lookup";
+            let registered = register_local_snapshot(id, root_repo_snapshot());
+
+            assert!(lookup_preview_snapshot(id, Utc::now()).is_ok());
+            assert!(matches!(
+                lookup_preview_snapshot("github-preview-unknown", Utc::now()),
+                Err(GithubImportError::PreviewSnapshotMissing)
+            ));
+            assert!(matches!(
+                lookup_preview_snapshot(id, registered.expires_at),
+                Err(GithubImportError::PreviewWorkspaceExpired)
+            ));
+
+            assert!(discard_preview_snapshot(id).is_some());
+            assert!(!preview_snapshot_is_registered(id));
+        }
+
+        #[test]
+        fn import_lease_is_exclusive_and_released_for_retry() {
+            let id = "github-preview-lease";
+            register_local_snapshot(id, root_repo_snapshot());
+
+            assert!(acquire_import_lease(id, Utc::now()).is_ok());
+            assert!(matches!(
+                acquire_import_lease(id, Utc::now()),
+                Err(GithubImportError::PreviewSnapshotBusy)
+            ));
+
+            // Failure releases the lease and keeps the snapshot for a retry.
+            assert!(release_import_lease(id).is_none());
+            assert!(preview_snapshot_is_registered(id));
+            assert!(acquire_import_lease(id, Utc::now()).is_ok());
+
+            // Success consumes the token; every later read or import fails.
+            assert!(consume_preview_snapshot(id).is_some());
+            assert!(!preview_snapshot_is_registered(id));
+            assert!(matches!(
+                lookup_preview_snapshot(id, Utc::now()),
+                Err(GithubImportError::PreviewSnapshotMissing)
+            ));
+            assert!(matches!(
+                acquire_import_lease(id, Utc::now()),
+                Err(GithubImportError::PreviewSnapshotMissing)
+            ));
+        }
+
+        #[test]
+        fn discard_during_an_import_lease_is_deferred_until_release() {
+            let id = "github-preview-deferred-discard";
+            register_local_snapshot(id, root_repo_snapshot());
+            assert!(acquire_import_lease(id, Utc::now()).is_ok());
+
+            // The in-flight import still owns the storage.
+            assert!(discard_preview_snapshot(id).is_none());
+            assert!(preview_snapshot_is_registered(id));
+
+            // Releasing the lease applies the pending discard and hands the
+            // snapshot back so the caller can release remote storage.
+            assert!(release_import_lease(id).is_some());
+            assert!(!preview_snapshot_is_registered(id));
+        }
+
+        /// Register an already-expired snapshot.
+        ///
+        /// Expiry is encoded on the entry (not on the prune clock) so this test
+        /// cannot prune snapshots registered by other tests running in parallel.
+        fn register_expired_local_snapshot(id: &str) -> PreviewSnapshot {
+            let mut registered =
+                local_test_snapshot(&demo_repo(), None, root_repo_snapshot(), Vec::new());
+            registered.id = id.to_string();
+            registered.created_at = Utc::now() - Duration::minutes(60);
+            registered.expires_at = Utc::now() - Duration::minutes(30);
+            register_preview_snapshot(registered.clone());
+            registered
+        }
+
+        #[test]
+        fn expiry_pruning_removes_only_unleased_snapshots() {
+            let leased = "github-preview-prune-leased";
+            let expired = "github-preview-prune-expired";
+            register_expired_local_snapshot(leased);
+            register_expired_local_snapshot(expired);
+            // An expired snapshot can never start a new import.
+            assert!(matches!(
+                acquire_import_lease(leased, Utc::now()),
+                Err(GithubImportError::PreviewWorkspaceExpired)
+            ));
+
+            let pruned = prune_expired_preview_snapshots(Utc::now());
+            assert!(pruned.iter().any(|snapshot| snapshot.id == expired));
+            assert!(pruned.iter().any(|snapshot| snapshot.id == leased));
+            assert!(!preview_snapshot_is_registered(expired));
+            assert!(!preview_snapshot_is_registered(leased));
+        }
+
+        #[tokio::test]
+        async fn pruning_never_removes_a_snapshot_with_an_active_import_lease() {
+            let id = "github-preview-prune-active-lease";
+            // A short TTL keeps the prune clock at "now", so snapshots
+            // registered by tests running in parallel are never pruned.
+            let mut registered =
+                local_test_snapshot(&demo_repo(), None, root_repo_snapshot(), Vec::new());
+            registered.id = id.to_string();
+            registered.expires_at = Utc::now() + Duration::milliseconds(50);
+            register_preview_snapshot(registered);
+            assert!(acquire_import_lease(id, Utc::now()).is_ok());
+
+            tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+            let pruned = prune_expired_preview_snapshots(Utc::now());
+            assert!(pruned.iter().all(|snapshot| snapshot.id != id));
+            assert!(preview_snapshot_is_registered(id));
+
+            assert!(release_import_lease(id).is_none());
+            assert!(discard_preview_snapshot(id).is_some());
+        }
+
+        #[tokio::test]
+        async fn snapshot_reads_return_preview_bytes_and_never_consume_the_token() {
+            let id = "github-preview-markdown";
+            let snapshot_files = root_repo_snapshot();
+            let mut registered =
+                local_test_snapshot(&demo_repo(), None, snapshot_files, Vec::new());
+            registered.id = id.to_string();
+            registered.candidates = vec![PreviewSnapshotCandidate {
+                source_path: ".".to_string(),
+                content_digest: "sha256-v1:candidate".to_string(),
+            }];
+            register_preview_snapshot(registered);
+
+            for _ in 0..2 {
+                let markdown = fetch_github_skill_markdown_from_snapshot(
+                    &ActiveTarget::Local,
+                    id,
+                    &demo_repo(),
+                    ".",
+                )
+                .await
+                .expect("markdown read");
+                assert!(markdown.contains("twitterapi-io"));
+            }
+            assert!(preview_snapshot_is_registered(id));
+
+            // A candidate that was never previewed cannot be read.
+            assert!(matches!(
+                fetch_github_skill_markdown_from_snapshot(
+                    &ActiveTarget::Local,
+                    id,
+                    &demo_repo(),
+                    "skills/other",
+                )
+                .await,
+                Err(GithubImportError::SelectionUnavailable(path)) if path == "skills/other"
+            ));
+
+            // A different repository is a binding mismatch.
+            let other_repo = GitHubRepoRef {
+                repo: "other".to_string(),
+                ..demo_repo()
+            };
+            assert!(matches!(
+                fetch_github_skill_markdown_from_snapshot(
+                    &ActiveTarget::Local,
+                    id,
+                    &other_repo,
+                    ".",
+                )
+                .await,
+                Err(GithubImportError::PreviewWorkspaceMismatch)
+            ));
+
+            // A different target is a target change.
+            assert!(matches!(
+                fetch_github_skill_markdown_from_snapshot(
+                    &ssh_test_target("ssh-demo"),
+                    id,
+                    &demo_repo(),
+                    ".",
+                )
+                .await,
+                Err(GithubImportError::PreviewTargetChanged)
+            ));
+
+            assert!(discard_preview_snapshot(id).is_some());
+        }
+
+        #[tokio::test]
+        async fn snapshot_read_fails_closed_when_storage_content_changed() {
+            let id = "github-preview-read-integrity";
+            let mut registered =
+                local_test_snapshot(&demo_repo(), None, root_repo_snapshot(), Vec::new());
+            registered.id = id.to_string();
+            registered.candidates = vec![PreviewSnapshotCandidate {
+                source_path: ".".to_string(),
+                content_digest: "sha256-v1:candidate".to_string(),
+            }];
+            // Simulate a manifest that no longer matches the retained bytes.
+            for file in &mut registered.files {
+                if file.repo_path == "SKILL.md" {
+                    file.sha256 = [0_u8; 32];
+                }
+            }
+            register_preview_snapshot(registered);
+
+            assert!(matches!(
+                fetch_github_skill_markdown_from_snapshot(
+                    &ActiveTarget::Local,
+                    id,
+                    &demo_repo(),
+                    ".",
+                )
+                .await,
+                Err(GithubImportError::PreviewSnapshotIntegrity)
+            ));
+
+            assert!(discard_preview_snapshot(id).is_some());
+        }
+
+        #[tokio::test]
+        async fn integrity_verification_rejects_a_changed_retained_snapshot() {
+            let mut registered =
+                local_test_snapshot(&demo_repo(), None, root_repo_snapshot(), Vec::new());
+            assert!(verify_snapshot_integrity(&ActiveTarget::Local, &registered)
+                .await
+                .is_ok());
+
+            registered.snapshot_digest = "sha256-v1:not-the-registered-digest".to_string();
+            assert!(matches!(
+                verify_snapshot_integrity(&ActiveTarget::Local, &registered).await,
+                Err(GithubImportError::PreviewSnapshotIntegrity)
+            ));
+        }
+
+        #[tokio::test]
+        async fn import_uses_preview_bytes_and_persists_per_skill_provenance() {
+            let pool = setup_test_db().await;
+            let central_root = tempdir().expect("central root");
+            crate::test_support::set_agent_dir(&pool, "central", central_root.path()).await;
+
+            let repo = demo_repo();
+            let snapshot_files = repo_snapshot(&[
+                (
+                    "skills/demo/SKILL.md",
+                    sample_frontmatter("Demo Skill", "preview-time content"),
+                ),
+                ("skills/demo/references/guide.md", "# guide\n".to_string()),
+            ]);
+            let candidates = build_repo_skill_candidates_from_snapshot(&repo, &snapshot_files)
+                .expect("candidates");
+            let mut skills = build_preview_skills(&pool, &candidates)
+                .await
+                .expect("preview skills");
+            let repository_files = snapshot_preview_repository_files(&snapshot_files);
+            let snapshot_candidates =
+                attach_preview_file_manifests(&mut skills, &repository_files).expect("manifests");
+
+            let id = "github-preview-import";
+            let mut registered =
+                local_test_snapshot(&repo, None, snapshot_files, snapshot_candidates.clone());
+            registered.id = id.to_string();
+            let expected_commit = registered.resolved_commit_sha.clone();
+            register_preview_snapshot(registered);
+
+            let result = import_github_repo_skills_from_preview(
+                &pool,
+                &ActiveTarget::Local,
+                id,
+                "https://github.com/anthropics/skills",
+                vec![GitHubSkillImportSelection {
+                    source_path: "skills/demo".to_string(),
+                    resolution: DuplicateResolution::Overwrite,
+                    renamed_skill_id: None,
+                }],
+                None,
+            )
+            .await
+            .expect("import from preview snapshot");
+
+            assert_eq!(result.imported_skills.len(), 1);
+            let imported_id = result.imported_skills[0].imported_skill_id.clone();
+            let installed = central_root.path().join(&imported_id);
+            assert!(installed.join("SKILL.md").exists());
+            assert!(installed.join("references/guide.md").exists());
+            assert!(std::fs::read_to_string(installed.join("SKILL.md"))
+                .expect("read imported SKILL.md")
+                .contains("preview-time content"));
+
+            let (commit, digest) = db::get_skill_repository_provenance(&pool, &imported_id)
+                .await
+                .expect("provenance query")
+                .expect("membership row");
+            assert_eq!(commit.as_deref(), Some(expected_commit.as_str()));
+            assert_eq!(
+                digest.as_deref(),
+                snapshot_candidates
+                    .iter()
+                    .find(|candidate| candidate.source_path == "skills/demo")
+                    .map(|candidate| candidate.content_digest.as_str())
+            );
+
+            // Success consumes the token immediately.
+            assert!(!preview_snapshot_is_registered(id));
+            assert!(matches!(
+                import_github_repo_skills_from_preview(
+                    &pool,
+                    &ActiveTarget::Local,
+                    id,
+                    "https://github.com/anthropics/skills",
+                    vec![GitHubSkillImportSelection {
+                        source_path: "skills/demo".to_string(),
+                        resolution: DuplicateResolution::Overwrite,
+                        renamed_skill_id: None,
+                    }],
+                    None,
+                )
+                .await,
+                Err(GithubImportError::PreviewSnapshotMissing)
+            ));
+        }
+
+        /// Renamed imports must record provenance under the final skill ID, and
+        /// a skipped selection must not create or touch a membership row.
+        #[tokio::test]
+        async fn renamed_import_records_provenance_and_skip_writes_nothing() {
+            let pool = setup_test_db().await;
+            let central_root = tempdir().expect("central root");
+            crate::test_support::set_agent_dir(&pool, "central", central_root.path()).await;
+
+            let repo = demo_repo();
+            let snapshot_files = repo_snapshot(&[
+                (
+                    "skills/agent-planner/SKILL.md",
+                    sample_frontmatter("Agent Planner", "planner"),
+                ),
+                (
+                    "skills/commit/SKILL.md",
+                    sample_frontmatter("Commit", "commit"),
+                ),
+            ]);
+            let candidates = build_repo_skill_candidates_from_snapshot(&repo, &snapshot_files)
+                .expect("candidates");
+            let mut skills = build_preview_skills(&pool, &candidates)
+                .await
+                .expect("preview skills");
+            let repository_files = snapshot_preview_repository_files(&snapshot_files);
+            let snapshot_candidates =
+                attach_preview_file_manifests(&mut skills, &repository_files).expect("manifests");
+
+            let id = "github-preview-rename-skip";
+            let mut registered =
+                local_test_snapshot(&repo, None, snapshot_files, snapshot_candidates.clone());
+            registered.id = id.to_string();
+            let expected_commit = registered.resolved_commit_sha.clone();
+            register_preview_snapshot(registered);
+
+            let result = import_github_repo_skills_from_preview(
+                &pool,
+                &ActiveTarget::Local,
+                id,
+                "https://github.com/anthropics/skills",
+                vec![
+                    GitHubSkillImportSelection {
+                        source_path: "skills/agent-planner".to_string(),
+                        resolution: DuplicateResolution::Rename,
+                        renamed_skill_id: Some("planner-renamed".to_string()),
+                    },
+                    GitHubSkillImportSelection {
+                        source_path: "skills/commit".to_string(),
+                        resolution: DuplicateResolution::Skip,
+                        renamed_skill_id: None,
+                    },
+                ],
+                None,
+            )
+            .await
+            .expect("import from preview snapshot");
+
+            assert_eq!(result.imported_skills.len(), 1);
+            assert_eq!(
+                result.imported_skills[0].imported_skill_id,
+                "planner-renamed"
+            );
+            assert_eq!(result.skipped_skills, vec!["skills/commit".to_string()]);
+
+            // Provenance follows the final (renamed) skill ID.
+            let (commit, digest) = db::get_skill_repository_provenance(&pool, "planner-renamed")
+                .await
+                .expect("provenance query")
+                .expect("membership row");
+            assert_eq!(commit.as_deref(), Some(expected_commit.as_str()));
+            assert_eq!(
+                digest.as_deref(),
+                snapshot_candidates
+                    .iter()
+                    .find(|candidate| candidate.source_path == "skills/agent-planner")
+                    .map(|candidate| candidate.content_digest.as_str())
+            );
+
+            // The skipped selection wrote no skill and no membership row.
+            assert!(db::get_skill_by_id(&pool, "commit")
+                .await
+                .expect("db")
+                .is_none());
+            assert!(db::get_skill_repository_provenance(&pool, "commit")
+                .await
+                .expect("provenance query")
+                .is_none());
+        }
+
+        #[tokio::test]
+        async fn import_fails_closed_on_binding_mismatch_and_keeps_the_token() {
+            let pool = setup_test_db().await;
+            let central_root = tempdir().expect("central root");
+            crate::test_support::set_agent_dir(&pool, "central", central_root.path()).await;
+
+            let repo = demo_repo();
+            let snapshot_files = repo_snapshot(&[(
+                "skills/demo/SKILL.md",
+                sample_frontmatter("Demo Skill", "preview-time content"),
+            )]);
+            let candidates = build_repo_skill_candidates_from_snapshot(&repo, &snapshot_files)
+                .expect("candidates");
+            let mut skills = build_preview_skills(&pool, &candidates)
+                .await
+                .expect("preview skills");
+            let repository_files = snapshot_preview_repository_files(&snapshot_files);
+            let snapshot_candidates =
+                attach_preview_file_manifests(&mut skills, &repository_files).expect("manifests");
+
+            let id = "github-preview-binding-mismatch";
+            let mut registered =
+                local_test_snapshot(&repo, None, snapshot_files, snapshot_candidates);
+            registered.id = id.to_string();
+            register_preview_snapshot(registered);
+
+            let selections = vec![GitHubSkillImportSelection {
+                source_path: "skills/demo".to_string(),
+                resolution: DuplicateResolution::Overwrite,
+                renamed_skill_id: None,
+            }];
+
+            assert!(matches!(
+                import_github_repo_skills_from_preview(
+                    &pool,
+                    &ActiveTarget::Local,
+                    id,
+                    "https://github.com/anthropics/other",
+                    selections.clone(),
+                    None,
+                )
+                .await,
+                Err(GithubImportError::PreviewWorkspaceMismatch)
+            ));
+            assert!(std::fs::read_dir(central_root.path())
+                .expect("read central root")
+                .next()
+                .is_none());
+
+            assert!(matches!(
+                import_github_repo_skills_from_preview(
+                    &pool,
+                    &ActiveTarget::Local,
+                    id,
+                    "https://github.com/anthropics/skills",
+                    vec![GitHubSkillImportSelection {
+                        source_path: "skills/never-previewed".to_string(),
+                        resolution: DuplicateResolution::Overwrite,
+                        renamed_skill_id: None,
+                    }],
+                    None,
+                )
+                .await,
+                Err(GithubImportError::SelectionUnavailable(path)) if path == "skills/never-previewed"
+            ));
+
+            // Both failures released the lease, so the same preview can retry.
+            assert!(preview_snapshot_is_registered(id));
+            let result = import_github_repo_skills_from_preview(
+                &pool,
+                &ActiveTarget::Local,
+                id,
+                "https://github.com/anthropics/skills",
+                selections,
+                None,
+            )
+            .await
+            .expect("retry with the same preview token");
+            assert_eq!(result.imported_skills.len(), 1);
+            assert!(!preview_snapshot_is_registered(id));
+        }
+
+        #[tokio::test]
+        async fn import_fails_before_mutation_when_the_snapshot_digest_changed() {
+            let pool = setup_test_db().await;
+            let central_root = tempdir().expect("central root");
+            crate::test_support::set_agent_dir(&pool, "central", central_root.path()).await;
+
+            let repo = demo_repo();
+            let snapshot_files = repo_snapshot(&[(
+                "skills/demo/SKILL.md",
+                sample_frontmatter("Demo Skill", "preview-time content"),
+            )]);
+            let candidates = build_repo_skill_candidates_from_snapshot(&repo, &snapshot_files)
+                .expect("candidates");
+            let mut skills = build_preview_skills(&pool, &candidates)
+                .await
+                .expect("preview skills");
+            let repository_files = snapshot_preview_repository_files(&snapshot_files);
+            let snapshot_candidates =
+                attach_preview_file_manifests(&mut skills, &repository_files).expect("manifests");
+
+            let id = "github-preview-import-integrity";
+            let mut registered =
+                local_test_snapshot(&repo, None, snapshot_files, snapshot_candidates);
+            registered.id = id.to_string();
+            registered.snapshot_digest = "sha256-v1:stale".to_string();
+            register_preview_snapshot(registered);
+
+            assert!(matches!(
+                import_github_repo_skills_from_preview(
+                    &pool,
+                    &ActiveTarget::Local,
+                    id,
+                    "https://github.com/anthropics/skills",
+                    vec![GitHubSkillImportSelection {
+                        source_path: "skills/demo".to_string(),
+                        resolution: DuplicateResolution::Overwrite,
+                        renamed_skill_id: None,
+                    }],
+                    None,
+                )
+                .await,
+                Err(GithubImportError::PreviewSnapshotIntegrity)
+            ));
+            assert!(std::fs::read_dir(central_root.path())
+                .expect("read central root")
+                .next()
+                .is_none());
+            let skills = db::get_central_skills(&pool).await.expect("skills");
+            assert!(skills.is_empty(), "integrity failure must not write the DB");
+
+            assert!(discard_preview_snapshot(id).is_some());
+        }
+
+        /// The remote inventory and the local snapshot must agree byte for byte,
+        /// so an SSH/WSL preview and a Local preview of the same content produce
+        /// the same registered digest.
+        #[test]
+        fn remote_inventory_digest_matches_the_local_snapshot_digest() {
+            let snapshot = repo_snapshot(&[
+                ("SKILL.md", sample_frontmatter("demo", "demo skill")),
+                ("references/guide.md", "# guide\n".to_string()),
+            ]);
+            let local_files = snapshot_files_from_local(&snapshot);
+
+            let mut inventory = String::new();
+            for file in &local_files {
+                inventory.push_str(&format!(
+                    "{}\0{}\0{}\0",
+                    file.repo_path,
+                    file.byte_len,
+                    hex_encode(&file.sha256)
+                ));
+            }
+            let remote_files =
+                parse_remote_preview_repository_files(&inventory).expect("remote inventory");
+
+            assert_eq!(remote_files, local_files);
+            assert_eq!(
+                repository_snapshot_digest(&remote_files),
+                repository_snapshot_digest(&local_files)
+            );
+        }
+
+        /// Structural guard for the core invariant: the confirmed import must not
+        /// be able to acquire anything. If this module ever regains a client,
+        /// repo-source resolution, or archive download, a moved branch could
+        /// silently change what is written to Central.
+        #[test]
+        fn preview_import_module_cannot_acquire_repository_content() {
+            let source = include_str!("snapshot_import.rs");
+            for forbidden in [
+                "download_repo_snapshot",
+                "resolve_repo_source",
+                "github_client",
+                "try_prepare_tree_import",
+                "fetch_raw",
+                "create_remote_preview_workspace",
+            ] {
+                assert!(
+                    !source.contains(forbidden),
+                    "preview-driven import must not reference {forbidden}"
+                );
+            }
+        }
+
+        #[test]
+        fn snapshot_lifecycle_errors_use_stable_ipc_codes_without_leaking_details() {
+            for (error, code) in [
+                (GithubImportError::PreviewSnapshotMissing, "preview_missing"),
+                (
+                    GithubImportError::PreviewWorkspaceExpired,
+                    "preview_expired",
+                ),
+                (
+                    GithubImportError::PreviewWorkspaceMismatch,
+                    "preview_mismatch",
+                ),
+                (GithubImportError::PreviewTargetChanged, "preview_mismatch"),
+                (
+                    GithubImportError::PreviewSnapshotIntegrity,
+                    "preview_integrity",
+                ),
+                (GithubImportError::PreviewSnapshotBusy, "preview_busy"),
+                (
+                    GithubImportError::PreviewCommitUnresolved,
+                    "preview_commit_unresolved",
+                ),
+            ] {
+                let envelope = error.to_ipc_error();
+                assert_eq!(error.preview_snapshot_code(), Some(code));
+                assert!(
+                    envelope.starts_with(&format!("github_import.{code}:")),
+                    "unexpected envelope: {envelope}"
+                );
+                for leaked in ["github-preview-", "/tmp/", "sha256-v1:", "ghp_"] {
+                    assert!(
+                        !envelope.contains(leaked),
+                        "envelope leaked {leaked}: {envelope}"
+                    );
+                }
+            }
+
+            // Non-lifecycle errors keep their historical Display text so the
+            // existing toasts do not change.
+            let other = GithubImportError::NoSelections;
+            assert_eq!(other.preview_snapshot_code(), None);
+            assert_eq!(other.to_ipc_error(), other.to_string());
+        }
     }
 }

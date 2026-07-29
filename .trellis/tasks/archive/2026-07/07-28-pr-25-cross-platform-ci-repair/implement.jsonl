@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/index.md","reason":"Route implementation through the repository backend contracts."}
+{"file":".trellis/spec/backend/process-supervision.md","reason":"Preserve process-tree cleanup and error-precedence invariants while repairing the fixture."}
+{"file":".trellis/spec/backend/database-migrations.md","reason":"Preserve raw-byte-locked SQL fixture digests across Windows and Unix checkouts."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Apply the repository CI parity and cross-platform generated-artifact requirements."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Keep the regression at the existing process-runner and contract-test seams."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Check the Rust fixture, Git checkout conversion, and CI workflow as one cross-platform contract."}

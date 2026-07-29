@@ -513,7 +513,7 @@ export function PlatformView() {
       variant="platform"
       key={getPlatformSkillRowKey(skill)}
       name={skill.name}
-      description={skill.description}
+      description={skill.description ?? undefined}
       aiSummary={getAiSummary(skill)}
       sourceType={skill.link_type as "symlink" | "copy" | "native"}
       originKind={skill.source_kind ?? null}

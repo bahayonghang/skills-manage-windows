@@ -100,6 +100,9 @@ pub enum GithubImportError {
     #[error("Repository path '{0}' is not supported.")]
     UnsupportedRepoPath(String),
 
+    #[error("GitHub repository {field} '{value}' is not supported.")]
+    InvalidRepoComponent { field: &'static str, value: String },
+
     #[error("Skill identifier '{0}' is not supported.")]
     InvalidSkillIdentifier(String),
 
@@ -216,26 +219,40 @@ pub enum GithubImportError {
     #[error("Failed to determine imported file parent directory.")]
     ImportParentDirUnknown,
 
-    // ── Remote preview workspaces ────────────────────────────────────────────
+    // ── Immutable preview snapshots ──────────────────────────────────────────
     #[error("Remote GitHub preview did not return a workspace path.")]
     RemotePreviewNoWorkspacePath,
 
     #[error(
-        "GitHub preview workspace does not match the active target or repository. Preview the repository again."
+        "GitHub preview snapshot does not match the active target or repository. Preview the repository again."
     )]
     PreviewWorkspaceMismatch,
 
-    #[error("GitHub preview workspace has expired. Preview the repository again.")]
+    #[error("GitHub preview snapshot has expired. Preview the repository again.")]
     PreviewWorkspaceExpired,
 
-    #[error("A source path is required for remote GitHub markdown preview.")]
-    PreviewSourcePathRequired,
-
-    #[error("The active remote target changed after preview. Preview the repository again.")]
+    #[error("The active target changed after preview. Preview the repository again.")]
     PreviewTargetChanged,
 
-    #[error("Remote GitHub preview workspace is only available on its remote target.")]
-    PreviewTargetNotRemote,
+    /// The token is unknown, was already consumed by a successful import, or
+    /// belongs to a previous application session.
+    #[error("GitHub preview snapshot is no longer available. Preview the repository again.")]
+    PreviewSnapshotMissing,
+
+    /// Another import is already running for the same preview snapshot.
+    #[error("This GitHub preview is already being imported. Wait for it to finish.")]
+    PreviewSnapshotBusy,
+
+    /// The retained snapshot no longer matches the digest confirmed at preview
+    /// time. Fails closed before any Central or database mutation.
+    #[error(
+        "GitHub preview snapshot content changed after preview. Preview the repository again."
+    )]
+    PreviewSnapshotIntegrity,
+
+    /// The repository branch could not be resolved to an immutable commit.
+    #[error("GitHub repository commit could not be resolved. Retry the preview.")]
+    PreviewCommitUnresolved,
 
     // ── PAT management ───────────────────────────────────────────────────────
     /// Secret-store failures and PAT save/verify problems (messages
@@ -279,5 +296,35 @@ impl GithubImportError {
 
     pub(crate) fn task_join(label: &'static str, message: String) -> Self {
         Self::TaskJoin { label, message }
+    }
+
+    /// Stable, locale-neutral code for the preview snapshot lifecycle failures
+    /// the wizard must translate into a "preview again" state.
+    ///
+    /// Only snapshot-lifecycle variants are coded; every other variant keeps
+    /// its historical Display text so existing toasts stay unchanged.
+    pub fn preview_snapshot_code(&self) -> Option<&'static str> {
+        match self {
+            Self::PreviewSnapshotMissing => Some("preview_missing"),
+            Self::PreviewWorkspaceExpired => Some("preview_expired"),
+            Self::PreviewWorkspaceMismatch | Self::PreviewTargetChanged => Some("preview_mismatch"),
+            Self::PreviewSnapshotIntegrity => Some("preview_integrity"),
+            Self::PreviewSnapshotBusy => Some("preview_busy"),
+            Self::PreviewCommitUnresolved => Some("preview_commit_unresolved"),
+            _ => None,
+        }
+    }
+
+    /// Serialize for the IPC boundary.
+    ///
+    /// Snapshot lifecycle failures use a stable `github_import.<code>:<summary>`
+    /// envelope the frontend maps through i18n. The summary is a fixed English
+    /// sentence and never contains a token, workspace path, digest, or file
+    /// content.
+    pub fn to_ipc_error(&self) -> String {
+        match self.preview_snapshot_code() {
+            Some(code) => format!("github_import.{}:{}", code, self),
+            None => self.to_string(),
+        }
     }
 }

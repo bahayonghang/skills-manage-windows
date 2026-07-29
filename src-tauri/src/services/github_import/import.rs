@@ -1,4 +1,4 @@
-use super::tree_import::{try_prepare_tree_import, TreeImportOutcome};
+use super::tree_import::{try_prepare_tree_import, TreeImportOutcome, TreeSelectionScope};
 use super::*;
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) async fn import_github_repo_skills_impl(
@@ -11,6 +11,7 @@ pub(crate) async fn import_github_repo_skills_impl(
     let auth = github_direct_auth_from_secret_store(pool, secrets).await?;
     import_github_repo_skills_with_auth(pool, repo_url, selections, app, auth.as_deref()).await
 }
+
 pub(crate) async fn import_github_repo_skills_with_auth(
     pool: &DbPool,
     repo_url: &str,
@@ -35,8 +36,9 @@ pub(crate) async fn import_github_repo_skills_with_auth(
     let (snapshot, candidates) = match try_prepare_tree_import(
         &client,
         &resolved.repo,
+        &resolved.repo,
         resolved.source_path.as_deref(),
-        &selections,
+        TreeSelectionScope::Selected(&selections),
         auth,
         false,
     )
@@ -70,11 +72,13 @@ pub(crate) async fn import_github_repo_skills_with_auth(
         &candidates,
         selections,
         &central_root,
+        None,
         app,
     )
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn import_github_repo_skills_from_snapshot(
     pool: &DbPool,
     repo: &GitHubRepoRef,
@@ -82,6 +86,7 @@ pub(super) async fn import_github_repo_skills_from_snapshot(
     candidates: &[RemoteSkillCandidate],
     selections: Vec<GitHubSkillImportSelection>,
     central_root: &Path,
+    provenance: Option<&ImportProvenance>,
     app: Option<&AppHandle>,
 ) -> Result<GitHubRepoImportResult, GithubImportError> {
     let (mut staging_ops, skipped_skills) =
@@ -129,6 +134,7 @@ pub(super) async fn import_github_repo_skills_from_snapshot(
             snapshot,
             central_root,
             op,
+            provenance,
             &mut progress_state,
             app,
         )
@@ -181,8 +187,9 @@ pub(crate) async fn import_github_repo_skills_partially_with_auth(
     let (snapshot, inspected) = match try_prepare_tree_import(
         &client,
         &resolved.repo,
+        &resolved.repo,
         resolved.source_path.as_deref(),
-        &selections,
+        TreeSelectionScope::Selected(&selections),
         auth,
         true,
     )
@@ -415,6 +422,7 @@ pub(crate) async fn import_github_repo_skills_from_snapshot_partially(
             snapshot,
             central_root,
             op,
+            None,
             &mut progress_state,
             app,
         )
@@ -449,12 +457,14 @@ pub(crate) async fn import_github_repo_skills_from_snapshot_partially(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn import_single_staged_skill(
     pool: &DbPool,
     repo: &GitHubRepoRef,
     snapshot: &GitHubRepoSnapshot,
     central_root: &Path,
     op: &StagedImport,
+    provenance: Option<&ImportProvenance>,
     progress_state: &mut GitHubImportProgressState,
     app: Option<&AppHandle>,
 ) -> Result<ImportedGitHubSkillSummary, GithubImportError> {
@@ -543,6 +553,8 @@ pub(super) async fn import_single_staged_skill(
         fs_created_at: None,
         fs_updated_at: None,
     };
+    let (resolved_commit_sha, content_digest) =
+        provenance_for(provenance, &op.candidate.source_path);
     if let Err(error) = db::upsert_skill_with_github_repository(
         pool,
         &db_skill,
@@ -551,6 +563,8 @@ pub(super) async fn import_single_staged_skill(
         &repo.branch,
         &repo.normalized_url,
         &op.candidate.source_path,
+        resolved_commit_sha.as_deref(),
+        content_digest.as_deref(),
     )
     .await
     {

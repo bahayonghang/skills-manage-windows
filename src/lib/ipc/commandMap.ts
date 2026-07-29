@@ -1,3 +1,5 @@
+import { GENERATED_IPC_COMMANDS } from "./generatedCommandMap";
+
 import type {
   AgentWithStatus,
   ArchiveFingerprint,
@@ -5,17 +7,24 @@ import type {
   BatchUninstallSkillResult,
   BootstrapSnapshot,
   CentralTopTag,
+  CentralSkillUpdateResult,
+  CentralSkillUpdateState,
   CreateSshTargetRequest,
   CreateWslTargetRequest,
   CustomAgentConfig,
   DailyOperationCount,
   DashboardCentralSummary,
   DirectoryTreeEntry,
+  GitHubRepoImportResult,
+  GitHubRepoPreview,
+  GitHubRepoRef,
+  GitHubSkillImportSelection,
   ObsidianSkill,
   ObsidianVault,
   OperationLogEntry,
   OperationLogFilter,
   OperationLogPage,
+  PendingFsDbOperation,
   LocalArchiveImportResolution,
   LocalArchiveImportResult,
   LocalArchivePreview,
@@ -30,10 +39,15 @@ import type {
   SkillCountsSummary,
   SkillDetail,
   SkillDetailRequest,
+  SkillportStateImportPreview,
+  SkillportStateImportResolution,
+  SkillportStateImportResult,
   SkillWithLinks,
   SshTargetTestResult,
+  StartupStatus,
   TagGroup,
   TargetSummary,
+  TargetConfigQuarantineStatus,
   TestSshTargetRequest,
   TestWslTargetRequest,
   UpdateCustomAgentConfig,
@@ -42,6 +56,13 @@ import type {
   WslDistributionSummary,
   WslTargetTestResult,
 } from "@/types";
+import type {
+  CentralRepositorySyncPreview,
+} from "@/types/centralRepositorySync";
+import type {
+  SkillUpdateApplyResult,
+  SkillUpdateDecisions,
+} from "@/types/skillUpdateInventory";
 import type { SkillExplanationSummaryMap } from "@/types/skillExplanation";
 import type {
   ProviderHealth,
@@ -65,7 +86,23 @@ type IpcCommandSpec<Args, Result> = {
 // 同时让 Object.keys 可枚举已类型化命令（供 ipcCommandCoverage 测试使用）。
 const command = <Args, Result>() => ({}) as IpcCommandSpec<Args, Result>;
 
-export const IPC_COMMANDS = {
+function mergeCommandMaps<
+  Generated extends Record<string, IpcCommandSpec<unknown, unknown>>,
+  Handwritten extends Record<string, IpcCommandSpec<unknown, unknown>>,
+>(
+  generated: Generated,
+  handwritten: Handwritten &
+    Record<Extract<keyof Generated, keyof Handwritten>, never>,
+) {
+  return { ...generated, ...handwritten } as const;
+}
+
+export const HANDWRITTEN_IPC_COMMANDS = {
+  // ── startup gate ─────────────────────────────────────────────────────────
+  get_startup_status: command<undefined, StartupStatus>(),
+  retry_startup: command<undefined, StartupStatus>(),
+  rebuild_startup_database: command<undefined, StartupStatus>(),
+  exit_startup: command<undefined, void>(),
   // ── skill detail / obsidian（旧 lib/ipc.ts 首批）───────────────────────────
   get_skill_detail: command<SkillDetailRequest, SkillDetail>(),
   read_file_by_path: command<SkillPathRequest, string>(),
@@ -96,6 +133,25 @@ export const IPC_COMMANDS = {
     },
     LocalArchiveImportResult
   >(),
+  // ── GitHub import: every content read is bound to a preview snapshot ─────
+  preview_github_repo_import: command<{ repoUrl: string }, GitHubRepoPreview>(),
+  fetch_github_skill_markdown: command<
+    {
+      previewId: string;
+      repo: GitHubRepoRef;
+      sourcePath: string;
+    },
+    string
+  >(),
+  import_github_repo_skills: command<
+    {
+      previewId: string;
+      repoUrl: string;
+      selections: GitHubSkillImportSelection[];
+    },
+    GitHubRepoImportResult
+  >(),
+  discard_github_repo_preview_snapshot: command<{ previewId: string }, void>(),
   set_agent_enabled: command<
     { agentId: string; isEnabled: boolean },
     AgentWithStatus
@@ -106,6 +162,41 @@ export const IPC_COMMANDS = {
     AgentWithStatus
   >(),
   remove_custom_agent: command<{ agentId: string }, void>(),
+  preview_skillport_state_import_file: command<
+    { jobId: string; path: string },
+    { json: string; preview: SkillportStateImportPreview }
+  >(),
+  export_skillport_state: command<
+    { jobId: string; options: Record<string, never> },
+    string
+  >(),
+  preview_skillport_state_import: command<
+    { jobId: string; json: string },
+    SkillportStateImportPreview
+  >(),
+  import_skillport_state: command<
+    { jobId: string; json: string; resolutions: SkillportStateImportResolution[] },
+    SkillportStateImportResult
+  >(),
+  cancel_skillport_state_portability: command<{ jobId: string }, void>(),
+  check_central_skill_updates: command<
+    { jobId: string; skillIds: string[] | null },
+    CentralSkillUpdateState[]
+  >(),
+  check_central_repository_sync: command<
+    { jobId: string; repositoryIds: string[]; skillIds: string[] | null },
+    CentralRepositorySyncPreview
+  >(),
+  update_central_skills: command<
+    { jobId: string; skillIds: string[] },
+    CentralSkillUpdateResult
+  >(),
+  cancel_central_skill_updates: command<{ jobId: string }, void>(),
+  apply_skill_update_decisions: command<
+    { jobId: string; decisions: SkillUpdateDecisions },
+    SkillUpdateApplyResult
+  >(),
+  save_skillport_state_export: command<{ path: string; json: string }, void>(),
   // ── platform skills ───────────────────────────────────────────────────────
   get_skills_by_agent: command<{ agentId: string }, ScannedSkill[]>(),
   get_central_skills: command<undefined, SkillWithLinks[]>(),
@@ -146,6 +237,10 @@ export const IPC_COMMANDS = {
   >(),
   // ── targets ───────────────────────────────────────────────────────────────
   list_targets: command<undefined, TargetSummary[]>(),
+  get_target_config_quarantine_status: command<
+    undefined,
+    TargetConfigQuarantineStatus
+  >(),
   list_wsl_distributions: command<undefined, WslDistributionSummary[]>(),
   create_ssh_target: command<
     { request: CreateSshTargetRequest },
@@ -186,6 +281,11 @@ export const IPC_COMMANDS = {
   clear_operation_logs: command<{ filter: OperationLogFilter }, number>(),
   export_operation_logs: command<{ filter: OperationLogFilter }, string>(),
   get_daily_operation_counts: command<{ days: number }, DailyOperationCount[]>(),
+  list_pending_fs_db_operations: command<undefined, PendingFsDbOperation[]>(),
+  retry_fs_db_operation: command<
+    { operationId: string },
+    PendingFsDbOperation[]
+  >(),
   // ── runtime logs ──────────────────────────────────────────────────────────
   list_runtime_log_files: command<undefined, RuntimeLogFile[]>(),
   read_runtime_log_file: command<
@@ -236,6 +336,11 @@ export const IPC_COMMANDS = {
   reorder_saved_views: command<{ ids: string[] }, void>(),
 } as const;
 
+export const IPC_COMMANDS = mergeCommandMaps(
+  GENERATED_IPC_COMMANDS,
+  HANDWRITTEN_IPC_COMMANDS,
+);
+
 export type IpcCommandMap = typeof IPC_COMMANDS;
 
 export type CommandArgs<K extends keyof IpcCommandMap> =
@@ -245,6 +350,8 @@ export type CommandResult<K extends keyof IpcCommandMap> =
 
 export const TYPED_IPC_COMMAND_NAMES: readonly string[] =
   Object.keys(IPC_COMMANDS);
+export const HANDWRITTEN_IPC_COMMAND_NAMES: readonly string[] =
+  Object.keys(HANDWRITTEN_IPC_COMMANDS);
 
 /**
  * 尚未进入 IPC_COMMANDS 的存量命令允许清单（ratchet：只减不增）。
@@ -257,47 +364,21 @@ export const UNTYPED_IPC_COMMANDS: readonly string[] = [
   "add_registry",
   "add_scan_directory",
   "add_skill_to_collection",
-  "apply_central_repository_sync",
-  "apply_central_store_location_change",
-  "apply_local_remote_sync",
-  "apply_skill_update_decisions",
   "assign_skill_tags",
   "assign_skills_to_repository",
-  "batch_install_central_skills",
-  "batch_install_collection",
-  "batch_install_to_agents",
   "browse_skills_sh_directory",
   "bulk_suggest_skill_tags",
   "cancel_ai_tag_job",
-  "cancel_central_skill_updates",
-  "cancel_skillport_state_portability",
-  "check_central_repository_sync",
-  "check_central_skill_updates",
-  "clear_ai_api_key",
-  "clear_github_pat",
-  "clear_skill_update_inventory",
   "create_collection",
   "create_or_update_skill_repository",
   "create_skill_tag",
-  "delete_central_skill",
-  "delete_central_skills",
-  "delete_collection",
-  "delete_skill_repository",
-  "discard_github_repo_preview_workspace",
   "explain_skill",
   "explain_skill_stream",
   "export_collection",
-  "export_skillport_state",
-  "fetch_github_skill_markdown",
-  "force_mirror_central_repositories",
-  "force_update_central_skills",
   "get_agents",
-  "get_ai_api_key_state",
   "get_app_runtime_info",
-  "get_central_skill_update_states",
   "get_collection_detail",
   "get_collections",
-  "get_github_pat",
   "get_pending_ai_tag_reviews",
   "get_project_skills",
   "get_scan_directories",
@@ -305,55 +386,24 @@ export const UNTYPED_IPC_COMMANDS: readonly string[] = [
   "get_skill_explanation",
   "get_skill_repositories",
   "get_skill_tags",
-  "get_skill_update_inventory",
-  "import_collection",
-  "import_github_repo_skills",
-  "import_obsidian_skill_to_central",
-  "import_obsidian_skill_to_platform",
-  "import_skillport_state",
-  "install_from_skills_sh",
-  "install_marketplace_skill",
-  "install_skill_to_agent",
-  "install_skill_to_project",
-  "keep_remote_missing_central_skills",
   "list_projects",
   "list_projects_using_skill",
   "list_registries",
   "pick_project_folder",
-  "preview_central_store_location_change",
   "preview_delete_central_skills",
   "preview_delete_skill_repository",
-  "preview_github_repo_import",
-  "preview_local_remote_sync",
-  "preview_skillport_state_import",
   "read_skills_sh_file",
   "record_frontend_runtime_log",
   "refresh_skill_explanation",
-  "refresh_skill_update_inventory",
-  "remove_project",
-  "remove_registry",
-  "remove_scan_directory",
-  "remove_skill_from_collection",
   "rename_project",
   "rescan_project",
   "resolve_skills_sh_url",
-  "reveal_ai_api_key",
-  "reveal_github_pat",
-  "scan_deleted_platform_copies",
-  "scan_platform_duplicate_skills",
   "search_marketplace_skills",
   "search_skills_sh",
-  "set_ai_api_key",
-  "set_github_pat",
   "set_project_pinned",
   "set_scan_directory_active",
   "set_settings",
   "set_skill_repository_pinned",
   "skip_ai_tag_review",
-  "test_ai_connection",
-  "test_github_pat",
-  "unassign_skill_tags",
-  "uninstall_skill_from_project",
-  "update_central_skills",
   "update_collection",
 ];

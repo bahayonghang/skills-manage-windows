@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend quality checklist and affected service conventions."}
+{"file":".trellis/spec/backend/path-policy.md","reason":"Verify canonical containment and local/SSH/WSL policy parity."}
+{"file":".trellis/spec/backend/process-supervision.md","reason":"Verify no remote process bypasses the supervised runner."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Verify semantic error mapping and no new service-layer string errors."}
+{"file":".trellis/spec/backend/test-support.md","reason":"Verify regression tests use the shared FakeRunner seam."}
+{"file":".trellis/spec/quality/index.md","reason":"Repository quality-check index for final verification."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Canonical full validation gate and locked Rust commands."}
+{"file":".trellis/tasks/07-24-remote-path-canonical/research/remote-canonical-path.md","reason":"Check implementation against the researched attack and protocol constraints."}

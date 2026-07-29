@@ -1,22 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Dispatch, SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  BatchDeleteCentralSkillPreviewResult,
-  CentralSkillUpdateState,
-  DeleteSkillRepositoryPreview,
-  SkillDetail,
-  SkillRepositoryWithStats,
-  SkillWithLinks,
-} from "@/types";
-import type { CentralRepositorySyncPreview } from "@/types/centralRepositorySync";
 import { markAppPerformance } from "@/lib/performance";
-import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import { CentralSkillsShell } from "@/components/central/CentralSkillsShell";
 import { CentralStoreLocationDialog } from "@/components/central/CentralStoreLocationDialog";
 import { CommandPalette } from "@/components/central/CommandPalette";
 import { useCentralViewStateUrl } from "@/hooks/useCentralViewStateUrl";
-import { useCentralSkillsActions } from "@/pages/centralSkillsActions";
+import {
+  useCentralSkillsActionBindings,
+  useCentralSkillsActionState,
+} from "@/pages/centralSkillsActionBindings";
 import { getCentralSkillsCheckButtonState } from "@/pages/centralSkillsCheckButton";
 import { useCentralSkillsFacets } from "@/pages/centralSkillsFacets";
 import {
@@ -32,7 +24,6 @@ import {
   type CentralSortDirection,
   type CentralSortField,
 } from "@/pages/centralSkillsViewModel";
-import { usePlatformStore } from "@/stores/platformStore";
 import { useCentralInstalledSkillsFilterBridge } from "@/pages/centralInstalledSkillsFilterBridge";
 import { useCentralSkillsLayoutSizing } from "@/pages/centralSkillsLayoutSizing";
 import { useCentralSkillsViewChrome } from "@/pages/centralSkillsViewChrome";
@@ -42,8 +33,6 @@ import {
 } from "@/pages/centralStoreLocationView";
 import { useCentralUpdateCheckModeController } from "@/pages/centralUpdateCheckModeController";
 import { useCentralAiTagDashboardView } from "@/pages/centralAiTagDashboardView";
-import { useCentralBatchUninstallView } from "@/pages/centralBatchUninstallView";
-import { useImportIntentBindings } from "@/stores/importIntentStore";
 
 export function CentralSkillsView() {
   const { t } = useTranslation();
@@ -77,105 +66,25 @@ export function CentralSkillsView() {
     availableInstallAgents,
     githubImport,
     resetGitHubImport,
-    exportSkillportState,
-    previewSkillportStateImport,
+    exportSkillportState, saveSkillportStateExport,
+    previewSkillportStateImport, previewSkillportStateImportFile,
     importSkillportState,
     setRepositoryPinned,
     previewCentralStoreLocationChange,
     applyCentralStoreLocationChange,
   } = useCentralSkillsStoreBindings(t);
-
-  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
+  const actionState = useCentralSkillsActionState();
   const [categorizeTab, setCategorizeTab] = useState<CentralCategorizeTab>("manual");
-  const [manualTagQuery, setManualTagQuery] = useState("");
-  const [manualSelectedTagIds, setManualSelectedTagIds] = useState<string[]>([]);
-  const [installTargetSkill, setInstallTargetSkill] = useState<SkillWithLinks | null>(null);
-  const [deleteTargetSkill, setDeleteTargetSkill] = useState<SkillWithLinks | null>(null);
-  const [deletePreview, setDeletePreview] = useState<SkillDetail | null>(null);
-  const [batchDeletePreview, setBatchDeletePreview] = useState<BatchDeleteCentralSkillPreviewResult | null>(null);
-  const [pendingUpdateStates, setPendingUpdateStates] = useState<CentralSkillUpdateState[]>([]);
-  const [queuedRemoteMissingStates, setQueuedRemoteMissingStates] = useState<CentralSkillUpdateState[]>([]);
-  const [remoteMissingStates, setRemoteMissingStates] = useState<CentralSkillUpdateState[]>([]);
-  const [remoteMissingPreview, setRemoteMissingPreview] =
-    useState<BatchDeleteCentralSkillPreviewResult | null>(null);
-  const [repositorySyncPreview, setRepositorySyncPreview] = useState<CentralRepositorySyncPreview | null>(null);
-  const [queuedRepositorySyncPreview, setQueuedRepositorySyncPreview] = useState<CentralRepositorySyncPreview | null>(null);
-  const [repositorySyncDeletePreview, setRepositorySyncDeletePreview] = useState<BatchDeleteCentralSkillPreviewResult | null>(null);
-  const [repositoryDeleteTarget, setRepositoryDeleteTarget] = useState<SkillRepositoryWithStats | null>(null);
-  const [repositoryDeletePreview, setRepositoryDeletePreview] = useState<DeleteSkillRepositoryPreview | null>(null);
   const {
     filterSidebarWidth,
     handleFilterSidebarResizeKeyDown,
     startFilterSidebarResize,
   } = useCentralSkillsLayoutSizing();
-  const [isDeletePreviewLoading, setIsDeletePreviewLoading] = useState(false);
-  const [isBatchDeletePreviewLoading, setIsBatchDeletePreviewLoading] =
-    useState(false);
-  const [isRemoteMissingPreviewLoading, setIsRemoteMissingPreviewLoading] =
-    useState(false);
-  const [isRepositorySyncPreviewLoading, setIsRepositorySyncPreviewLoading] =
-    useState(false);
-  const [isResolvingRemoteMissing, setIsResolvingRemoteMissing] =
-    useState(false);
-  const [isApplyingRepositorySync, setIsApplyingRepositorySync] =
-    useState(false);
-  const [
-    isRepositoryDeletePreviewLoading,
-    setIsRepositoryDeletePreviewLoading,
-  ] = useState(false);
-  const [deletePreviewError, setDeletePreviewError] = useState<string | null>(
-    null,
-  );
-  const [batchDeletePreviewError, setBatchDeletePreviewError] = useState<
-    string | null
-  >(null);
-  const [remoteMissingError, setRemoteMissingError] = useState<string | null>(
-    null,
-  );
-  const [repositorySyncError, setRepositorySyncError] = useState<string | null>(
-    null,
-  );
-  const [repositoryDeletePreviewError, setRepositoryDeletePreviewError] =
-    useState<string | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isBatchInstallDialogOpen, setIsBatchInstallDialogOpen] =
-    useState(false);
-  const [isBatchDeleteDialogOpen, setIsBatchDeleteDialogOpen] = useState(false);
-  const [isUpdateConfirmDialogOpen, setIsUpdateConfirmDialogOpen] =
-    useState(false);
-  const [isRemoteMissingDialogOpen, setIsRemoteMissingDialogOpen] =
-    useState(false);
-  const [isRepositorySyncDialogOpen, setIsRepositorySyncDialogOpen] =
-    useState(false);
-  const [isRepositoryDeleteDialogOpen, setIsRepositoryDeleteDialogOpen] =
-    useState(false);
   const [isStoreLocationDialogOpen, setIsStoreLocationDialogOpen] =
     useState(false);
-  const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const { githubRepoUrl, isGitHubImportOpen, setGithubRepoUrl, setIsGitHubImportOpen } = useImportIntentBindings();
-  const [isPlatformManageOpen, setIsPlatformManageOpen] = useState(false);
-  const [isPortabilityOpen, setIsPortabilityOpen] = useState(false);
   const [isCategorizeDrawerOpen, setIsCategorizeDrawerOpen] = useState(false);
   const [isTaskCenterOpen, setIsTaskCenterOpen] = useState(false);
-  const contentRef = useRef<HTMLDivElement | null>(null);
-  const detailButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const hasMarkedCentralListReady = useRef(false);
-  const categoryVisibility =
-    usePlatformStore((state) => state.categoryVisibility) ??
-    DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
-  const setCategoryVisibility = usePlatformStore(
-    (state) => state.setCategoryVisibility,
-  );
-  const setAgentEnabled = usePlatformStore((state) => state.setAgentEnabled);
-  const addCustomAgent = usePlatformStore((state) => state.addCustomAgent);
-  const updateCustomAgent = usePlatformStore(
-    (state) => state.updateCustomAgent,
-  );
-  const removeCustomAgent = usePlatformStore(
-    (state) => state.removeCustomAgent,
-  );
 
   const [viewState, setViewState] = useCentralViewStateUrl();
   const v2 = useCentralSkillsFacets({
@@ -196,25 +105,9 @@ export function CentralSkillsView() {
     skills,
     tags,
     updateStatuses,
-    selectedSkillIds,
-    manualTagQuery,
+    selectedSkillIds: actionState.selectedSkillIds,
+    manualTagQuery: actionState.manualTagQuery,
   });
-
-  // ─── 旧动作模块仍接收 setRepositoryFilter（StateSetter<string>），这里包装成对 viewState.repos 的转换。
-  const setRepositoryFilter = useCallback<Dispatch<SetStateAction<string>>>(
-    (value) => {
-      setViewState((prev) => {
-        const currentRepo = prev.repos[0] ?? "all";
-        const nextValue =
-          typeof value === "function" ? value(currentRepo) : value;
-        return {
-          ...prev,
-          repos: nextValue === "all" ? [] : [nextValue],
-        };
-      });
-    },
-    [setViewState],
-  );
 
   const sortFieldOptions: Array<{ value: CentralSortField; label: string }> =
     useMemo(
@@ -250,20 +143,10 @@ export function CentralSkillsView() {
     availableInstallAgents,
     currentViewSkills: v2.sortedSkills,
     filteredSkills: v2.filteredSkills,
-    selectedSkillIds,
-    setIsBatchInstallDialogOpen,
-    setSelectedSkillIds,
+    selectedSkillIds: actionState.selectedSkillIds,
+    setIsBatchInstallDialogOpen: actionState.setIsBatchInstallDialogOpen,
+    setSelectedSkillIds: actionState.setSelectedSkillIds,
   });
-
-  useEffect(() => {
-    const visibleIds = new Set(
-      visibleCurrentViewSkills.map((skill) => skill.id),
-    );
-    setSelectedSkillIds((current) => {
-      const next = current.filter((skillId) => visibleIds.has(skillId));
-      return next.length === current.length ? current : next;
-    });
-  }, [visibleCurrentViewSkills]);
 
   const savedViewsBridge = useCentralSavedViewsBridge({
     enabled: true,
@@ -289,7 +172,7 @@ export function CentralSkillsView() {
     hasCurrentFilters,
     hasNonRepositoryFilters,
     repositories,
-    selectedSkillIds,
+    selectedSkillIds: actionState.selectedSkillIds,
     selectedRepoIds: viewState.repos,
     sortedSkills: visibleCurrentViewSkills,
     t,
@@ -353,9 +236,9 @@ export function CentralSkillsView() {
   }, [subscribePortabilityProgress]);
 
   useEffect(() => {
-    if (!v2.isSearchActive || !contentRef.current) return;
-    contentRef.current.scrollTop = 0;
-  }, [v2.isSearchActive, viewState.q]);
+    if (!v2.isSearchActive || !actionState.contentRef.current) return;
+    actionState.contentRef.current.scrollTop = 0;
+  }, [v2.isSearchActive, viewState.q, actionState.contentRef]);
 
   useEffect(() => {
     if (!isLoading && skills.length > 0 && !hasMarkedCentralListReady.current) {
@@ -372,284 +255,131 @@ export function CentralSkillsView() {
     onSaveCurrentView: savedViewsBridge.handleSaveCurrentView,
     onCreateTagGroup: tagGroupsBridge.handleCreateTagGroup,
   });
-  const installableImportedSkills = useMemo(() => {
-    if (!githubImport.importResult) return [];
-    const importedIds = new Set(
-      githubImport.importResult.importedSkills.map(
-        (skill) => skill.importedSkillId,
-      ),
-    );
-    return skills.filter((skill) => importedIds.has(skill.id));
-  }, [githubImport.importResult, skills]);
-
-  const {
-    handleAcceptReview,
-    handleAddSkillTag,
-    handleAfterImportSuccess,
-    handleApplyManualTags,
-    handleApplyManualTagsToReview,
-    handleBatchDeleteCentralSkills,
-    handleBatchDeleteClick,
-    handleBatchDeleteDialogOpenChange,
-    handleBatchInstallCentralSkills,
-    handleBatchUninstallCentralSkills,
-    handleBulkSuggestTags,
-    handleCancelAiTagJob,
-    handleCancelCentralUpdates,
-    handleCreateSkillTag,
-    handleRepositorySyncDialogOpenChange,
-    handleApplyRepositorySync,
-    handleConfirmUpdateSkills,
-    handleCreateManualTag,
-    handleDeleteCentralSkill,
-    handleDeleteClick,
-    handleDeleteDialogOpenChange,
-    handleDeleteSkillRepository,
-    handleGitHubImport,
-    handleGitHubPreview,
-    handleInstall,
-    handleInstallClick,
-    handleInstallImportedSkill,
-    handleOpenDrawer,
-    handleRemoteMissingDialogOpenChange,
-    handleRemoveSkillTag,
-    handleUpdateConfirmDialogOpenChange,
-    handleRepositoryDeleteClick,
-    handleRepositoryDeleteDialogOpenChange,
-    handleResolveRemoteMissing,
-    handleSkipReview,
-    handleToggleManualTag,
-    handleTogglePlatform,
-    handleToggleSelection,
-    handleUpdateSkills,
-    setDetailButtonRef,
-  } = useCentralSkillsActions({
-    detailButtonRefs,
-    t,
-    state: {
-      deleteTargetSkill,
-      githubRepoUrl,
-      manualSelectedTagIds,
-      manualTagQuery,
-      repositoryDeleteTarget,
-      repositoryFilter: viewState.repos[0] ?? "all",
-      queuedRemoteMissingStates,
-      queuedRepositorySyncPreview,
-      selectedSkillIds,
-      currentViewSkills: visibleCurrentViewSkills,
+  const actionBindings = useCentralSkillsActionBindings({
+    actionState,
+    currentViewSkills: visibleCurrentViewSkills,
+    githubImportResult: githubImport.importResult,
+    list: {
+      availableInstallAgents,
+      filteredSkills: visibleFilteredSkills,
+      isLoading,
+      isSearchActive: v2.isSearchActive || isInstalledSkillsFilterActive,
+      searchQuery: viewState.q,
+      selectedSkillIdSet,
+      tags,
+      togglingAgentId: togglingAgentId ?? null,
+      updateStatuses,
+      updatingSkillIds,
+      viewDensity: viewState.density,
+      viewMode: viewState.view,
     },
-    setters: {
-      setBatchDeletePreview,
-      setBatchDeletePreviewError,
-      setDeletePreview,
-      setDeletePreviewError,
-      setDeleteTargetSkill,
-      setDrawerSkillId,
-      setInstallTargetSkill,
-      setIsBatchDeleteDialogOpen,
-      setIsBatchDeletePreviewLoading,
-      setIsDeleteDialogOpen,
-      setIsDeletePreviewLoading,
-      setIsDialogOpen,
-      setIsDrawerOpen,
-      setIsRemoteMissingDialogOpen,
-      setIsRemoteMissingPreviewLoading,
-      setIsRepositorySyncDialogOpen,
-      setIsRepositorySyncPreviewLoading,
-      setIsApplyingRepositorySync,
-      setIsRepositoryDeleteDialogOpen,
-      setIsRepositoryDeletePreviewLoading,
-      setIsResolvingRemoteMissing,
-      setIsUpdateConfirmDialogOpen,
-      setManualSelectedTagIds,
-      setManualTagQuery,
-      setPendingUpdateStates,
-      setQueuedRemoteMissingStates,
-      setQueuedRepositorySyncPreview,
-      setRemoteMissingError,
-      setRemoteMissingPreview,
-      setRemoteMissingStates,
-      setRepositorySyncDeletePreview,
-      setRepositorySyncError,
-      setRepositorySyncPreview,
-      setRepositoryDeletePreview,
-      setRepositoryDeletePreviewError,
-      setRepositoryDeleteTarget,
-      setRepositoryFilter,
-      setSelectedSkillIds,
-    },
-  });
-
-  const handleToggleSelectionPreservingScroll = useCallback(
-    (skillId: string) => {
-      const scrollContainer = contentRef.current;
-      const scrollTop = scrollContainer?.scrollTop;
-
-      handleToggleSelection(skillId);
-
-      if (scrollTop === undefined) return;
-
-      window.requestAnimationFrame(() => {
-        if (contentRef.current) {
-          contentRef.current.scrollTop = scrollTop;
-        }
-      });
-    },
-    [handleToggleSelection],
-  );
-
-  const batchUninstall = useCentralBatchUninstallView({
-    selectedSkillIds,
+    platform: { agents, loadCentralSkills, refreshCounts },
+    repositoryFilter: viewState.repos[0] ?? "all",
+    setViewState,
     skills,
-    onConfirm: handleBatchUninstallCentralSkills,
+    t,
+    updateTargetSkillIds,
+    updatingSkillIds,
   });
 
   // ─── 共享 props ────────────────────────────────────────────────
   const dialogsProps = {
     agents, activeTarget,
     availableInstallAgents,
-    batchDeletePreview,
-    batchDeletePreviewError,
-    deletePreview,
-    deletePreviewError,
-    deleteTargetSkill,
-    detailButtonRefs,
-    drawerSkillId,
+    batchDeletePreview: actionBindings.batchDeletePreview,
+    batchDeletePreviewError: actionBindings.batchDeletePreviewError,
+    deletePreview: actionBindings.deletePreview,
+    deletePreviewError: actionBindings.deletePreviewError,
+    deleteTargetSkill: actionBindings.deleteTargetSkill,
+    detailButtonRefs: actionBindings.detailButtonRefs,
+    drawerSkillId: actionBindings.drawerSkillId,
     githubImport,
-    githubRepoUrl,
+    githubRepoUrl: actionBindings.githubRepoUrl,
     importSkillportState,
-    installTargetSkill,
-    installableImportedSkills,
-    isBatchDeleteDialogOpen,
-    isBatchDeletePreviewLoading,
-    isBatchInstallDialogOpen,
-    isDeleteDialogOpen,
-    isDeletePreviewLoading,
+    installTargetSkill: actionBindings.installTargetSkill,
+    installableImportedSkills: actionBindings.installableImportedSkills,
+    isBatchDeleteDialogOpen: actionBindings.isBatchDeleteDialogOpen,
+    isBatchDeletePreviewLoading: actionBindings.isBatchDeletePreviewLoading,
+    isBatchInstallDialogOpen: actionBindings.isBatchInstallDialogOpen,
+    isDeleteDialogOpen: actionBindings.isDeleteDialogOpen,
+    isDeletePreviewLoading: actionBindings.isDeletePreviewLoading,
     isDeleting,
-    isDialogOpen,
-    isDrawerOpen,
-    isGitHubImportOpen,
-    isPlatformManageOpen,
+    isDialogOpen: actionBindings.isDialogOpen,
+    isDrawerOpen: actionBindings.isDrawerOpen,
+    isGitHubImportOpen: actionBindings.isGitHubImportOpen,
+    isPlatformManageOpen: actionBindings.isPlatformManageOpen,
     isInstalling,
-    isPortabilityOpen,
-    isRemoteMissingDialogOpen,
-    isRemoteMissingPreviewLoading,
-    isRepositorySyncDialogOpen,
-    isRepositorySyncPreviewLoading,
-    isApplyingRepositorySync,
-    isRepositoryDeleteDialogOpen,
-    isRepositoryDeletePreviewLoading,
-    isResolvingRemoteMissing,
+    isPortabilityOpen: actionBindings.isPortabilityOpen,
+    isRemoteMissingDialogOpen: actionBindings.isRemoteMissingDialogOpen,
+    isRemoteMissingPreviewLoading:
+      actionBindings.isRemoteMissingPreviewLoading,
+    isRepositorySyncDialogOpen: actionBindings.isRepositorySyncDialogOpen,
+    isRepositorySyncPreviewLoading:
+      actionBindings.isRepositorySyncPreviewLoading,
+    isApplyingRepositorySync: actionBindings.isApplyingRepositorySync,
+    isRepositoryDeleteDialogOpen:
+      actionBindings.isRepositoryDeleteDialogOpen,
+    isRepositoryDeletePreviewLoading:
+      actionBindings.isRepositoryDeletePreviewLoading,
+    isResolvingRemoteMissing: actionBindings.isResolvingRemoteMissing,
     isUpdatingSkills: updatingSkillIds.length > 0,
-    isUpdateConfirmDialogOpen,
+    isUpdateConfirmDialogOpen: actionBindings.isUpdateConfirmDialogOpen,
     loadCentralSkills,
-    pendingUpdateStates,
-    previewSkillportStateImport,
-    remoteMissingError,
-    remoteMissingPreview,
-    remoteMissingStates,
-    batchUninstall: batchUninstall.dialog,
-    repositorySyncError,
-    repositorySyncPreview,
-    repositorySyncDeletePreview,
-    repositoryDeletePreview,
-    repositoryDeletePreviewError,
-    repositoryDeleteTarget,
-    selectedSkillIds,
+    pendingUpdateStates: actionBindings.pendingUpdateStates,
+    previewSkillportStateImport, previewSkillportStateImportFile,
+    remoteMissingError: actionBindings.remoteMissingError,
+    remoteMissingPreview: actionBindings.remoteMissingPreview,
+    remoteMissingStates: actionBindings.remoteMissingStates,
+    batchUninstall: actionBindings.batchUninstall.dialog,
+    repositorySyncError: actionBindings.repositorySyncError,
+    repositorySyncPreview: actionBindings.repositorySyncPreview,
+    repositorySyncDeletePreview: actionBindings.repositorySyncDeletePreview,
+    repositoryDeletePreview: actionBindings.repositoryDeletePreview,
+    repositoryDeletePreviewError: actionBindings.repositoryDeletePreviewError,
+    repositoryDeleteTarget: actionBindings.repositoryDeleteTarget,
+    selectedSkillIds: actionBindings.selectedSkillIds,
     skills,
-    setDrawerSkillId,
-    setGithubRepoUrl,
-    setIsBatchInstallDialogOpen,
-    setIsDialogOpen,
-    setIsDrawerOpen,
-    setIsGitHubImportOpen,
-    setIsPlatformManageOpen,
-    setIsPortabilityOpen,
-    exportSkillportState,
+    setDrawerSkillId: actionBindings.setDrawerSkillId,
+    setGithubRepoUrl: actionBindings.setGithubRepoUrl,
+    setIsBatchInstallDialogOpen: actionBindings.setIsBatchInstallDialogOpen,
+    setIsDialogOpen: actionBindings.setIsDialogOpen,
+    setIsDrawerOpen: actionBindings.setIsDrawerOpen,
+    setIsGitHubImportOpen: actionBindings.setIsGitHubImportOpen,
+    setIsPlatformManageOpen: actionBindings.setIsPlatformManageOpen,
+    setIsPortabilityOpen: actionBindings.setIsPortabilityOpen,
+    exportSkillportState, saveSkillportStateExport,
     portabilityJob,
     cancelSkillportStatePortability,
-    platformManagement: {
-      agents,
-      categoryVisibility,
-      addCustomAgent,
-      updateCustomAgent,
-      removeCustomAgent,
-      setCategoryVisibility,
-      setAgentEnabled,
-      refreshAfterPlatformChange: async () => {
-        await loadCentralSkills();
-        await refreshCounts();
-      },
-    },
-    onAfterImportSuccess: handleAfterImportSuccess,
-    onBatchDeleteCentralSkills: handleBatchDeleteCentralSkills,
-    onBatchDeleteDialogOpenChange: handleBatchDeleteDialogOpenChange,
-    onBatchInstallCentralSkills: handleBatchInstallCentralSkills,
-    onDeleteCentralSkill: handleDeleteCentralSkill,
-    onDeleteDialogOpenChange: handleDeleteDialogOpenChange,
-    onDeleteSkillRepository: handleDeleteSkillRepository,
-    onGitHubImport: handleGitHubImport,
-    onGitHubPreview: handleGitHubPreview,
-    onInstall: handleInstall,
-    onInstallFromDrawer: handleInstallClick,
-    onInstallImportedSkill: handleInstallImportedSkill,
+    platformManagement: actionBindings.platformManagement,
+    onAfterImportSuccess: actionBindings.handleAfterImportSuccess,
+    onBatchDeleteCentralSkills: actionBindings.handleBatchDeleteCentralSkills,
+    onBatchDeleteDialogOpenChange:
+      actionBindings.handleBatchDeleteDialogOpenChange,
+    onBatchInstallCentralSkills:
+      actionBindings.handleBatchInstallCentralSkills,
+    onDeleteCentralSkill: actionBindings.handleDeleteCentralSkill,
+    onDeleteDialogOpenChange: actionBindings.handleDeleteDialogOpenChange,
+    onDeleteSkillRepository: actionBindings.handleDeleteSkillRepository,
+    onGitHubImport: actionBindings.handleGitHubImport,
+    onGitHubPreview: actionBindings.handleGitHubPreview,
+    onInstall: actionBindings.handleInstall,
+    onInstallFromDrawer: actionBindings.handleInstallClick,
+    onInstallImportedSkill: actionBindings.handleInstallImportedSkill,
     onRefreshCounts: refreshCounts,
-    onConfirmUpdateSkills: handleConfirmUpdateSkills,
-    onRemoteMissingDialogOpenChange: handleRemoteMissingDialogOpenChange,
-    onRepositorySyncDialogOpenChange: handleRepositorySyncDialogOpenChange,
-    onApplyRepositorySync: handleApplyRepositorySync,
-    onUpdateConfirmDialogOpenChange: handleUpdateConfirmDialogOpenChange,
-    onRepositoryDeleteDialogOpenChange: handleRepositoryDeleteDialogOpenChange,
+    onConfirmUpdateSkills: actionBindings.handleConfirmUpdateSkills,
+    onRemoteMissingDialogOpenChange:
+      actionBindings.handleRemoteMissingDialogOpenChange,
+    onRepositorySyncDialogOpenChange:
+      actionBindings.handleRepositorySyncDialogOpenChange,
+    onApplyRepositorySync: actionBindings.handleApplyRepositorySync,
+    onUpdateConfirmDialogOpenChange:
+      actionBindings.handleUpdateConfirmDialogOpenChange,
+    onRepositoryDeleteDialogOpenChange:
+      actionBindings.handleRepositoryDeleteDialogOpenChange,
     onResetGitHubImport: resetGitHubImport,
-    onResolveRemoteMissing: handleResolveRemoteMissing,
+    onResolveRemoteMissing: actionBindings.handleResolveRemoteMissing,
   };
 
-  const listContentProps = {
-    availableInstallAgents,
-    contentRef,
-    filteredSkills: visibleFilteredSkills,
-    isLoading,
-    isSearchActive: v2.isSearchActive || isInstalledSkillsFilterActive,
-    viewMode: viewState.view,
-    viewDensity: viewState.density,
-    onDelete: (skill: SkillWithLinks) => {
-      void handleDeleteClick(skill);
-    },
-    onDetail: handleOpenDrawer, onInstallTo: handleInstallClick,
-    onUninstallFromPlatforms: (skill: SkillWithLinks) => batchUninstall.openForSkill(skill.id),
-    onTogglePlatform: handleTogglePlatform,
-    onToggleSelection: handleToggleSelectionPreservingScroll,
-    onUpdateCentral: (skillIds: string[]) => {
-      void handleUpdateSkills(skillIds);
-    },
-    onAddSkillTag: (skillId: string, tagId: string) => {
-      void handleAddSkillTag(skillId, tagId);
-    },
-    onCreateSkillTag: (skillId: string, name: string) => {
-      void handleCreateSkillTag(skillId, name);
-    },
-    onRemoveSkillTag: (skillId: string, tagId: string) => {
-      void handleRemoveSkillTag(skillId, tagId);
-    },
-    searchQuery: viewState.q,
-    selectedSkillIdSet,
-    setDetailButtonRef,
-    skillsCount: skills.length,
-    sortedSkills: visibleCurrentViewSkills,
-    tags,
-    togglingAgentId: togglingAgentId ?? null,
-    updateStatuses,
-    updatingSkillIds,
-  };
-
-  const updateButtonProps = {
-    disabled: updateTargetSkillIds.length === 0 || updatingSkillIds.length > 0,
-    label:
-      selectedSkillIds.length > 0
-        ? t("central.updateSelected", { count: updateTargetSkillIds.length })
-        : t("central.updateAvailable", { count: updateTargetSkillIds.length }),
-    targetSkillIds: updateTargetSkillIds,
-  };
   const { aiTagProgressItems, aiTagRateProfile } =
     useCentralAiTagDashboardView({ aiTagJob, skills });
 
@@ -666,10 +396,10 @@ export function CentralSkillsView() {
     updateJob,
     portabilityJob,
     onCancelAiTag: () => {
-      void handleCancelAiTagJob();
+      void actionBindings.handleCancelAiTagJob();
     },
     onCancelUpdate: () => {
-      void handleCancelCentralUpdates();
+      void actionBindings.handleCancelCentralUpdates();
     },
     onCancelPortability: () => {
       void cancelSkillportStatePortability();
@@ -696,36 +426,40 @@ export function CentralSkillsView() {
     filteredManualTags,
     isMetadataUpdating,
     isSuggestingTags,
-    manualSelectedTagIds,
-    manualTagQuery,
-    selectedSkillCount: selectedSkillIds.length,
+    manualSelectedTagIds: actionBindings.manualSelectedTagIds,
+    manualTagQuery: actionBindings.manualTagQuery,
+    selectedSkillCount: actionBindings.selectedSkillIds.length,
     sortedSkillCount: visibleCurrentViewSkills.length,
-    onAcceptReview: (review: Parameters<typeof handleAcceptReview>[0]) => {
-      void handleAcceptReview(review);
+    onAcceptReview: (
+      review: Parameters<typeof actionBindings.handleAcceptReview>[0],
+    ) => {
+      void actionBindings.handleAcceptReview(review);
     },
     onApplyManualTags: () => {
-      void handleApplyManualTags();
+      void actionBindings.handleApplyManualTags();
     },
     onApplyManualTagsToReview: (
-      review: Parameters<typeof handleApplyManualTagsToReview>[0],
+      review: Parameters<typeof actionBindings.handleApplyManualTagsToReview>[0],
     ) => {
-      void handleApplyManualTagsToReview(review);
+      void actionBindings.handleApplyManualTagsToReview(review);
     },
     onBulkSuggestTags: () => {
-      void handleBulkSuggestTags();
+      void actionBindings.handleBulkSuggestTags();
     },
     onCancelAiTag: () => {
-      void handleCancelAiTagJob();
+      void actionBindings.handleCancelAiTagJob();
     },
     onCreateManualTag: () => {
-      void handleCreateManualTag();
+      void actionBindings.handleCreateManualTag();
     },
     onSetCategorizeTab: setCategorizeTab,
-    onSetManualTagQuery: setManualTagQuery,
-    onSkipReview: (review: Parameters<typeof handleSkipReview>[0]) => {
-      void handleSkipReview(review);
+    onSetManualTagQuery: actionBindings.setManualTagQuery,
+    onSkipReview: (
+      review: Parameters<typeof actionBindings.handleSkipReview>[0],
+    ) => {
+      void actionBindings.handleSkipReview(review);
     },
-    onToggleManualTag: handleToggleManualTag,
+    onToggleManualTag: actionBindings.handleToggleManualTag,
   };
 
   const {
@@ -739,21 +473,21 @@ export function CentralSkillsView() {
     tagGroupsBridge,
     skills,
     updateStatuses,
-    selectedSkillIds,
-    setSelectedSkillIds,
+    selectedSkillIds: actionBindings.selectedSkillIds,
+    setSelectedSkillIds: actionBindings.setSelectedSkillIds,
     visibleCurrentViewSkills,
   });
 
   const bulkBarProps = {
-    selectedCount: selectedSkillIds.length,
+    selectedCount: actionBindings.selectedSkillIds.length,
     isInstalling,
-    ...batchUninstall.bulkBar,
+    ...actionBindings.batchUninstall.bulkBar,
     isDeleting,
     isAiBusy: isSuggestingTags || aiTagJob.status === "running",
     aiTaggingAvailable,
-    onBatchInstall: () => setIsBatchInstallDialogOpen(true),
+    onBatchInstall: () => actionBindings.setIsBatchInstallDialogOpen(true),
     onBatchDelete: () => {
-      void handleBatchDeleteClick();
+      void actionBindings.handleBatchDeleteClick();
     },
     onClearSelection: handleClearSelection,
   };
@@ -802,7 +536,7 @@ export function CentralSkillsView() {
         sortDirectionOptions={sortDirectionOptions}
         groupByOptions={groupByOptions}
         installedSkillsFilter={installedSkillsFilterProps}
-        listContent={listContentProps}
+        listContent={actionBindings.listContentProps}
         categorizePanel={categorizePanelProps}
         bulkBar={bulkBarProps}
         selectionControls={selectionControlsProps}
@@ -814,21 +548,21 @@ export function CentralSkillsView() {
           setIsStoreLocationDialogOpen,
           t,
         })}
-        setIsGitHubImportOpen={setIsGitHubImportOpen}
-        setIsPlatformManageOpen={setIsPlatformManageOpen}
-        setIsPortabilityOpen={setIsPortabilityOpen}
+        setIsGitHubImportOpen={actionBindings.setIsGitHubImportOpen}
+        setIsPlatformManageOpen={actionBindings.setIsPlatformManageOpen}
+        setIsPortabilityOpen={actionBindings.setIsPortabilityOpen}
         onUpdateSkills={(skillIds) => {
-          void handleUpdateSkills(skillIds);
+          void actionBindings.handleUpdateSkills(skillIds);
         }}
         updateAvailableSkillCount={updateAvailableSkillIds.length}
-        updateButton={updateButtonProps}
+        updateButton={actionBindings.updateButtonProps}
         checkModeControl={updateCheckMode.modeControl}
         checkButton={updateCheckMode.checkButton}
         onOpenPalette={() => setCommandPaletteOpen(true)}
         savedViewsSlot={savedViewsSlot}
         topFiltersTagGroups={tagGroupsSlot}
         onDeleteRepository={(repo) => {
-          void handleRepositoryDeleteClick(repo);
+          void actionBindings.handleRepositoryDeleteClick(repo);
         }}
         onToggleRepositoryPin={(repo) => {
           void setRepositoryPinned(repo.id, !repo.pinned);

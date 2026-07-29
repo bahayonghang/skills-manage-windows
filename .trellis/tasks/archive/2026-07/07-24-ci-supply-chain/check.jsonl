@@ -1,0 +1,3 @@
+{"file":".trellis/spec/quality/index.md","reason":"Apply the repository-wide quality checklist during final review."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Verify workflow triggers, stable check context, release integration, and documentation consistency."}
+{"file":".trellis/tasks/07-24-ci-supply-chain/research/ci-supply-chain-evidence.md","reason":"Check implementation claims against the captured live audit and SHA evidence."}
