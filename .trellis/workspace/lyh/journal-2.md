@@ -685,3 +685,25 @@ Bound target identity, cache DB, remote resources, events, and operation logs to
 ### Status
 
 [OK] **Completed**
+
+
+## Session 75: Repair PR #25 cross-platform CI
+
+**Date**: 2026-07-29
+**Task**: Repair PR #25 cross-platform CI
+**Branch**: `dev`
+
+### Summary
+
+Fixed the macOS stdin fixture and LF checkout contracts for generated IPC and frozen SQL fixtures; exact-head PR run 30415927278 passed every required check.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0c49dcf6` | (see git log) |
+| `e1a2d6f5` | (see git log) |
+
+### Status
+
+[OK] **Completed**
