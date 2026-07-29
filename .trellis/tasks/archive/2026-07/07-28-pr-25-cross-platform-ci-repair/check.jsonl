@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/process-supervision.md","reason":"Verify the repair does not weaken termination-failure or descendant cleanup semantics."}
+{"file":".trellis/spec/backend/database-migrations.md","reason":"Verify the LF checkout rule preserves all raw-byte-locked SQL fixture digests."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Verify local/remote gates and exact-head PR evidence."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Verify focused regression coverage and full-suite expectations."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Review cross-platform boundary behavior and failure propagation."}
