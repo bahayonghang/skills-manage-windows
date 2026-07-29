@@ -13,5 +13,6 @@
 *.rs text eol=lf
 *.mjs text eol=lf
 
-# Keep the byte-compared generated IPC artifact stable across checkout settings.
+# Keep byte-compared artifacts and raw-byte fixtures stable across checkouts.
 src/lib/ipc/generatedCommandMap.ts text eol=lf
+src-tauri/tests/fixtures/db/*.sql text eol=lf

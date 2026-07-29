@@ -32,6 +32,11 @@ pool-only initialization are test-only or documented legacy-fixture seams.
   isolated from mutable runtime repair/repository code before their source is
   added with `include_str!`; otherwise an unrelated runtime fix would make
   already-migrated databases fail checksum preflight.
+- Frozen tag SQL fixtures are raw-byte locked by `fixtureSha256`. Every
+  `src-tauri/tests/fixtures/db/*.sql` file must be checked out as LF through a
+  path-scoped `.gitattributes` rule. Do not normalize the checksum assertion or
+  update the manifest for CRLF-only drift; that would weaken the immutable
+  fixture contract instead of fixing checkout bytes.
 - Startup preflight is read-only and rejects descriptor gaps, applied gaps,
   unknown future versions, and checksum mismatch before backup or mutation.
 - File startup order is `open private pool -> preflight -> backup when pending
@@ -96,12 +101,17 @@ repair audit, restore, and FK validation are never best effort.
   and silently redefine history.
 - Bad: checksum an entire runtime repository module just because migration code
   consumes one constant from it; later repair-only edits would rewrite history.
+- Bad: let `core.autocrlf` rewrite a frozen SQL fixture and refresh its manifest
+  digest to match one platform's checkout bytes.
 - Bad: call `create_pool` then `init_database` from a production entry point;
   the path required for mandatory backup has already been lost.
 
 ## 6. Tests Required
 
 - Manifest/checksum-locked readable SQL fixtures for all five selected tags.
+- `git check-attr eol -- src-tauri/tests/fixtures/db/0_10_9.sql` reports `lf`;
+  an autocrlf checkout of all five SQL fixtures preserves their manifest SHA-256
+  digests before the focused fixture-lock test runs.
 - A locked digest for each descriptor, including migrations 3 and 4; changing
   runtime repair code alone must not change an already-released migration digest.
 - Fixture pre-schema assertions, four contiguous migration rows, preserved
