@@ -31,6 +31,8 @@ export interface GitHubRepoImportWizardProps {
   onOpenChange: (open: boolean) => void;
   repoUrl: string;
   onRepoUrlChange: (value: string) => void;
+  branch: string;
+  onBranchChange: (value: string) => void;
   preview: GitHubRepoPreview | null;
   previewError: string | null;
   isPreviewLoading: boolean;
@@ -96,7 +98,7 @@ export function normalizeMessage(message: unknown) {
 /**
  * Translate a backend GitHub-import failure.
  *
- * Preview snapshot lifecycle failures arrive as a stable
+ * Reviewed GitHub import failures arrive as a stable
  * `github_import.<code>:<summary>` envelope and are localized; every other
  * message keeps its historical text. The `Error:` prefix is stripped before
  * parsing so a stringified `Error` still resolves its code.
@@ -125,14 +127,21 @@ export function isPreviewSnapshotFailure(error: unknown) {
 /**
  * Localize a rejected import/install for a toast.
  *
- * Only the coded preview snapshot envelope is translated; every other message
- * keeps its exact historical text so unrelated failures cannot be reshaped by
- * the coded-error parser.
+ * Preview snapshot and branch-selection envelopes are translated; every other
+ * message keeps its exact historical text so unrelated failures cannot be
+ * reshaped by the coded-error parser.
  */
 export function formatGitHubImportToast(error: unknown, t: TFunction) {
   const message = String(error);
-  return isPreviewSnapshotFailure(message)
-    ? formatGitHubImportError(message, t)
+  const code = parseBackendError(
+    typeof error === "string" ? normalizeMessage(error) : error,
+  ).code;
+  const shouldLocalize =
+    code?.startsWith("github_import.preview") === true ||
+    code === "github_import.branch_invalid" ||
+    code === "github_import.branch_conflict";
+  return shouldLocalize
+    ? formatGitHubImportError(error, t)
     : message;
 }
 

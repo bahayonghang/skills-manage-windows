@@ -13,6 +13,7 @@ import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useTargetStore } from "@/stores/targetStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
+import { useImportIntentStore } from "@/stores/importIntentStore";
 import { isTauriRuntime, listen } from "@/lib/ipc";
 
 type MigrationProgressPayload =
@@ -53,6 +54,9 @@ export function AppShell() {
   );
   const resetMarketplaceForTargetChange = useMarketplaceStore(
     (s) => s.resetForTargetChange,
+  );
+  const clearGitHubBranchForTargetChange = useImportIntentStore(
+    (s) => s.setGitHubBranch,
   );
   const loadTargets = useTargetStore((s) => s.loadTargets);
   const activeTargetId = useTargetStore((s) => s.activeTarget.id);
@@ -103,9 +107,11 @@ export function AppShell() {
     resetCentralForTargetChange();
     resetSkillsForTargetChange();
     resetMarketplaceForTargetChange();
+    clearGitHubBranchForTargetChange("");
     void handleGlobalRescan();
   }, [
     activeTargetId,
+    clearGitHubBranchForTargetChange,
     handleGlobalRescan,
     hasLoadedTargets,
     resetCentralForTargetChange,

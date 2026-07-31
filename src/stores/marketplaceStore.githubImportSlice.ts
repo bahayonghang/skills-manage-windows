@@ -17,6 +17,10 @@ import type {
   MarketplaceStoreContext,
 } from "./marketplaceStore.types";
 
+function normalizeGitHubBranch(branch?: string | null): string | null {
+  return branch?.trim() || null;
+}
+
 export function createMarketplaceGitHubImportSlice({
   set,
   get,
@@ -34,20 +38,30 @@ export function createMarketplaceGitHubImportSlice({
   | "resetForTargetChange"
 > {
   return {
-    previewGitHubRepoSkills: async (repoUrl: string) => {
+    previewGitHubRepoSkills: async (
+      repoUrl: string,
+      branch?: string | null,
+    ) => {
       if (!isTauriRuntime()) {
         throw new Error(
           "Desktop-only feature: GitHub repo preview is available in the Tauri app.",
         );
       }
 
-      const preview = await invoke("preview_github_repo_import", { repoUrl });
+      const preview = await invoke("preview_github_repo_import", {
+        repoUrl,
+        branch: normalizeGitHubBranch(branch),
+      });
       await discardGitHubRepoPreviewSnapshot(preview.previewId);
       return preview;
     },
 
-    previewGitHubRepoImport: async (repoUrl: string) => {
+    previewGitHubRepoImport: async (
+      repoUrl: string,
+      branch?: string | null,
+    ) => {
       const generation = getGeneration();
+      const previewedBranch = normalizeGitHubBranch(branch);
       if (!isTauriRuntime()) {
         const error =
           "Desktop-only feature: GitHub repo preview is available in the Tauri app.";
@@ -58,6 +72,7 @@ export function createMarketplaceGitHubImportSlice({
             preview: null,
             importResult: null,
             previewedRepoUrl: repoUrl,
+            previewedBranch,
             error,
             importProgress: null,
             importStartedAt: null,
@@ -77,6 +92,7 @@ export function createMarketplaceGitHubImportSlice({
           preview: null,
           importResult: null,
           previewedRepoUrl: repoUrl,
+          previewedBranch,
           error: null,
           importProgress: null,
           importStartedAt: null,
@@ -84,7 +100,10 @@ export function createMarketplaceGitHubImportSlice({
       }));
 
       try {
-        const preview = await invoke("preview_github_repo_import", { repoUrl });
+        const preview = await invoke("preview_github_repo_import", {
+          repoUrl,
+          branch: previewedBranch,
+        });
         if (generation === getGeneration()) {
           set((state) => ({
             githubImport: {
@@ -93,6 +112,7 @@ export function createMarketplaceGitHubImportSlice({
               preview,
               importResult: null,
               previewedRepoUrl: repoUrl,
+              previewedBranch,
               error: null,
               importProgress: null,
               importStartedAt: null,
@@ -109,6 +129,7 @@ export function createMarketplaceGitHubImportSlice({
               preview: null,
               importResult: null,
               previewedRepoUrl: repoUrl,
+              previewedBranch,
               error: backendErrorStateValue(err),
               importProgress: null,
               importStartedAt: null,
@@ -142,6 +163,7 @@ export function createMarketplaceGitHubImportSlice({
 
       const activePreviewId =
         previewId ?? get().githubImport.preview?.previewId ?? null;
+      const previewedBranch = get().githubImport.previewedBranch;
       if (!activePreviewId) {
         const error = i18n.t("marketplace.githubImportPreviewRequired");
         set((state) => ({
@@ -180,6 +202,7 @@ export function createMarketplaceGitHubImportSlice({
         const importResult = await invoke("import_github_repo_skills", {
           previewId: activePreviewId,
           repoUrl,
+          branch: previewedBranch,
           selections,
         });
         if (generation === getGeneration()) {

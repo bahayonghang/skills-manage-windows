@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 75
-- **Last Active**: 2026-07-29
+- **Total Sessions**: 76
+- **Last Active**: 2026-08-01
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~709 | Active |
+| `journal-2.md` | ~730 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 76 | 2026-08-01 | GitHub 导入分支选择 | `eaf3035d` | `dev` |
 | 75 | 2026-07-29 | Repair PR #25 cross-platform CI | `0c49dcf6`, `e1a2d6f5` | `dev` |
 | 74 | 2026-07-28 | 优化 Skill Usage 页面体验 | `39f8a674` | `dev` |
 | 73 | 2026-07-28 | 完成极限审计整改父任务验收 | - | `dev` |

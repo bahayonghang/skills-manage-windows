@@ -14,10 +14,12 @@ type OpenImportIntentResult = "opened" | "pending" | "duplicate" | "invalid";
 interface ImportIntentState {
   githubWizardOpen: boolean;
   githubSource: string;
+  githubBranch: string;
   pendingSources: string[];
   openImportIntent: (intent: ImportIntent) => OpenImportIntentResult;
   setGitHubWizardOpen: (open: boolean) => void;
   setGitHubSource: (source: string) => void;
+  setGitHubBranch: (branch: string) => void;
   consumePendingIntent: () => void;
   discardPendingIntent: () => void;
   resetGitHubSession: () => void;
@@ -75,6 +77,7 @@ function hasDirtyGitHubSession(state: ImportIntentState): boolean {
   const githubImport = useMarketplaceStore.getState().githubImport;
   return (
     state.githubSource.trim().length > 0 ||
+    state.githubBranch.trim().length > 0 ||
     githubImport.isPreviewLoading ||
     githubImport.isImporting ||
     githubImport.preview !== null ||
@@ -87,6 +90,7 @@ function hasDirtyGitHubSession(state: ImportIntentState): boolean {
 export const useImportIntentStore = create<ImportIntentState>((set, get) => ({
   githubWizardOpen: false,
   githubSource: "",
+  githubBranch: "",
   pendingSources: [],
 
   openImportIntent: (intent) => {
@@ -115,18 +119,24 @@ export const useImportIntentStore = create<ImportIntentState>((set, get) => ({
       return "pending";
     }
 
-    set({ githubSource: source, githubWizardOpen: true });
+    set({ githubSource: source, githubBranch: "", githubWizardOpen: true });
     return "opened";
   },
 
   setGitHubWizardOpen: (githubWizardOpen) => set({ githubWizardOpen }),
   setGitHubSource: (githubSource) => set({ githubSource }),
+  setGitHubBranch: (githubBranch) => set({ githubBranch }),
 
   consumePendingIntent: () => {
     const [source, ...pendingSources] = get().pendingSources;
     if (!source || get().githubWizardOpen) return;
     useMarketplaceStore.getState().resetGitHubImport();
-    set({ githubSource: source, githubWizardOpen: true, pendingSources });
+    set({
+      githubSource: source,
+      githubBranch: "",
+      githubWizardOpen: true,
+      pendingSources,
+    });
   },
 
   discardPendingIntent: () => {
@@ -136,11 +146,16 @@ export const useImportIntentStore = create<ImportIntentState>((set, get) => ({
 
   resetGitHubSession: () => {
     useMarketplaceStore.getState().resetGitHubImport();
-    set({ githubSource: "" });
+    set({ githubSource: "", githubBranch: "" });
   },
 
   resetForTest: () =>
-    set({ githubWizardOpen: false, githubSource: "", pendingSources: [] }),
+    set({
+      githubWizardOpen: false,
+      githubSource: "",
+      githubBranch: "",
+      pendingSources: [],
+    }),
 }));
 
 export function openImportIntent(intent: ImportIntent): OpenImportIntentResult {
@@ -155,8 +170,12 @@ export function useImportIntentBindings() {
     (state) => state.setGitHubWizardOpen,
   );
   const githubRepoUrl = useImportIntentStore((state) => state.githubSource);
+  const githubBranch = useImportIntentStore((state) => state.githubBranch);
   const setGithubRepoUrl = useImportIntentStore(
     (state) => state.setGitHubSource,
+  );
+  const setGithubBranch = useImportIntentStore(
+    (state) => state.setGitHubBranch,
   );
   const setIsGitHubImportOpen = useCallback(
     (open: boolean) => {
@@ -167,8 +186,10 @@ export function useImportIntentBindings() {
   );
 
   return {
+    githubBranch,
     githubRepoUrl,
     isGitHubImportOpen,
+    setGithubBranch,
     setGithubRepoUrl,
     setIsGitHubImportOpen,
   };

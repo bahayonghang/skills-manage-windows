@@ -95,7 +95,9 @@
       "preview_mismatch": "仓库预览与当前目标或仓库不一致，请重新预览。",
       "preview_integrity": "预览的仓库内容已变化，请重新预览并确认更新。",
       "preview_busy": "该预览正在导入中，请等待完成后重试。",
-      "preview_commit_unresolved": "无法解析仓库提交，请重新预览。"
+      "preview_commit_unresolved": "无法解析仓库提交，请重新预览。",
+      "branch_invalid": "请输入不含斜杠的安全单段分支名。",
+      "branch_conflict": "仓库 URL 中的分支与分支输入框不一致，请调整一致后重新预览。"
     },
     "local_archive": {
       "archive_not_found": "未找到所选 ZIP 压缩包。",
@@ -2302,6 +2304,9 @@
       "result": "结果"
     },
     "githubRepoUrl": "GitHub 仓库 URL",
+    "githubBranchLabel": "分支（可选）",
+    "githubBranchPlaceholder": "dev",
+    "githubBranchDefaultHint": "留空时使用仓库默认分支。",
     "previewImport": "预览导入",
     "githubImportNoWriteHint": "预览为只读操作，在你确认导入前不会执行任何写入。",
     "githubImportDesktopOnlyHint": "当前版本仅桌面应用支持 GitHub 仓库预览与导入。",

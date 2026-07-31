@@ -1,0 +1,7 @@
+{"file":".trellis/tasks/07-31-github-import-branch-selection/research/github-import-branch-contract.md","reason":"Review against the complete task-scoped SSRF, resource-budget, immutable snapshot, Local/SSH/WSL, CLI, and validation contract excerpt."}
+{"file":".trellis/spec/backend/shared-local-cli.md","reason":"Verify desktop branch input does not fork or break the shared local CLI import behavior."}
+{"file":".trellis/spec/frontend/github-preview-snapshot-token.md","reason":"Verify preview replacement, reset, Markdown, and confirmation cannot cross branch identities."}
+{"file":".trellis/spec/frontend/import-intent-controller.md","reason":"Verify branch dirty-state and reset behavior across shared launchers and queued intents."}
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Verify typed command payload coverage and absence of direct component invoke calls."}
+{"file":".trellis/spec/frontend/async-ui-test-stability.md","reason":"Review test fixtures for stable selector state and preview identity."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Place focused Rust, store, contract, and wizard tests in the established suite structure."}

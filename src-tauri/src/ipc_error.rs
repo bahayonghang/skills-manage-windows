@@ -264,6 +264,10 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
         "github_import.preview_commit_unresolved" => {
             Some("GitHub repository commit could not be resolved. Preview again.")
         }
+        "github_import.branch_invalid" => Some("GitHub branch must be a safe single-segment name."),
+        "github_import.branch_conflict" => {
+            Some("GitHub branch in the repository URL does not match the selected branch.")
+        }
         "local_archive.archive_not_found" => Some("The selected archive was not found."),
         "local_archive.archive_read_failed" => Some("The selected archive could not be read."),
         "local_archive.archive_changed_since_preview" => {
@@ -355,6 +359,25 @@ mod tests {
         assert_eq!(error.code, "ai.rate_limit");
         assert_eq!(error.message, "The AI provider rate limited the request.");
         assert!(!error.message.contains("attacker"));
+    }
+
+    #[test]
+    fn github_branch_codes_keep_reviewed_public_messages() {
+        for (code, message) in [
+            (
+                "github_import.branch_invalid",
+                "GitHub branch must be a safe single-segment name.",
+            ),
+            (
+                "github_import.branch_conflict",
+                "GitHub branch in the repository URL does not match the selected branch.",
+            ),
+        ] {
+            let error = IpcError::from(format!("{code}:private branch detail"));
+            assert_eq!(error.code, code);
+            assert_eq!(error.message, message);
+            assert!(!error.message.contains("private"));
+        }
     }
 
     #[test]

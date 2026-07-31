@@ -56,6 +56,7 @@ interface GitHubRepoImportWizardHeaderProps {
   preview: GitHubRepoPreview | null;
   showRepoToolbar: boolean;
   repoUrl: string;
+  branch: string;
   previewError: string | null;
   isPreviewLoading: boolean;
   browserMode: boolean;
@@ -63,6 +64,7 @@ interface GitHubRepoImportWizardHeaderProps {
   selectedSkillsCount: number;
   activeTarget: TargetSummary;
   onRepoUrlChange: (value: string) => void;
+  onBranchChange: (value: string) => void;
   onPreviewSubmit: () => void;
 }
 
@@ -72,6 +74,7 @@ export function GitHubRepoImportWizardHeader({
   preview,
   showRepoToolbar,
   repoUrl,
+  branch,
   previewError,
   isPreviewLoading,
   browserMode,
@@ -79,6 +82,7 @@ export function GitHubRepoImportWizardHeader({
   selectedSkillsCount,
   activeTarget,
   onRepoUrlChange,
+  onBranchChange,
   onPreviewSubmit,
 }: GitHubRepoImportWizardHeaderProps) {
   const { t } = useTranslation();
@@ -177,10 +181,12 @@ export function GitHubRepoImportWizardHeader({
       ) : step === "input" ? (
         <GitHubRepoImportUrlInputBlock
           repoUrl={repoUrl}
+          branch={branch}
           previewError={previewError}
           isPreviewLoading={isPreviewLoading}
           browserMode={browserMode}
           onRepoUrlChange={onRepoUrlChange}
+          onBranchChange={onBranchChange}
           onPreviewSubmit={onPreviewSubmit}
         />
       ) : null}
@@ -190,39 +196,63 @@ export function GitHubRepoImportWizardHeader({
 
 interface GitHubRepoImportUrlInputBlockProps {
   repoUrl: string;
+  branch: string;
   previewError: string | null;
   isPreviewLoading: boolean;
   browserMode: boolean;
   onRepoUrlChange: (value: string) => void;
+  onBranchChange: (value: string) => void;
   onPreviewSubmit: () => void;
 }
 
 function GitHubRepoImportUrlInputBlock({
   repoUrl,
+  branch,
   previewError,
   isPreviewLoading,
   browserMode,
   onRepoUrlChange,
+  onBranchChange,
   onPreviewSubmit,
 }: GitHubRepoImportUrlInputBlockProps) {
   const { t } = useTranslation();
 
   return (
     <div className="mt-4 rounded-xl border border-border/70 bg-muted/10 p-4">
-      <label
-        className="mb-2 block text-sm font-medium"
-        htmlFor="github-repo-url"
-      >
-        {t("marketplace.githubRepoUrl")}
-      </label>
-      <div className="flex gap-2">
-        <Input
-          id="github-repo-url"
-          value={repoUrl}
-          onChange={(event) => onRepoUrlChange(event.target.value)}
-          placeholder="https://github.com/owner/repo"
-          className="flex-1"
-        />
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-end">
+        <div className="min-w-0">
+          <label
+            className="mb-2 block text-sm font-medium"
+            htmlFor="github-repo-url"
+          >
+            {t("marketplace.githubRepoUrl")}
+          </label>
+          <Input
+            id="github-repo-url"
+            value={repoUrl}
+            onChange={(event) => onRepoUrlChange(event.target.value)}
+            placeholder="https://github.com/owner/repo"
+          />
+        </div>
+        <div className="min-w-0">
+          <label
+            className="mb-2 block text-sm font-medium"
+            htmlFor="github-repo-branch"
+          >
+            {t("marketplace.githubBranchLabel")}
+          </label>
+          <div className="relative">
+            <GitBranch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="github-repo-branch"
+              value={branch}
+              onChange={(event) => onBranchChange(event.target.value)}
+              placeholder={t("marketplace.githubBranchPlaceholder")}
+              aria-describedby="github-repo-branch-hint"
+              className="pl-9"
+            />
+          </div>
+        </div>
         <Button
           onClick={onPreviewSubmit}
           disabled={isPreviewLoading || !repoUrl.trim()}
@@ -235,6 +265,12 @@ function GitHubRepoImportUrlInputBlock({
           <span>{t("marketplace.previewImport")}</span>
         </Button>
       </div>
+      <p
+        id="github-repo-branch-hint"
+        className="mt-2 text-xs text-muted-foreground"
+      >
+        {t("marketplace.githubBranchDefaultHint")}
+      </p>
       <p className="mt-2 text-xs text-muted-foreground">
         {browserMode
           ? t("marketplace.githubImportDesktopOnlyHint")

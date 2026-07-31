@@ -119,8 +119,10 @@ export function useCentralSkillsActionState() {
   const [drawerSkillId, setDrawerSkillId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const {
+    githubBranch,
     githubRepoUrl,
     isGitHubImportOpen,
+    setGithubBranch,
     setGithubRepoUrl,
     setIsGitHubImportOpen,
   } = useImportIntentBindings();
@@ -154,6 +156,7 @@ export function useCentralSkillsActionState() {
     deleteTargetSkill,
     detailButtonRefs,
     drawerSkillId,
+    githubBranch,
     githubRepoUrl,
     installTargetSkill,
     isApplyingRepositorySync,
@@ -198,6 +201,7 @@ export function useCentralSkillsActionState() {
     setDeletePreviewError,
     setDeleteTargetSkill,
     setDrawerSkillId,
+    setGithubBranch,
     setGithubRepoUrl,
     setInstallTargetSkill,
     setIsApplyingRepositorySync,
@@ -303,6 +307,7 @@ export function useCentralSkillsActionBindings({
     t,
     state: {
       deleteTargetSkill: actionState.deleteTargetSkill,
+      githubBranch: actionState.githubBranch,
       githubRepoUrl: actionState.githubRepoUrl,
       manualSelectedTagIds: actionState.manualSelectedTagIds,
       manualTagQuery: actionState.manualTagQuery,

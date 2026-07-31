@@ -70,6 +70,7 @@ interface MarketplaceShellProps {
   detailSkill: MarketplaceSkillDetail | null;
   detailTriggerRef: RefObject<HTMLElement | null>;
   githubImport: GitHubImportState;
+  githubBranch: string;
   githubRepoUrl: string;
   installingIds: Set<string>;
   isGitHubImportOpen: boolean;
@@ -110,6 +111,7 @@ interface MarketplaceShellProps {
   selectedTag: SkillTag | null;
   setActiveTab: (tab: MarketplaceTabId) => void;
   setDetailSkill: (skill: MarketplaceSkillDetail | null) => void;
+  setGithubBranch: (value: string) => void;
   setGithubRepoUrl: (value: string) => void;
   setIsGitHubImportOpen: (open: boolean) => void;
   setPublisherSearch: (value: string) => void;
@@ -127,6 +129,7 @@ export function MarketplaceShell({
   detailSkill,
   detailTriggerRef,
   githubImport,
+  githubBranch,
   githubRepoUrl,
   installingIds,
   isGitHubImportOpen,
@@ -154,6 +157,7 @@ export function MarketplaceShell({
   selectedTag,
   setActiveTab,
   setDetailSkill,
+  setGithubBranch,
   setGithubRepoUrl,
   setIsGitHubImportOpen,
   setPublisherSearch,
@@ -643,6 +647,8 @@ export function MarketplaceShell({
         onOpenChange={setIsGitHubImportOpen}
         repoUrl={githubRepoUrl}
         onRepoUrlChange={setGithubRepoUrl}
+        branch={githubBranch}
+        onBranchChange={setGithubBranch}
         preview={githubImport.preview}
         previewError={githubImport.error}
         isPreviewLoading={githubImport.isPreviewLoading}

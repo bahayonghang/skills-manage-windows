@@ -10,11 +10,13 @@ import type { GitHubSkillImportSelection } from "@/types";
 
 export interface CentralSkillsImportWorkflowDeps {
   t: TFunction;
+  githubBranch: string;
   githubRepoUrl: string;
 }
 
 export function useCentralSkillsImportWorkflow({
   t,
+  githubBranch,
   githubRepoUrl,
 }: CentralSkillsImportWorkflowDeps) {
   const skillsByAgent = useSkillStore((store) => store.skillsByAgent);
@@ -33,7 +35,7 @@ export function useCentralSkillsImportWorkflow({
 
   async function handleGitHubPreview() {
     try {
-      return await previewGitHubRepoImport(githubRepoUrl);
+      return await previewGitHubRepoImport(githubRepoUrl, githubBranch);
     } catch {
       return null;
     }

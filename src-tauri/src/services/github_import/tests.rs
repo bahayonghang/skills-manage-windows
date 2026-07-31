@@ -512,6 +512,48 @@ metadata:
     }
 
     #[test]
+    fn reconcile_selected_branch_preserves_default_and_explicit_selection() {
+        assert_eq!(
+            reconcile_selected_branch(None, None).expect("default branch"),
+            None
+        );
+        assert_eq!(
+            reconcile_selected_branch(None, Some("   ")).expect("blank branch"),
+            None
+        );
+        assert_eq!(
+            reconcile_selected_branch(None, Some("  dev  ")).expect("explicit branch"),
+            Some("dev".to_string())
+        );
+        assert_eq!(
+            reconcile_selected_branch(Some("dev"), None).expect("URL branch"),
+            Some("dev".to_string())
+        );
+        assert_eq!(
+            reconcile_selected_branch(Some("dev"), Some("dev")).expect("matching branches"),
+            Some("dev".to_string())
+        );
+    }
+
+    #[test]
+    fn reconcile_selected_branch_rejects_conflicts_and_unsafe_names() {
+        assert!(matches!(
+            reconcile_selected_branch(Some("dev"), Some("main")),
+            Err(GithubImportError::BranchSelectionConflict)
+        ));
+
+        for branch in ["feature/foo", r"feature\foo", "dev\nnext"] {
+            assert!(
+                matches!(
+                    reconcile_selected_branch(None, Some(branch)),
+                    Err(GithubImportError::InvalidBranchSelection)
+                ),
+                "branch should be rejected: {branch:?}"
+            );
+        }
+    }
+
+    #[test]
     fn parse_github_source_rejects_non_github_hosts() {
         let error = parse_github_source("https://gitlab.com/example/repo").unwrap_err();
         assert!(error.to_string().contains("github.com"));
@@ -2418,6 +2460,34 @@ metadata:
                 "https://github.com/openai/skills/tree/main/content/skills",
             ),
             Err(GithubImportError::PreviewWorkspaceMismatch)
+        ));
+    }
+
+    #[test]
+    fn snapshot_binding_reconciles_an_explicit_branch_with_the_preview() {
+        let snapshot = remote_test_snapshot(Some("content/skills"));
+        let ssh_demo = ssh_test_target("ssh-demo");
+        let repo_url = "https://github.com/openai/skills/content/skills";
+
+        assert!(validate_snapshot_binding_with_branch(
+            &snapshot,
+            &ssh_demo,
+            repo_url,
+            Some("main"),
+        )
+        .is_ok());
+        assert!(matches!(
+            validate_snapshot_binding_with_branch(&snapshot, &ssh_demo, repo_url, Some("dev"),),
+            Err(GithubImportError::PreviewWorkspaceMismatch)
+        ));
+        assert!(matches!(
+            validate_snapshot_binding_with_branch(
+                &snapshot,
+                &ssh_demo,
+                "https://github.com/openai/skills/tree/main/content/skills",
+                Some("dev"),
+            ),
+            Err(GithubImportError::BranchSelectionConflict)
         ));
     }
 
@@ -4442,6 +4512,33 @@ metadata:
                 .is_none());
 
             assert!(matches!(
+                import_github_repo_skills_from_preview_with_branch(
+                    &pool,
+                    &ActiveTarget::Local,
+                    id,
+                    "https://github.com/anthropics/skills/tree/main",
+                    Some("dev"),
+                    selections.clone(),
+                    None,
+                )
+                .await,
+                Err(GithubImportError::BranchSelectionConflict)
+            ));
+            assert!(matches!(
+                import_github_repo_skills_from_preview_with_branch(
+                    &pool,
+                    &ActiveTarget::Local,
+                    id,
+                    "https://github.com/anthropics/skills",
+                    Some("dev"),
+                    selections.clone(),
+                    None,
+                )
+                .await,
+                Err(GithubImportError::PreviewWorkspaceMismatch)
+            ));
+
+            assert!(matches!(
                 import_github_repo_skills_from_preview(
                     &pool,
                     &ActiveTarget::Local,
@@ -4458,13 +4555,15 @@ metadata:
                 Err(GithubImportError::SelectionUnavailable(path)) if path == "skills/never-previewed"
             ));
 
-            // Both failures released the lease, so the same preview can retry.
+            // Every binding/selection failure released the lease, so the same
+            // preview can retry with its matching explicit branch.
             assert!(preview_snapshot_is_registered(id));
-            let result = import_github_repo_skills_from_preview(
+            let result = import_github_repo_skills_from_preview_with_branch(
                 &pool,
                 &ActiveTarget::Local,
                 id,
                 "https://github.com/anthropics/skills",
+                Some("main"),
                 selections,
                 None,
             )
@@ -4616,11 +4715,29 @@ metadata:
                 }
             }
 
-            // Non-lifecycle errors keep their historical Display text so the
-            // existing toasts do not change.
+            // Uncoded errors keep their historical Display text so existing
+            // toasts do not change.
             let other = GithubImportError::NoSelections;
             assert_eq!(other.preview_snapshot_code(), None);
             assert_eq!(other.to_ipc_error(), other.to_string());
+        }
+
+        #[test]
+        fn branch_selection_errors_use_stable_ipc_codes_without_dynamic_details() {
+            for (error, code) in [
+                (GithubImportError::InvalidBranchSelection, "branch_invalid"),
+                (
+                    GithubImportError::BranchSelectionConflict,
+                    "branch_conflict",
+                ),
+            ] {
+                let envelope = error.to_ipc_error();
+                assert_eq!(error.ipc_code(), Some(code));
+                assert!(envelope.starts_with(&format!("github_import.{code}:")));
+                for leaked in ["feature/private", "ghp_", "github-preview-"] {
+                    assert!(!envelope.contains(leaked));
+                }
+            }
         }
     }
 }

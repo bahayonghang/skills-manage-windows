@@ -1,0 +1,6 @@
+{"file":".trellis/tasks/07-31-github-import-branch-selection/research/github-import-branch-contract.md","reason":"Use the complete task-scoped excerpt of structured source validation, immutable preview, security, transport, CLI, and test contracts without truncating the large aggregate backend spec."}
+{"file":".trellis/spec/frontend/github-preview-snapshot-token.md","reason":"Keep renderer preview, Markdown reads, reset, and confirmation bound to one opaque immutable snapshot."}
+{"file":".trellis/spec/frontend/import-intent-controller.md","reason":"Carry and reset the manual branch consistently across Central, Marketplace, target changes, and queued deep-link intents."}
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Extend GitHub preview/import payloads through the typed IPC adapter without direct component invoke calls."}
+{"file":".trellis/spec/frontend/async-ui-test-stability.md","reason":"Preserve stable Zustand selector fixtures while adding branch state and wizard tests."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Trace the optional branch across UI, store, IPC, service resolution, snapshot binding, persistence, and updates."}

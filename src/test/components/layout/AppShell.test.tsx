@@ -7,6 +7,7 @@ import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useTargetStore } from "@/stores/targetStore";
 import { useSkillStore } from "@/stores/skillStore";
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
+import { useImportIntentStore } from "@/stores/importIntentStore";
 import type { TargetSummary } from "@/types";
 import { listen, isTauriRuntime } from "@/lib/ipc";
 import { toast } from "sonner";
@@ -163,6 +164,7 @@ function DummyPage({ label }: { label: string }) {
 describe("AppShell", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useImportIntentStore.getState().resetForTest();
     testNavigate = null;
     triggerRescanInMock = false;
     mockIsTauriRuntime.mockReturnValue(true);
@@ -388,6 +390,8 @@ describe("AppShell", () => {
       expect(mockInitialize).toHaveBeenCalledTimes(1);
     });
 
+    act(() => useImportIntentStore.getState().setGitHubBranch("dev"));
+
     activeTarget = {
       id: "ssh-demo",
       kind: "ssh" as const,
@@ -412,6 +416,7 @@ describe("AppShell", () => {
       expect(mockResetMarketplaceForTargetChange).toHaveBeenCalledTimes(1);
       expect(mockRescan).toHaveBeenCalledTimes(1);
       expect(mockLoadCentralSkills).toHaveBeenCalledTimes(1);
+      expect(useImportIntentStore.getState().githubBranch).toBe("");
     });
   });
 

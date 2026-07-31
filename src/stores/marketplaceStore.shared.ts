@@ -6,6 +6,7 @@ export const createInitialGitHubImportState = (): GitHubImportState => ({
   preview: null,
   importResult: null,
   previewedRepoUrl: null,
+  previewedBranch: null,
   error: null,
   importProgress: null,
   importStartedAt: null,

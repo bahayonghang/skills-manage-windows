@@ -961,3 +961,125 @@ snapshot.verify_integrity(&selections)?;
 
 A lost or moved snapshot is a user-visible "preview again", never a silent
 re-fetch.
+
+## Scenario: Manual Single-Segment Branch Selection
+
+### 1. Scope / Trigger
+
+Apply this contract when the GitHub import branch input, preview/import command
+arguments, repository source parsing, or snapshot binding changes. The renderer
+may select a branch, but shared Rust service code remains the only authority for
+parsing, validation, URL/manual reconciliation, and default-branch resolution.
+
+### 2. Signatures
+
+```rust
+preview_github_repo_import(repo_url: String, branch: Option<String>)
+import_github_repo_skills(
+    preview_id: String,
+    repo_url: String,
+    branch: Option<String>,
+    selections: Vec<GitHubSkillImportSelection>,
+)
+
+resolve_repo_source_with_branch(
+    repo_url: &str,
+    selected_branch: Option<&str>,
+    auth_token: Option<&str>,
+) -> Result<ResolvedGitHubRepoSource, GithubImportError>
+```
+
+```ts
+preview_github_repo_import: { repoUrl: string; branch?: string | null };
+import_github_repo_skills: {
+  previewId: string;
+  repoUrl: string;
+  branch?: string | null;
+  selections: GitHubSkillImportSelection[];
+};
+```
+
+### 3. Contracts
+
+- Trim the manual value; missing, empty, or whitespace-only means no manual
+  selection. A non-empty value uses the existing safe single-segment branch
+  validator. Slash/backslash, controls, `.` and `..` remain invalid.
+- Parse the repository source first, then reconcile its optional `/tree/<branch>`
+  branch with the manual field before constructing a client or issuing a
+  request. Equal values succeed; unequal values fail closed. Neither wins
+  silently.
+- Use manual or URL branch when present. Only when both are absent may the
+  repository inspection response supply `default_branch`.
+- Local, SSH, and WSL preview entry points call the same branch-aware resolver.
+  Existing CLI/service helpers remain source-compatible wrappers that pass
+  `None`; CLI tree URLs retain their historical behavior.
+- Confirmation validates the same optional branch evidence against the
+  registered snapshot and imports retained bytes only. It never resolves a new
+  branch tip or reacquires repository content.
+- The renderer passes branch as structured data. It must not append `/tree/`,
+  parse GitHub source paths, or choose request authority.
+
+### 4. Validation & Error Matrix
+
+| Input / condition | Required result |
+| --- | --- |
+| root URL + missing/blank branch | inspect and use repository default branch |
+| root URL + `dev` | validate and resolve `dev` |
+| `/tree/dev/<path>` + missing or `dev` | use `dev` and preserve source path |
+| `/tree/dev/<path>` + `main` | `BranchSelectionConflict` -> `github_import.branch_conflict`; no request/mutation |
+| manual `feature/foo`, backslash, or control | `InvalidBranchSelection` -> `github_import.branch_invalid`; no request/mutation |
+| selected branch is absent/inaccessible | preserve existing commit-resolution/access failure; no Central mutation |
+| confirmation branch differs from snapshot | fail binding before Central mutation; retain snapshot for retry |
+
+The two branch error envelopes use fixed public summaries and never include the
+branch value, PAT, preview token, workspace path, or response body.
+
+### 5. Good / Base / Bad Cases
+
+- Good: root URL plus `dev` previews and imports retained `dev` bytes; preview,
+  result, per-skill provenance, and Central update identity all record `dev`.
+- Base: blank manual input preserves default-branch behavior byte-for-byte.
+- Good: `/tree/dev/skills` plus manual `dev` succeeds without renderer URL
+  rewriting.
+- Bad: manual `main` silently overrides `/tree/dev`, or confirmation reads the
+  current input instead of the branch associated with its preview.
+- Bad: relaxing this scenario to slash-containing refs without reviewing every
+  API/raw/archive URL builder and endpoint policy.
+
+### 6. Tests Required
+
+- Pure Rust reconciliation tests: none/blank, trimmed `dev`, URL-only, equal,
+  conflict, slash/backslash, and control characters.
+- Snapshot binding tests: explicit equal branch succeeds; explicit mismatch and
+  URL/manual conflict fail before mutation.
+- IPC tests: `branch_invalid` and `branch_conflict` map to fixed public messages
+  without dynamic detail.
+- Store/contract tests: blank sends `null`, explicit input is trimmed, confirm
+  reuses `previewedBranch`, command map contains both optional branch fields,
+  and renderer production code builds no `/tree/` URL.
+- Intent/wizard/page tests: branch-only dirty detection, deep-link/reset
+  clearing, controlled Central/Marketplace inputs, and bilingual error text.
+- Full gate: `just ci`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+await previewGitHubRepoImport(`${repoUrl}/tree/${branch}`);
+```
+
+This duplicates parser behavior, breaks source subpaths, and can let display
+state change repository identity outside the shared service boundary.
+
+#### Correct
+
+```ts
+await invoke("preview_github_repo_import", {
+  repoUrl,
+  branch: branch.trim() || null,
+});
+```
+
+Rust reconciles one structured hint with the URL and binds the resolved branch
+to the immutable preview snapshot.

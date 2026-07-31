@@ -707,3 +707,24 @@ Fixed the macOS stdin fixture and LF checkout contracts for generated IPC and fr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 76: GitHub 导入分支选择
+
+**Date**: 2026-08-01
+**Task**: GitHub 导入分支选择
+**Branch**: `dev`
+
+### Summary
+
+新增可选 GitHub 分支输入并贯通 Central/Marketplace、typed IPC 与 Local/SSH/WSL 解析；保持默认分支、CLI 与不可变 preview snapshot 契约，补齐本地化错误和跨层回归测试。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `eaf3035d` | (see git log) |
+
+### Status
+
+[OK] **Completed**
