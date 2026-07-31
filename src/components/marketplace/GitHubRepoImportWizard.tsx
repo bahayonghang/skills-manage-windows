@@ -38,6 +38,8 @@ export function GitHubRepoImportWizard({
   onOpenChange,
   repoUrl,
   onRepoUrlChange,
+  branch,
+  onBranchChange,
   preview,
   previewError,
   isPreviewLoading,
@@ -333,6 +335,7 @@ export function GitHubRepoImportWizard({
           preview={preview}
           showRepoToolbar={shellState.showRepoToolbar}
           repoUrl={repoUrl}
+          branch={branch}
           previewError={previewError}
           isPreviewLoading={isPreviewLoading}
           browserMode={browserMode}
@@ -340,6 +343,7 @@ export function GitHubRepoImportWizard({
           selectedSkillsCount={previewState.selectedSkills.length}
           activeTarget={activeTarget}
           onRepoUrlChange={onRepoUrlChange}
+          onBranchChange={onBranchChange}
           onPreviewSubmit={handlePreviewSubmit}
         />
 

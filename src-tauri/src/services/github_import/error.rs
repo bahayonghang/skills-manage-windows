@@ -103,6 +103,12 @@ pub enum GithubImportError {
     #[error("GitHub repository {field} '{value}' is not supported.")]
     InvalidRepoComponent { field: &'static str, value: String },
 
+    #[error("GitHub branch must be a safe single-segment name.")]
+    InvalidBranchSelection,
+
+    #[error("GitHub branch in the repository URL does not match the selected branch.")]
+    BranchSelectionConflict,
+
     #[error("Skill identifier '{0}' is not supported.")]
     InvalidSkillIdentifier(String),
 
@@ -315,14 +321,23 @@ impl GithubImportError {
         }
     }
 
+    /// Stable IPC codes for reviewed GitHub-import failures.
+    pub fn ipc_code(&self) -> Option<&'static str> {
+        self.preview_snapshot_code().or(match self {
+            Self::InvalidBranchSelection => Some("branch_invalid"),
+            Self::BranchSelectionConflict => Some("branch_conflict"),
+            _ => None,
+        })
+    }
+
     /// Serialize for the IPC boundary.
     ///
-    /// Snapshot lifecycle failures use a stable `github_import.<code>:<summary>`
-    /// envelope the frontend maps through i18n. The summary is a fixed English
-    /// sentence and never contains a token, workspace path, digest, or file
-    /// content.
+    /// Reviewed snapshot lifecycle and branch-selection failures use a stable
+    /// `github_import.<code>:<summary>` envelope the frontend maps through i18n.
+    /// The summary is fixed and never contains a token, workspace path, digest,
+    /// branch value, or file content.
     pub fn to_ipc_error(&self) -> String {
-        match self.preview_snapshot_code() {
+        match self.ipc_code() {
             Some(code) => format!("github_import.{}:{}", code, self),
             None => self.to_string(),
         }

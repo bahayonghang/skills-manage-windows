@@ -70,4 +70,17 @@ describe("github preview snapshot contract", () => {
     ).toHaveLength(1);
     expect(callers[0]).toContain("marketplaceStore.githubImportSlice.ts");
   });
+
+  it("carries branch selection as structured data without renderer tree URLs", () => {
+    const commandMap = readFileSync(
+      join(SRC_ROOT, "lib", "ipc", "commandMap.ts"),
+      "utf8",
+    );
+    expect(commandMap.match(/branch\?: string \| null/g)).toHaveLength(2);
+
+    const treeUrlBuilders = collectSourceFiles(SRC_ROOT).filter((file) =>
+      readFileSync(file, "utf8").includes("/tree/"),
+    );
+    expect(treeUrlBuilders).toEqual([]);
+  });
 });

@@ -15,6 +15,15 @@ describe("CentralSkillsView shared GitHub import + categorize handlers", () => {
   });
   afterEach(S.cleanupCentralSkillsViewTestState);
 
+  it("shares the controlled optional branch field with the Central launcher", async () => {
+    renderCentralSkillsView();
+    await S.openGitHubImportViaLauncher(screen);
+
+    const branchInput = await screen.findByLabelText("Branch (optional)");
+    fireEvent.change(branchInput, { target: { value: "dev" } });
+    expect(branchInput).toHaveValue("dev");
+  });
+
   it("清空搜索后恢复完整列表", async () => {
     renderCentralSkillsView();
     const searchInput = screen.getByRole("textbox");

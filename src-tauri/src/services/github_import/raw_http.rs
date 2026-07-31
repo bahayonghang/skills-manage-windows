@@ -203,7 +203,7 @@ fn validate_repo_name(value: &str) -> Result<(), GithubImportError> {
     Ok(())
 }
 
-fn validate_repo_branch(value: &str) -> Result<(), GithubImportError> {
+pub(super) fn validate_repo_branch(value: &str) -> Result<(), GithubImportError> {
     if value.is_empty()
         || value.trim() != value
         || matches!(value, "." | "..")

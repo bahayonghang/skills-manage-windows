@@ -331,7 +331,16 @@ pub(crate) async fn preview_github_repo_import_with_auth(
     repo_url: &str,
     auth: Option<&str>,
 ) -> Result<GitHubRepoPreview, GithubImportError> {
-    let resolved = resolve_repo_source(repo_url, auth).await?;
+    preview_github_repo_import_with_branch_and_auth(pool, repo_url, None, auth).await
+}
+
+pub(crate) async fn preview_github_repo_import_with_branch_and_auth(
+    pool: &DbPool,
+    repo_url: &str,
+    branch: Option<&str>,
+    auth: Option<&str>,
+) -> Result<GitHubRepoPreview, GithubImportError> {
+    let resolved = resolve_repo_source_with_branch(repo_url, branch, auth).await?;
     let client = github_client()?;
     let resolved_commit_sha = resolve_commit_sha(&client, &resolved.repo, auth).await?;
     let pinned_repo = pinned_repo_ref(&resolved.repo, &resolved_commit_sha);
@@ -376,9 +385,10 @@ pub(crate) async fn preview_github_repo_import_remote_with_auth(
     pool: &DbPool,
     active_target: &ActiveTarget,
     repo_url: &str,
+    branch: Option<&str>,
     auth: Option<&str>,
 ) -> Result<GitHubRepoPreview, GithubImportError> {
-    let resolved = resolve_repo_source(repo_url, auth).await?;
+    let resolved = resolve_repo_source_with_branch(repo_url, branch, auth).await?;
     let client = github_client()?;
     let resolved_commit_sha = resolve_commit_sha(&client, &resolved.repo, auth).await?;
     let pinned_repo = pinned_repo_ref(&resolved.repo, &resolved_commit_sha);

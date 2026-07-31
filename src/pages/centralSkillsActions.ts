@@ -31,6 +31,7 @@ type StateSetter<T> = Dispatch<SetStateAction<T>>;
 
 export interface CentralSkillsActionsState {
   deleteTargetSkill: SkillWithLinks | null;
+  githubBranch: string;
   githubRepoUrl: string;
   manualSelectedTagIds: string[];
   manualTagQuery: string;
@@ -140,6 +141,7 @@ export function useCentralSkillsActions({
 
   const {
     deleteTargetSkill,
+    githubBranch,
     githubRepoUrl,
     manualSelectedTagIds,
     manualTagQuery,
@@ -248,6 +250,7 @@ export function useCentralSkillsActions({
 
   const importWorkflow = useCentralSkillsImportWorkflow({
     t,
+    githubBranch,
     githubRepoUrl,
   });
 

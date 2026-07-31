@@ -134,7 +134,10 @@ export const HANDWRITTEN_IPC_COMMANDS = {
     LocalArchiveImportResult
   >(),
   // ── GitHub import: every content read is bound to a preview snapshot ─────
-  preview_github_repo_import: command<{ repoUrl: string }, GitHubRepoPreview>(),
+  preview_github_repo_import: command<
+    { repoUrl: string; branch?: string | null },
+    GitHubRepoPreview
+  >(),
   fetch_github_skill_markdown: command<
     {
       previewId: string;
@@ -147,6 +150,7 @@ export const HANDWRITTEN_IPC_COMMANDS = {
     {
       previewId: string;
       repoUrl: string;
+      branch?: string | null;
       selections: GitHubSkillImportSelection[];
     },
     GitHubRepoImportResult

@@ -36,6 +36,7 @@ describe("marketplaceStore", () => {
         preview: null,
         importResult: null,
         previewedRepoUrl: null,
+        previewedBranch: null,
         error: null,
         importProgress: null,
         importStartedAt: null,
@@ -308,6 +309,7 @@ describe("marketplaceStore", () => {
 
     expect(mockInvoke).toHaveBeenCalledWith("preview_github_repo_import", {
       repoUrl: "https://github.com/anthropics/skills",
+      branch: null,
     });
     expect(useMarketplaceStore.getState().githubImport.preview).toEqual(
       preview,
@@ -320,6 +322,59 @@ describe("marketplaceStore", () => {
     );
     expect(useMarketplaceStore.getState().githubImport.isPreviewLoading).toBe(
       false,
+    );
+  });
+
+  it("normalizes an explicit branch and reuses the preview-associated value on import", async () => {
+    const repoUrl = "https://github.com/anthropics/skills";
+    const repo = {
+      owner: "anthropics",
+      repo: "skills",
+      branch: "dev",
+      normalizedUrl: repoUrl,
+    };
+    const preview = {
+      repo,
+      skills: [],
+      previewId: "github-preview-dev",
+      resolvedCommitSha: "1111111111111111111111111111111111111111",
+      snapshotDigest: `sha256-v1:${"e".repeat(64)}`,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    };
+    const result = { repo, importedSkills: [], skippedSkills: [] };
+    mockInvoke.mockResolvedValueOnce(preview).mockResolvedValueOnce(result);
+
+    await useMarketplaceStore
+      .getState()
+      .previewGitHubRepoImport(repoUrl, "  dev  ");
+    expect(mockInvoke).toHaveBeenNthCalledWith(
+      1,
+      "preview_github_repo_import",
+      { repoUrl, branch: "dev" },
+    );
+    expect(useMarketplaceStore.getState().githubImport.previewedBranch).toBe(
+      "dev",
+    );
+
+    const selections = [
+      {
+        sourcePath: "skills/dev-skill",
+        resolution: "overwrite" as const,
+        renamedSkillId: null,
+      },
+    ];
+    await useMarketplaceStore
+      .getState()
+      .importGitHubRepoSkills(repoUrl, selections);
+    expect(mockInvoke).toHaveBeenNthCalledWith(
+      2,
+      "import_github_repo_skills",
+      {
+        previewId: "github-preview-dev",
+        repoUrl,
+        branch: "dev",
+        selections,
+      },
     );
   });
 
@@ -439,6 +494,7 @@ describe("marketplaceStore", () => {
     expect(mockInvoke).toHaveBeenCalledWith("import_github_repo_skills", {
       previewId: "github-preview-import",
       repoUrl: "https://github.com/dorukardahan/twitterapi-io-skill",
+      branch: null,
       selections: [
         {
           sourcePath: "twitterapi-io-skill/SKILL.md",
@@ -568,11 +624,13 @@ describe("marketplaceStore", () => {
       "preview_github_repo_import",
       {
         repoUrl,
+        branch: null,
       },
     );
     expect(mockInvoke).toHaveBeenNthCalledWith(2, "import_github_repo_skills", {
       previewId: "github-preview-install",
       repoUrl,
+      branch: null,
       selections: [
         {
           sourcePath,
@@ -613,6 +671,7 @@ describe("marketplaceStore", () => {
       "preview_github_repo_import",
       {
         repoUrl,
+        branch: null,
       },
     );
     expect(mockInvoke).toHaveBeenNthCalledWith(
@@ -666,6 +725,7 @@ describe("marketplaceStore", () => {
     expect(mockInvoke).toHaveBeenCalledWith("import_github_repo_skills", {
       previewId: "github-preview-ssh",
       repoUrl: "https://github.com/openai/skills",
+      branch: null,
       selections: [
         {
           sourcePath: "skills/openai-docs",
@@ -719,6 +779,7 @@ describe("marketplaceStore", () => {
       "preview_github_repo_import",
       {
         repoUrl: "https://github.com/openai/skills",
+        branch: null,
       },
     );
     expect(useMarketplaceStore.getState().githubImport.preview?.previewId).toBe(
@@ -860,6 +921,7 @@ describe("marketplaceStore", () => {
       expect(mockInvoke).toHaveBeenCalledWith("import_github_repo_skills", {
         previewId: "github-preview-progress",
         repoUrl: "https://github.com/dorukardahan/twitterapi-io-skill",
+        branch: null,
         selections: [
           {
             sourcePath: "twitterapi-io-skill/SKILL.md",

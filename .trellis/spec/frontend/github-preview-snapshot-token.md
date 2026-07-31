@@ -11,8 +11,9 @@ snapshot，渲染层持有的 `previewId` 是唯一能读取/导入这份内容�
 
 ## State Ownership
 
-`marketplaceStore.githubImportSlice` 是 `previewId` 的唯一所有者，随
-`GitHubRepoPreview` 一起存放，不单独复制到组件本地 state：
+`marketplaceStore.githubImportSlice` 是 `previewId` 和该 preview 请求所用
+`previewedBranch` 的唯一所有者。token 随 `GitHubRepoPreview` 存放，branch
+证据随 store session 存放；二者都不复制到组件本地 state：
 
 ```ts
 interface GitHubRepoPreview {
@@ -34,6 +35,9 @@ interface GitHubRepoPreview {
   保护）。见 [IPC adapter 约定](./ipc-adapter.md)。
 - 组件不直接 `invoke()`；`invoke("import_github_repo_skills")` 全仓只允许一个
   调用点，由 `src/test/contracts/githubPreviewSnapshotContract.test.ts` 断言。
+- 两个命令的 request 都带结构化 `branch?: string | null`。store 在 preview
+  submission 时 trim，空白发送 `null`，并记录 `previewedBranch`；confirm 必须发送
+  preview 关联值，不能读取后来改变的输入值。renderer 禁止拼接 `/tree/<branch>`。
 
 ## Discard 契约
 
@@ -60,12 +64,17 @@ token 不会跨应用重启存活，且后端只在远程 preview 创建时回�
 - `formatGitHubImportError` 先 `normalizeMessage` 剥掉 `Error:` 前缀，再
   `formatBackendError`。顺序不能颠倒——stringified `Error` 否则匹配不到 code 而
   漏出原文。
-- `formatGitHubImportToast` 只翻译 `github_import.preview*` 信封，其他 message
+- `formatGitHubImportToast` 只翻译 `github_import.preview*` 与已审核的
+  `github_import.branch_invalid` / `github_import.branch_conflict` 信封，其他 message
   原样返回；避免把恰好含冒号的无关文案（如 `skills.sh: ...`）截断。
-- 六个 code 都必须有中英文案：`preview_missing`、`preview_expired`、
+- toast 入口必须把结构化 `IpcInvokeError` 原对象传给 `parseBackendError` 与
+  `formatGitHubImportError`；仅 legacy string / stringified `Error` 才先执行
+  `normalizeMessage`。不要先统一 `String(error)`，否则会丢失结构化 `code`，导致
+  snapshot/branch 错误无法本地化。
+- 八个 code 都必须有中英文案：`preview_missing`、`preview_expired`、
   `preview_mismatch`、`preview_integrity`、`preview_busy`、
-  `preview_commit_unresolved`，统一落在 `backendErrors.github_import.*`，语义都是
-  "请重新预览"。
+  `preview_commit_unresolved`、`branch_invalid`、`branch_conflict`，统一落在
+  `backendErrors.github_import.*`。只有 `preview*` code 触发通用“重新预览”提示。
 - confirm 步骤失败时目标面板不会打开，inline error 区域也不在当前 step 上，
   所以必须走 toast——且必须经 `formatGitHubImportToast`，不能 `String(err)`。
   参见 [前端异步动作失败反馈约定](./async-error-feedback.md)。
@@ -83,9 +92,10 @@ token 不会跨应用重启存活，且后端只在远程 preview 创建时回�
   `previewWorkspaceId` 引用、零 `discard_github_repo_preview_workspace` 引用、
   单一 import 调用点。
 - `src/test/components/marketplace/githubImportWizardUtils.test.ts`：coded 信封
-  翻译、`Error:` 前缀、非 coded 文案原样透传。
+  翻译、结构化 `IpcInvokeError` code 保留、`Error:` 前缀、非 coded 文案原样透传。
 - store 测试：reset/新 preview/target change/close 都发出 discard；import 成功
-  清空 preview；import 失败保留 token 可重试。
+  清空 preview；import 失败保留 token 可重试；`branch` trim/blank-null 且 confirm
+  复用 preview 关联值。
 - wizard 测试：短 SHA 与 expiry 渲染；六个 code 都显示中英"重新预览"文案。
 - 官方源预览与 Central sync 调用方回归。
 
@@ -95,3 +105,4 @@ token 不会跨应用重启存活，且后端只在远程 preview 创建时回�
 - `pnpm typecheck`
 - `pnpm lint`
 - `rg previewWorkspaceId src` 必须为零命中。
+- renderer 生产代码不得出现 `/tree/` URL 构造；branch 只通过 typed IPC 字段传递。

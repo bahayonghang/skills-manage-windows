@@ -83,6 +83,7 @@ export function CentralSkillDialogs({
   detailButtonRefs,
   drawerSkillId,
   githubImport,
+  githubBranch,
   githubRepoUrl,
   importSkillportState,
   installTargetSkill,
@@ -126,6 +127,7 @@ export function CentralSkillDialogs({
   selectedSkillIds,
   skills,
   setDrawerSkillId,
+  setGithubBranch,
   setGithubRepoUrl,
   setIsBatchInstallDialogOpen,
   setIsDialogOpen,
@@ -172,6 +174,7 @@ export function CentralSkillDialogs({
   detailButtonRefs: RefObject<Record<string, HTMLButtonElement | null>>;
   drawerSkillId: string | null;
   githubImport: GitHubImportState;
+  githubBranch: string;
   githubRepoUrl: string;
   importSkillportState: (
     json: string,
@@ -228,6 +231,7 @@ export function CentralSkillDialogs({
   selectedSkillIds: string[];
   skills: SkillWithLinks[];
   setDrawerSkillId: (skillId: string | null) => void;
+  setGithubBranch: (branch: string) => void;
   setGithubRepoUrl: (url: string) => void;
   setIsBatchInstallDialogOpen: (open: boolean) => void;
   setIsDialogOpen: (open: boolean) => void;
@@ -451,6 +455,8 @@ export function CentralSkillDialogs({
             onOpenChange={setIsGitHubImportOpen}
             repoUrl={githubRepoUrl}
             onRepoUrlChange={setGithubRepoUrl}
+            branch={githubBranch}
+            onBranchChange={setGithubBranch}
             preview={githubImport.preview}
             previewError={githubImport.error}
             isPreviewLoading={githubImport.isPreviewLoading}
@@ -464,6 +470,7 @@ export function CentralSkillDialogs({
             onAfterImportSuccess={onAfterImportSuccess}
             onReset={() => {
               onResetGitHubImport();
+              setGithubBranch("");
               setGithubRepoUrl("");
             }}
             launcherLabel={t("central.title")}

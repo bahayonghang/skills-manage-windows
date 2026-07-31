@@ -21,6 +21,7 @@ pub use crate::services::github_import::{
 pub async fn preview_github_repo_import(
     state: State<'_, AppState>,
     repo_url: String,
+    branch: Option<String>,
 ) -> crate::ipc_error::IpcResult<GitHubRepoPreview> {
     crate::ipc_boundary!(
         async move {
@@ -34,18 +35,22 @@ pub async fn preview_github_repo_import(
             .await
             .map_err(|e| e.to_ipc_error())?;
             match &active_target {
-                ActiveTarget::Local => github_import::preview_github_repo_import_with_auth(
-                    &pool,
-                    &repo_url,
-                    auth.as_deref(),
-                )
-                .await
-                .map_err(|e| e.to_ipc_error()),
+                ActiveTarget::Local => {
+                    github_import::preview_github_repo_import_with_branch_and_auth(
+                        &pool,
+                        &repo_url,
+                        branch.as_deref(),
+                        auth.as_deref(),
+                    )
+                    .await
+                    .map_err(|e| e.to_ipc_error())
+                }
                 ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
                     github_import::preview_github_repo_import_remote_with_auth(
                         &pool,
                         &active_target,
                         &repo_url,
+                        branch.as_deref(),
                         auth.as_deref(),
                     )
                     .await
@@ -68,6 +73,7 @@ pub async fn import_github_repo_skills(
     state: State<'_, AppState>,
     preview_id: String,
     repo_url: String,
+    branch: Option<String>,
     selections: Vec<GitHubSkillImportSelection>,
 ) -> crate::ipc_error::IpcResult<GitHubRepoImportResult> {
     crate::ipc_boundary!(
@@ -75,11 +81,12 @@ pub async fn import_github_repo_skills(
             let request_context = state.resolve_target_context().await?;
             let active_target = request_context.target().clone();
             let pool = request_context.db().clone();
-            github_import::import_github_repo_skills_from_preview(
+            github_import::import_github_repo_skills_from_preview_with_branch(
                 &pool,
                 &active_target,
                 &preview_id,
                 &repo_url,
+                branch.as_deref(),
                 selections,
                 Some(&app),
             )

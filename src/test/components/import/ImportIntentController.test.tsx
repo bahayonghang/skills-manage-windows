@@ -86,6 +86,7 @@ describe("ImportIntentController", () => {
     expect(useImportIntentStore.getState()).toMatchObject({
       githubWizardOpen: true,
       githubSource: "https://github.com/owner/repo",
+      githubBranch: "",
       pendingSources: [],
     });
     expect(mockInvoke).not.toHaveBeenCalledWith(
@@ -126,11 +127,13 @@ describe("ImportIntentController", () => {
       pendingSources: ["https://github.com/next/repo"],
     });
 
+    act(() => useImportIntentStore.getState().setGitHubBranch("dev"));
     act(() => useImportIntentStore.getState().setGitHubWizardOpen(false));
     act(() => useImportIntentStore.getState().consumePendingIntent());
     expect(useImportIntentStore.getState()).toMatchObject({
       githubWizardOpen: true,
       githubSource: "https://github.com/next/repo",
+      githubBranch: "",
       pendingSources: [],
     });
 
@@ -170,6 +173,22 @@ describe("ImportIntentController", () => {
     );
   });
 
+  it("treats a manual branch as dirty session state", () => {
+    act(() => useImportIntentStore.getState().setGitHubBranch("dev"));
+
+    expect(
+      openImportIntent({
+        kind: "github",
+        source: "https://github.com/owner/repo",
+      }),
+    ).toBe("pending");
+    expect(useImportIntentStore.getState()).toMatchObject({
+      githubSource: "",
+      githubBranch: "dev",
+      pendingSources: ["https://github.com/owner/repo"],
+    });
+  });
+
   it("ignores invalid event payloads without navigation or state changes", async () => {
     render(<TestRouter />);
 
@@ -197,6 +216,7 @@ describe("ImportIntentController", () => {
     expect(useImportIntentStore.getState()).toMatchObject({
       githubWizardOpen: false,
       githubSource: "",
+      githubBranch: "",
       pendingSources: [],
     });
   });

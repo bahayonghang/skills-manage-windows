@@ -270,10 +270,20 @@ pub(super) fn provenance_for(
 ///
 /// The repository URL is parsed offline: it is binding evidence, never a
 /// content locator.
+#[cfg(test)]
 pub(super) fn validate_snapshot_binding(
     snapshot: &PreviewSnapshot,
     active_target: &ActiveTarget,
     repo_url: &str,
+) -> Result<(), GithubImportError> {
+    validate_snapshot_binding_with_branch(snapshot, active_target, repo_url, None)
+}
+
+pub(super) fn validate_snapshot_binding_with_branch(
+    snapshot: &PreviewSnapshot,
+    active_target: &ActiveTarget,
+    repo_url: &str,
+    branch: Option<&str>,
 ) -> Result<(), GithubImportError> {
     if snapshot.target_id != active_target.id() || snapshot.target_kind != active_target.kind() {
         return Err(GithubImportError::PreviewTargetChanged);
@@ -282,7 +292,7 @@ pub(super) fn validate_snapshot_binding(
     if parsed.owner != snapshot.repo.owner || parsed.repo != snapshot.repo.repo {
         return Err(GithubImportError::PreviewWorkspaceMismatch);
     }
-    if let Some(branch) = parsed.branch.as_deref() {
+    if let Some(branch) = reconcile_selected_branch(parsed.branch.as_deref(), branch)? {
         if branch != snapshot.repo.branch {
             return Err(GithubImportError::PreviewWorkspaceMismatch);
         }

@@ -16,6 +16,7 @@ export interface GitHubImportState {
   preview: GitHubRepoPreview | null;
   importResult: GitHubRepoImportResult | null;
   previewedRepoUrl: string | null;
+  previewedBranch: string | null;
   error: string | null;
   importProgress: GitHubImportProgressPayload | null;
   importStartedAt: number | null;
@@ -80,8 +81,14 @@ export interface MarketplaceState {
   ) => Promise<SkillsShFileEntry[]>;
   readSkillsShFile: (source: string, filePath: string) => Promise<string>;
   installFromSkillsSh: (source: string, skillId: string) => Promise<string>;
-  previewGitHubRepoSkills: (repoUrl: string) => Promise<GitHubRepoPreview>;
-  previewGitHubRepoImport: (repoUrl: string) => Promise<GitHubRepoPreview>;
+  previewGitHubRepoSkills: (
+    repoUrl: string,
+    branch?: string | null,
+  ) => Promise<GitHubRepoPreview>;
+  previewGitHubRepoImport: (
+    repoUrl: string,
+    branch?: string | null,
+  ) => Promise<GitHubRepoPreview>;
   /**
    * Import the skills confirmed in a preview snapshot. `previewId` defaults to
    * the snapshot currently held in the store; without one the action rejects

@@ -164,10 +164,19 @@ function makeGroupedPreview(): GitHubRepoPreview {
 function wizardElement({
   preview = makePreview(),
   previewError = null,
+  branch = "",
+  onBranchChange = vi.fn(),
+  onPreview = vi.fn(),
   onImport = vi.fn(),
 }: {
   preview?: GitHubRepoPreview | null;
   previewError?: string | null;
+  branch?: string;
+  onBranchChange?: (value: string) => void;
+  onPreview?: () =>
+    | Promise<GitHubRepoPreview | null>
+    | GitHubRepoPreview
+    | null;
   onImport?: (selections: GitHubSkillImportSelection[]) => Promise<void> | void;
 } = {}) {
   return (
@@ -177,12 +186,14 @@ function wizardElement({
         onOpenChange={vi.fn()}
         repoUrl="https://github.com/mattpocock/skills"
         onRepoUrlChange={vi.fn()}
+        branch={branch}
+        onBranchChange={onBranchChange}
         preview={preview}
         previewError={previewError}
         isPreviewLoading={false}
         isImporting={false}
         importResult={null}
-        onPreview={vi.fn()}
+        onPreview={onPreview}
         onImport={onImport}
         onReset={vi.fn()}
         launcherLabel="Central Skills"
@@ -206,6 +217,25 @@ async function reviewImport() {
 }
 
 describe("GitHubRepoImportWizard", () => {
+  it("renders the optional branch input and submits the controlled value", async () => {
+    const onBranchChange = vi.fn();
+    const onPreview = vi.fn().mockResolvedValue(null);
+    renderWizard({ preview: null, onBranchChange, onPreview });
+
+    const branchInput = screen.getByRole("textbox", {
+      name: /分支（可选）|Branch \(optional\)/i,
+    });
+    expect(screen.getByText(/留空时使用仓库默认分支|Leave branch blank/i)).toBeInTheDocument();
+
+    fireEvent.change(branchInput, { target: { value: "dev" } });
+    expect(onBranchChange).toHaveBeenCalledWith("dev");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /预览导入|Preview import/i }),
+    );
+    await waitFor(() => expect(onPreview).toHaveBeenCalledTimes(1));
+  });
+
   it("shows the resolved commit short sha and preview expiry without leaking the token", async () => {
     const preview = makePreview();
     renderWizard({ preview });
@@ -237,6 +267,19 @@ describe("GitHubRepoImportWizard", () => {
       ).not.toBeInTheDocument();
     },
   );
+
+  it("localizes a conflicting URL and manual branch without exposing backend detail", async () => {
+    renderWizard({
+      preview: null,
+      previewError: "github_import.branch_conflict:private branch detail",
+    });
+
+    const message = await screen.findByText(
+      /仓库 URL 中的分支与分支输入框不一致|branch in the repository URL differs/i,
+    );
+    expect(message).toBeInTheDocument();
+    expect(message).not.toHaveTextContent("private branch detail");
+  });
 
   it("keeps uncoded preview failures on their historical message", async () => {
     renderWizard({

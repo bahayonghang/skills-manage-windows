@@ -64,6 +64,7 @@ type StoreState = {
     preview: GitHubRepoPreview | null;
     importResult: GitHubRepoImportResult | null;
     previewedRepoUrl: string | null;
+    previewedBranch: string | null;
     error: string | null;
   };
 };
@@ -82,6 +83,7 @@ export const storeState: StoreState = {
     preview: null,
     importResult: null,
     previewedRepoUrl: null,
+    previewedBranch: null,
     error: null,
   },
 };
@@ -189,6 +191,8 @@ vi.mock("@/components/marketplace/GitHubRepoImportWizard", async () => {
       open,
       repoUrl,
       onRepoUrlChange,
+      branch,
+      onBranchChange,
       preview,
       previewError,
       importResult,
@@ -198,6 +202,8 @@ vi.mock("@/components/marketplace/GitHubRepoImportWizard", async () => {
       open: boolean;
       repoUrl: string;
       onRepoUrlChange: (value: string) => void;
+      branch: string;
+      onBranchChange: (value: string) => void;
       preview: GitHubRepoPreview | null;
       previewError: string | null;
       importResult: GitHubRepoImportResult | null;
@@ -339,6 +345,14 @@ vi.mock("@/components/marketplace/GitHubRepoImportWizard", async () => {
                   aria-label="GitHub repository URL"
                   value={repoUrl}
                   onChange={(event) => onRepoUrlChange(event.target.value)}
+                />
+              </label>
+              <label>
+                Branch (optional)
+                <input
+                  aria-label="Branch (optional)"
+                  value={branch}
+                  onChange={(event) => onBranchChange(event.target.value)}
                 />
               </label>
               {previewError && looksLikeGitHubAuthGuidance(previewError) ? (
@@ -694,6 +708,7 @@ export function resetMarketplaceViewTestState() {
     preview: null,
     importResult: null,
     previewedRepoUrl: null,
+    previewedBranch: null,
     error: null,
   };
 

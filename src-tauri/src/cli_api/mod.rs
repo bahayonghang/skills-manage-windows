@@ -100,7 +100,9 @@ fn github_error(error: github_import::GithubImportError) -> CliApiError {
         | github_import::GithubImportError::RepoUrlMissingRepo
         | github_import::GithubImportError::RepoUrlMissingOwnerRepo
         | github_import::GithubImportError::TreeUrlMissingBranch
-        | github_import::GithubImportError::BlobUrlUnsupported => {
+        | github_import::GithubImportError::BlobUrlUnsupported
+        | github_import::GithubImportError::InvalidBranchSelection
+        | github_import::GithubImportError::BranchSelectionConflict => {
             CliApiError::InvalidInput(error.to_string())
         }
         github_import::GithubImportError::RepoNotFound

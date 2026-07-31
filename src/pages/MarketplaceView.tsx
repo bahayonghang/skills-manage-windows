@@ -74,7 +74,14 @@ export function MarketplaceView() {
   const [previewStatus, setPreviewStatus] = useState<MarketplacePreviewStatus>({
     kind: "idle",
   });
-  const { githubRepoUrl, isGitHubImportOpen, setGithubRepoUrl, setIsGitHubImportOpen } = useImportIntentBindings();
+  const {
+    githubBranch,
+    githubRepoUrl,
+    isGitHubImportOpen,
+    setGithubBranch,
+    setGithubRepoUrl,
+    setIsGitHubImportOpen,
+  } = useImportIntentBindings();
   const detailTriggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -237,7 +244,7 @@ export function MarketplaceView() {
 
   async function handleGitHubPreview() {
     try {
-      return await previewGitHubRepoImport(githubRepoUrl);
+      return await previewGitHubRepoImport(githubRepoUrl, githubBranch);
     } catch {
       return null;
     }
@@ -282,6 +289,7 @@ export function MarketplaceView() {
 
   function handleResetGitHubImport() {
     resetGitHubImport();
+    setGithubBranch("");
     setGithubRepoUrl("");
   }
 
@@ -292,6 +300,7 @@ export function MarketplaceView() {
       detailSkill={detailSkill}
       detailTriggerRef={detailTriggerRef}
       githubImport={githubImport}
+      githubBranch={githubBranch}
       githubRepoUrl={githubRepoUrl}
       installingIds={installingIds}
       isGitHubImportOpen={isGitHubImportOpen}
@@ -319,6 +328,7 @@ export function MarketplaceView() {
       selectedTag={selectedTag}
       setActiveTab={setActiveTab}
       setDetailSkill={setDetailSkill}
+      setGithubBranch={setGithubBranch}
       setGithubRepoUrl={setGithubRepoUrl}
       setIsGitHubImportOpen={setIsGitHubImportOpen}
       setPublisherSearch={setPublisherSearch}

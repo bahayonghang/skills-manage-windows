@@ -2,9 +2,9 @@
  * Toast-facing translation of GitHub import failures.
  *
  * The confirmed-import surface is a toast, so a preview snapshot lifecycle
- * failure must reach the user as a localized "preview again" sentence instead of
- * the raw `github_import.<code>:<summary>` envelope. Every other failure must
- * keep its exact historical text.
+ * failure or branch-selection failure must reach the user as a localized
+ * sentence instead of the raw `github_import.<code>:<summary>` envelope. Every
+ * other failure must keep its exact historical text.
  */
 import { describe, expect, it } from "vitest";
 
@@ -13,6 +13,7 @@ import {
   formatGitHubImportToast,
   isPreviewSnapshotFailure,
 } from "@/components/marketplace/githubImportWizardUtils";
+import { IpcInvokeError } from "@/lib/ipc";
 
 describe("formatGitHubImportToast", () => {
   it.each([
@@ -36,6 +37,33 @@ describe("formatGitHubImportToast", () => {
     expect(isPreviewSnapshotFailure(message)).toBe(false);
     expect(formatGitHubImportToast(message, i18n.t)).toBe(message);
   });
+
+  it.each(["branch_invalid", "branch_conflict"])(
+    "localizes github_import.%s without classifying it as a snapshot failure",
+    (code) => {
+      const envelope = `github_import.${code}:private detail`;
+      expect(isPreviewSnapshotFailure(envelope)).toBe(false);
+
+      const formatted = formatGitHubImportToast(new Error(envelope), i18n.t);
+      expect(formatted).toBe(i18n.t(`backendErrors.github_import.${code}`));
+      expect(formatted).not.toContain("private detail");
+    },
+  );
+
+  it.each(["preview_mismatch", "branch_conflict"])(
+    "preserves the github_import.%s code from a structured IPC rejection",
+    (code) => {
+      const error = new IpcInvokeError({
+        code: `github_import.${code}`,
+        message: "Reviewed public backend summary.",
+        retryable: false,
+      });
+
+      expect(formatGitHubImportToast(error, i18n.t)).toBe(
+        i18n.t(`backendErrors.github_import.${code}`),
+      );
+    },
+  );
 
   it("does not reshape an unrelated colon-prefixed message", () => {
     const message = "skills.sh: the requested skill was not found";

@@ -14,6 +14,7 @@ use super::*;
 /// single import lease guards the snapshot, so two concurrent confirmations
 /// cannot both mutate Central. Failure releases the lease so the same preview
 /// can be retried; success consumes the token atomically.
+#[cfg(test)]
 pub(crate) async fn import_github_repo_skills_from_preview(
     pool: &DbPool,
     active_target: &ActiveTarget,
@@ -22,10 +23,38 @@ pub(crate) async fn import_github_repo_skills_from_preview(
     selections: Vec<GitHubSkillImportSelection>,
     app: Option<&AppHandle>,
 ) -> Result<GitHubRepoImportResult, GithubImportError> {
+    import_github_repo_skills_from_preview_with_branch(
+        pool,
+        active_target,
+        preview_id,
+        repo_url,
+        None,
+        selections,
+        app,
+    )
+    .await
+}
+
+pub(crate) async fn import_github_repo_skills_from_preview_with_branch(
+    pool: &DbPool,
+    active_target: &ActiveTarget,
+    preview_id: &str,
+    repo_url: &str,
+    branch: Option<&str>,
+    selections: Vec<GitHubSkillImportSelection>,
+    app: Option<&AppHandle>,
+) -> Result<GitHubRepoImportResult, GithubImportError> {
     let snapshot = acquire_import_lease(preview_id, Utc::now())?;
-    let outcome =
-        import_from_preview_snapshot(pool, active_target, &snapshot, repo_url, selections, app)
-            .await;
+    let outcome = import_from_preview_snapshot(
+        pool,
+        active_target,
+        &snapshot,
+        repo_url,
+        branch,
+        selections,
+        app,
+    )
+    .await;
 
     match outcome {
         Ok(result) => {
@@ -48,13 +77,14 @@ async fn import_from_preview_snapshot(
     active_target: &ActiveTarget,
     snapshot: &PreviewSnapshot,
     repo_url: &str,
+    branch: Option<&str>,
     selections: Vec<GitHubSkillImportSelection>,
     app: Option<&AppHandle>,
 ) -> Result<GitHubRepoImportResult, GithubImportError> {
     if selections.is_empty() {
         return Err(GithubImportError::NoSelections);
     }
-    validate_snapshot_binding(snapshot, active_target, repo_url)?;
+    validate_snapshot_binding_with_branch(snapshot, active_target, repo_url, branch)?;
     for selection in &selections {
         if snapshot.candidate(&selection.source_path).is_none() {
             return Err(GithubImportError::SelectionUnavailable(

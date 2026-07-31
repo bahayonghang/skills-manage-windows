@@ -116,12 +116,16 @@ vi.mock("@/components/marketplace/GitHubRepoImportWizard", async () => {
   return {
     GitHubRepoImportWizard: ({
       open,
+      branch,
+      onBranchChange,
       preview,
       importResult,
       onImport,
       onOpenChange,
     }: {
       open: boolean;
+      branch: string;
+      onBranchChange: (value: string) => void;
       preview: {
         skills?: Array<{
           sourcePath: string;
@@ -183,6 +187,16 @@ vi.mock("@/components/marketplace/GitHubRepoImportWizard", async () => {
 
       return (
         <div role="dialog" aria-label="GitHub import wizard">
+          {step === "input" ? (
+            <label>
+              Branch (optional)
+              <input
+                aria-label="Branch (optional)"
+                value={branch}
+                onChange={(event) => onBranchChange(event.target.value)}
+              />
+            </label>
+          ) : null}
           {step === "preview" ? (
             <>
               <div>GitHub import preview</div>
@@ -661,6 +675,7 @@ export function buildMarketplaceStoreState(overrides = {}) {
       preview: null,
       importResult: null,
       previewedRepoUrl: null,
+      previewedBranch: null,
       error: null,
     },
     previewGitHubRepoImport: mockPreviewGitHubRepoImport,

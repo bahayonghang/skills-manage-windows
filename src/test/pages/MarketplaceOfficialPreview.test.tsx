@@ -85,8 +85,8 @@ const mockLoadRegistries = vi.fn();
 const mockLoadPreviewSkills = vi.fn<() => Promise<MarketplaceSkill[]>>();
 const mockInstallSkill = vi.fn();
 const mockInstallGitHubPreviewSkill = vi.fn();
-const mockPreviewGitHubRepoSkills = vi.fn((repoUrl: string) =>
-  mockInvoke("preview_github_repo_import", { repoUrl })
+const mockPreviewGitHubRepoSkills = vi.fn((repoUrl: string, branch?: string | null) =>
+  mockInvoke("preview_github_repo_import", { repoUrl, branch: branch?.trim() || null })
 );
 const mockPreviewGitHubRepoImport = vi.fn();
 const mockImportGitHubRepoSkills = vi.fn();
@@ -264,6 +264,7 @@ describe("Marketplace official preview", () => {
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith("preview_github_repo_import", {
         repoUrl: "https://github.com/anthropics/knowledge-work-plugins",
+        branch: null,
       });
     });
     expect(mockLoadPreviewSkills).not.toHaveBeenCalled();
