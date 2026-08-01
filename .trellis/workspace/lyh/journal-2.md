@@ -791,3 +791,38 @@ Fixed the macOS stdin fixture and LF checkout contracts for generated IPC and fr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 80: 桌面发布可信度提升交付
+
+**Date**: 2026-08-01
+**Task**: 桌面发布可信度提升交付
+**Branch**: `dev`
+
+### Summary
+
+完成 desktop-release-assurance 实现、PR #33 squash 合入 dev 与 exact-head hosted CI；真实 rehearsal、Azure 和 release environment 仍等待独立授权。
+
+### Main Changes
+
+- 加入 exact-SHA rehearsal、tag-bound publish、Windows Authenticode/updater 分离签名、安装启动卸载 smoke、publish-only attestation 和 staging guard。
+- 同步中英文发布文档、质量 spec、任务证据并归档 desktop 子任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f4dadb798acf0bdd22f82818379144de9eefe7eb` | (see git log) |
+
+### Testing
+
+- [OK] just ci；just audit；release/workflow contract tests；release-signature-verifier tests。
+- [OK] pnpm docs:gen:check；pnpm docs:build；Windows NSIS 与显式 NSIS/MSI bundle；git diff --check。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 等待 desktop-signing/desktop-release、Azure OIDC variables/secrets 与非公开 rehearsal 的独立授权；完成后再做父任务集成验收和归档。

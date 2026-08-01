@@ -5,7 +5,7 @@
 保留一个 canonical `.github/workflows/release-desktop.yml`：
 
 - `push v*`：正式 publish 模式，沿用冻结 tag 和原子公开合同。
-- `workflow_dispatch(tag, mode=rehearsal|publish)`：默认 `rehearsal`；只有显式 `publish` 才进入 draft/upload/fresh-download/公开路径。
+- `workflow_dispatch(mode=rehearsal|publish)`：默认 `rehearsal`，且必须提供位于 `origin/main` 的精确 40 位 `rehearsal_ref` SHA；`publish` 必须提供并校验现有 `v<semver>` tag。只有显式 `publish` 才进入 draft/upload/fresh-download/公开路径。
 - rehearsal 使用同一 frozen tag SHA、reusable CI、全 required builds、aggregate、安装 smoke 和 artifact inventory，但停止在 Actions artifact，不创建 GitHub Release 或公开 deployment。
 
 release-context 输出规范化 `mode`，所有 build checkout 仍绑定 peeled tag SHA。publish job 同时要求 `mode == publish`、受保护 environment 和前置成功。

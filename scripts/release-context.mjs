@@ -5,6 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const SEMVER_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const COMMIT_SHA = /^[0-9a-f]{40}$/i;
 
 export function parseReleaseTag(tag) {
   const normalized = String(tag ?? "").trim();
@@ -40,6 +41,19 @@ export function resolveReleaseTag({ tag, cwd = process.cwd(), exec = run }) {
   return { ...parsedTag, sha };
 }
 
+export function resolveRehearsalRef({ sha, cwd = process.cwd(), exec = run }) {
+  const normalized = String(sha ?? "").trim();
+  if (!COMMIT_SHA.test(normalized)) {
+    throw new Error("Rehearsal ref must be an exact 40-character commit SHA.");
+  }
+  const resolved = exec("git", ["rev-parse", `${normalized}^{commit}`], cwd);
+  if (resolved.toLowerCase() !== normalized.toLowerCase()) {
+    throw new Error("Rehearsal ref did not resolve to the requested commit SHA.");
+  }
+  exec("git", ["merge-base", "--is-ancestor", resolved, "origin/main"], cwd);
+  return { sha: resolved };
+}
+
 export function resolveReleaseContext({ tag, cwd = process.cwd(), exec = run }) {
   const releaseTag = resolveReleaseTag({ tag, cwd, exec });
   const { version } = releaseTag;
@@ -59,7 +73,7 @@ export function resolveReleaseContext({ tag, cwd = process.cwd(), exec = run }) 
   }
 
   validateVersionSet({
-    tag: parsedTag.tag,
+    tag: releaseTag.tag,
     packageVersion: packageJson.version,
     tauriVersion: tauriConfig.version,
     cargoVersion: cargoPackage.version,
@@ -68,12 +82,36 @@ export function resolveReleaseContext({ tag, cwd = process.cwd(), exec = run }) 
   return { ...releaseTag, releaseName: `SkillPort v${version}` };
 }
 
+export function resolveRehearsalContext({ sha, cwd = process.cwd(), exec = run }) {
+  const rehearsal = resolveRehearsalRef({ sha, cwd, exec });
+  const packageJson = JSON.parse(fs.readFileSync(path.join(cwd, "package.json"), "utf8"));
+  const tauriConfig = JSON.parse(fs.readFileSync(path.join(cwd, "src-tauri", "tauri.conf.json"), "utf8"));
+  const metadata = JSON.parse(
+    exec(
+      "cargo",
+      ["metadata", "--manifest-path", "src-tauri/Cargo.toml", "--locked", "--no-deps", "--format-version", "1"],
+      cwd,
+    ),
+  );
+  const cargoPackage = metadata.packages.find((candidate) => candidate.name === "skillport");
+  if (!cargoPackage) throw new Error("Cargo metadata does not contain the skillport package.");
+  const tag = `v${packageJson.version}`;
+  validateVersionSet({
+    tag,
+    packageVersion: packageJson.version,
+    tauriVersion: tauriConfig.version,
+    cargoVersion: cargoPackage.version,
+  });
+  return { tag, version: packageJson.version, sha: rehearsal.sha, releaseName: `SkillPort v${packageJson.version}` };
+}
+
 export function writeGitHubOutputs(context, outputPath) {
   const lines = [
     `tag=${context.tag}`,
     `version=${context.version}`,
     `sha=${context.sha}`,
     `release_name=${context.releaseName}`,
+    `mode=${context.mode}`,
   ];
   fs.appendFileSync(outputPath, `${lines.join("\n")}\n`);
 }
@@ -82,11 +120,17 @@ const entryPath = process.argv[1] ? path.resolve(process.argv[1]) : "";
 if (entryPath && import.meta.url === pathToFileURL(entryPath).href) {
   const tagIndex = process.argv.indexOf("--tag");
   const tag = tagIndex >= 0 ? process.argv[tagIndex + 1] : process.env.RELEASE_TAG;
+  const shaIndex = process.argv.indexOf("--sha");
+  const sha = shaIndex >= 0 ? process.argv[shaIndex + 1] : process.env.REHEARSAL_REF;
+  const modeIndex = process.argv.indexOf("--mode");
+  const mode = modeIndex >= 0 ? process.argv[modeIndex + 1] : process.env.RELEASE_MODE || "publish";
+  if (!new Set(["rehearsal", "publish"]).has(mode)) throw new Error("Release mode must be rehearsal or publish.");
   if (process.argv.includes("--resolve-only")) {
-    console.log(resolveReleaseTag({ tag }).sha);
+    console.log(mode === "rehearsal" ? resolveRehearsalRef({ sha }).sha : resolveReleaseTag({ tag }).sha);
     process.exit(0);
   }
-  const context = resolveReleaseContext({ tag });
+  const context = mode === "rehearsal" ? resolveRehearsalContext({ sha }) : resolveReleaseContext({ tag });
+  context.mode = mode;
   if (process.env.GITHUB_OUTPUT) {
     writeGitHubOutputs(context, process.env.GITHUB_OUTPUT);
   }

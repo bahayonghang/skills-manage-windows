@@ -2,7 +2,7 @@
 
 ## Steps
 
-1. 扩展 release workflow/context 合同测试，先覆盖 `rehearsal` 默认不公开、publish 条件、environment/permission 边界和失败传播。
+1. 扩展 release workflow/context 合同测试，先覆盖默认不公开的 `rehearsal` 精确 SHA 输入、tag-bound publish 条件、environment/permission 边界和失败传播。
 2. 为 Authenticode/updater 状态、签名顺序和最终字节验证补充脚本测试；测试必须证明“Updater 签名后再改字节”会失败。
 3. 将 Windows build 改为先构建未生成 updater artifact 的 EXE/MSI/NSIS；加入 Azure 可配置探测、Authenticode 签名/验证，再对最终 NSIS 调用 Tauri signer 生成 `.sig`，最后生成 ZIP/metadata/checksum。
 4. rehearsal 允许 `authenticode=not-configured` 并在 summary/artifact manifest 中显式记录；publish 模式缺少 Azure 或 Authenticode 无效时 fail closed。
@@ -30,3 +30,12 @@ Windows bundle 后核对 NSIS、MSI、ZIP 和 `.sig` inventory；在 Azure 未�
 - 在签名顺序测试通过前不替换现有 updater 构建步骤。
 - 先创建并回读受保护 environment，再提交依赖其名称的远端运行；不在日志输出 OIDC token、private key 或 Azure 响应中的敏感字段。
 - 正式 publish 仍需要独立 tag/release 授权；rehearsal 成功不能自动升级为公开发布。
+
+## Local Evidence
+
+- Release contract tests: `4 files / 24 tests` passed; CI workflow contract: `1 file / 7 tests` passed.
+- `cargo test --manifest-path src-tauri/Cargo.toml --bin release-signature-verifier --locked`: `2 passed`.
+- `just ci`: passed; frontend `1606 passed / 1 skipped`, Rust `1031 passed / 6 ignored`.
+- `just audit`: passed with `2 blocking advisories` and `2 approved exceptions`.
+- `pnpm docs:gen:check`, `pnpm docs:build`, `git diff --check`, script syntax checks, and `release-preflight --help`: passed.
+- Windows `pnpm tauri build`: NSIS created; explicit `pnpm tauri build --bundles nsis,msi --no-sign`: NSIS and MSI created. Local EXE/NSIS/MSI Authenticode state is `NotSigned`, recorded as the expected rehearsal `not-configured` boundary; no public rehearsal, environment provisioning, Azure configuration, tag, or release was performed.

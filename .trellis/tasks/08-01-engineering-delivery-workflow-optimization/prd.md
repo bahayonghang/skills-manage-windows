@@ -11,7 +11,8 @@
 - 最近 15 个合并 PR 的中位数为 137 个文件、5716 行新增；9 个超过 100 个文件，4 个超过 400 个文件。
 - CI 子任务已归档：PR #29 squash 交付 `4119855d516bd2e91f3a68fa381a7c912d909d9e`，PR #30 merge commit `df7dfcd8711155e17fec0c001f206277a9cd79e4`；最终 promotion run `30687477887` wall 9m19s、queue 32s、critical lane 8m34s，达到 15 分钟目标且跨平台与供应链覆盖保留。
 - 2026-08-01 developer/PR 最终规划审查时，远端仅有 `dev@34021e8579eb2a2d2913933f66ffab250776d761` 与 `main@df7dfcd8711155e17fec0c001f206277a9cd79e4`，两者 1/1 divergence 且 merge-tree 无内容冲突；`dev` 永久保留，legacy `gh-pages` 在远端 refs 和本地跟踪 refs 中均不存在。
-- developer/PR 子任务已通过 PR #31 squash 合入 `dev@cc8a12bde9394142d5ac6cb100d2f28e596e1451`；批准后的远端回读为 `dev-safety` ruleset `20175337`、`dev-flow` ruleset `20175349`，repository 已启用 squash/merge、关闭 rebase 并自动删除合并 task 分支。`main` protection 未修改，`main@df7dfcd8711155e17fec0c001f206277a9cd79e4` 保持不变。
+- developer/PR 子任务已通过 PR #31 squash 合入 `dev@cc8a12bde9394142d5ac6cb100d2f28e596e1451`；批准后的远端回读为 `dev-safety` ruleset `20175337`、`dev-flow` ruleset `20175349`，repository 已启用 squash/merge、关闭 rebase 并自动删除合并 task 分支。`main` protection 未修改。
+- developer/PR bookkeeping 已通过 promotion PR #32 以 merge commit `92940b04788fdaca8a78d8afa4da7a2f4ccd87b1` 合入 `main`，parents 为 `df7dfcd8711155e17fec0c001f206277a9cd79e4` 与 `24705e3bfb9edbca4d38d821fb3ea9ab8b6b70f9`；exact-head hosted CI run `30691230221` 首次 macOS 进程终止测试失败，失败 job 重跑后全量 success（common 6m44s、Windows 9m01s、Linux 5m55s、macOS 5m21s、supply-chain 55s、just-ci 4s），随后 `dev` 无 force fast-forward 到同一 promotion SHA。
 - 文档子任务已归档：PR #27 squash 合入 `dev`，PR #28 以 merge commit 合入 `main`；Pages `build_type=workflow`，run `30682087003` 成功，公开 URL 返回 HTTP 200、标题为 `SkillPort`。`pnpm docs:gen:check` 与 `pnpm docs:build` 已改为只读门禁。
 - 当前原子发布 workflow 与 checksum 合同晚于最后一次 `v0.10.14` 发布，尚未完成真实发布演练；公开 NSIS 的 Authenticode 状态为 `NotSigned`。
 
@@ -41,18 +42,18 @@
 
 ## Acceptance Criteria
 
-- [ ] 四个子任务都有独立、可测试的 PRD、design、implement 和验证记录；父任务不承载产品代码实现。
-- [ ] 本地 `just ci`、`just audit`、文档生成/构建检查和相关 workflow contract 测试全部通过，最终工作树无意外生成物漂移。
+- [x] 四个子任务都有独立、可测试的 PRD、design、implement 和验证记录；父任务不承载产品代码实现。
+- [x] 本地 `just ci`、`just audit`、文档生成/构建检查和相关 workflow contract 测试全部通过，最终工作树无意外生成物漂移。
 - [x] GitHub PR workflow 的平台 job 并行启动，稳定 `just-ci` 汇总结果；失败前置检查不再迫使一个完整 Windows job 串行等待后才汇总（PR #29/#30）。
 - [x] 真实 promotion PR #30 run `30687477887` 已记录各 lane 用时；wall 9m19s、queue 32s、活跃关键路径 8m34s，达到 15 分钟目标，原始失败 run 仍保留。
 - [x] Pages source 已切换为 GitHub Actions 并回读验证；项目 Pages URL 返回 HTTP 200 且页面身份正确，部署后 smoke 失败会使部署 workflow 失败（PR #27/#28，run `30682087003`）。
 - [x] 版本、IPC 和文档生成物均有只读漂移门禁；CI 不依赖修改 tracked files 后通过。
 - [x] 开发者使用仓库声明的 Node、pnpm 和 Rust 工具链，快速门禁与完整门禁边界有文档且命令可执行（PR #31；当前主机 doctor 明确报告 Node 25/22 mismatch，其余检查通过）。
-- [ ] CI、贡献文档和远端保护设置支持任务分支 squash 到 `dev`、`dev -> main` promotion PR 使用 merge commit并随后 fast-forward `dev` 的模型，不存在要求删除或退役 `dev` 的有效说明。
+- [x] CI、贡献文档和远端保护设置支持任务分支 squash 到 `dev`、`dev -> main` promotion PR 使用 merge commit 并随后 fast-forward `dev` 的模型，不存在要求删除或退役 `dev` 的有效说明（PR #31/#32，promotion `92940b04788fdaca8a78d8afa4da7a2f4ccd87b1`）。
 - [x] 获得外部设置授权后，仓库允许 squash merge 与 merge commit、关闭 rebase merge 并自动删除已合并任务分支；`dev-safety`（`20175337`）不可 bypass 地禁止 force/delete，`dev-flow`（`20175349`）对常规 task PR 强制 PR/`just-ci`/linear history 且仅为 bookkeeping/exact fast-forward 提供受控 bypass，实际设置回读与目标合同一致。
 - [ ] 当前发布 workflow 至少完成一次不公开 rehearsal；任何公开发布、签名服务接入或 GitHub 设置修改均有单独批准和回读证据。
-- [ ] 发布验证能够分别报告 Azure Artifact Signing Authenticode、Tauri updater `.sig` 和未配置签名三种状态；未接入 Azure 时不得把安装包报告为已完成 Authenticode 签名。
-- [ ] 正式 publish 对最终签名字节生成 `actions/attest` provenance，并在 fresh-download 后通过 `gh attestation verify` 验证；attestation 不替代 Authenticode、updater `.sig` 或 checksum。
+- [x] 发布验证能够分别报告 Azure Artifact Signing Authenticode、Tauri updater `.sig` 和未配置签名三种状态；未接入 Azure 时不得把安装包报告为已完成 Authenticode 签名。
+- [x] 正式 publish 对最终签名字节生成 `actions/attest` provenance，并在 fresh-download 后通过 `gh attestation verify` 验证；attestation 不替代 Authenticode、updater `.sig` 或 checksum。
 
 ## Out of Scope
 
@@ -62,3 +63,10 @@
 - 重新创建 legacy `gh-pages` 或恢复分支发布模式。
 - 删除本地或远端 `dev` 分支。
 - 在当前低并发维护模式下引入 merge queue。
+
+## Integration Evidence
+
+- Desktop child PR #33 was squash-merged into `dev` as `f4dadb798acf0bdd22f82818379144de9eefe7eb` from exact task head `b8850a6fa6982033756b9a529b8b60690090d9fd`; hosted run `30693986360` passed common, Windows/Linux/macOS Rust, supply-chain, and `just-ci`.
+- Desktop local gates passed: release/workflow contracts, verifier tests, `just ci`, `just audit`, docs checks, script syntax checks, and Windows NSIS plus explicit NSIS/MSI bundle builds. The local unsigned Authenticode state is retained as rehearsal `not-configured` evidence.
+- `dev` remains present locally and remotely; `gh-pages` remains absent. The child short-lived branch was deleted after merge. No environment, Azure OIDC/variables/secrets, tag, GitHub Release, or public rehearsal was changed or run.
+- Parent archive remains deferred until separately authorized non-public rehearsal and any required environment/Azure setup complete; this task tree is intentionally still active despite all four children being archived.
