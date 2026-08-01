@@ -127,6 +127,13 @@ describe("release workflow contract", () => {
     expect(source).toContain("authenticode=not-configured");
     expect(source).toContain("pnpm tauri signer sign");
     expect(source).not.toContain("Select-Object -Single");
+    const macPrepare = workflow.jobs["build-macos"].steps?.find(
+      (step) => step.name === "Prepare macOS assets",
+    );
+    expect(macPrepare?.run).not.toContain("mapfile");
+    expect(macPrepare?.run).toContain("shopt -s nullglob");
+    expect(macPrepare?.run).toContain('APPS=("$BUNDLE_ROOT/macos"/*.app)');
+    expect(macPrepare?.run).toContain('DMGS=("$BUNDLE_ROOT/dmg"/*.dmg)');
     expect(source).toContain('Expected exactly one final NSIS asset');
   });
 
