@@ -129,4 +129,19 @@ describe("release workflow contract", () => {
     expect(source).not.toContain("Select-Object -Single");
     expect(source).toContain('Expected exactly one final NSIS asset');
   });
+
+  it("builds every macOS universal sidecar and installs Linux bundle dependencies", () => {
+    const macSidecars = workflow.jobs["build-macos"].steps?.find(
+      (step) => step.name === "Build universal CLI",
+    );
+    expect(macSidecars?.run?.match(/--bin release-signature-verifier/g)).toHaveLength(2);
+    expect(macSidecars?.run).toContain(
+      "-output src-tauri/target/universal-apple-darwin/release/release-signature-verifier",
+    );
+
+    const linuxDeps = workflow.jobs["build-linux"].steps?.find(
+      (step) => step.name === "Install Linux system deps",
+    );
+    expect(linuxDeps?.run).toContain("xdg-utils");
+  });
 });
