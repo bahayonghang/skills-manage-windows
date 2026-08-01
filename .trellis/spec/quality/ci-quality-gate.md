@@ -125,24 +125,34 @@ universal, Linux x64, and optional Linux arm64 release matrix.
 
 ### Release context and publication contract
 
-- Validate the explicit `v<semver>` tag and peel it to a commit on `origin/main`
-  before reading version files. Checkout that peeled commit, then require
+- Publish validates the explicit `v<semver>` tag and peels it to a commit on
+  `origin/main`; manual rehearsal instead requires an exact 40-character
+  `rehearsal_ref` SHA on `origin/main`. Checkout the frozen commit, then require
   `package.json`, `tauri.conf.json`, Cargo metadata, and `Cargo.lock` to agree.
 - Every reusable CI/build checkout uses the frozen SHA. Manual dispatch must use
   the `main` workflow definition; a selected branch is never a release context.
 - Required platform builds finish before a draft is created. Optional Linux
   arm64 may be absent, but any arm64 output must be a complete DEB/RPM/AppImage
   group.
-- Validate the exact artifact inventory, updater signature, `latest.json`, and
+- Validate the exact artifact inventory, independent Authenticode state and
+  final-byte updater signature, `latest.json`, and
   deterministic `SHA256SUMS` before draft creation. Reset a reused draft, upload
   the validated set, verify API inventory, then fresh-download and recheck the
   manifest.
 - `release.target_commitish` is not authoritative for an existing tag and may
   contain a branch such as `main`. Verify the remote tag's peeled commit instead,
   including immediately before publication.
-- Workflow permissions default to `contents: read`; only the publish job receives
-  `contents: write`. The sole public transition is the final `draft=false` API
-  update after every prior check succeeds.
+- Rehearsal creates no GitHub Release and retains the validated asset set and
+  frozen-SHA signing summary as a time-limited Actions artifact. Only publish
+  enters `desktop-release`, receives `contents: write`, `id-token: write`, and
+  `attestations: write`, then makes the sole public `draft=false` transition.
+- `desktop-signing` is the only job with Azure OIDC. It Authenticode-signs EXE,
+  NSIS, and MSI before generating the Tauri updater `.sig` over the final NSIS
+  bytes. Rehearsal may report `authenticode=not-configured`; publish requires
+  valid timestamped Authenticode and separately valid updater verification.
+- The Windows install/launch/uninstall smoke is an aggregate prerequisite. A
+  real previous-to-candidate updater smoke remains guarded and deferred until a
+  separately approved non-public staging feed and rollback plan exist.
 
 Package job guards must remain:
 
@@ -220,6 +230,7 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
 | Package job lacks event guard | Contract test fails |
 | Reusable CI runs package jobs | Contract test fails; `workflow_call` owns only `just-ci` |
 | Manual release runs from a non-`main` workflow ref | Context job fails before checkout/build |
+| Rehearsal ref is not an exact main-ancestor SHA | Context job fails before CI/build |
 | Tag is absent, invalid, outside `main`, or version metadata differs | Context job fails before CI/build |
 | Required build or aggregate check fails | Publish job is not scheduled; no new release exists |
 | Optional arm64 has a partial set | Artifact inventory fails before draft creation |
@@ -228,6 +239,10 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
 | Remote tag moves after context freeze | Draft creation or final publish check fails |
 | Existing release reports `target_commitish: main` | Accept only after the remote tag itself peels to the frozen SHA |
 | Signature, metadata, asset inventory, or checksum is invalid | Aggregate/publish fails before `draft=false` |
+| Azure is absent or Authenticode is invalid in publish | Publish path is never scheduled; rehearsal records `not-configured` only |
+| Authenticode changes NSIS after updater signing | Final-byte updater verification fails |
+| Windows install, launch, or uninstall fails | Aggregate fails and publish is not scheduled |
+| Attestation or fresh-download provenance verification fails | Draft remains private and is not published |
 | Rust is not formatted | `cargo fmt --check` fails |
 | Renderer capability, plugin wiring, or inventory drifts | `pnpm capabilitycheck` fails before size/test/build |
 | IPC or schema generated Markdown drifts | `pnpm docs:gen:check` fails with the stale path and repair command; working tree bytes stay unchanged |

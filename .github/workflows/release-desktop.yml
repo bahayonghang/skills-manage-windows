@@ -7,8 +7,29 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing v<semver> tag to release
-        required: true
+        description: Existing v<semver> tag (required for publish)
+        required: false
+        type: string
+      mode:
+        description: Rehearsal validates an exact main SHA without a GitHub Release; publish is tag-bound.
+        required: false
+        default: rehearsal
+        type: choice
+        options:
+          - rehearsal
+          - publish
+      rehearsal_ref:
+        description: Exact 40-character commit SHA on origin/main (required for rehearsal only)
+        required: false
+        type: string
+      run_updater_staging_smoke:
+        description: Requires separately approved staging feed and rollback inputs; disabled by default.
+        required: false
+        default: false
+        type: boolean
+      updater_staging_feed:
+        description: Approved HTTPS staging latest.json URL for a real previous-to-candidate update smoke.
+        required: false
         type: string
 
 concurrency:
@@ -30,6 +51,7 @@ jobs:
       version: ${{ steps.context.outputs.version }}
       sha: ${{ steps.context.outputs.sha }}
       release_name: ${{ steps.context.outputs.release_name }}
+      mode: ${{ steps.context.outputs.mode }}
     steps:
       - name: Require canonical manual workflow source
         if: ${{ github.event_name == 'workflow_dispatch' }}
@@ -49,17 +71,21 @@ jobs:
       - name: Checkout frozen tag commit
         shell: bash
         env:
+          RELEASE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'publish' }}
           RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          REHEARSAL_REF: ${{ inputs.rehearsal_ref }}
         run: |
           set -euo pipefail
-          RELEASE_SHA="$(node scripts/release-context.mjs --tag "$RELEASE_TAG" --resolve-only)"
+          RELEASE_SHA="$(node scripts/release-context.mjs --mode "$RELEASE_MODE" --tag "$RELEASE_TAG" --sha "$REHEARSAL_REF" --resolve-only)"
           git checkout --detach "$RELEASE_SHA"
 
       - name: Resolve and validate release context
         id: context
         env:
+          RELEASE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'publish' }}
           RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-        run: node scripts/release-context.mjs --tag "$RELEASE_TAG"
+          REHEARSAL_REF: ${{ inputs.rehearsal_ref }}
+        run: node scripts/release-context.mjs --mode "$RELEASE_MODE" --tag "$RELEASE_TAG" --sha "$REHEARSAL_REF"
 
   quality-gate:
     name: Validate frozen release commit
@@ -72,6 +98,10 @@ jobs:
     name: Build Windows x64
     needs: [release-context, quality-gate]
     runs-on: windows-2022
+    environment: desktop-signing
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout frozen release commit
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -108,7 +138,7 @@ jobs:
 
       - name: Sync version metadata
         shell: pwsh
-        run: node scripts/sync-version.mjs
+        run: node scripts/sync-version.mjs --check
 
       - name: Validate updater signing secrets
         shell: pwsh
@@ -131,11 +161,89 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           $releaseConfig = @{
-            bundle = @{ createUpdaterArtifacts = $true }
+            bundle = @{ createUpdaterArtifacts = $false }
             plugins = @{ updater = @{ pubkey = $env:TAURI_UPDATER_PUBLIC_KEY } }
           } | ConvertTo-Json -Depth 10 -Compress
           Set-Content -LiteralPath release-updater-config.json -Value $releaseConfig -NoNewline -Encoding utf8
           pnpm tauri build --target x86_64-pc-windows-msvc --bundles nsis,msi --config release-updater-config.json --ci
+
+      - name: Detect Azure Artifact Signing configuration
+        id: azure-config
+        shell: pwsh
+        env:
+          RELEASE_MODE: ${{ needs.release-context.outputs.mode }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          AZURE_ARTIFACT_SIGNING_ENDPOINT: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+          AZURE_ARTIFACT_SIGNING_ACCOUNT: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+          AZURE_ARTIFACT_SIGNING_PROFILE: ${{ vars.AZURE_ARTIFACT_SIGNING_PROFILE }}
+        run: |
+          $required = @("AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_SUBSCRIPTION_ID", "AZURE_ARTIFACT_SIGNING_ENDPOINT", "AZURE_ARTIFACT_SIGNING_ACCOUNT", "AZURE_ARTIFACT_SIGNING_PROFILE")
+          $missing = @($required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) })
+          if ($missing.Count -gt 0) {
+            if ($env:RELEASE_MODE -eq "publish") { throw "Azure Artifact Signing is required for publish; missing: $($missing -join ', ')." }
+            "configured=false" >> $env:GITHUB_OUTPUT
+            "authenticode=not-configured" >> $env:GITHUB_OUTPUT
+          } else {
+            "configured=true" >> $env:GITHUB_OUTPUT
+            "authenticode=valid" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Azure login for Artifact Signing
+        if: ${{ steps.azure-config.outputs.configured == 'true' }}
+        uses: Azure/login@1384c340ab2dda50fed2bee3041d1d87018aa5e8 # v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Prepare Artifact Signing file catalog
+        if: ${{ steps.azure-config.outputs.configured == 'true' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $nsis = @(Get-ChildItem -Path "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis" -Recurse -Filter *.exe)
+          $msi = @(Get-ChildItem -Path "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi" -Recurse -Filter *.msi)
+          $files = @("src-tauri/target/x86_64-pc-windows-msvc/release/skillport.exe") + $nsis.FullName + $msi.FullName
+          if ($files.Count -ne 3) { throw "Artifact Signing requires exactly skillport.exe, one NSIS installer, and one MSI installer." }
+          $files | ForEach-Object { Resolve-Path -LiteralPath $_ -Relative } | Set-Content -LiteralPath artifact-signing-files.txt -Encoding utf8
+
+      - name: Sign Windows files with Azure Artifact Signing
+        if: ${{ steps.azure-config.outputs.configured == 'true' }}
+        uses: Azure/artifact-signing-action@b443cf8ea4124818d2ea9f043cba29fc3ec47b16 # v1
+        with:
+          endpoint: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_ARTIFACT_SIGNING_PROFILE }}
+          files-catalog: ${{ github.workspace }}\artifact-signing-files.txt
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com/
+          timestamp-digest: SHA256
+
+      - name: Sign final NSIS updater bytes and record Windows signature state
+        shell: pwsh
+        env:
+          RELEASE_MODE: ${{ needs.release-context.outputs.mode }}
+          AUTHENTICODE_STATE: ${{ steps.azure-config.outputs.authenticode }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $nsis = @(Get-ChildItem -Path "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis" -Recurse -Filter *.exe)
+          $msi = @(Get-ChildItem -Path "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi" -Recurse -Filter *.msi)
+          $exePath = "src-tauri/target/x86_64-pc-windows-msvc/release/skillport.exe"
+          if ($nsis.Count -ne 1 -or $msi.Count -ne 1 -or -not (Test-Path $exePath)) { throw "Expected one NSIS, one MSI, and skillport.exe before signing." }
+          pnpm tauri signer sign $nsis[0].FullName
+          $files = @{ "skillport.exe" = $exePath; "nsis" = $nsis[0].FullName; "msi" = $msi[0].FullName }
+          $results = @{}
+          foreach ($name in $files.Keys) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $files[$name]
+            $results[$name] = @{ status = $signature.Status.ToString(); signer = $signature.SignerCertificate.Subject; timestamp = $null -ne $signature.TimeStamperCertificate }
+            if ($env:AUTHENTICODE_STATE -eq "valid" -and ($signature.Status.ToString() -ne "Valid" -or [string]::IsNullOrWhiteSpace($signature.SignerCertificate.Subject) -or $null -eq $signature.TimeStamperCertificate)) { throw "Authenticode verification failed for $name." }
+            if ($env:AUTHENTICODE_STATE -eq "not-configured" -and $signature.Status.ToString() -ne "NotSigned") { throw "Unsigned rehearsal expected NotSigned for $name, got $($signature.Status)." }
+          }
+          @{ authenticode = $env:AUTHENTICODE_STATE; updaterSignature = "valid"; files = $results } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath windows-signing.json -Encoding utf8
 
       - name: Prepare Windows assets
         shell: pwsh
@@ -149,7 +257,7 @@ jobs:
           if ($nsis.Count -ne 1) { throw "Expected exactly one Windows NSIS bundle, found $($nsis.Count)." }
           $nsisAsset = "release-assets/skillport_${env:RELEASE_VERSION}_windows_x64_nsis.exe"
           Copy-Item $nsis[0].FullName $nsisAsset
-          if (-not (Test-Path "$($nsis[0].FullName).sig")) { throw "Windows NSIS updater signature not found." }
+          if (-not (Test-Path "$($nsis[0].FullName).sig")) { throw "Windows NSIS updater signature not found after signing the final Authenticode bytes." }
           Copy-Item "$($nsis[0].FullName).sig" "$nsisAsset.sig"
 
           $msi = @(Get-ChildItem -Path "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi" -Recurse -Filter *.msi)
@@ -167,6 +275,64 @@ jobs:
           name: desktop-release-windows
           path: release-assets/*
           if-no-files-found: error
+
+      - name: Upload Windows signing evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-signing-evidence
+          path: |
+            windows-signing.json
+            release-updater-config.json
+          if-no-files-found: error
+
+  windows-install-smoke:
+    name: Smoke Windows install, launch, and uninstall
+    needs: [release-context, build-windows]
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: windows-2022
+    steps:
+      - name: Checkout frozen release verifier
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.release-context.outputs.sha }}
+      - name: Download Windows release artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: desktop-release-windows
+          path: smoke-assets
+      - name: Download Windows signing evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: windows-signing-evidence
+          path: smoke-evidence
+      - name: Verify signatures before installation
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ needs.release-context.outputs.version }}
+          RELEASE_TAG: ${{ needs.release-context.outputs.tag }}
+          RELEASE_MODE: ${{ needs.release-context.outputs.mode }}
+        run: |
+          node scripts/release-preflight.mjs --version $env:RELEASE_VERSION --tag $env:RELEASE_TAG --mode $env:RELEASE_MODE --asset-dir smoke-assets --config smoke-evidence/release-updater-config.json --signing-state smoke-evidence/windows-signing.json
+      - name: Install launch and uninstall final NSIS
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ needs.release-context.outputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = Get-ChildItem -LiteralPath smoke-assets -Filter "*windows_x64_nsis.exe" | Select-Object -Single
+          if ($null -eq $installer) { throw "Final NSIS asset was not downloaded." }
+          $installRoot = Join-Path $env:RUNNER_TEMP "skillport-install-smoke-$env:RELEASE_VERSION"
+          Start-Process -FilePath $installer.FullName -ArgumentList @("/S", "/D=$installRoot") -Wait
+          $executable = Get-ChildItem -LiteralPath $installRoot -Recurse -Filter skillport.exe | Select-Object -First 1
+          if ($null -eq $executable) { throw "Installed SkillPort executable was not found." }
+          $process = Start-Process -FilePath $executable.FullName -PassThru
+          Start-Sleep -Seconds 5
+          if ($process.HasExited) { throw "Installed SkillPort exited before the smoke check." }
+          Stop-Process -Id $process.Id -Force
+          $uninstaller = Get-ChildItem -LiteralPath $installRoot -Recurse -Filter uninstall.exe | Select-Object -First 1
+          if ($null -eq $uninstaller) { throw "NSIS uninstaller was not found." }
+          Start-Process -FilePath $uninstaller.FullName -ArgumentList "/S" -Wait
+          if (Test-Path $executable.FullName) { throw "Uninstall left the application executable behind." }
 
   build-macos:
     name: Build macOS universal
@@ -201,7 +367,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Sync version metadata
-        run: node scripts/sync-version.mjs
+        run: node scripts/sync-version.mjs --check
       - name: Build universal CLI
         run: |
           cargo build --manifest-path src-tauri/Cargo.toml --release --bin skillport-cli --locked --target aarch64-apple-darwin
@@ -281,7 +447,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Sync version metadata
-        run: node scripts/sync-version.mjs
+        run: node scripts/sync-version.mjs --check
       - name: Build Linux bundles
         run: pnpm tauri build --bundles deb,rpm,appimage --no-sign --ci
       - name: Prepare Linux assets
@@ -309,7 +475,7 @@ jobs:
 
   aggregate:
     name: Verify release artifacts
-    needs: [release-context, quality-gate, build-windows, build-macos, build-linux]
+    needs: [release-context, quality-gate, build-windows, build-macos, build-linux, windows-install-smoke]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout frozen release commit
@@ -345,32 +511,54 @@ jobs:
           pattern: desktop-release-*
           path: release-assets
           merge-multiple: true
-      - name: Build release-only updater config
-        env:
-          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
-        run: |
-          node -e 'const fs=require("fs"); const key=process.env.TAURI_UPDATER_PUBLIC_KEY; if(!key) throw new Error("Missing TAURI_UPDATER_PUBLIC_KEY"); fs.writeFileSync("release-updater-config.json", JSON.stringify({bundle:{createUpdaterArtifacts:true},plugins:{updater:{pubkey:key}}}))'
+      - name: Download Windows signing evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: windows-signing-evidence
+          path: signing-evidence
       - name: Verify signature metadata inventory and checksums
         env:
           RELEASE_VERSION: ${{ needs.release-context.outputs.version }}
           RELEASE_TAG: ${{ needs.release-context.outputs.tag }}
+          RELEASE_MODE: ${{ needs.release-context.outputs.mode }}
         run: |
-          node scripts/release-preflight.mjs --version "$RELEASE_VERSION" --tag "$RELEASE_TAG" --config release-updater-config.json --asset-dir release-assets
+          node scripts/release-preflight.mjs --version "$RELEASE_VERSION" --tag "$RELEASE_TAG" --mode "$RELEASE_MODE" --config signing-evidence/release-updater-config.json --signing-state signing-evidence/windows-signing.json --asset-dir release-assets
           node scripts/release-artifacts.mjs --version "$RELEASE_VERSION" --asset-dir release-assets
           node scripts/release-artifacts.mjs --version "$RELEASE_VERSION" --asset-dir release-assets --verify
+      - name: Record validated release evidence
+        env:
+          RELEASE_MODE: ${{ needs.release-context.outputs.mode }}
+          RELEASE_SHA: ${{ needs.release-context.outputs.sha }}
+          RELEASE_TAG: ${{ needs.release-context.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.release-context.outputs.version }}
+        run: |
+          mkdir -p release-validation
+          node -e 'const fs=require("fs"); const signing=JSON.parse(fs.readFileSync("signing-evidence/windows-signing.json")); fs.writeFileSync("release-validation/release-validation.json", JSON.stringify({mode:process.env.RELEASE_MODE,sha:process.env.RELEASE_SHA,tag:process.env.RELEASE_TAG,version:process.env.RELEASE_VERSION,authenticode:signing.authenticode,updaterSignature:signing.updaterSignature,assets:fs.readdirSync("release-assets").sort()},null,2)+"\n")'
       - name: Upload validated release set
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: validated-desktop-release
           path: release-assets/*
+          retention-days: 14
+          if-no-files-found: error
+      - name: Upload release validation evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: desktop-release-validation
+          path: release-validation/release-validation.json
+          retention-days: 14
           if-no-files-found: error
 
   publish:
     name: Publish verified draft
     needs: [release-context, aggregate]
+    if: ${{ needs.release-context.outputs.mode == 'publish' }}
     runs-on: ubuntu-latest
+    environment: desktop-release
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: ${{ needs.release-context.outputs.tag }}
@@ -387,6 +575,18 @@ jobs:
         with:
           name: validated-desktop-release
           path: release-assets
+      - name: Generate build provenance predicate
+        id: provenance-predicate
+        uses: actions/attest-build-provenance/predicate@1176ef556905f349f669722abf30bce1a6e16e01 # predicate@1.1.5
+      - name: Attest final Windows release bytes
+        uses: actions/attest@11bbd243972067817e9ed160cb123cab3601f436 # v2
+        with:
+          subject-path: |
+            release-assets/*windows_x64_nsis.exe
+            release-assets/*windows_x64.msi
+            release-assets/*windows_x64.zip
+          predicate-type: ${{ steps.provenance-predicate.outputs.predicate-type }}
+          predicate: ${{ steps.provenance-predicate.outputs.predicate }}
       - name: Prepare release notes
         run: node scripts/prepare-release-body.mjs --version "$RELEASE_VERSION" --output release-body.md
       - name: Verify remote tag target
@@ -423,11 +623,14 @@ jobs:
         run: |
           gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" > release.json
           node scripts/release-draft-state.mjs --release-json release.json --tag "$RELEASE_TAG" --version "$RELEASE_VERSION"
-      - name: Fresh-download and verify checksums
+      - name: Fresh-download and verify checksums and provenance
         run: |
           mkdir fresh-release
           gh release download "$RELEASE_TAG" --dir fresh-release
           node scripts/release-artifacts.mjs --version "$RELEASE_VERSION" --asset-dir fresh-release --verify
+          gh attestation verify "fresh-release/skillport_${RELEASE_VERSION}_windows_x64_nsis.exe" -R bahayonghang/skills-manage-windows
+          gh attestation verify "fresh-release/skillport_${RELEASE_VERSION}_windows_x64.msi" -R bahayonghang/skills-manage-windows
+          gh attestation verify "fresh-release/skillport_${RELEASE_VERSION}_windows_x64.zip" -R bahayonghang/skills-manage-windows
       - name: Publish verified draft
         shell: bash
         run: |
@@ -438,3 +641,19 @@ jobs:
           gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${{ steps.draft.outputs.release_id }}" -F draft=false > published.json
       - name: Verify public release state
         run: node scripts/release-draft-state.mjs --release-json published.json --tag "$RELEASE_TAG" --version "$RELEASE_VERSION" --public
+
+  updater-staging-smoke:
+    name: Deferred updater staging smoke
+    needs: [release-context, aggregate]
+    if: ${{ github.event_name == 'workflow_dispatch' && needs.release-context.outputs.mode == 'rehearsal' && inputs.run_updater_staging_smoke && inputs.updater_staging_feed != '' }}
+    runs-on: windows-2022
+    environment: updater-staging
+    steps:
+      - name: Require an approved HTTPS staging feed
+        shell: pwsh
+        env:
+          STAGING_FEED: ${{ inputs.updater_staging_feed }}
+        run: |
+          $uri = [Uri]$env:STAGING_FEED
+          if ($uri.Scheme -ne "https" -or $uri.Host -eq "github.com") { throw "Updater staging smoke requires an approved non-public HTTPS staging feed." }
+          throw "Follow docs/reference/updater-staging-runbook.md to supply the separately approved previous installer, candidate feed, rollback target, and environment credentials."

@@ -93,8 +93,8 @@ cargo install --path src-tauri --bin skillport-cli --locked --force
 
 - 最新发布：<https://github.com/bahayonghang/skills-manage-windows/releases/latest>
 - 当前桌面发布目标：Windows x64（`.exe`、`.msi`、`.zip`）、macOS Universal（`.dmg`、`.zip`、`.tar.gz`），以及 Linux x86_64 / arm64（`.deb`、`.rpm`、`.AppImage`）
-- Windows 自动更新使用 Tauri 签名的 NSIS 产物和 `latest.json`；macOS 仍未签名 / notarize，Linux arm64 产物是否可用取决于 GitHub Actions runner 矩阵
-- 维护者应推送已存在的 release tag（或手动选择该 tag），由唯一 workflow 对固定 SHA 的 CI、全部必需 bundle、NSIS 密码学签名、`latest.json` 与 fresh-download checksum 完成验证后再原子公开 draft。
+- Windows 自动更新使用 Tauri 对最终 NSIS 产物生成的签名和 `latest.json`；updater `.sig` 与 Windows Authenticode 是两项独立合同。macOS 仍未签名 / notarize，Linux arm64 产物是否可用取决于 GitHub Actions runner 矩阵。
+- 维护者应先手动对精确的 `origin/main` commit SHA 做 rehearsal。rehearsal 只保留已验证产物，不创建 GitHub Release；只有 `v<semver>` tag 能进入受保护 publish 路径，且必须完成 Azure Authenticode、updater 签名、checksum、provenance attestation 和 fresh-download 验证。
 
 ### macOS 未签名构建说明
 

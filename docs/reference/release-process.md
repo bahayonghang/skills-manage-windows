@@ -5,7 +5,7 @@ canonical `Release Desktop` workflow at `.github/workflows/release-desktop.yml`.
 
 ## Canonical workflow
 
-- Trigger: push an existing `v<semver>` tag, or manually select an existing tag.
+- Trigger: push an existing `v<semver>` tag for publish, or manually select `rehearsal` with an exact 40-character `rehearsal_ref` on `origin/main`.
 - Quality gate: reusable `just-ci` runs against the tag's peeled commit SHA.
 - Release body source: `scripts/prepare-release-body.mjs`.
 - Updater metadata source: `scripts/generate-latest-json.mjs`.
@@ -36,23 +36,21 @@ signing and `latest.json` stay in sync.
    - `pnpm sizecheck`
    - `cargo test --manifest-path src-tauri/Cargo.toml`
    - `cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings`
-6. After the Windows release-only config and `release-assets/` exist, run:
-   - `pnpm release:preflight -- --version <version> --tag v<version> --config release-updater-config.json --asset-dir release-assets`
-   - This validates the updater configuration and `latest.json`, then
-     cryptographically verifies the NSIS bytes with the updater public key.
-7. Merge the release commit to `main`.
-8. Create `v<version>` at that `main` commit and push the tag. For a retry,
+6. Use manual `rehearsal` first. It validates the frozen SHA and retains a 14-day Actions artifact, but does not create or modify a GitHub Release. `publish` remains bound to an existing `v<semver>` tag.
+7. Authenticode and the Tauri updater `.sig` are separate checks. Windows files are Authenticode-signed first, then the final NSIS bytes are signed and verified with the updater key. An updater `.sig` never proves Windows Authenticode.
+8. Merge the release commit to `main`.
+9. Create `v<version>` at that `main` commit and push the tag. For a retry,
    manually dispatch `Release Desktop` with the same existing tag.
-9. Wait for frozen-context validation, reusable CI, and every required platform
+10. Wait for frozen-context validation, reusable CI, every required platform
    build. The workflow verifies the complete artifact inventory, updater
    signature, metadata, and `SHA256SUMS` before creating or reusing a draft.
-10. Confirm the atomically published release contains:
+11. Confirm the atomically published release contains:
    - `latest.json`
    - `skillport_<version>_windows_x64_nsis.exe`
    - `skillport_<version>_windows_x64_nsis.exe.sig`
    - Windows MSI / ZIP assets
    - macOS and Linux install assets when those jobs pass
-11. Fetch
+12. Fetch
     `https://github.com/bahayonghang/skills-manage-windows/releases/latest/download/latest.json`
     and confirm it has the expected version, Windows URL, and signature.
 
@@ -67,8 +65,15 @@ rejected rather than overwritten.
 - The Tauri config in `src-tauri/tauri.conf.json` intentionally keeps
   `bundle.createUpdaterArtifacts` disabled and stores a placeholder updater
   public key for local builds.
-- The release workflow must inject the real updater public key and enable
-  updater artifacts for Windows builds, then pass cryptographic preflight.
+- The release workflow injects the real updater public key but keeps automatic
+  updater artifacts disabled. It Authenticode-signs EXE/NSIS/MSI first, then
+  signs the final NSIS bytes and runs updater cryptographic preflight.
+- Rehearsal may report `authenticode=not-configured`; publish fails closed unless
+  Azure Artifact Signing produces timestamped valid Authenticode for EXE, NSIS,
+  and MSI. Publish alone creates provenance attestations and verifies them after
+  fresh download.
+- The real previous-to-candidate updater smoke remains deferred until a staging
+  feed is approved; follow [the staging runbook](updater-staging-runbook.md).
 - Every build and the reusable CI gate use the same peeled tag SHA. Draft
   creation happens only after all required predecessors succeed, and the sole
   public transition is the final `draft=false` API update.

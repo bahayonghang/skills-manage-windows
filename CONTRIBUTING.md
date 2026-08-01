@@ -82,6 +82,7 @@ with `pnpm docs:gen`, then reviewed and committed with its authoritative source.
 
 If your change touches UI behavior, include screenshots or a short screen recording in the pull request.
 If your change touches packaging or release automation, also run `pnpm tauri build` on Windows and confirm the expected bundle exists.
+For Windows releases, updater `.sig` and Authenticode are separate checks. Rehearse an exact `origin/main` commit SHA before a tag-bound publish; do not treat an updater signature as evidence that the installer is Authenticode-signed.
 
 ## Branch and merge model
 

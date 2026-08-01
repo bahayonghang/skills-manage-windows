@@ -16,11 +16,16 @@ type ReleaseContextHelpers = {
     tauriVersion: string;
     cargoVersion: string;
   }) => { tag: string; version: string };
+  resolveRehearsalRef: (args: {
+    sha: string;
+    cwd: string;
+    exec: (command: string, args: string[], cwd: string) => string;
+  }) => { sha: string };
 };
 
 // @ts-expect-error The release context helper is an ESM Node script outside the TS source tree.
 const releaseContextModule = await import("../../../scripts/release-context.mjs");
-const { parseReleaseTag, resolveReleaseTag, validateVersionSet } = releaseContextModule as ReleaseContextHelpers;
+const { parseReleaseTag, resolveReleaseTag, resolveRehearsalRef, validateVersionSet } = releaseContextModule as ReleaseContextHelpers;
 
 describe("release context", () => {
   it("accepts explicit semver tags and derives the version", () => {
@@ -63,5 +68,15 @@ describe("release context", () => {
 
     const source = readFileSync("scripts/release-context.mjs", "utf8");
     expect(source).toContain('"--locked"');
+  });
+
+  it("accepts only an exact main-ancestor SHA for manual rehearsal", () => {
+    const sha = "a".repeat(40);
+    expect(resolveRehearsalRef({
+      sha,
+      cwd: "repo",
+      exec: (_command, args) => args[0] === "rev-parse" ? sha : "",
+    })).toEqual({ sha });
+    expect(() => resolveRehearsalRef({ sha: "main", cwd: "repo", exec: () => "" })).toThrow(/40-character/);
   });
 });
