@@ -279,12 +279,16 @@ See [SECURITY.md](SECURITY.md) for vulnerability reporting and data-handling not
 A bilingual VitePress documentation site lives under `docs/`. To preview locally:
 
 ```bash
+pnpm docs:gen
+pnpm docs:gen:check
 pnpm docs:dev
 pnpm docs:build
 pnpm docs:preview
 ```
 
-The English entry point is `/`, and the Chinese mirror is `/zh/`. Build output is written to `dist-docs/` at the repository root.
+Run `pnpm docs:gen` after changing Tauri commands or database schema sources and commit the two refreshed files under `docs/architecture/_generated/`. `pnpm docs:gen:check` and `pnpm docs:build` are read-only: they fail on generated-file drift instead of rewriting the checkout.
+
+The English entry point is `/`, and the Chinese mirror is `/zh/`. Build output is written to `dist-docs/` at the repository root. Published releases deploy that artifact to GitHub Pages; maintainers can also dispatch the Docs workflow from canonical `main` for migration or recovery. The workflow deploys the single build artifact and then verifies the public SkillPort page.
 
 ## License
 

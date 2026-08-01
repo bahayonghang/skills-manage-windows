@@ -278,12 +278,16 @@ SQLite 数据库位于 `~/.skillsmanage/db.sqlite`，首次启动时会自动初
 `docs/` 下提供基于 VitePress 的中英双语文档站点。本地预览：
 
 ```bash
+pnpm docs:gen
+pnpm docs:gen:check
 pnpm docs:dev
 pnpm docs:build
 pnpm docs:preview
 ```
 
-英文入口为 `/`，中文镜像为 `/zh/`。构建产物输出到仓库根的 `dist-docs/`。
+修改 Tauri command 或数据库 schema 源码后，运行 `pnpm docs:gen`，并共同提交 `docs/architecture/_generated/` 下刷新的两个文件。`pnpm docs:gen:check` 和 `pnpm docs:build` 都是只读入口：生成物漂移时直接失败，不会改写工作树。
+
+英文入口为 `/`，中文镜像为 `/zh/`。构建产物输出到仓库根的 `dist-docs/`。公开 release 会把该产物部署到 GitHub Pages；维护者也可以从 canonical `main` 手动触发 Docs workflow 进行迁移或恢复。workflow 只部署这一份构建产物，随后验证公开页面确实属于 SkillPort。
 
 ## 许可证
 

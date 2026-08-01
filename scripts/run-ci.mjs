@@ -19,6 +19,7 @@ const chains = [
       { name: "sizecheck", command: "pnpm", args: ["sizecheck"] },
       { name: "test", command: "pnpm", args: ["test"] },
       { name: "build", command: "pnpm", args: ["build"] },
+      { name: "docs", command: "pnpm", args: ["docs:build"] },
     ],
   },
   {

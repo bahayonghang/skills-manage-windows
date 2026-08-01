@@ -1,0 +1,2 @@
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Align toolchain, local commands, PR documentation, dev/main protection, and merge settings with the canonical gate."}
+{"file":".trellis/tasks/08-01-engineering-delivery-workflow-optimization/research/industry-delivery-practices.md","reason":"Apply official long-running-branch, protection, merge-method, toolchain, and small-PR guidance."}

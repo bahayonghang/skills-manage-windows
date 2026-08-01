@@ -1,0 +1,2 @@
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Preserve the repository's stable CI, release, supply-chain, packaging, and remote protection contracts across all child tasks."}
+{"file":".trellis/tasks/08-01-engineering-delivery-workflow-optimization/research/industry-delivery-practices.md","reason":"Apply primary-source guidance for Actions DAGs, Pages, long-running branches, toolchains, Azure signing, and attestations."}

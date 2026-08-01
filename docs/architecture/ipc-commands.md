@@ -5,7 +5,7 @@ Every Rust function annotated with `#[tauri::command]` is a callable from the fr
 ## How the dictionary is built
 
 ```text
-[scripts/build-ipc-dict.mjs] ── reads src-tauri/src/**/*.rs
+[scripts/build-ipc-dict.mjs] ── reads src-tauri/src/commands/**/*.rs
                                     │
                                     ▼
                             extract #[tauri::command]
@@ -17,7 +17,7 @@ Every Rust function annotated with `#[tauri::command]` is a callable from the fr
         write docs/architecture/_generated/ipc-commands.md
 ```
 
-Run `pnpm docs:gen` to refresh. CI runs the same script before `pnpm docs:build`, so a stale table fails the documentation pipeline.
+Run `pnpm docs:gen` to refresh and commit the generated file with its Rust source. CI runs the read-only `pnpm docs:gen:check` through `pnpm docs:build`, so a stale table fails without rewriting the checkout.
 
 ## Calling Convention
 
