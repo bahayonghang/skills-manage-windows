@@ -14,7 +14,7 @@
 | --- | --- | --- | --- |
 | P0 | 将 CI 改为 common / Windows / Linux / macOS / supply-chain 并行，保留唯一 `just-ci` 汇总 | 消除当前 Unix 前置后 Windows 才启动的串行关键路径 | `just-ci` 名称稳定；任一 required lane 失败、取消或未执行都 fail closed |
 | P0 | 将版本与文档生成改为真正只读 check | 消除“CI 改完文件后仍然通过”和本地脏树 | 显式生成命令仍可更新文件；check 不写 tracked 文件 |
-| P0 | Pages 改为官方 Actions artifact 部署并做线上 smoke | 修复 workflow 成功但公开 URL 404 的验收缺口 | source 切为 GitHub Actions；保留 `gh-pages`；部署后验证 HTTP 与页面身份 |
+| P0 | Pages 改为官方 Actions artifact 部署并做线上 smoke | 修复 workflow 成功但公开 URL 404 的验收缺口 | source 使用 GitHub Actions；legacy `gh-pages` 保持不存在；部署后验证 HTTP 与页面身份 |
 | P1 | 保护长期 `dev`，任务分支 squash 到 `dev`，`dev -> main` 用 merge commit | 保留日常开发分支，同时避免 squash 长期分支造成祖先关系问题 | 不删除 `dev`；`main` 继续保护；关闭 rebase merge |
 | P1 | 固定开发工具链并提供分层入口与 PR template | 缩短新机器排障和日常反馈时间，提高评审输入质量 | 快速门禁不能替代 `just ci` |
 | P1 | Release rehearsal、Azure Artifact Signing、最终产物 attestation | 在公开发布前验证同一套产物，并补足 Authenticode 与 provenance | Authenticode、Tauri updater `.sig`、checksum、attestation 分层验证且顺序正确 |
@@ -105,10 +105,10 @@ supply-chain -----/
 
 - PR 的 `common` lane 执行 `docs:gen:check` 和 `pnpm docs:build`，但不部署。
 - Docs workflow 只 build 一次：checkout/install/check/build -> `upload-pages-artifact`；deploy job下载/部署同一个 Pages artifact，不再 checkout、install、第二次 build。
-- 保持当前 `release.published` 作为生产文档触发器，并增加受控 `workflow_dispatch` 用于首次迁移或恢复验证。不要因切换 source 而删除 `gh-pages` 分支。
+- 保持当前 `release.published` 作为生产文档触发器，并使用受控 `workflow_dispatch` 进行恢复验证。Legacy `gh-pages` 已在文档子任务中删除，后续不得重新创建或恢复分支发布模式。
 - deploy job只拥有 `contents: read`、`pages: write`、`id-token: write`，并绑定 `github-pages` environment。build job不获得 Pages 写权限。
 - 部署成功后对 `steps.deployment.outputs.page_url` 做有界重试，要求 HTTP 200，并检查稳定的 SkillPort 标识（例如 title 或唯一页面元素）。超时或错误站点均使 workflow 失败。
-- 远端变更顺序：合并 workflow -> 将 Pages source 切为 GitHub Actions -> 回读 `build_type`/source -> 手动部署 -> 验证 URL 与页面身份。该顺序避免 workflow 与仓库设置短暂错配被误判为成功。
+- 该迁移已按“合并 workflow -> Pages source 切为 GitHub Actions -> 回读 `build_type`/source -> 手动部署 -> 验证 URL 与页面身份”完成。后续只在 Actions source 内恢复并重新验证，不回退到 legacy 分支发布。
 
 ## 3. 长期 `dev -> main` 与 PR 体验
 
@@ -238,7 +238,7 @@ build executable
 2. **Pages 本地合同**：改为官方 Pages artifact build/deploy 单构建结构，加入 deployment output URL smoke 和 workflow contract tests。
 3. **CI 并行 DAG**：拆 common/platform/supply-chain，增加 timeout/summary，保留 `just-ci` 聚合与 manual-only package。
 4. **开发与 PR 入口**：固定工具链、`just doctor`、快速/聚焦/完整门禁和 PR template；同步中英文文档与 quality spec。
-5. **远端分支/Pages 设置**：按已授权目标展示精确变更，更新 Pages source、merge methods、auto-delete、`dev`/`main` rulesets并回读；绝不删除 `dev`。
+5. **远端分支设置**：Pages source 已完成并保持 GitHub Actions；按已授权目标展示精确变更，更新 merge methods、auto-delete、`dev`/`main` rulesets 并回读；绝不删除 `dev` 或重建 `gh-pages`。
 6. **Release rehearsal**：先跑无签名、不公开 rehearsal，验证完整产物与明确 `NotSigned` 状态。
 7. **Authenticode 合同**：实现可选但 fail-closed 的 Tauri `signCommand` 时序与 Authenticode/updater 双重验证；真实 Azure 接入仍等待单独授权。
 8. **Attestation**：对最终字节生成并在 fresh download 后验证 provenance。

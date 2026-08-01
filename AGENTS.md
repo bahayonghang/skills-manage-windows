@@ -20,6 +20,7 @@
 ```powershell
 pnpm install
 just ci
+just version-check
 just dev
 just build
 just install
@@ -38,12 +39,13 @@ pnpm tauri build
 
 ## justfile 约定
 
-- `just ci`：并行跑前端 `typecheck`、`lint`、`sizecheck`、Vitest、生产构建、只读文档构建，以及 Rust entrypoint 契约、`fmt --check`、全 targets Clippy、测试；Cargo 检查使用锁文件。
+- `just ci`：并行跑平台无关的 common lane（只读版本/生成物检查、前端验证与构建、文档、Rust entrypoint/格式/IPC 合同）和当前平台的全 targets Clippy、锁文件 Rust 测试；漂移时失败但不修改 tracked 文件。
+- `just version-check`：只读检查 `package.json`、Tauri 与 Cargo 版本元数据；显式更新仍使用 `just sync-version`。
 - `just dev`：直接启动 Tauri 开发模式。
 - `just build`：跑 `pnpm tauri build`，然后把 `src-tauri/target/release/bundle/nsis/` 里最新的 Windows 安装包复制到根目录 `outputs/`。
 - `just install`：跑 `just build`，然后以 passive 模式运行根目录 `outputs/` 里的最新 NSIS 安装包。
 - 改 CI 或发布流程时，优先保持 `just ci` 和 GitHub Actions 的检查项一致，避免本地和远端两套标准。
-- GitHub Actions 的 `just-ci` 在指向 `main` 的 PR、手动触发和 release 上运行；跨平台 smoke package 只在手动触发或 release 上运行。
+- GitHub Actions 对指向 `dev` 或 `main` 的 PR 并行运行 common、Windows/Linux/macOS Rust 和供应链 lane；`just-ci` 只做 fail-closed 汇总。CI 跨平台 smoke package 只在直接手动触发时运行，正式发布打包由桌面发布 workflow 独立负责。
 
 ## 修改约束
 

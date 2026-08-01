@@ -1,20 +1,29 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const defaultRepoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
-const packageJsonPath = join(repoRoot, "package.json");
-const cargoTomlPath = join(repoRoot, "src-tauri", "Cargo.toml");
-const cargoLockPath = join(repoRoot, "src-tauri", "Cargo.lock");
-const tauriConfigPath = join(repoRoot, "src-tauri", "tauri.conf.json");
-
-const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
-const version = String(packageJson.version ?? "").trim();
-
-if (!version) {
-  throw new Error("package.json is missing a valid version.");
-}
+const targets = [
+  {
+    relativePath: "src-tauri/tauri.conf.json",
+    pattern: /("version"\s*:\s*")[^"]+(")/,
+    replacement: (version) => `$1${version}$2`,
+    missingMessage: "tauri.conf.json version was not found.",
+  },
+  {
+    relativePath: "src-tauri/Cargo.toml",
+    pattern: /(\[package\]\s*name\s*=\s*"skillport"\s*version\s*=\s*")[^"]+(")/ms,
+    replacement: (version) => `$1${version}$2`,
+    missingMessage: "Cargo.toml package version was not found.",
+  },
+  {
+    relativePath: "src-tauri/Cargo.lock",
+    pattern: /(\[\[package\]\]\s*name\s*=\s*"skillport"\s*version\s*=\s*")[^"]+(")/ms,
+    replacement: (version) => `$1${version}$2`,
+    missingMessage: "Cargo.lock package version was not found.",
+  },
+];
 
 function replaceFirstOrFail(content, pattern, replacement, errorMessage) {
   if (!pattern.test(content)) {
@@ -24,60 +33,76 @@ function replaceFirstOrFail(content, pattern, replacement, errorMessage) {
   return content.replace(pattern, replacement);
 }
 
-function writeIfChanged(filePath, nextContent) {
-  const currentContent = readFileSync(filePath, "utf8");
-
-  if (currentContent === nextContent) {
-    return false;
+export function parseSyncVersionArgs(args) {
+  if (args.length === 0) {
+    return { check: false };
   }
 
-  writeFileSync(filePath, nextContent);
-  return true;
+  if (args.length === 1 && args[0] === "--check") {
+    return { check: true };
+  }
+
+  throw new Error(`Unknown argument: ${args[0] ?? ""}`);
 }
 
-const changedFiles = [];
+export function syncVersion({
+  rootDir = defaultRepoRoot,
+  check = false,
+  log = console.log,
+} = {}) {
+  const packageJsonPath = join(rootDir, "package.json");
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+  const version = String(packageJson.version ?? "").trim();
 
-const tauriConfigContent = readFileSync(tauriConfigPath, "utf8");
-if (writeIfChanged(
-  tauriConfigPath,
-  replaceFirstOrFail(
-    tauriConfigContent,
-    /("version"\s*:\s*")[^"]+(")/,
-    `$1${version}$2`,
-    "tauri.conf.json version was not found.",
-  ),
-)) {
-  changedFiles.push("src-tauri/tauri.conf.json");
+  if (!version) {
+    throw new Error("package.json is missing a valid version.");
+  }
+
+  const updates = targets.map((target) => {
+    const filePath = join(rootDir, ...target.relativePath.split("/"));
+    const currentContent = readFileSync(filePath, "utf8");
+    const nextContent = replaceFirstOrFail(
+      currentContent,
+      target.pattern,
+      target.replacement(version),
+      target.missingMessage,
+    );
+    return { ...target, filePath, currentContent, nextContent };
+  });
+  const changed = updates.filter((target) => target.currentContent !== target.nextContent);
+  const changedFiles = changed.map((target) => target.relativePath);
+
+  if (check && changedFiles.length > 0) {
+    throw new Error(
+      `[version] metadata is not synced to ${version}: ${changedFiles.join(", ")}. Run just sync-version.`,
+    );
+  }
+
+  if (!check) {
+    for (const target of changed) {
+      writeFileSync(target.filePath, target.nextContent);
+    }
+  }
+
+  if (changedFiles.length === 0) {
+    log(`[version] already synced to ${version}`);
+  } else {
+    log(`[version] synced to ${version}: ${changedFiles.join(", ")}`);
+  }
+
+  return { version, changedFiles };
 }
 
-const cargoTomlContent = readFileSync(cargoTomlPath, "utf8");
-if (writeIfChanged(
-  cargoTomlPath,
-  replaceFirstOrFail(
-    cargoTomlContent,
-    /(\[package\]\s*name\s*=\s*"skillport"\s*version\s*=\s*")[^"]+(")/ms,
-    `$1${version}$2`,
-    "Cargo.toml package version was not found.",
-  ),
-)) {
-  changedFiles.push("src-tauri/Cargo.toml");
+function isDirectExecution() {
+  return process.argv[1] !== undefined
+    && pathToFileURL(resolve(process.argv[1])).href === import.meta.url;
 }
 
-const cargoLockContent = readFileSync(cargoLockPath, "utf8");
-if (writeIfChanged(
-  cargoLockPath,
-  replaceFirstOrFail(
-    cargoLockContent,
-    /(\[\[package\]\]\s*name\s*=\s*"skillport"\s*version\s*=\s*")[^"]+(")/ms,
-    `$1${version}$2`,
-    "Cargo.lock package version was not found.",
-  ),
-)) {
-  changedFiles.push("src-tauri/Cargo.lock");
-}
-
-if (changedFiles.length === 0) {
-  console.log(`[version] already synced to ${version}`);
-} else {
-  console.log(`[version] synced to ${version}: ${changedFiles.join(", ")}`);
+if (isDirectExecution()) {
+  try {
+    syncVersion(parseSyncVersionArgs(process.argv.slice(2)));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  }
 }

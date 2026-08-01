@@ -1,66 +1,64 @@
 import { spawn, spawnSync } from "node:child_process";
-import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { appendFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const isWindows = process.platform === "win32";
-const activeChildren = new Set();
 
-let abortReason = null;
-let firstFailure = null;
-
-const chains = [
+const quickSteps = [
+  { name: "version", command: "pnpm", args: ["version:check"] },
+  { name: "docs-generated", command: "pnpm", args: ["docs:gen:check"] },
+  { name: "typecheck", command: "pnpm", args: ["typecheck"] },
+  { name: "lint", command: "pnpm", args: ["lint"] },
+  { name: "capability", command: "pnpm", args: ["capabilitycheck"] },
+  { name: "size", command: "pnpm", args: ["sizecheck"] },
+  { name: "entrypoints", command: "pnpm", args: ["entrypointcheck"] },
   {
-    name: "web",
-    steps: [
-      { name: "typecheck", command: "pnpm", args: ["typecheck"] },
-      { name: "lint", command: "pnpm", args: ["lint"] },
-      { name: "capabilitycheck", command: "pnpm", args: ["capabilitycheck"] },
-      { name: "sizecheck", command: "pnpm", args: ["sizecheck"] },
-      { name: "test", command: "pnpm", args: ["test"] },
-      { name: "build", command: "pnpm", args: ["build"] },
-      { name: "docs", command: "pnpm", args: ["docs:build"] },
-    ],
-  },
-  {
-    name: "rust",
-    steps: [
-      { name: "entrypoints", command: "pnpm", args: ["entrypointcheck"] },
-      { name: "ipc-codegen", command: "pnpm", args: ["ipc:codegen:check"] },
-      {
-        name: "fmt",
-        command: "cargo",
-        args: [
-          "fmt",
-          "--manifest-path",
-          "src-tauri/Cargo.toml",
-          "--all",
-          "--",
-          "--check",
-        ],
-      },
-      {
-        name: "clippy",
-        command: "cargo",
-        args: [
-          "clippy",
-          "--manifest-path",
-          "src-tauri/Cargo.toml",
-          "--all-targets",
-          "--locked",
-          "--",
-          "-D",
-          "warnings",
-        ],
-      },
-      {
-        name: "test",
-        command: "cargo",
-        args: ["test", "--manifest-path", "src-tauri/Cargo.toml", "--locked"],
-      },
+    name: "fmt",
+    command: "cargo",
+    args: [
+      "fmt",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--all",
+      "--",
+      "--check",
     ],
   },
 ];
+
+export const CI_LANES = {
+  quick: quickSteps,
+  common: [
+    ...quickSteps,
+    { name: "ipc-codegen", command: "pnpm", args: ["ipc:codegen:check"] },
+    { name: "test", command: "pnpm", args: ["test"] },
+    { name: "build", command: "pnpm", args: ["build"] },
+    { name: "docs", command: "pnpm", args: ["docs:site:build"] },
+  ],
+  "rust-platform": [
+    {
+      name: "clippy",
+      command: "cargo",
+      args: [
+        "clippy",
+        "--manifest-path",
+        "src-tauri/Cargo.toml",
+        "--all-targets",
+        "--locked",
+        "--",
+        "-D",
+        "warnings",
+      ],
+    },
+    {
+      name: "test",
+      command: "cargo",
+      args: ["test", "--manifest-path", "src-tauri/Cargo.toml", "--locked"],
+    },
+  ],
+};
 
 function resolveCommand(command) {
   if (isWindows) {
@@ -76,28 +74,14 @@ function resolveCommand(command) {
         .map((line) => line.trim())
         .filter(Boolean);
       return (
-        candidates.find((candidate) => /\.(cmd|bat)$/i.test(candidate)) ??
-        candidates[0] ??
-        command
+        candidates.find((candidate) => /\.(cmd|bat)$/i.test(candidate))
+        ?? candidates[0]
+        ?? command
       );
     }
   }
 
   return command;
-}
-
-function createSpawnConfig(command, args) {
-  const resolvedCommand = resolveCommand(command);
-
-  if (isWindows && /\.(cmd|bat)$/i.test(resolvedCommand)) {
-    return {
-      command: [resolvedCommand, ...args].map(quoteCmdArg).join(" "),
-      args: [],
-      options: { shell: true },
-    };
-  }
-
-  return { command: resolvedCommand, args, options: {} };
 }
 
 function quoteArg(arg) {
@@ -114,6 +98,20 @@ function quoteCmdArg(arg) {
 
 function formatCommand(command, args) {
   return [command, ...args].map(quoteArg).join(" ");
+}
+
+function createSpawnConfig(command, args) {
+  const resolvedCommand = resolveCommand(command);
+
+  if (isWindows && /\.(cmd|bat)$/i.test(resolvedCommand)) {
+    return {
+      command: [resolvedCommand, ...args].map(quoteCmdArg).join(" "),
+      args: [],
+      options: { shell: true },
+    };
+  }
+
+  return { command: resolvedCommand, args, options: {} };
 }
 
 function createLineWriter(prefix, write) {
@@ -151,132 +149,236 @@ function terminateChild(child) {
     return;
   }
 
-  child.kill("SIGTERM");
+  const killProcessGroup = (signal) => {
+    try {
+      process.kill(-child.pid, signal);
+    } catch (error) {
+      if (error?.code !== "ESRCH") {
+        child.kill(signal);
+      }
+    }
+  };
+
+  killProcessGroup("SIGTERM");
   setTimeout(() => {
     if (child.exitCode === null && child.signalCode === null) {
-      child.kill("SIGKILL");
+      killProcessGroup("SIGKILL");
     }
   }, 5_000).unref();
 }
 
-function abortAll(reason) {
-  if (abortReason) {
-    return;
-  }
-
-  abortReason = reason;
-  console.error(`[ci] ${reason.message}`);
-  console.error("[ci] Stopping sibling checks...");
-
-  for (const child of activeChildren) {
-    terminateChild(child);
-  }
-}
-
-async function runProcess(chainName, step) {
-  if (abortReason) {
-    throw new Error(`[${chainName}:${step.name}] skipped after sibling failure.`);
-  }
-
-  const label = `${chainName}:${step.name}`;
+export async function spawnStep({ lane, step, signal, writeLine, writeError }) {
+  const label = `${lane}:${step.name}`;
   const spawnConfig = createSpawnConfig(step.command, step.args);
-  const startedAt = Date.now();
 
-  console.log(`[${label}] $ ${formatCommand(step.command, step.args)}`);
-
-  return new Promise((resolve, reject) => {
+  await new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(spawnConfig.command, spawnConfig.args, {
       cwd: repoRoot,
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
+      detached: !isWindows,
       windowsHide: true,
       ...spawnConfig.options,
     });
-    const stdout = createLineWriter(label, console.log);
-    const stderr = createLineWriter(label, console.error);
+    const stdout = createLineWriter(label, writeLine);
+    const stderr = createLineWriter(label, writeError);
     let settled = false;
 
-    activeChildren.add(child);
-
     const finish = (error) => {
-      if (settled) {
-        return;
-      }
-
+      if (settled) return;
       settled = true;
+      signal.removeEventListener("abort", handleAbort);
       stdout.flush();
       stderr.flush();
-      activeChildren.delete(child);
-
-      if (error) {
-        reject(error);
-        return;
-      }
-
-      const elapsedSeconds = ((Date.now() - startedAt) / 1_000).toFixed(1);
-      console.log(`[${label}] completed in ${elapsedSeconds}s`);
-      resolve();
+      if (error) rejectPromise(error);
+      else resolvePromise();
     };
+    const handleAbort = () => terminateChild(child);
 
+    signal.addEventListener("abort", handleAbort, { once: true });
+    if (signal.aborted) handleAbort();
     child.stdout.on("data", (chunk) => stdout.push(chunk));
     child.stderr.on("data", (chunk) => stderr.push(chunk));
     child.on("error", (error) => {
       finish(new Error(`[${label}] failed to start: ${error.message}`));
     });
-    child.on("close", (code, signal) => {
+    child.on("close", (code, childSignal) => {
+      if (signal.aborted) {
+        finish(new Error(`[${label}] stopped after sibling failure.`));
+        return;
+      }
       if (code === 0) {
         finish();
         return;
       }
 
-      if (abortReason) {
-        finish(new Error(`[${label}] stopped after sibling failure.`));
-        return;
-      }
-
-      const suffix = signal ? `signal ${signal}` : `exit code ${code ?? 1}`;
+      const suffix = childSignal ? `signal ${childSignal}` : `exit code ${code ?? 1}`;
       finish(new Error(`[${label}] failed with ${suffix}.`));
     });
   });
 }
 
-async function runChain(chain) {
-  const startedAt = Date.now();
+function resolveLaneNames(lane) {
+  if (lane === "all") return ["common", "rust-platform"];
+  if (Object.hasOwn(CI_LANES, lane)) return [lane];
+  throw new Error(`Unknown CI lane: ${lane}. Expected quick, common, rust-platform, or all.`);
+}
 
-  for (const step of chain.steps) {
-    await runProcess(chain.name, step);
+export function parseCiArgs(args) {
+  if (args.length === 0) return { lane: "all" };
+  if (args.length !== 2 || args[0] !== "--lane") {
+    throw new Error("Usage: node scripts/run-ci.mjs [--lane quick|common|rust-platform|all]");
   }
 
-  const elapsedSeconds = ((Date.now() - startedAt) / 1_000).toFixed(1);
-  console.log(`[${chain.name}] chain completed in ${elapsedSeconds}s`);
+  resolveLaneNames(args[1]);
+  return { lane: args[1] };
 }
 
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => {
-    abortAll(new Error(`Received ${signal}.`));
-  });
+function formatSeconds(startedAt, finishedAt) {
+  return ((finishedAt - startedAt) / 1_000).toFixed(1);
 }
 
-console.log("[ci] Running web and Rust chains in parallel.");
+function writeSummary(summaryPath, stepResults, laneResults) {
+  if (!summaryPath) return;
 
-const results = await Promise.allSettled(
-  chains.map((chain) =>
-    runChain(chain).catch((error) => {
-      if (!firstFailure) {
-        firstFailure = error;
-        abortAll(error);
+  const lines = [
+    "## CI lane summary",
+    "",
+    "| Lane | Step | Result | Seconds |",
+    "| --- | --- | --- | ---: |",
+    ...stepResults.map(
+      (result) => `| ${result.lane} | ${result.step} | ${result.result} | ${result.seconds} |`,
+    ),
+    "",
+    "| Lane | Result |",
+    "| --- | --- |",
+    ...laneResults.map((result) => `| ${result.lane} | ${result.result} |`),
+    "",
+  ];
+  appendFileSync(summaryPath, `${lines.join("\n")}\n`);
+}
+
+export async function runCi({
+  lane = "all",
+  executeStep = spawnStep,
+  now = Date.now,
+  summaryPath = process.env.GITHUB_STEP_SUMMARY ?? null,
+  writeLine = console.log,
+  writeError = console.error,
+  signal: externalSignal,
+} = {}) {
+  const laneNames = resolveLaneNames(lane);
+  const controller = new AbortController();
+  const stepResults = [];
+  const laneResults = [];
+  let firstFailure = null;
+  const handleExternalAbort = () => {
+    controller.abort(externalSignal.reason ?? new Error("CI execution aborted."));
+  };
+
+  if (externalSignal) {
+    if (externalSignal.aborted) handleExternalAbort();
+    else externalSignal.addEventListener("abort", handleExternalAbort, { once: true });
+  }
+
+  async function runLane(laneName) {
+    for (const step of CI_LANES[laneName]) {
+      if (controller.signal.aborted) {
+        throw new Error(`[${laneName}:${step.name}] stopped after sibling failure.`);
       }
 
-      throw error;
-    }),
-  ),
-);
+      const startedAt = now();
+      writeLine(`[${laneName}:${step.name}] $ ${formatCommand(step.command, step.args)}`);
+      try {
+        await executeStep({
+          lane: laneName,
+          step,
+          signal: controller.signal,
+          writeLine,
+          writeError,
+        });
+        const seconds = formatSeconds(startedAt, now());
+        stepResults.push({ lane: laneName, step: step.name, result: "success", seconds });
+        writeLine(`[${laneName}:${step.name}] completed in ${seconds}s`);
+      } catch (error) {
+        const seconds = formatSeconds(startedAt, now());
+        stepResults.push({
+          lane: laneName,
+          step: step.name,
+          result: controller.signal.aborted ? "cancelled" : "failure",
+          seconds,
+        });
+        throw error;
+      }
+    }
+  }
 
-const rejected = results.filter((result) => result.status === "rejected");
+  writeLine(`[ci] Running ${laneNames.join(" and ")} lane${laneNames.length === 1 ? "" : "s"}.`);
 
-if (rejected.length > 0) {
-  console.error(`[ci] Failed. First failure: ${firstFailure.message}`);
-  process.exit(1);
+  const results = await Promise.allSettled(laneNames.map(async (laneName) => {
+    try {
+      await runLane(laneName);
+      laneResults.push({ lane: laneName, result: "success" });
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error(String(error));
+      const aborted = controller.signal.aborted;
+      laneResults.push({ lane: laneName, result: aborted ? "cancelled" : "failure" });
+      if (!firstFailure) {
+        firstFailure = normalizedError;
+        writeError(`[ci] ${normalizedError.message}`);
+        writeError("[ci] Stopping sibling checks...");
+        controller.abort(normalizedError);
+      }
+      throw normalizedError;
+    }
+  }));
+
+  if (externalSignal) {
+    externalSignal.removeEventListener("abort", handleExternalAbort);
+  }
+  writeSummary(summaryPath, stepResults, laneResults);
+
+  if (results.some((result) => result.status === "rejected")) {
+    const failure = firstFailure ?? new Error("CI execution failed.");
+    writeError(`[ci] Failed. First failure: ${failure.message}`);
+    throw failure;
+  }
+
+  writeLine("[ci] All checks passed.");
 }
 
-console.log("[ci] All checks passed.");
+function isDirectExecution() {
+  return process.argv[1] !== undefined
+    && pathToFileURL(resolve(process.argv[1])).href === import.meta.url;
+}
+
+if (isDirectExecution()) {
+  let cliOptions = null;
+  try {
+    cliOptions = parseCiArgs(process.argv.slice(2));
+  } catch (error) {
+    console.error(`[ci] ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+  }
+
+  if (cliOptions) {
+    const controller = new AbortController();
+    const signalHandlers = new Map();
+
+    for (const signalName of ["SIGINT", "SIGTERM"]) {
+      const handler = () => controller.abort(new Error(`Received ${signalName}.`));
+      signalHandlers.set(signalName, handler);
+      process.on(signalName, handler);
+    }
+
+    try {
+      await runCi({ ...cliOptions, signal: controller.signal });
+    } catch {
+      process.exitCode = 1;
+    }
+
+    for (const [signalName, handler] of signalHandlers) {
+      process.off(signalName, handler);
+    }
+  }
+}
