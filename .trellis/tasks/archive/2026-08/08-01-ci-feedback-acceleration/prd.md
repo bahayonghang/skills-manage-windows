@@ -30,7 +30,7 @@
 - [x] `just ci` 与 GitHub lanes 的命令来源一致，不产生两套语义不同的质量门。
 - [x] `sync-version --check` 和 `just ci` 在版本漂移时失败且不修改任何 tracked file；脚本测试覆盖全部漂移路径和只读行为。
 - [x] `run-ci` 脚本测试覆盖 lane 选择、未知 lane、default/all、失败传播、兄弟进程终止、计时与 summary 输出。
-- [ ] 本地聚焦测试、workflow contract、`just ci`、`just audit`、`git diff --check` 与 Windows `pnpm tauri build` 通过，并核对默认配置实际生成的 NSIS bundle；manual Windows package job 的 MSI 构建合同与 hosted 结果保持通过。
+- [x] 本地聚焦测试、workflow contract、`just ci`、`just audit`、`git diff --check` 与 Windows `pnpm tauri build` 通过，并核对默认配置实际生成的 NSIS bundle；manual Windows package job 的 MSI 构建合同与 hosted 结果保持通过。
 - [ ] 任务分支 exact-head `workflow_dispatch` 全部 required lanes 通过；promotion PR 记录 wall time、runner time、排队时间和各 lane 用时，用于验证 15 分钟活跃关键路径目标。
 - [ ] 若目标未达到，保留原始数据、critical lane 和后续结论，不删除跨平台、供应链、打包或 fresh-download 覆盖来换取绿色结果。
 - [ ] task PR squash 合入 `dev`，promotion PR 以 merge commit 合入 `main`；两次合并都使用刷新后的 exact head，短期分支已删除，`dev` 与 legacy `gh-pages` 状态未改变，任务已归档且 journal 只记录实际交付提交。
@@ -39,10 +39,17 @@
 
 - 聚焦脚本与 workflow contract：3 files / 20 tests passed；取消进程树用例连续 5 次通过。
 - 显式 lanes：quick 9.2s、common 46.0s、Windows rust-platform 96.4s，均通过。
-- `just ci`：100.7s；Vitest 143 files / 1590 passed / 1 skipped，Rust 主测试 1031 passed / 6 ignored，其他 Rust integration/doc tests 通过。
+- 最终 `just ci`：111.6s；Vitest、Rust 主测试及其他 Rust integration/doc tests 全部通过。
 - `just audit`：通过；2 个 blocking advisories 均由 2 个当前有效的精确例外覆盖。
 - `pnpm docs:gen:check`、`pnpm docs:build`、`pnpm typecheck`、`pnpm lint`、`git diff --check`：通过且未产生 tracked 生成物漂移。
-- Windows `pnpm tauri build`：340.4s；本次生成 `src-tauri/target/release/bundle/nsis/SkillPort_0.10.14_x64-setup.exe`，12,284,876 bytes。hosted MSI 与 exact-head DAG 仍等待任务分支 dispatch 证据。
+- 最终 Windows `pnpm tauri build`：319.9s；本次生成 `src-tauri/target/release/bundle/nsis/SkillPort_0.10.14_x64-setup.exe`，12,284,782 bytes。
+
+## Hosted Evidence (2026-08-01)
+
+- 首轮 exact-head manual run `30685051133` 绑定 `e116c186edc3748a04a87617467259d85d86ee2f`。required DAG、Windows MSI 与 Linux x64 通过；Linux arm64 因 fresh runner 缺少 `xdg-mime` 失败，macOS 因 universal `release-signature-verifier` 缺失失败。该原始失败保留为依赖合同修正证据。
+- 修复后 manual run `30686279380` 绑定 `3a331daf7068a2404b8cecf0d4eec768a0af6b33`。attempt 1 仅 macOS Rust 的 `stderr_overflow_terminates_the_process` 因 `TerminationFailed(OutputLimit, PermissionDenied)` 瞬时失败；failed-job rerun attempt 2 后整体成功。required lanes：common 5m02s、Windows Rust 5m02s、Linux Rust 3m23s、macOS Rust 2m35s、supply-chain 32s、`just-ci` 3s；package jobs：Windows MSI 14m52s、Linux x64 10m37s、Linux arm64 13m50s、macOS universal 25m11s。
+- PR #29 run `30686280627` 绑定同一 exact head，wall time 5m51s，workflow queue 0s、jobs queue 1-5s；common 4m41s、Windows Rust 5m40s、Linux Rust 3m36s、macOS Rust 3m07s、supply-chain 38s、`just-ci` 3s，全部 required checks 成功，PR 合同规定的 package jobs skipped。当前 PR 活跃关键路径为 Windows Rust 5m40s，低于 15 分钟目标。
+- PR #29 在刷新 refs 并再次验证 open、non-draft、`MERGEABLE/CLEAN`、exact head 与 hosted checks 后 squash 合入 `dev`；交付 SHA `4119855d516bd2e91f3a68fa381a7c912d909d9e`，远端短期分支已删除，`dev` 保留且 legacy `gh-pages` 不存在。
 
 ## Out of Scope
 
