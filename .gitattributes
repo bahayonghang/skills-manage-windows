@@ -16,3 +16,4 @@
 # Keep byte-compared artifacts and raw-byte fixtures stable across checkouts.
 src/lib/ipc/generatedCommandMap.ts text eol=lf
 src-tauri/tests/fixtures/db/*.sql text eol=lf
+docs/architecture/_generated/*.md text eol=lf

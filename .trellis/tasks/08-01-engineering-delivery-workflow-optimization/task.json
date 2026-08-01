@@ -1,0 +1,31 @@
+{
+  "id": "engineering-delivery-workflow-optimization",
+  "name": "engineering-delivery-workflow-optimization",
+  "title": "工程交付流程优化",
+  "description": "优化开发、PR、CI、文档部署与桌面发布流程的体验、速度和可验证性",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P0",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-08-01",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-01-docs-deployment-generated-integrity",
+    "08-01-ci-feedback-acceleration",
+    "08-01-developer-pr-experience",
+    "08-01-desktop-release-assurance"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

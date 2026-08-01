@@ -1,0 +1,2 @@
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Keep generated-file checks, docs CI, Action pinning, permissions, and deployment behavior aligned with the quality gate."}
+{"file":".trellis/tasks/08-01-engineering-delivery-workflow-optimization/research/industry-delivery-practices.md","reason":"Use official Pages artifact, permission, source-switch, and post-deploy verification guidance."}

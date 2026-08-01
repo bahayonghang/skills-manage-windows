@@ -1,0 +1,2 @@
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Preserve frozen release context, atomic publication, artifact inventory, updater signatures, least privilege, and Windows bundle requirements."}
+{"file":".trellis/tasks/08-01-engineering-delivery-workflow-optimization/research/industry-delivery-practices.md","reason":"Apply official Azure Artifact Signing OIDC, Tauri signing-order, rehearsal, and GitHub attestation guidance."}

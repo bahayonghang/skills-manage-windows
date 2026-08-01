@@ -3,18 +3,29 @@ name: Docs
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: docs-${{ github.ref }}
-  cancel-in-progress: true
+  group: pages-production
+  cancel-in-progress: false
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
     steps:
+      - name: Require canonical manual workflow source
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Manual documentation deployments must run from refs/heads/main."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -22,6 +33,7 @@ jobs:
         uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
         with:
           version: 10.12.3
+          run_install: false
 
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -36,48 +48,65 @@ jobs:
       - name: Build documentation site
         run: pnpm docs:build
 
-      - name: Upload site artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - name: Configure Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          name: skillport-docs
           path: dist-docs
-          retention-days: 7
-          if-no-files-found: error
 
   deploy:
     needs: build
     if: github.repository == 'bahayonghang/skills-manage-windows'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
     permissions:
-      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Deploy Pages artifact
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
-        with:
-          version: 10.12.3
+  smoke:
+    needs: deploy
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions: {}
+    env:
+      PAGES_URL: ${{ needs.deploy.outputs.page_url }}
+    steps:
+      - name: Verify deployed documentation
+        shell: bash
+        run: |
+          expected_url="https://bahayonghang.github.io/skills-manage-windows/"
+          normalized_url="${PAGES_URL%/}/"
+          if [[ "$normalized_url" != "$expected_url" ]]; then
+            echo "::error::Unexpected Pages URL: $PAGES_URL"
+            exit 1
+          fi
 
-      - name: Setup Node.js
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
+          page_file="$(mktemp)"
+          trap 'rm -f "$page_file"' EXIT
+          for attempt in {1..10}; do
+            status="$(curl --location --silent --show-error --max-time 10 \
+              --output "$page_file" --write-out '%{http_code}' "$normalized_url" || true)"
+            if [[ "$status" == "200" ]] \
+              && grep -Eiq '<title>[^<]*SkillPort[^<]*</title>' "$page_file"; then
+              echo "Verified SkillPort documentation at $normalized_url"
+              exit 0
+            fi
+            echo "Attempt $attempt/10 returned HTTP $status or the wrong page identity."
+            if [[ "$attempt" -lt 10 ]]; then
+              sleep 10
+            fi
+          done
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build documentation site
-        run: pnpm docs:build
-
-      - name: Publish to gh-pages
-        uses: peaceiris/actions-gh-pages@329bcc8f12caed2cefe5a5b80781499a6f3b361b # v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: dist-docs
-          publish_branch: gh-pages
-          user_name: 'github-actions[bot]'
-          user_email: 'github-actions[bot]@users.noreply.github.com'
-          commit_message: 'docs: deploy ${{ github.sha }}'
+          echo "::error::Pages did not return HTTP 200 with the SkillPort identity."
+          exit 1

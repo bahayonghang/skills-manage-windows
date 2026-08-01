@@ -1,0 +1,3 @@
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Verify rehearsal isolation, final-byte updater signing, Authenticode reporting, smoke, attestation, and sole public transition."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Review release workflow and helper contract coverage in the established test structure."}
+{"file":".trellis/tasks/08-01-engineering-delivery-workflow-optimization/research/industry-delivery-practices.md","reason":"Verify Authenticode, updater signature, attestation, permissions, and publication claims against primary sources."}

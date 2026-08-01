@@ -1,0 +1,2 @@
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Preserve stable just-ci context, frozen reusable CI, platform coverage, supply-chain rules, and package guards while changing the DAG."}
+{"file":".trellis/tasks/08-01-engineering-delivery-workflow-optimization/research/industry-delivery-practices.md","reason":"Apply official needs, concurrency, timeout, cache, required-check, permissions, and SHA-pinning guidance."}

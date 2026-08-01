@@ -40,8 +40,8 @@ just audit
 ```
 
 `just ci` runs frontend type checking, linting, source-size contracts, Vitest,
-and the production build in parallel with Rust entrypoint contracts, formatting,
-all-target Clippy, and locked tests. `just audit` checks production pnpm
+the production build, and the read-only documentation build in parallel with
+Rust entrypoint contracts, formatting, all-target Clippy, and locked tests. `just audit` checks production pnpm
 high/critical advisories and Cargo vulnerabilities against the exact,
 time-bounded exceptions in `security/dependency-audit-exceptions.json`.
 
@@ -49,6 +49,18 @@ GitHub first runs the same source checks on Ubuntu and macOS plus the dependency
 audit. The Windows `just-ci` required check then runs the complete local gate and
 fails if either prerequisite job failed. Routine pull requests do not build
 installers; package smoke remains a manual/release workflow concern.
+
+When a change affects Tauri commands or `src-tauri/src/db/schema/`, refresh and
+commit the generated documentation explicitly:
+
+```bash
+pnpm docs:gen
+pnpm docs:gen:check
+pnpm docs:build
+```
+
+The last two commands never update tracked files. A drift failure must be fixed
+with `pnpm docs:gen`, then reviewed and committed with its authoritative source.
 
 - Keep production source files under `src/` and `src-tauri/src/` at or below 800 lines.
 - `pnpm sizecheck` enforces the 800-line limit uniformly; no production file has a per-file allowlist bypass.
