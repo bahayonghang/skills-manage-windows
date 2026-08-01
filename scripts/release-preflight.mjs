@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { readAndValidateSigningState } from "./release-signing-state.mjs";
 
 const PLACEHOLDER_PUBKEY = "TAURI_UPDATER_PUBLIC_KEY_PLACEHOLDER_REPLACE_IN_RELEASE_CONFIG";
 
@@ -12,6 +13,8 @@ export function parseArgs(argv) {
     tag: process.env.RELEASE_TAG || "",
     assetDir: "release-assets",
     config: "release-updater-config.json",
+    signingState: "windows-signing.json",
+    mode: process.env.RELEASE_MODE || "rehearsal",
     repo: process.env.GITHUB_REPOSITORY || "bahayonghang/skills-manage-windows",
   };
 
@@ -33,9 +36,15 @@ export function parseArgs(argv) {
     } else if (arg === "--repo" && next) {
       args.repo = next;
       index += 1;
+    } else if (arg === "--signing-state" && next) {
+      args.signingState = next;
+      index += 1;
+    } else if (arg === "--mode" && next) {
+      args.mode = next;
+      index += 1;
     } else if (arg === "--help" || arg === "-h") {
       console.log(
-        "Usage: node scripts/release-preflight.mjs --version <version> --tag <tag> [--config release-updater-config.json] [--asset-dir release-assets] [--repo owner/repo]",
+        "Usage: node scripts/release-preflight.mjs --version <version> --tag <tag> [--mode rehearsal|publish] [--signing-state windows-signing.json] [--config release-updater-config.json] [--asset-dir release-assets] [--repo owner/repo]",
       );
       process.exit(0);
     }
@@ -46,6 +55,9 @@ export function parseArgs(argv) {
   }
   if (!args.tag) {
     args.tag = `v${args.version}`;
+  }
+  if (!new Set(["rehearsal", "publish"]).has(args.mode)) {
+    throw new Error(`Release mode must be rehearsal or publish, got ${args.mode}.`);
   }
 
   return args;
@@ -95,8 +107,8 @@ export function validateReleasePreflight(args) {
     throw new Error(`Release tag/version mismatch: expected v${args.version}, got ${args.tag}.`);
   }
   const config = readJson(args.config, "Release updater config");
-  if (config?.bundle?.createUpdaterArtifacts !== true) {
-    throw new Error("Release updater config must set bundle.createUpdaterArtifacts=true.");
+  if (config?.bundle?.createUpdaterArtifacts !== false) {
+    throw new Error("Release updater config must disable automatic updater artifacts so the final Authenticode bytes are signed first.");
   }
   ensureNonPlaceholderPubkey(config?.plugins?.updater?.pubkey);
 
@@ -135,11 +147,13 @@ export function validateReleasePreflight(args) {
       throw new Error(`latest.json ${platformKey} signature does not match ${assetName}.sig.`);
     }
   }
+  const signingState = readAndValidateSigningState(args.signingState, { mode: args.mode });
 
   return {
     assetName,
     latestJsonPath,
     publicKey: config.plugins.updater.pubkey,
+    signingState,
   };
 }
 

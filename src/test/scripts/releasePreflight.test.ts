@@ -11,6 +11,8 @@ type ReleasePreflightHelpers = {
     tag: string;
     assetDir: string;
     config: string;
+    signingState: string;
+    mode: string;
     repo: string;
   }) => { assetName: string };
 };
@@ -33,11 +35,24 @@ function fixture() {
   const signature = "wrapped-signature";
   fs.writeFileSync(path.join(root, assetName), "installer");
   fs.writeFileSync(path.join(root, `${assetName}.sig`), signature);
+  const signingState = path.join(root, "windows-signing.json");
+  fs.writeFileSync(
+    signingState,
+    JSON.stringify({
+      authenticode: "not-configured",
+      updaterSignature: "valid",
+      files: {
+        "skillport.exe": { status: "NotSigned" },
+        nsis: { status: "NotSigned" },
+        msi: { status: "NotSigned" },
+      },
+    }),
+  );
   const config = path.join(root, "config.json");
   fs.writeFileSync(
     config,
     JSON.stringify({
-      bundle: { createUpdaterArtifacts: true },
+      bundle: { createUpdaterArtifacts: false },
       plugins: { updater: { pubkey: "real-wrapped-public-key" } },
     }),
   );
@@ -55,7 +70,7 @@ function fixture() {
   return {
     root,
     latestPath: path.join(root, "latest.json"),
-    args: { version: "1.2.3", tag: "v1.2.3", assetDir: root, config, repo: "example/repo" },
+    args: { version: "1.2.3", tag: "v1.2.3", assetDir: root, config, signingState, mode: "rehearsal", repo: "example/repo" },
   };
 }
 

@@ -83,6 +83,7 @@ pnpm tauri build
 ### Windows 发布与更新契约
 
 - 审查 Tauri 配置、发布 workflow、版本/依赖和产物命名变更时，保护 Windows x64 发布面：已签名 NSIS、对应 `.sig`、指向该产物的 `latest.json`，以及 MSI / ZIP 产物必须保持一致。本地 bundle 成功但签名或更新元数据缺失，仍然是发布回归。安全路径：同步更新唯一桌面发布 workflow、`latest.json` 生成器和 release preflight；本地配置继续使用占位公钥并关闭 updater artifacts，只在发布 workflow 中注入真实公钥并启用签名产物。
+- Tauri updater `.sig` 只证明最终 NSIS 与 updater key 匹配，不能替代 Authenticode。Windows 交付顺序固定为 EXE/NSIS/MSI Authenticode、验证 timestamp、对最终 NSIS 生成 updater `.sig`、再生成 metadata/checksum；rehearsal 可显式报告 `not-configured`，publish 必须因 Authenticode 缺失或无效而失败。
 
 ## 验证要求
 

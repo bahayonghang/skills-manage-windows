@@ -212,7 +212,7 @@ describe("CI workflow contract", () => {
       for (const reference of collectUses(document.value)) {
         if (reference.startsWith("./")) continue;
         expect(reference, `${document.name}: ${reference}`).toMatch(
-          /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+@[0-9a-f]{40}$/,
+          /^(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+@[0-9a-f]{40}$/,
         );
       }
     }

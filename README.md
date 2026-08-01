@@ -94,8 +94,8 @@ options, JSON output, exit codes, duplicate safety, and sync workflows.
 
 - Latest release: <https://github.com/bahayonghang/skills-manage-windows/releases/latest>
 - Current desktop release targets: Windows x64 (`.exe`, `.msi`, `.zip`), macOS Universal (`.dmg`, `.zip`, `.tar.gz`), and Linux x86_64 / arm64 (`.deb`, `.rpm`, `.AppImage`)
-- Windows auto-update uses a Tauri-signed NSIS artifact plus `latest.json`; macOS remains unsigned / not notarized, and Linux arm64 availability depends on the GitHub Actions runner matrix
-- Maintainers: push an existing release tag (or manually select it) and let the canonical workflow validate frozen CI, all required bundles, the NSIS signature, `latest.json`, and fresh-download checksums before atomically publishing its draft.
+- Windows auto-update uses a Tauri-signed final NSIS artifact plus `latest.json`; this updater `.sig` is separate from Windows Authenticode. macOS remains unsigned / not notarized, and Linux arm64 availability depends on the GitHub Actions runner matrix.
+- Maintainers: manually rehearse an exact `origin/main` commit SHA before publishing. Rehearsal retains validated artifacts without creating a GitHub Release; only a `v<semver>` tag can enter the protected publish path, which requires Azure Authenticode, updater signature, checksum, provenance attestation, and fresh-download verification.
 
 ### macOS Unsigned Build
 
