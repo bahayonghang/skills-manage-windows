@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 76
+- **Total Sessions**: 78
 - **Last Active**: 2026-08-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~730 | Active |
+| `journal-2.md` | ~772 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,8 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 78 | 2026-08-01 | CI 反馈路径提速交付 | `4119855d516bd2e91f3a68fa381a7c912d909d9e` | `dev` |
+| 77 | 2026-08-01 | 文档生成完整性与 Pages 部署 | `ba23e5925dc3d4b8f18ca2be69df459d7b2bbc24` | `dev` |
 | 76 | 2026-08-01 | GitHub 导入分支选择 | `eaf3035d` | `dev` |
 | 75 | 2026-07-29 | Repair PR #25 cross-platform CI | `0c49dcf6`, `e1a2d6f5` | `dev` |
 | 74 | 2026-07-28 | 优化 Skill Usage 页面体验 | `39f8a674` | `dev` |

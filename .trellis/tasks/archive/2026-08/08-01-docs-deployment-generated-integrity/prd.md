@@ -24,7 +24,7 @@
 - [x] `release.published` 和 canonical `main` 手动迁移/恢复入口共享同一 build/deploy/smoke 路径；其他分支手动触发在部署前失败。
 - [x] `just ci` 通过。
 - [x] Legacy `gh-pages` 分支已从 GitHub、远端 refs 和本地跟踪引用中删除，`dev` / `main` 保持不变。
-- [ ] Pages source 已切换为 GitHub Actions 且设置回读一致；线上项目 Pages URL 返回 HTTP 200 且标题/标识属于 SkillPort。
+- [x] Pages source 已切换为 GitHub Actions 且设置回读一致；线上项目 Pages URL 返回 HTTP 200 且标题/标识属于 SkillPort。
 
 ## Out of Scope
 

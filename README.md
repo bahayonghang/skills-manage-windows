@@ -201,12 +201,14 @@ pnpm install
 
 ```bash
 just ci
+just version-check
 just dev
 just build
 just install
 ```
 
-- `just ci` runs the frontend chain (`typecheck` → `lint` → `sizecheck` → `test` → production `build`) in parallel with the Rust chain (entrypoint contract → `fmt --check` → all-target `clippy` → locked `test`).
+- `just ci` runs the platform-independent `common` lane (read-only version/generated checks, frontend validation/build, documentation, Rust entrypoint/format/IPC contracts) in parallel with the current platform's all-target Clippy and locked Rust tests.
+- `just version-check` verifies that Tauri and Cargo metadata match `package.json` without modifying the working tree. Use `just sync-version` to update them explicitly.
 - `just dev` starts the Tauri development app directly.
 - `just build` builds the desktop app for the current platform and copies the latest bundle artifact to `outputs/` (`.exe` on Windows, `.app` + `.dmg` on macOS, `.AppImage`/`.deb` on Linux).
 - `just install` builds the Windows NSIS installer, copies it to `outputs/`, and runs it in passive mode. On macOS, it prints a reminder and runs `just build` instead.
@@ -225,7 +227,7 @@ The Vite dev server runs on port `24200`.
 just ci
 ```
 
-GitHub runs the same `just-ci` gate for pull requests targeting `main`, pushes to `main` or `dev`, manual dispatches, and published releases. Cross-platform smoke packages run only for manual dispatches and published releases.
+GitHub runs independent `common`, Windows Rust, Linux Rust, macOS Rust, and supply-chain lanes for pull requests targeting `dev` or `main`. The stable `just-ci` check reports success only when every required lane succeeds. Direct manual dispatches also run cross-platform smoke packages; the desktop release workflow calls the same frozen-SHA quality gate and owns formal release packaging.
 
 ## Project Structure
 

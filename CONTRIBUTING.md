@@ -39,16 +39,21 @@ just ci
 just audit
 ```
 
-`just ci` runs frontend type checking, linting, source-size contracts, Vitest,
-the production build, and the read-only documentation build in parallel with
-Rust entrypoint contracts, formatting, all-target Clippy, and locked tests. `just audit` checks production pnpm
+`just ci` runs the platform-independent common lane (read-only version and
+generated-artifact checks, frontend validation/build, documentation, and Rust
+entrypoint/format/IPC contracts) in parallel with the current platform's
+all-target Clippy and locked Rust tests. It fails on version drift without
+changing tracked files; use `just sync-version` only when you intend to update
+version metadata. `just audit` checks production pnpm
 high/critical advisories and Cargo vulnerabilities against the exact,
 time-bounded exceptions in `security/dependency-audit-exceptions.json`.
 
-GitHub first runs the same source checks on Ubuntu and macOS plus the dependency
-audit. The Windows `just-ci` required check then runs the complete local gate and
-fails if either prerequisite job failed. Routine pull requests do not build
-installers; package smoke remains a manual/release workflow concern.
+For pull requests targeting `dev` or `main`, GitHub runs common, Windows Rust,
+Linux Rust, macOS Rust, and supply-chain lanes independently. The stable
+`just-ci` required check is an aggregate only and fails unless every required
+lane succeeds. These hosted lanes use the same command plan as local `just ci`;
+routine pull requests do not build installers, and package smoke remains a
+direct-manual or release-workflow concern.
 
 When a change affects Tauri commands or `src-tauri/src/db/schema/`, refresh and
 commit the generated documentation explicitly:
