@@ -826,3 +826,38 @@ Fixed the macOS stdin fixture and LF checkout contracts for generated IPC and fr
 ### Next Steps
 
 - 等待 desktop-signing/desktop-release、Azure OIDC variables/secrets 与非公开 rehearsal 的独立授权；完成后再做父任务集成验收和归档。
+
+
+## Session 81: 工程交付流程优化父任务集成收尾
+
+**Date**: 2026-08-01
+**Task**: 工程交付流程优化父任务集成收尾
+**Branch**: `dev`
+
+### Summary
+
+四个子任务均已归档；PR #40 将最终跨子任务验收证据 squash 合入 dev，最终 promotion SHA d68387b 在非公开 rehearsal run 30700955460 通过。父任务已归档，保留 dev、gh-pages 缺失和未授权发布边界。
+
+### Main Changes
+
+- 汇总 PR #38/#39/#40、exact-head hosted CI 与 rehearsal 30700955460 的真实证据。
+- 归档 08-01-engineering-delivery-workflow-optimization；未修改远端设置、tag、Release、Azure 或 secrets。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d68387bffdd2f9e0b9f05d978ed925976913ef42` | (see git log) |
+| `d03548d3dbed17a69cef88b5f7ff08e760e6f6ad` | (see git log) |
+
+### Testing
+
+- [OK] just ci、just audit、文档/版本检查、18 个 workflow contract tests、git diff --check 和 Windows pnpm tauri build 全部通过。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Azure Artifact Signing、desktop-release environment、updater staging、公开 Release 和 tag movement 仍需独立授权。
