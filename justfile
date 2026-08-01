@@ -9,14 +9,18 @@ set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
 sync-version:
     node scripts/sync-version.mjs
 
+# 只读检查版本元数据，不修改工作树
+version-check:
+    pnpm version:check
+
 # ========================================================================
 # 步骤2：检查工作流
 # ========================================================================
 # 目标：
-# 1) 先同步版本元数据
-# 2) 并行运行 Web 链（typecheck -> lint -> sizecheck -> test -> build -> docs:build）
-# 3) 并行运行 Rust 链（entrypoints -> fmt -> clippy -> test）
-ci: sync-version
+# 1) common 与当前平台 Rust lane 并行运行
+# 2) 版本与生成物检查保持只读，漂移时失败而不修改工作树
+# 3) common 负责前端、文档、格式与静态合同；Rust lane 负责 Clippy 与测试
+ci:
     node scripts/run-ci.mjs
 
 # ========================================================================

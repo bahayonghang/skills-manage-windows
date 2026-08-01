@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [dev, main]
   workflow_dispatch:
   workflow_call:
     inputs:
@@ -12,8 +12,8 @@ on:
         type: string
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -22,11 +22,10 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  ci:
-    name: just-ci
-    needs: [source-validation, supply-chain]
-    if: ${{ always() }}
-    runs-on: windows-2022
+  common:
+    name: common
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -49,66 +48,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
-          components: clippy,rustfmt
-          targets: x86_64-pc-windows-msvc
-
-      - name: Cache Rust artifacts
-        uses: swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
-        with:
-          workspaces: |
-            src-tauri -> target
-
-      - name: Install dependencies
-        shell: pwsh
-        run: pnpm install --frozen-lockfile
-
-      - name: Sync version metadata
-        shell: pwsh
-        run: node scripts/sync-version.mjs
-
-      - name: Run repository CI checks
-        shell: pwsh
-        run: node scripts/run-ci.mjs
-
-      - name: Require source and supply-chain checks
-        if: ${{ always() }}
-        shell: pwsh
-        run: |
-          if ("${{ needs.source-validation.result }}" -ne "success" -or
-              "${{ needs.supply-chain.result }}" -ne "success") {
-            throw "Source validation and supply-chain checks must both pass."
-          }
-
-  source-validation:
-    name: source-validation (${{ matrix.runner }})
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [ubuntu-22.04, macos-14]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ inputs.checkout_ref || github.sha }}
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
-        with:
-          version: 10.12.3
-          run_install: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-        with:
-          components: clippy,rustfmt
+          components: rustfmt
 
       - name: Cache Rust artifacts
         uses: swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
@@ -117,7 +57,6 @@ jobs:
             src-tauri -> target
 
       - name: Install Linux system deps
-        if: ${{ runner.os == 'Linux' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -136,15 +75,118 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Sync version metadata
-        run: node scripts/sync-version.mjs
+      - name: Run common checks
+        run: node scripts/run-ci.mjs --lane common
 
-      - name: Run repository source checks
-        run: node scripts/run-ci.mjs
+  windows-rust:
+    name: rust (windows-2022)
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          components: clippy
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust artifacts
+        uses: swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          workspaces: |
+            src-tauri -> target
+
+      - name: Run platform Rust checks
+        shell: pwsh
+        run: node scripts/run-ci.mjs --lane rust-platform
+
+  linux-rust:
+    name: rust (ubuntu-22.04)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          components: clippy
+
+      - name: Cache Rust artifacts
+        uses: swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          workspaces: |
+            src-tauri -> target
+
+      - name: Install Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libssl-dev \
+            libgtk-3-dev \
+            libxdo-dev \
+            librsvg2-dev \
+            libayatana-appindicator3-dev \
+            pkg-config
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev \
+            || sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.0-dev
+          sudo apt-get install -y --no-install-recommends libsoup-3.0-dev \
+            || sudo apt-get install -y --no-install-recommends libsoup2.4-dev
+
+      - name: Run platform Rust checks
+        run: node scripts/run-ci.mjs --lane rust-platform
+
+  macos-rust:
+    name: rust (macos-14)
+    runs-on: macos-14
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          components: clippy
+
+      - name: Cache Rust artifacts
+        uses: swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          workspaces: |
+            src-tauri -> target
+
+      - name: Run platform Rust checks
+        run: node scripts/run-ci.mjs --lane rust-platform
 
   supply-chain:
     name: supply-chain
     runs-on: ubuntu-22.04
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -180,15 +222,77 @@ jobs:
         run: cargo install cargo-audit --version 0.22.2 --locked
 
       - name: Audit production dependencies
-        run: pnpm audit:dependencies
+        run: |
+          started=$SECONDS
+          set +e
+          pnpm audit:dependencies
+          status=$?
+          set -e
+          elapsed=$((SECONDS - started))
+          {
+            echo "## Supply-chain summary"
+            echo ""
+            echo "| Step | Result | Seconds |"
+            echo "| --- | --- | ---: |"
+            if [ "$status" -eq 0 ]; then result=success; else result=failure; fi
+            echo "| dependency audit | $result | $elapsed |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+  ci:
+    name: just-ci
+    needs: [common, windows-rust, linux-rust, macos-rust, supply-chain]
+    if: ${{ always() }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every required CI lane
+        shell: bash
+        run: |
+          common="${{ needs.common.result }}"
+          windows="${{ needs['windows-rust'].result }}"
+          linux="${{ needs['linux-rust'].result }}"
+          macos="${{ needs['macos-rust'].result }}"
+          supply_chain="${{ needs['supply-chain'].result }}"
+          {
+            echo "## Required CI lanes"
+            echo ""
+            echo "| Lane | Result |"
+            echo "| --- | --- |"
+            echo "| common | $common |"
+            echo "| windows-rust | $windows |"
+            echo "| linux-rust | $linux |"
+            echo "| macos-rust | $macos |"
+            echo "| supply-chain | $supply_chain |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          failed=""
+          for entry in \
+            "common:$common" \
+            "windows-rust:$windows" \
+            "linux-rust:$linux" \
+            "macos-rust:$macos" \
+            "supply-chain:$supply_chain"; do
+            result="${entry#*:}"
+            if [ "$result" != "success" ]; then
+              failed="$failed ${entry%%:*}=$result"
+            fi
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::Required lanes did not succeed:$failed"
+            exit 1
+          fi
 
   windows-package:
     name: Windows x64 smoke package
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: windows-2022
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
@@ -218,9 +322,9 @@ jobs:
         shell: pwsh
         run: pnpm install --frozen-lockfile
 
-      - name: Sync version metadata
+      - name: Check version metadata
         shell: pwsh
-        run: node scripts/sync-version.mjs
+        run: node scripts/sync-version.mjs --check
 
       - name: Build Windows MSI smoke package
         shell: pwsh
@@ -230,6 +334,7 @@ jobs:
     name: Linux ${{ matrix.asset-arch }} smoke packages
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 75
     continue-on-error: ${{ matrix.continue_on_error }}
     strategy:
       fail-fast: false
@@ -244,6 +349,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
@@ -282,7 +389,8 @@ jobs:
             libayatana-appindicator3-dev \
             pkg-config \
             rpm \
-            wget
+            wget \
+            xdg-utils
           sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev \
             || sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.0-dev
           sudo apt-get install -y --no-install-recommends libsoup-3.0-dev \
@@ -291,9 +399,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Sync version metadata
-        shell: pwsh
-        run: node scripts/sync-version.mjs
+      - name: Check version metadata
+        run: node scripts/sync-version.mjs --check
 
       - name: Build Linux smoke packages
         run: pnpm tauri build --bundles deb,rpm,appimage --no-sign --ci
@@ -302,9 +409,12 @@ jobs:
     name: macOS universal smoke packages
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: macos-14
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
@@ -333,19 +443,22 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Sync version metadata
-        shell: pwsh
-        run: node scripts/sync-version.mjs
+      - name: Check version metadata
+        run: node scripts/sync-version.mjs --check
 
-      - name: Build universal CLI
+      - name: Build universal sidecars
         run: |
-          cargo build --manifest-path src-tauri/Cargo.toml --release --bin skillport-cli --locked --target aarch64-apple-darwin
-          cargo build --manifest-path src-tauri/Cargo.toml --release --bin skillport-cli --locked --target x86_64-apple-darwin
+          cargo build --manifest-path src-tauri/Cargo.toml --release --bin skillport-cli --bin release-signature-verifier --locked --target aarch64-apple-darwin
+          cargo build --manifest-path src-tauri/Cargo.toml --release --bin skillport-cli --bin release-signature-verifier --locked --target x86_64-apple-darwin
           mkdir -p src-tauri/target/universal-apple-darwin/release
           lipo -create \
             src-tauri/target/aarch64-apple-darwin/release/skillport-cli \
             src-tauri/target/x86_64-apple-darwin/release/skillport-cli \
             -output src-tauri/target/universal-apple-darwin/release/skillport-cli
+          lipo -create \
+            src-tauri/target/aarch64-apple-darwin/release/release-signature-verifier \
+            src-tauri/target/x86_64-apple-darwin/release/release-signature-verifier \
+            -output src-tauri/target/universal-apple-darwin/release/release-signature-verifier
 
       - name: Build macOS universal app+dmg smoke packages
         run: pnpm tauri build --target universal-apple-darwin --bundles app,dmg --no-sign --ci
