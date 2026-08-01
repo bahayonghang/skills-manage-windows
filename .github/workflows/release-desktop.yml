@@ -319,8 +319,9 @@ jobs:
           RELEASE_VERSION: ${{ needs.release-context.outputs.version }}
         run: |
           $ErrorActionPreference = "Stop"
-          $installer = Get-ChildItem -LiteralPath smoke-assets -Filter "*windows_x64_nsis.exe" | Select-Object -Single
-          if ($null -eq $installer) { throw "Final NSIS asset was not downloaded." }
+          $installers = @(Get-ChildItem -LiteralPath smoke-assets -Filter "*windows_x64_nsis.exe")
+          if ($installers.Count -ne 1) { throw "Expected exactly one final NSIS asset, found $($installers.Count)." }
+          $installer = $installers[0]
           $installRoot = Join-Path $env:RUNNER_TEMP "skillport-install-smoke-$env:RELEASE_VERSION"
           Start-Process -FilePath $installer.FullName -ArgumentList @("/S", "/D=$installRoot") -Wait
           $executable = Get-ChildItem -LiteralPath $installRoot -Recurse -Filter skillport.exe | Select-Object -First 1

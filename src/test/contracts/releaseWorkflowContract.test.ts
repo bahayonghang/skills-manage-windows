@@ -126,5 +126,7 @@ describe("release workflow contract", () => {
     expect(workflow.jobs.publish.steps?.some((step) => step.run?.includes("gh attestation verify"))).toBe(true);
     expect(source).toContain("authenticode=not-configured");
     expect(source).toContain("pnpm tauri signer sign");
+    expect(source).not.toContain("Select-Object -Single");
+    expect(source).toContain('Expected exactly one final NSIS asset');
   });
 });
