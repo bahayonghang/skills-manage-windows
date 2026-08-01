@@ -30,10 +30,10 @@ task branch --squash PR--> dev --merge-commit promotion PR--> protected main
 
 - `dev` 是长期日常开发分支，不删除。
 - 短生命周期任务分支 PR 到 `dev`，使用 squash merge，合并后自动删除。
-- `dev -> main` promotion PR 使用 merge commit，保持 `dev` 提交是 `main` 的祖先。
-- 仓库允许 squash merge 与 merge commit，关闭 rebase merge；`dev` 在启用自动删分支前通过 PR/check/linear-history/force/delete ruleset 受到保护。
+- `dev -> main` promotion PR 使用 merge commit；合并后先验证 parents，再无 force fast-forward `dev` 到新的 `main` merge SHA，保持下一轮 strict/CLEAN promotion 可执行。
+- 仓库允许 squash merge 与 merge commit，关闭 rebase merge；`dev` 在启用自动删分支前由不可 bypass 的 safety ruleset 禁止 force/delete，并由带最小维护者 bypass 的 flow ruleset 约束常规 PR/check/linear history。bypass 只供 Trellis bookkeeping 和 exact fast-forward。
 - GitHub 不能把 `main` 自动限制为 merge-commit-only；promotion 使用 `gh pr merge --merge --match-head-commit` 并在执行前验证 base/head/SHA。
-- promotion 后不做例行 `main -> dev` 反向 merge；只有 `main` 存在独立 hotfix 或 merge 冲突修复时才显式同步。
+- promotion 后不制造反向 merge commit；受控 fast-forward `dev` 到 promotion merge SHA 后才能写最终证据或开始新 task。只有 `main` 存在独立 hotfix 时才进入额外同步审查。
 
 ## 4. External Change Gates
 

@@ -19,7 +19,10 @@
 
 ```powershell
 pnpm install
+just doctor
+just check
 just ci
+just audit
 just version-check
 just dev
 just build
@@ -39,6 +42,9 @@ pnpm tauri build
 
 ## justfile 约定
 
+- 工具链固定为 Node 22 LTS（`.node-version`/`package.json`）、pnpm 10.12.3（`package.json`）和 Rust 1.97.0（`rust-toolchain.toml`）。
+- `just doctor` 是跨平台只读诊断，会报告缺失或漂移，不安装依赖、不切换 Rust、不修改 PATH，也不输出 token 或 secret。
+- `just check` 只运行 `run-ci` 的 quick lane，适合开发中反馈；不能替代提交前完整的 `just ci` 和 `just audit`。
 - `just ci`：并行跑平台无关的 common lane（只读版本/生成物检查、前端验证与构建、文档、Rust entrypoint/格式/IPC 合同）和当前平台的全 targets Clippy、锁文件 Rust 测试；漂移时失败但不修改 tracked 文件。
 - `just version-check`：只读检查 `package.json`、Tauri 与 Cargo 版本元数据；显式更新仍使用 `just sync-version`。
 - `just dev`：直接启动 Tauri 开发模式。
@@ -46,6 +52,14 @@ pnpm tauri build
 - `just install`：跑 `just build`，然后以 passive 模式运行根目录 `outputs/` 里的最新 NSIS 安装包。
 - 改 CI 或发布流程时，优先保持 `just ci` 和 GitHub Actions 的检查项一致，避免本地和远端两套标准。
 - GitHub Actions 对指向 `dev` 或 `main` 的 PR 并行运行 common、Windows/Linux/macOS Rust 和供应链 lane；`just-ci` 只做 fail-closed 汇总。CI 跨平台 smoke package 只在直接手动触发时运行，正式发布打包由桌面发布 workflow 独立负责。
+- CI 只由目标为 `dev` 或 `main` 的 PR 触发，普通 push 不触发 CI；`just-ci` 仍是唯一稳定的 required check。
+
+## 分支与 PR 合并模型
+
+- `dev` 是长期保留的日常开发分支，不删除或退役。
+- 短生命周期 task 分支以 `dev` 为目标并使用 squash merge，合并后自动删除 task 分支。
+- `dev -> main` promotion PR 使用 merge commit 保留祖先关系；合并后先刷新并确认精确 promotion merge SHA，再把 `dev` fast-forward 到该 SHA，之后才能写 Trellis bookkeeping 或开始下一个 task。
+- `main` 的 required `just-ci`、PR、resolved conversations、管理员约束和禁止 force/delete 保持不变；远端 ruleset/merge settings 变更必须先展示目标和回读实际值。
 
 ## 修改约束
 

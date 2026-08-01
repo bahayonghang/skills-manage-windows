@@ -13,6 +13,14 @@ sync-version:
 version-check:
     pnpm version:check
 
+# 只读诊断本机工具链；不会安装、切换或修改任何环境变量
+doctor:
+    node scripts/doctor.mjs
+
+# 快速反馈入口；提交前仍必须运行 just ci 与 just audit
+check:
+    node scripts/run-ci.mjs --lane quick
+
 # ========================================================================
 # 步骤2：检查工作流
 # ========================================================================

@@ -25,16 +25,18 @@
 
 - task branch -> `dev`: squash merge；合并后自动删除 task branch。
 - `dev -> main`: merge commit；关闭 rebase merge，保留祖先关系。
-- `dev` 不删除，并在启用 repository-wide `delete_branch_on_merge` 前建立保护。
+- `dev` 不删除，并在启用 repository-wide `delete_branch_on_merge` 前建立两个独立 ruleset。
 - `main` 继续要求 PR、`just-ci`、对话解决、管理员受约束、禁止 force/delete。
-- `dev` 至少禁止 force/delete，并按 task PR 模型要求 PR 与 `just-ci`；不增加审批人数。
+- `dev-safety` 不配置 bypass actor，只禁止 deletion 与 non-fast-forward；`dev-flow` 要求 PR、app `15368` 绑定的 `just-ci`、strict update 与 linear history，不增加审批人数。
 
-仓库级同时启用 squash 与 merge commit 并关闭 rebase。`dev` ruleset 要求 PR、`just-ci`、禁止 force/delete 和 linear history；由于 rebase 已关闭，task PR 实际只可 squash。`main` 保留现有 required check/app binding、PR、对话解决和禁止 force/delete，但不能启用 linear history，否则 promotion merge commit 会被禁止。GitHub 不能把 `main` 自动限制为 merge-commit-only，因此 promotion 必须使用受控 `gh pr merge --merge --match-head-commit` 并在执行前检查 base/head。远端更新顺序为：读取快照 -> 建立/验证 `dev` ruleset -> 更新 repository merge settings/auto-delete -> 回读全部设置。任一步不一致即停止。
+仓库级同时启用 squash 与 merge commit 并关闭 rebase。`dev-flow` 的 linear history 使常规 task PR 实际只可 squash；该 ruleset 为当前已认证维护者配置 `always` bypass，只允许 runbook 驱动的 archive/journal/final-evidence bookkeeping 和 promotion 后 exact fast-forward。bypass 不出现在 `dev-safety`，因此同一维护者仍不能 force push 或删除 `dev`。`main` 保留现有 required check/app binding、PR、对话解决和禁止 force/delete，但不能启用 linear history，否则 promotion merge commit 会被禁止。GitHub 不能把 `main` 自动限制为 merge-commit-only，因此 promotion 必须使用受控 `gh pr merge --merge --match-head-commit` 并在执行前检查 base/head。
+
+远端更新顺序为：读取 repo/protection/ruleset/actor 快照 -> 建立并验证不可 bypass 的 `dev-safety` -> 建立并验证带最小维护者 bypass 的 `dev-flow` -> 更新 repository merge settings/auto-delete -> 回读全部设置。执行前必须展示实际 actor 类型/ID、两个 ruleset payload、repository PATCH、精确回滚 API 和副作用；任一步不一致即停止。
 
 ## 4. Sync Semantics
 
-常规 promotion merge 后，旧 `dev` tip 已是 `main` 的祖先，不要求制造 `main -> dev` merge commit。只有 `main` 有独立 hotfix、promotion 冲突解决改变内容或下一批工作确需新基线时，才通过显式同步 PR/受控 fast-forward 更新 `dev`。
+常规 promotion merge 后，旧 `dev` tip 是新 `main` merge commit 的父提交。为同时满足 `main` strict required checks、下一次 PR 的 `CLEAN` 门禁和 `dev` linear history，必须先刷新并证明 promotion head 是 `main` 的祖先，再通过维护者 bypass 将 `dev` fast-forward 到该 merge SHA；禁止 force。完成 fast-forward 后才能写最终证据或开始下一 task。若 `main` 存在独立 hotfix，则在新 task 前走单独同步审查，不把 hotfix 静默混入 task squash。
 
 ## 5. Documentation And Rollback
 
-README、README_CN、CONTRIBUTING、AGENTS 和质量 spec 使用同一分支/命令/CI 触发器描述。远端设置变更前保留完整 JSON；回滚按相反顺序恢复 merge settings 和保护规则，绝不通过删除 `dev` 回滚。
+README、README_CN、CONTRIBUTING、AGENTS 和质量 spec 使用同一分支/命令/CI 触发器描述。远端设置变更前保留完整 JSON 和新 ruleset ID；回滚先恢复 repository merge settings，再删除/禁用 `dev-flow`，最后删除/禁用 `dev-safety`，并回读 `main` 未变化。绝不通过 force push 或删除 `dev` 回滚。
