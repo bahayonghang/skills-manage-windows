@@ -186,10 +186,12 @@ Custom platforms can be added through Settings.
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (LTS)
-- [pnpm](https://pnpm.io/)
-- [Rust toolchain](https://rustup.rs/) (stable)
+- [Node.js](https://nodejs.org/) 22 LTS (see `.node-version`)
+- [pnpm](https://pnpm.io/) 10.12.3
+- [Rust toolchain](https://rustup.rs/) 1.97.0 (see `rust-toolchain.toml`)
 - Tauri v2 system dependencies: <https://v2.tauri.app/start/prerequisites/>
+
+The repository toolchain is Node 22, pnpm 10.12.3, and Rust 1.97.0.
 
 ### Install Dependencies
 
@@ -200,13 +202,18 @@ pnpm install
 ### Common Just Commands
 
 ```bash
+just doctor
+just check
 just ci
+just audit
 just version-check
 just dev
 just build
 just install
 ```
 
+- `just doctor` is a read-only toolchain and Tauri prerequisite diagnostic. It reports missing or mismatched tools without installing packages, changing PATH, or switching toolchains.
+- `just check` runs the quick static/generated-artifact lane while you iterate. It is not a replacement for the complete `just ci` and `just audit` gates before opening or merging a pull request.
 - `just ci` runs the platform-independent `common` lane (read-only version/generated checks, frontend validation/build, documentation, Rust entrypoint/format/IPC contracts) in parallel with the current platform's all-target Clippy and locked Rust tests.
 - `just version-check` verifies that Tauri and Cargo metadata match `package.json` without modifying the working tree. Use `just sync-version` to update them explicitly.
 - `just dev` starts the Tauri development app directly.
@@ -228,6 +235,10 @@ just ci
 ```
 
 GitHub runs independent `common`, Windows Rust, Linux Rust, macOS Rust, and supply-chain lanes for pull requests targeting `dev` or `main`. The stable `just-ci` check reports success only when every required lane succeeds. Direct manual dispatches also run cross-platform smoke packages; the desktop release workflow calls the same frozen-SHA quality gate and owns formal release packaging.
+
+### Branch and pull request flow
+
+`dev` is the long-lived day-to-day development branch and is never retired. Short-lived task branches target `dev` and are squash-merged, then deleted automatically after merge. A `dev` -> `main` promotion pull request uses a merge commit to preserve ancestry. Immediately after a promotion, refresh the exact promotion merge SHA and fast-forward `dev` to it before adding Trellis evidence or starting another task. CI runs for pull requests to `dev` or `main`; it does not run from ordinary pushes.
 
 ## Project Structure
 

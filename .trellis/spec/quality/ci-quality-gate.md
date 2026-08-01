@@ -23,6 +23,17 @@ just audit
   -> node scripts/check-dependency-audit.mjs
   -> pnpm audit --prod --json + cargo audit --json
 
+Toolchain:
+  .node-version / package.json engines -> Node 22 LTS
+  package.json packageManager         -> pnpm 10.12.3
+  rust-toolchain.toml                 -> Rust 1.97.0 + rustfmt + clippy
+
+just doctor
+  -> node scripts/doctor.mjs (read-only environment diagnostics)
+
+just check
+  -> node scripts/run-ci.mjs --lane quick (development feedback only)
+
 GitHub Actions required job/check:
   workflow: .github/workflows/ci.yml
   job id: ci
@@ -75,6 +86,18 @@ their descendants do not continue after the aggregate command has failed.
 
 `pnpm sizecheck` enforces the 800-line limit uniformly across production source
 files. There are no frozen baseline exceptions or per-file allowlist bypasses.
+
+The local developer entrypoints are intentionally layered:
+
+```text
+just doctor -> inspect Node/pnpm/Rust/just/Git and Windows Tauri prerequisites
+just check  -> quick static/generated-artifact lane while iterating
+just ci     -> complete frontend and Rust quality gate before a PR
+just audit  -> production dependency vulnerability gate before a PR
+```
+
+`just doctor` never installs packages, switches a toolchain, modifies PATH, or
+prints credentials. `just check` is not a substitute for `just ci` or `just audit`.
 
 ## 3. Contracts
 
@@ -160,6 +183,23 @@ binary build does not prove that required sidecars or package utilities exist.
 - Conversations must be resolved; force pushes and deletion are disabled.
 - Signed commits, linear history, branch locking, code-owner reviews, and merge queues are not enabled without a separate migration.
 
+The long-lived branch and promotion contract is separate from the existing
+`main` required-check contract:
+
+- `dev` remains the day-to-day development branch and is never deleted or retired.
+- Short-lived task branches target `dev`, use squash merge, and are automatically deleted after merge.
+- `dev -> main` promotion pull requests use a merge commit to preserve ancestry.
+- After each promotion, refresh and verify the exact promotion merge SHA, then
+  fast-forward `dev` to that SHA before writing Trellis bookkeeping or starting
+  another task. The fast-forward must not use force push.
+- Repository CI runs for pull requests targeting `dev` or `main`; ordinary push
+  events do not trigger the CI workflow. Manual dispatch remains the package-smoke
+  entrypoint.
+- The `dev` safety ruleset forbids force pushes and deletion without bypass. A
+  separate `dev` flow ruleset requires the PR, app-bound `just-ci`, strict update,
+  and linear history; its narrowly scoped maintenance bypass does not weaken the
+  safety ruleset. Remote settings are read before and after any authorized change.
+
 For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` are alternative schemas. Use `checks` alone when binding `app_id`; sending both returns HTTP 422.
 
 ## 4. Validation & Error Matrix
@@ -167,6 +207,11 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
 | Condition | Required result |
 | --- | --- |
 | `dev` or `main` PR trigger removed | `ciWorkflowContract.test.ts` fails |
+| Node/pnpm/Rust declarations drift between package, toolchain, and Actions | `developerExperienceContract.test.ts` fails |
+| `just doctor` changes files or exposes a secret | `doctor.test.ts` fails; diagnostics remain read-only and redacted |
+| `just check` omits the quick lane or replaces `just ci` | `developerExperienceContract.test.ts` fails; full gate remains required |
+| Task PR targets `main`, or promotion uses squash | PR template/branch contract review fails |
+| Promotion leaves `dev` behind the `main` merge commit | Promotion closeout is incomplete; fast-forward `dev` before evidence |
 | `just-ci` renamed or guarded | Contract test fails; do not update branch protection casually |
 | Any required lane fails, cancels, or skips | Aggregate still reports `just-ci` and exits non-zero |
 | External Action uses a tag, branch, or short SHA | CI workflow contract fails |
@@ -230,6 +275,10 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
 - `pnpm vitest run src/test/scripts/syncVersion.test.ts src/test/scripts/runCi.test.ts`
   - Assert all version drift is reported without writes; explicit sync remains available; lane selection,
     unknown lanes, default/all, failure propagation, real spawned-command-tree cancellation, timing, and summary stay stable.
+- `pnpm vitest run src/test/scripts/doctor.test.ts src/test/contracts/developerExperienceContract.test.ts`
+  - Assert missing and mismatched tools, exact pnpm/Rust versions versus Node major,
+    Windows prerequisite checks, secret redaction, read-only behavior, quick/full
+    gate commands, PR template fields, and synchronized branch/toolchain documentation.
 - `pnpm exec vitest run src/test/contracts/dependencyAuditContract.test.ts`
   - Assert unknown high/RUSTSEC findings block; exact current exceptions pass;
     malformed, duplicate, expired, cross-ecosystem, and unused exceptions fail.
