@@ -392,8 +392,10 @@ jobs:
           set -euo pipefail
           BUNDLE_ROOT="src-tauri/target/universal-apple-darwin/release/bundle"
           mkdir -p release-assets
-          mapfile -d '' APPS < <(find "$BUNDLE_ROOT/macos" -maxdepth 1 -type d -name "*.app" -print0)
-          mapfile -d '' DMGS < <(find "$BUNDLE_ROOT/dmg" -maxdepth 1 -type f -name "*.dmg" -print0)
+          shopt -s nullglob
+          APPS=("$BUNDLE_ROOT/macos"/*.app)
+          DMGS=("$BUNDLE_ROOT/dmg"/*.dmg)
+          shopt -u nullglob
           [ "${#APPS[@]}" -eq 1 ] || { echo "Expected exactly one macOS app bundle" >&2; exit 1; }
           [ "${#DMGS[@]}" -eq 1 ] || { echo "Expected exactly one macOS DMG bundle" >&2; exit 1; }
           ditto -c -k --keepParent "${APPS[0]}" "release-assets/skillport_${RELEASE_VERSION}_macos_universal.zip"
