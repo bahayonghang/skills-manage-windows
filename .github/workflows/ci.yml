@@ -389,7 +389,8 @@ jobs:
             libayatana-appindicator3-dev \
             pkg-config \
             rpm \
-            wget
+            wget \
+            xdg-utils
           sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev \
             || sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.0-dev
           sudo apt-get install -y --no-install-recommends libsoup-3.0-dev \
@@ -445,15 +446,19 @@ jobs:
       - name: Check version metadata
         run: node scripts/sync-version.mjs --check
 
-      - name: Build universal CLI
+      - name: Build universal sidecars
         run: |
-          cargo build --manifest-path src-tauri/Cargo.toml --release --bin skillport-cli --locked --target aarch64-apple-darwin
-          cargo build --manifest-path src-tauri/Cargo.toml --release --bin skillport-cli --locked --target x86_64-apple-darwin
+          cargo build --manifest-path src-tauri/Cargo.toml --release --bin skillport-cli --bin release-signature-verifier --locked --target aarch64-apple-darwin
+          cargo build --manifest-path src-tauri/Cargo.toml --release --bin skillport-cli --bin release-signature-verifier --locked --target x86_64-apple-darwin
           mkdir -p src-tauri/target/universal-apple-darwin/release
           lipo -create \
             src-tauri/target/aarch64-apple-darwin/release/skillport-cli \
             src-tauri/target/x86_64-apple-darwin/release/skillport-cli \
             -output src-tauri/target/universal-apple-darwin/release/skillport-cli
+          lipo -create \
+            src-tauri/target/aarch64-apple-darwin/release/release-signature-verifier \
+            src-tauri/target/x86_64-apple-darwin/release/release-signature-verifier \
+            -output src-tauri/target/universal-apple-darwin/release/release-signature-verifier
 
       - name: Build macOS universal app+dmg smoke packages
         run: pnpm tauri build --target universal-apple-darwin --bundles app,dmg --no-sign --ci

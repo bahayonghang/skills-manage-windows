@@ -190,6 +190,21 @@ describe("CI workflow contract", () => {
     expect(windowsBuild?.run).toContain("--target x86_64-pc-windows-msvc");
     expect(windowsBuild?.run).toContain("--bundles msi");
     expect(windowsBuild?.run).toContain("--no-sign");
+
+    const linuxDeps = findStep(
+      workflow.jobs["linux-package"],
+      (step) => step.name === "Install Linux system deps",
+    );
+    expect(linuxDeps?.run).toContain("xdg-utils");
+
+    const macSidecars = findStep(
+      workflow.jobs["macos-package"],
+      (step) => step.name === "Build universal sidecars",
+    );
+    expect(macSidecars?.run?.match(/--bin release-signature-verifier/g)).toHaveLength(2);
+    expect(macSidecars?.run).toContain(
+      "-output src-tauri/target/universal-apple-darwin/release/release-signature-verifier",
+    );
   });
 
   it("pins every external action to a full commit SHA", () => {

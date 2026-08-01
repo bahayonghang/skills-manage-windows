@@ -127,6 +127,12 @@ Package job guards must remain:
 if: ${{ github.event_name == 'workflow_dispatch' }}
 ```
 
+Manual package jobs must work on fresh hosted runners. Linux installs
+`xdg-utils` explicitly because AppImage bundling requires `/usr/bin/xdg-mime`;
+the macOS universal job builds and `lipo`-merges both `skillport-cli` and
+`release-signature-verifier` before Tauri bundles the app. A successful main
+binary build does not prove that required sidecars or package utilities exist.
+
 ### Supply-chain contract
 
 - Every external Action in `.github/workflows/*.yml` is referenced by a full
