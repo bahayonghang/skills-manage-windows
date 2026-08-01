@@ -18,13 +18,13 @@
 
 ## Acceptance Criteria
 
-- [ ] release workflow contract 覆盖 rehearsal 不公开、正式模式原子发布和失败 draft 保留行为。
+- [x] release workflow contract 覆盖 rehearsal 不公开、正式模式原子发布和失败 draft 保留行为。
 - [ ] rehearsal 对冻结 SHA 运行 CI、required builds、artifact/signature/metadata/checksum 验证并留下可审计 artifact。
 - [ ] Windows smoke 能区分 updater 签名、Authenticode、安装成功、启动成功和升级成功。
-- [ ] 发布 workflow 能分别验证 Azure Artifact Signing Authenticode、Tauri updater `.sig` 和未配置签名状态，且未配置 Azure 时不会误报 Authenticode 已完成。
-- [ ] publish 模式在公开前生成并验证最终 NSIS/MSI/ZIP 的 artifact attestation；rehearsal 不获取 attestation/release 写权限。
-- [ ] `pnpm tauri build`、release 聚焦测试、`just ci` 和 `just audit` 通过。
-- [ ] 未获得公开发布授权时，不创建或公开 GitHub release，不移动 tag。
+- [x] 发布 workflow 能分别验证 Azure Artifact Signing Authenticode、Tauri updater `.sig` 和未配置签名状态，且未配置 Azure 时不会误报 Authenticode 已完成。
+- [x] publish 模式在公开前生成并验证最终 NSIS/MSI/ZIP 的 artifact attestation；rehearsal 不获取 attestation/release 写权限。
+- [x] `pnpm tauri build`、release 聚焦测试、`just ci` 和 `just audit` 通过。
+- [x] 未获得公开发布授权时，不创建或公开 GitHub release，不移动 tag。
 
 ## Out of Scope
 
@@ -35,3 +35,10 @@
 
 - 上一稳定版到候选版的真实 updater 升级执行，等待独立 staging feed、URL 与回滚方案获批；本阶段交付可执行 runbook 和 fail-closed workflow contract，不借用公开 latest channel 测试未发布候选版。
 - Azure 服务注册、identity validation、付费、OIDC variables/secrets 和 GitHub environment 实际配置均等待单独外部授权。
+
+## Delivery Record
+
+- Implementation squash merge: PR #33, `f4dadb798acf0bdd22f82818379144de9eefe7eb` into `dev`; task head was `b8850a6fa6982033756b9a529b8b60690090d9fd`.
+- Exact-head hosted CI: run `30693986360`; common, Windows/Linux/macOS Rust, supply-chain, and `just-ci` all succeeded. PR smoke package lanes were skipped by contract.
+- Local release gates passed: release contracts, verifier tests, `just ci`, `just audit`, docs checks, and Windows NSIS plus explicit NSIS/MSI bundle builds. Local Authenticode was `NotSigned` and is retained as rehearsal `not-configured` evidence.
+- No environment, Azure configuration, secret, tag, GitHub Release, public rehearsal, or updater staging run was performed. Those acceptance items remain deferred pending separate authorization.
