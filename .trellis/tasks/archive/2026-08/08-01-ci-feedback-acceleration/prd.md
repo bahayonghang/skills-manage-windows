@@ -31,9 +31,9 @@
 - [x] `sync-version --check` 和 `just ci` 在版本漂移时失败且不修改任何 tracked file；脚本测试覆盖全部漂移路径和只读行为。
 - [x] `run-ci` 脚本测试覆盖 lane 选择、未知 lane、default/all、失败传播、兄弟进程终止、计时与 summary 输出。
 - [x] 本地聚焦测试、workflow contract、`just ci`、`just audit`、`git diff --check` 与 Windows `pnpm tauri build` 通过，并核对默认配置实际生成的 NSIS bundle；manual Windows package job 的 MSI 构建合同与 hosted 结果保持通过。
-- [ ] 任务分支 exact-head `workflow_dispatch` 全部 required lanes 通过；promotion PR 记录 wall time、runner time、排队时间和各 lane 用时，用于验证 15 分钟活跃关键路径目标。
-- [ ] 若目标未达到，保留原始数据、critical lane 和后续结论，不删除跨平台、供应链、打包或 fresh-download 覆盖来换取绿色结果。
-- [ ] task PR squash 合入 `dev`，promotion PR 以 merge commit 合入 `main`；两次合并都使用刷新后的 exact head，短期分支已删除，`dev` 与 legacy `gh-pages` 状态未改变，任务已归档且 journal 只记录实际交付提交。
+- [x] 任务分支 exact-head `workflow_dispatch` 全部 required lanes 通过；promotion PR 记录 wall time、runner time、排队时间和各 lane 用时，用于验证 15 分钟活跃关键路径目标。
+- [x] 若目标未达到，保留原始数据、critical lane 和后续结论，不删除跨平台、供应链、打包或 fresh-download 覆盖来换取绿色结果。
+- [x] task PR squash 合入 `dev`，promotion PR 以 merge commit 合入 `main`；两次合并都使用刷新后的 exact head，短期分支已删除，`dev` 与 legacy `gh-pages` 状态未改变，任务已归档且 journal 只记录实际交付提交。
 
 ## Local Evidence (2026-08-01)
 
@@ -50,6 +50,9 @@
 - 修复后 manual run `30686279380` 绑定 `3a331daf7068a2404b8cecf0d4eec768a0af6b33`。attempt 1 仅 macOS Rust 的 `stderr_overflow_terminates_the_process` 因 `TerminationFailed(OutputLimit, PermissionDenied)` 瞬时失败；failed-job rerun attempt 2 后整体成功。required lanes：common 5m02s、Windows Rust 5m02s、Linux Rust 3m23s、macOS Rust 2m35s、supply-chain 32s、`just-ci` 3s；package jobs：Windows MSI 14m52s、Linux x64 10m37s、Linux arm64 13m50s、macOS universal 25m11s。
 - PR #29 run `30686280627` 绑定同一 exact head，wall time 5m51s，workflow queue 0s、jobs queue 1-5s；common 4m41s、Windows Rust 5m40s、Linux Rust 3m36s、macOS Rust 3m07s、supply-chain 38s、`just-ci` 3s，全部 required checks 成功，PR 合同规定的 package jobs skipped。当前 PR 活跃关键路径为 Windows Rust 5m40s，低于 15 分钟目标。
 - PR #29 在刷新 refs 并再次验证 open、non-draft、`MERGEABLE/CLEAN`、exact head 与 hosted checks 后 squash 合入 `dev`；交付 SHA `4119855d516bd2e91f3a68fa381a7c912d909d9e`，远端短期分支已删除，`dev` 保留且 legacy `gh-pages` 不存在。
+- PR #30 的首个 head `6c420f783d3dd2688c5d21e5f7ee52fe25e97f5f` 因落后于上一轮 promotion merge commit 显示 `BEHIND`；将 `origin/main` merge 回长期 `dev` 后，该 head 的 run `30687452688` 被 concurrency 正常取消，不计入最终 timing。
+- PR #30 最终 run `30687477887` 绑定 exact head `b4069727b1c774d4f94b3d9befb0151a6c9bee85`，wall time 9m19s、workflow queue 32s、required runner 总用时 27m07s；common 6m16s、Windows Rust 8m34s、Linux Rust 5m28s、macOS Rust 6m02s、supply-chain 39s、`just-ci` 8s。全部 required checks 成功，活跃 critical lane 8m34s，达到 15 分钟目标；跨平台、供应链与 manual smoke/fresh-runner 覆盖均保留。
+- PR #30 在刷新 refs 并验证 open、non-draft、`MERGEABLE/CLEAN`、exact head 与全部 hosted checks 后，以 merge commit `df7dfcd8711155e17fec0c001f206277a9cd79e4` 合入 `main`。`dev` 保留，legacy `gh-pages` 与短期任务分支均不存在；归档提交 `a2858952d497c49c40032ecf84d77c2656dd1091` 与 journal 提交 `6c420f783d3dd2688c5d21e5f7ee52fe25e97f5f` 分离，journal 只引用交付 SHA `4119855d516bd2e91f3a68fa381a7c912d909d9e`。
 
 ## Out of Scope
 
