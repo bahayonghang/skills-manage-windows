@@ -728,3 +728,24 @@ Fixed the macOS stdin fixture and LF checkout contracts for generated IPC and fr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 77: 文档生成完整性与 Pages 部署
+
+**Date**: 2026-08-01
+**Task**: 文档生成完整性与 Pages 部署
+**Branch**: `dev`
+
+### Summary
+
+完成确定性生成文档门禁、官方 Pages artifact 部署与公网 smoke；PR #27 squash 合入 dev，PR #28 merge commit 合入 main，保留 dev 并删除 legacy gh-pages。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ba23e5925dc3d4b8f18ca2be69df459d7b2bbc24` | (see git log) |
+
+### Status
+
+[OK] **Completed**
