@@ -25,8 +25,9 @@
     "audit:dependencies": "node scripts/check-dependency-audit.mjs",
     "release:preflight": "node scripts/release-preflight.mjs",
     "docs:gen": "node scripts/build-ipc-dict.mjs && node scripts/build-schema-table.mjs",
+    "docs:gen:check": "node scripts/build-ipc-dict.mjs --check && node scripts/build-schema-table.mjs --check",
     "docs:dev": "pnpm docs:gen && vitepress dev docs",
-    "docs:build": "pnpm docs:gen && vitepress build docs",
+    "docs:build": "pnpm docs:gen:check && vitepress build docs",
     "docs:preview": "vitepress preview docs"
   },
   "dependencies": {

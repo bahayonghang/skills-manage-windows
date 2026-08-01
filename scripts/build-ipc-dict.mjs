@@ -1,24 +1,27 @@
 #!/usr/bin/env node
 // scripts/build-ipc-dict.mjs
 //
-// 扫描 src-tauri/src 下所有 .rs 文件中的 `#[tauri::command]` 函数，
+// 扫描 src-tauri/src/commands 下所有 .rs 文件中的 `#[tauri::command]` 函数，
 // 解析函数签名（名称、参数、返回类型、所属模块、首段 doc 注释），
 // 生成 docs/architecture/_generated/ipc-commands.md。
 // VitePress 通过 markdown 引入此文件，避免手工同步 80+ IPC 命令清单。
 
-import { readdirSync, readFileSync, mkdirSync, writeFileSync, statSync } from 'node:fs'
-import { join, relative, sep } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { join, relative, resolve, sep } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { writeOrCheckGeneratedFile } from './generated-doc-file.mjs'
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url))
-const repoRoot = join(__dirname, '..')
+const scriptUrl = new URL('.', import.meta.url)
+const repoRoot = scriptUrl.protocol === 'file:'
+  ? resolve(fileURLToPath(scriptUrl), '..')
+  : resolve(process.cwd())
 const srcDir = join(repoRoot, 'src-tauri', 'src')
 const outDir = join(repoRoot, 'docs', 'architecture', '_generated')
 const outFile = join(outDir, 'ipc-commands.md')
 
 function collectRustFiles(dir) {
   const out = []
-  for (const entry of readdirSync(dir)) {
+  for (const entry of readdirSync(dir).sort()) {
     const full = join(dir, entry)
     const stat = statSync(full)
     if (stat.isDirectory()) {
@@ -30,8 +33,8 @@ function collectRustFiles(dir) {
   return out
 }
 
-function shortPath(absolute) {
-  return relative(repoRoot, absolute).split(sep).join('/')
+function shortPath(absolute, rootDir = repoRoot) {
+  return relative(rootDir, absolute).split(sep).join('/')
 }
 
 function extractFnName(signature) {
@@ -39,10 +42,26 @@ function extractFnName(signature) {
   return match ? match[1] : null
 }
 
+function findParameterBounds(signature) {
+  const fnIndex = signature.search(/\bfn\s+[a-zA-Z_][a-zA-Z0-9_]*/)
+  const open = signature.indexOf('(', fnIndex)
+  if (fnIndex < 0 || open < 0) return null
+
+  let depth = 0
+  for (let index = open; index < signature.length; index++) {
+    if (signature[index] === '(') depth++
+    else if (signature[index] === ')') depth--
+    if (depth === 0) return { open, close: index }
+  }
+  return null
+}
+
 function extractReturn(signature) {
-  const arrow = signature.indexOf('->')
+  const bounds = findParameterBounds(signature)
+  const returnClause = bounds ? signature.slice(bounds.close + 1) : signature
+  const arrow = returnClause.indexOf('->')
   if (arrow < 0) return 'unit'
-  const after = signature.slice(arrow + 2)
+  const after = returnClause.slice(arrow + 2)
   const brace = after.indexOf('{')
   const slice = brace >= 0 ? after.slice(0, brace) : after
   return slice.trim() || 'unit'
@@ -67,10 +86,9 @@ function splitTopLevel(input, sep) {
 }
 
 function extractParams(signature) {
-  const open = signature.indexOf('(')
-  const close = signature.lastIndexOf(')')
-  if (open < 0 || close < 0 || close <= open) return []
-  const inside = signature.slice(open + 1, close)
+  const bounds = findParameterBounds(signature)
+  if (!bounds) return []
+  const inside = signature.slice(bounds.open + 1, bounds.close)
   const params = splitTopLevel(inside, ',')
   const business = []
   for (const raw of params) {
@@ -102,14 +120,14 @@ function extractDocComment(lines, attributeIndex) {
   return docs.join(' ').trim()
 }
 
-function deriveModule(filePath) {
-  const rel = relative(srcDir, filePath).split(sep)
+function deriveModule(filePath, sourceDir = srcDir) {
+  const rel = relative(sourceDir, filePath).split(sep)
   if (rel[rel.length - 1] === 'mod.rs') rel.pop()
   else rel[rel.length - 1] = rel[rel.length - 1].replace(/\.rs$/, '')
   return rel.join('::')
 }
 
-function parseFile(filePath) {
+function parseFile(filePath, sourceDir = srcDir, rootDir = repoRoot) {
   const text = readFileSync(filePath, 'utf8')
   const lines = text.split(/\r?\n/)
   const commands = []
@@ -134,8 +152,8 @@ function parseFile(filePath) {
 
     commands.push({
       name,
-      module: deriveModule(filePath),
-      sourcePath: shortPath(filePath),
+      module: deriveModule(filePath, sourceDir),
+      sourcePath: shortPath(filePath, rootDir),
       sourceLine: headerLine + 1,
       params: extractParams(signature),
       returnType: extractReturn(signature),
@@ -188,25 +206,46 @@ function renderMarkdown(groups) {
     out.push('')
   }
 
-  out.push('---')
-  out.push('')
-  out.push('Last generated: ' + new Date().toISOString().slice(0, 10))
-  out.push('')
   return out.join('\n')
 }
 
-function main() {
-  const files = collectRustFiles(srcDir)
-  const commands = files.flatMap(parseFile)
+export function generateIpcDocs({
+  check = false,
+  log = console.log,
+  outputFile = outFile,
+  rootDir = repoRoot,
+  sourceDir = srcDir,
+} = {}) {
+  const scanDir = sourceDir === srcDir ? join(sourceDir, 'commands') : sourceDir
+  const files = collectRustFiles(scanDir)
+  const commands = files.flatMap((file) => parseFile(file, sourceDir, rootDir))
   if (!commands.length) {
-    console.error('[build-ipc-dict] no #[tauri::command] entries found — refusing to overwrite')
-    process.exit(1)
+    throw new Error('[build-ipc-dict] no #[tauri::command] entries found - refusing to overwrite')
   }
   const groups = groupCommands(commands)
   const markdown = renderMarkdown(groups)
-  mkdirSync(outDir, { recursive: true })
-  writeFileSync(outFile, markdown, 'utf8')
-  console.log(`[build-ipc-dict] wrote ${commands.length} commands → ${shortPath(outFile)}`)
+  const displayPath = shortPath(outputFile, rootDir)
+  writeOrCheckGeneratedFile({ check, content: markdown, displayPath, outputFile })
+  log(
+    check
+      ? `[build-ipc-dict] up to date: ${displayPath}`
+      : `[build-ipc-dict] wrote ${commands.length} commands -> ${displayPath}`
+  )
+  return markdown
 }
 
-main()
+function runCli(args) {
+  if (args.some((arg) => arg !== '--check')) {
+    throw new Error('[build-ipc-dict] usage: node scripts/build-ipc-dict.mjs [--check]')
+  }
+  generateIpcDocs({ check: args.includes('--check') })
+}
+
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+  try {
+    runCli(process.argv.slice(2))
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exitCode = 1
+  }
+}

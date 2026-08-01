@@ -5,7 +5,7 @@
 ## 字典如何构建
 
 ```text
-[scripts/build-ipc-dict.mjs] ── 读取 src-tauri/src/**/*.rs
+[scripts/build-ipc-dict.mjs] ── 读取 src-tauri/src/commands/**/*.rs
                                     │
                                     ▼
                          抽出 #[tauri::command]
@@ -17,7 +17,7 @@
        写入 docs/architecture/_generated/ipc-commands.md
 ```
 
-执行 `pnpm docs:gen` 刷新；CI 在 `pnpm docs:build` 之前跑同一脚本，过期表格会让 docs 流水线失败。
+执行 `pnpm docs:gen` 刷新，并与对应 Rust 源码共同提交。CI 通过 `pnpm docs:build` 运行只读的 `pnpm docs:gen:check`；表格过期时直接失败，不会改写工作树。
 
 ## 调用约定
 

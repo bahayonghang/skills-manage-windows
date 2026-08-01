@@ -6,12 +6,15 @@
 // 生成 docs/architecture/_generated/data-model.md。
 // 在 docs:gen 中调用，配合改 schema 后一并刷新文档。
 
-import { readdirSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
-import { join, relative, sep } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join, relative, resolve, sep } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { writeOrCheckGeneratedFile } from './generated-doc-file.mjs'
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url))
-const repoRoot = join(__dirname, '..')
+const scriptUrl = new URL('.', import.meta.url)
+const repoRoot = scriptUrl.protocol === 'file:'
+  ? resolve(fileURLToPath(scriptUrl), '..')
+  : resolve(process.cwd())
 const schemaDir = join(repoRoot, 'src-tauri', 'src', 'db', 'schema')
 const outDir = join(repoRoot, 'docs', 'architecture', '_generated')
 const outFile = join(outDir, 'data-model.md')
@@ -19,8 +22,8 @@ const outFile = join(outDir, 'data-model.md')
 const TABLE_RE = /CREATE TABLE IF NOT EXISTS\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([\s\S]*?)\)\s*"/g
 const INDEX_RE = /CREATE INDEX IF NOT EXISTS\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+ON\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]+)\)/g
 
-function shortPath(absolute) {
-  return relative(repoRoot, absolute).split(sep).join('/')
+function shortPath(absolute, rootDir = repoRoot) {
+  return relative(rootDir, absolute).split(sep).join('/')
 }
 
 function parseColumns(body) {
@@ -52,7 +55,7 @@ function parseColumns(body) {
         .map((s) => s.trim())
       continue
     }
-    if (/^FOREIGN KEY\b/i.test(trimmed)) continue
+    if (/^(?:CHECK|FOREIGN KEY|UNIQUE)\b/i.test(trimmed)) continue
     const tokens = trimmed.split(/\s+/)
     const name = tokens.shift()
     const rest = tokens.join(' ')
@@ -82,7 +85,7 @@ function extractDefault(text) {
   return m[1].trim()
 }
 
-function parseFile(filePath) {
+function parseFile(filePath, rootDir = repoRoot) {
   const text = readFileSync(filePath, 'utf8')
   const tables = []
   let m
@@ -99,7 +102,7 @@ function parseFile(filePath) {
       columns: idx[3].split(',').map((s) => s.trim()),
     })
   }
-  return { source: shortPath(filePath), tables }
+  return { source: shortPath(filePath, rootDir), tables }
 }
 
 function escapePipe(text) {
@@ -139,26 +142,48 @@ function render(modules) {
       }
     }
   }
-  out.push('---')
-  out.push('Last generated: ' + new Date().toISOString().slice(0, 10))
-  out.push('')
   return out.join('\n')
 }
 
-function main() {
-  const files = readdirSync(schemaDir)
+export function generateSchemaDocs({
+  check = false,
+  log = console.log,
+  outputFile = outFile,
+  rootDir = repoRoot,
+  sourceDir = schemaDir,
+} = {}) {
+  const files = readdirSync(sourceDir)
     .filter((f) => f.endsWith('.rs') && f !== 'mod.rs')
-    .map((f) => join(schemaDir, f))
-  const modules = files.map(parseFile).filter((m) => m.tables.length > 0)
+    .sort()
+    .map((f) => join(sourceDir, f))
+  const modules = files.map((file) => parseFile(file, rootDir)).filter((m) => m.tables.length > 0)
   if (!modules.length) {
-    console.error('[build-schema-table] no CREATE TABLE statements found — refusing to overwrite')
-    process.exit(1)
+    throw new Error('[build-schema-table] no CREATE TABLE statements found - refusing to overwrite')
   }
   const md = render(modules)
-  mkdirSync(outDir, { recursive: true })
-  writeFileSync(outFile, md, 'utf8')
   const total = modules.reduce((a, m) => a + m.tables.length, 0)
-  console.log(`[build-schema-table] wrote ${total} tables → ${shortPath(outFile)}`)
+  const displayPath = shortPath(outputFile, rootDir)
+  writeOrCheckGeneratedFile({ check, content: md, displayPath, outputFile })
+  log(
+    check
+      ? `[build-schema-table] up to date: ${displayPath}`
+      : `[build-schema-table] wrote ${total} tables -> ${displayPath}`
+  )
+  return md
 }
 
-main()
+function runCli(args) {
+  if (args.some((arg) => arg !== '--check')) {
+    throw new Error('[build-schema-table] usage: node scripts/build-schema-table.mjs [--check]')
+  }
+  generateSchemaDocs({ check: args.includes('--check') })
+}
+
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+  try {
+    runCli(process.argv.slice(2))
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exitCode = 1
+  }
+}

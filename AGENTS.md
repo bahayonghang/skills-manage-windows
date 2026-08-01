@@ -28,6 +28,9 @@ pnpm build
 pnpm test
 pnpm typecheck
 pnpm lint
+pnpm docs:gen
+pnpm docs:gen:check
+pnpm docs:build
 cd src-tauri; cargo test
 cd src-tauri; cargo clippy -- -D warnings
 pnpm tauri build
@@ -35,7 +38,7 @@ pnpm tauri build
 
 ## justfile 约定
 
-- `just ci`：并行跑前端 `typecheck`、`lint`、`sizecheck`、Vitest、生产构建，以及 Rust entrypoint 契约、`fmt --check`、全 targets Clippy、测试；Cargo 检查使用锁文件。
+- `just ci`：并行跑前端 `typecheck`、`lint`、`sizecheck`、Vitest、生产构建、只读文档构建，以及 Rust entrypoint 契约、`fmt --check`、全 targets Clippy、测试；Cargo 检查使用锁文件。
 - `just dev`：直接启动 Tauri 开发模式。
 - `just build`：跑 `pnpm tauri build`，然后把 `src-tauri/target/release/bundle/nsis/` 里最新的 Windows 安装包复制到根目录 `outputs/`。
 - `just install`：跑 `just build`，然后以 passive 模式运行根目录 `outputs/` 里的最新 NSIS 安装包。
@@ -48,6 +51,8 @@ pnpm tauri build
 - 涉及技能安装、卸载、中央化链路时，优先复用现有 `linker.rs` 逻辑，尤其是 `ensure_centralized` 约束。
 - Windows 相关命令默认按 PowerShell 场景写，避免只适用于 bash 的写法。
 - 改打包链路时，不要只验证前端构建。要把 Tauri Windows bundle 一起看成验收范围。
+- 修改 Tauri command 或 `src-tauri/src/db/schema/` 后运行 `pnpm docs:gen`，并共同提交 `docs/architecture/_generated/` 下两份生成文档；`docs:gen:check` 与 `docs:build` 必须保持只读。
+- Docs workflow 只在 release published 或 canonical `main` 手动触发时部署，同一 Pages artifact 依次经过 deploy 与线上 smoke；不要恢复 deploy job 二次构建或 legacy `gh-pages` 分支，重新创建该分支需要单独审批。
 
 ## Code Review Rules
 
