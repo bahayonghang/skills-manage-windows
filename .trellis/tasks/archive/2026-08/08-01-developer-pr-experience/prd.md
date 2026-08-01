@@ -22,11 +22,18 @@
 
 ## Acceptance Criteria
 
-- [ ] 声明工具链与 CI 完全一致，`just doctor` 在当前主机给出明确结果且不修改环境。
-- [ ] 快速与完整门禁都有合同测试/文档，`just ci` 继续通过。
-- [ ] PR template 可直接支持功能、修复、UI、打包和发布变更，不要求无关字段伪造证据。
-- [ ] workflow/docs/spec 明确任务分支 squash 到 `dev`、`dev -> main` promotion PR 使用 merge commit、promotion 后先 fast-forward `dev` 的模型，不存在要求删除或退役 `dev` 的有效说明。
-- [ ] 获得外部设置授权后，仓库允许 squash merge 和 merge commit、关闭 rebase merge 并自动删除已合并任务分支；`dev` safety ruleset 不可 bypass 地禁止 force/delete，flow ruleset 对常规 task PR 强制 PR/`just-ci`/linear history，受控 bypass 仅用于 Trellis bookkeeping 与 exact fast-forward；实际设置回读与目标合同一致。
+- [x] 声明工具链与 CI 完全一致，`just doctor` 在当前主机给出明确结果且不修改环境。
+- [x] 快速与完整门禁都有合同测试/文档，`just ci` 继续通过。
+- [x] PR template 可直接支持功能、修复、UI、打包和发布变更，不要求无关字段伪造证据。
+- [x] workflow/docs/spec 明确任务分支 squash 到 `dev`、`dev -> main` promotion PR 使用 merge commit、promotion 后先 fast-forward `dev` 的模型，不存在要求删除或退役 `dev` 的有效说明。
+- [x] 获得外部设置授权后，仓库允许 squash merge 和 merge commit、关闭 rebase merge 并自动删除已合并任务分支；`dev` safety ruleset 不可 bypass 地禁止 force/delete，flow ruleset 对常规 task PR 强制 PR/`just-ci`/linear history，受控 bypass 仅用于 Trellis bookkeeping 与 exact fast-forward；实际设置回读与目标合同一致。
+
+## Delivery Evidence
+
+- PR #31 (`task/developer-pr-experience` -> `dev`) used squash merge: work commit `4625e9f600eff7b551b7993d155c00c05dc9ae01`, delivery SHA `cc8a12bde9394142d5ac6cb100d2f28e596e1451`.
+- Hosted CI run `30690364410` ran at the exact head: common 5m47s, Windows Rust 9m30s, Linux Rust 6m39s, macOS Rust 6m37s, supply-chain 54s, and `just-ci` 3s; all required checks passed.
+- Local evidence: focused contracts 3 files/17 tests, `just check`, `just ci`, `just audit`, `git diff --check`, and Windows `pnpm tauri build` all passed. NSIS `src-tauri/target/release/bundle/nsis/SkillPort_0.10.14_x64-setup.exe` was generated at 15:35 on 2026-08-01.
+- Remote settings readback: `dev-safety` ruleset `20175337` and `dev-flow` ruleset `20175349` are active; repository squash/merge are enabled, rebase is disabled, and merged task branches auto-delete. `main` protection was unchanged.
 
 ## Out of Scope
 
