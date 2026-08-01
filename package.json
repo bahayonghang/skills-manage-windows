@@ -4,6 +4,10 @@
   "version": "0.10.14",
   "license": "Apache-2.0",
   "type": "module",
+  "packageManager": "pnpm@10.12.3",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "node scripts/dev-server.mjs",
     "build": "tsc && vite build",
@@ -24,6 +28,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --cache --cache-location node_modules/.cache/eslint/ --report-unused-disable-directives --max-warnings 0",
     "audit:dependencies": "node scripts/check-dependency-audit.mjs",
+    "doctor": "node scripts/doctor.mjs",
     "release:preflight": "node scripts/release-preflight.mjs",
     "docs:gen": "node scripts/build-ipc-dict.mjs && node scripts/build-schema-table.mjs",
     "docs:gen:check": "node scripts/build-ipc-dict.mjs --check && node scripts/build-schema-table.mjs --check",

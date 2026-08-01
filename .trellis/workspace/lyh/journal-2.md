@@ -770,3 +770,24 @@ Fixed the macOS stdin fixture and LF checkout contracts for generated IPC and fr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 79: 开发与 PR 体验治理交付收尾
+
+**Date**: 2026-08-01
+**Task**: 开发与 PR 体验治理交付收尾
+**Branch**: `dev`
+
+### Summary
+
+完成 developer/PR 子任务：固定工具链与 doctor、quick lane、PR 模板和 dev 分支治理；PR #31 squash 合入 dev，exact-head hosted CI run 30690364410 全部 required checks 通过；记录远端 ruleset/merge settings 回读。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cc8a12bde9394142d5ac6cb100d2f28e596e1451` | (see git log) |
+
+### Status
+
+[OK] **Completed**

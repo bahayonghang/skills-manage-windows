@@ -185,10 +185,12 @@ xattr -dr com.apple.quarantine "/Applications/SkillPort.app"
 
 ### 前置依赖
 
-- [Node.js](https://nodejs.org/)（LTS）
-- [pnpm](https://pnpm.io/)
-- [Rust toolchain](https://rustup.rs/)（stable）
+- [Node.js](https://nodejs.org/) 22 LTS（见 `.node-version`）
+- [pnpm](https://pnpm.io/) 10.12.3
+- [Rust toolchain](https://rustup.rs/) 1.97.0（见 `rust-toolchain.toml`）
 - Tauri v2 系统依赖：<https://v2.tauri.app/start/prerequisites/>
+
+仓库工具链固定为 Node 22、pnpm 10.12.3 和 Rust 1.97.0。
 
 ### 安装依赖
 
@@ -199,13 +201,18 @@ pnpm install
 ### 常用 just 命令
 
 ```bash
+just doctor
+just check
 just ci
+just audit
 just version-check
 just dev
 just build
 just install
 ```
 
+- `just doctor` 是只读的工具链与 Tauri 前置依赖诊断；它只报告缺失或版本漂移，不会安装依赖、修改 PATH 或切换 toolchain。
+- `just check` 在开发过程中运行快速静态/生成物检查；它不能替代提交或合并 PR 前必须运行的完整 `just ci` 与 `just audit` 门禁。
 - `just ci` 会并行运行平台无关的 `common` lane（只读版本/生成物检查、前端验证与构建、文档、Rust entrypoint/格式/IPC 合同）和当前平台的全 targets Clippy、锁文件 Rust 测试。
 - `just version-check` 会只读检查 Tauri/Cargo 元数据是否与 `package.json` 一致；需要显式更新时使用 `just sync-version`。
 - `just dev` 会直接启动 Tauri 开发应用。
@@ -227,6 +234,10 @@ just ci
 ```
 
 GitHub 会为指向 `dev` 或 `main` 的 PR 并行运行 `common`、Windows Rust、Linux Rust、macOS Rust 和供应链 lane；稳定的 `just-ci` 检查只有在全部 required lane 成功时才通过。直接手动触发还会运行跨平台 smoke package；桌面发布 workflow 则在冻结 SHA 上复用同一质量门禁，并独立负责正式发布打包。
+
+### 分支与 PR 流程
+
+`dev` 是长期保留的日常开发分支，不会退役。短生命周期 task 分支以 `dev` 为目标并使用 squash merge，合并后自动删除 task 分支。`dev` -> `main` 的 promotion PR 使用 merge commit 保留祖先关系。每次 promotion 后，先刷新并确认精确的 promotion merge SHA，再把 `dev` fast-forward 到该 SHA，之后才能写 Trellis 证据或开始下一个 task。CI 只响应目标为 `dev` 或 `main` 的 PR，普通 push 不触发 CI。
 
 ## 项目结构
 

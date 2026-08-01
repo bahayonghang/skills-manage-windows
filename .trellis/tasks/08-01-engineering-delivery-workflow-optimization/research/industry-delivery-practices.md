@@ -126,7 +126,7 @@ supply-chain -----/
 - 仓库级允许 squash merge 与 merge commit，关闭 rebase merge，开启 merged head branch 自动删除。
 - `dev` ruleset：require PR、require `just-ci`、禁止 force push、限制删除、require linear history。关闭 rebase 后，任务分支进入 `dev` 时只有 squash 可用；`dev` 本身因保护规则不会被自动删除。
 - `main` ruleset：require PR、require `just-ci`、禁止 force push、限制删除；不要 require linear history，否则 `dev -> main` 无法 merge commit。
-- promotion PR 的 head 固定为 `dev`、base 固定为 `main`，使用 merge commit。promotion 后无需例行 `main -> dev` reverse merge；只在 `main` 存在独立 hotfix 时同步该提交。
+- promotion PR 的 head 固定为 `dev`、base 固定为 `main`，使用 merge commit。不要制造例行 `main -> dev` reverse merge commit；但本仓库同时要求 `main` strict/CLEAN、`dev` linear history 和 promotion 后继续写 Trellis bookkeeping，因此必须在任何新提交前受控 fast-forward `dev` 到新的 `main` merge SHA。只有 `main` 存在独立 hotfix 时才需要额外同步审查。
 - 重要限制：GitHub 普通仓库设置没有“对 `main` 只允许 merge commit、同时对 `dev` 只允许 squash”的完整双向强制开关。`dev` 可通过 linear-history + 关闭 rebase 实现 squash-only；`main` 的 promotion merge-commit 仍需 runbook、PR template/检查提示和精确 `gh pr merge --merge` 流程保证。不能把“仓库已允许 merge commit”误报为“GitHub 已强制 promotion 使用 merge commit”。
 - main/dev 两套保护规则和合并设置都属于远端变更；实施时先展示目标 JSON/当前值，修改后从 API 回读。不要删除本地或远端 `dev`。
 
