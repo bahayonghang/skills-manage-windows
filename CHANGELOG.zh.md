@@ -10,6 +10,16 @@
 - 新增 Tauri 命令 `refresh_skill_update_inventory`、`apply_skill_update_decisions`、`clear_skill_update_inventory`、`get_skill_update_inventory`、`scan_platform_duplicate_skills`。
 - 新增 DB 表 `skill_repository_pending_additions`，新增字段 `skill_repositories.last_synced_at`，用于跨 session 持久化刷新结果。
 - 后端 `SkillUpdateStatus` enum 取代原来的字符串常量。
+- **Central 技能库**新增仓库/来源导航、顶部筛选、自适应卡片网格、布局与密度切换、卡片内标签编辑，以及单个或批量从平台卸载。
+- 更新检查支持当前平台或指定仓库范围，提供明确的刷新模式、按仓库进度、重试反馈，并支持一键清理平台残留副本。
+- 新增按目标感知的 Central 状态导出/导入，支持本机、SSH 和 WSL 目标，包含来源目标元数据、v1 JSON 兼容和跨目标导入提示。
+- 新增 Reasonix、Grok 内置平台目标，以及按安装来源导航和按调用次数排序的平台视图，用于区分 SkillPort 管理、仓库关联和独立安装的技能。
+- 新增状态与待办队列驾驶舱首页，展示操作活动和热门标签摘要；使用统计新增平台筛选、排行、热力图、Provider 健康度、最近调用和技能详情。
+- 扩展内置标签分类，保护用户自定义标签；AI 新标签必须经过复核后才能创建，并新增可展示进度、取消状态和限速风险的 AI 任务控制舱。
+- 新增本地运行时诊断控制台，将 Operation Log 与 Runtime Log 分开，并提供脱敏读取、导出和清理流程。
+- 统一本地 ZIP 与 GitHub 仓库导入，支持安全 ZIP 预览/导入、插件清单与文件树预览、选中子树导入、受限的 tree manifest 快速路径与 archive 回退，以及指定分支导入。
+- 新增安全 GitHub 导入深链、待处理意图队列，以及 Windows 单实例冷启动/热启动生命周期处理。
+- 新增稳定 skill 标识和版本化共享 `skillport-cli` JSON 契约，保证桌面端与 CLI 互操作。
 
 ### 调整
 
@@ -18,6 +28,26 @@
 - PlatformView 的 **扫描重复** 按钮现在跳转到更新中心的 **平台冗余** Tab，不再打开独立 dialog。
 - `UnifiedSkillCard` 新增 inventory-only 的 badge 展示（平台冗余、失链孤儿）。
 - `DuplicatePlatformSkillsDialog`、`CentralUpdateConfirmDialog`、`RemoteMissingSkillsDialog`、`CentralRepositorySyncDialog` 已标记 `@deprecated`，下一个 minor release 之后移除。
+- Central 与 Platform 页面支持可配置字体 fallback 和字号缩放，统一紧凑排版与语义状态色，并补充快捷键速查、键盘焦点和无障碍行为。
+- 远程更新与同步现在会批量处理 SSH/WSL 操作，按任务隔离取消状态，提供有界进度，并监督进程树生命周期。
+
+### 修复
+
+- GitHub 导入现在会保留根级技能内容，不再把合法的顶层 `skill/SKILL.md` 误判为无效目录；可恢复的预览失败会继续走回退路径，已删除仓库也不会留下过期条目。
+- Central 刷新与清理会严格限定在请求的目标和平台范围内，处理仓库/路径迁移，保留跳过决策，并在不混淆 inventory 与已安装基线的前提下展示失败检查。
+- Central 写操作与数据库迁移改为通过版本化备份、外键清理、事务化关系修复和可恢复的文件系统/数据库操作日志进行恢复。
+- 数据库或目录在启动阶段异常时，应用现在进入恢复流程而不是直接退出；损坏的目标配置也会与健康目标隔离。
+
+### 安全
+
+- GitHub 导入现在执行有界资源预算、受限的 raw fetch 来源校验和安全回退；远程 Central 路径会拒绝符号链接逃逸。
+- 收紧 renderer 权限与凭据访问，由后端策略统一控制；Operation Log 与 Runtime Log 共用敏感值脱敏策略。
+
+### 发布与 CI
+
+- 桌面发布现在分别校验 Windows EXE、NSIS、MSI 的 Authenticode 与 updater 签名，核对 `latest.json` 和校验和，执行安装 smoke 检查，并仅在完整产物集通过验证后发布。
+- 发布构建现在以可移植方式准备 macOS universal CLI 与桌面产物，并明确 Tauri 多 binary 入口。
+- CI 现在并行执行 common 与跨平台门禁，增加 fail-closed 供应链和生成文档漂移检查，仅验证目标为 `dev` 或 `main` 的 PR，并部署唯一经过线上 smoke 的 Pages 产物。
 
 ## 0.11.0 - 2026-05-11
 
