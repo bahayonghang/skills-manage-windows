@@ -1,0 +1,6 @@
+{"file":".trellis/tasks/08-02-src-tauri-architecture-quality-performance/research/src-tauri-deep-audit.md","reason":"复核 F1 每条证据和验收覆盖"}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"检查 Marketplace/GitHub import/IPC typed errors 与脱敏"}
+{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"检查 acquisition 在锁外、final apply 在共享锁内"}
+{"file":".trellis/spec/backend/fs-db-operation-journal.md","reason":"检查 FS/DB failure 和 recovery matrix"}
+{"file":".trellis/spec/backend/database-migrations.md","reason":"若 cache schema 变化，检查向后兼容迁移与 generated docs"}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"执行仓库完整验收"}

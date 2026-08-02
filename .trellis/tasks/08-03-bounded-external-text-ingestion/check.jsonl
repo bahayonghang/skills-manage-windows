@@ -1,0 +1,6 @@
+{"file":".trellis/tasks/08-02-src-tauri-architecture-quality-performance/research/src-tauri-deep-audit.md","reason":"逐项复核F3 call sites和acceptance"}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"检查typed errors和stable public summaries"}
+{"file":".trellis/spec/backend/process-supervision.md","reason":"检查idle/total/output/cancellation lifecycle"}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"用credential/body/path fixtures验证不泄漏"}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"新增跨domain tests放入可发现的正确位置"}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"执行正式全仓门禁"}

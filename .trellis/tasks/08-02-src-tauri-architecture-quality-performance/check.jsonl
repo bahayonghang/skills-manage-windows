@@ -1,0 +1,5 @@
+{"file":".trellis/tasks/08-02-src-tauri-architecture-quality-performance/research/src-tauri-deep-audit.md","reason":"逐条复核 findings、任务覆盖与非目标"}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"检查 service、repository 与 IPC 错误边界未回退"}
+{"file":".trellis/spec/backend/shared-local-cli.md","reason":"检查修复同时适用于 GUI/CLI 共享 use cases"}
+{"file":".trellis/spec/backend/database-migrations.md","reason":"检查 schema/index/data 变更的兼容性与生成文档要求"}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"执行正式完整门禁并核对 required contracts"}

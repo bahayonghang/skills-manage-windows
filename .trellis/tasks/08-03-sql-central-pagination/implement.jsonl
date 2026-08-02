@@ -1,0 +1,6 @@
+{"file":".trellis/tasks/08-02-src-tauri-architecture-quality-performance/research/src-tauri-deep-audit.md","reason":"F4 full-load/full-enrichment/stat和bind证据"}
+{"file":".trellis/spec/backend/database-migrations.md","reason":"可能新增query index的versioned migration契约"}
+{"file":".trellis/spec/backend/central-skill-tags.md","reason":"uncategorized和tag filter的活动domain语义"}
+{"file":".trellis/spec/backend/target-context.md","reason":"page query和enrichment必须使用同一request-scoped DB"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"锁住DTO -> SQL -> enrichment -> frontend的行为等价"}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"reference、large fixture和benchmark tests布局"}
