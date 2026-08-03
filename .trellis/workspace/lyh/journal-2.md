@@ -897,3 +897,24 @@ Fixed the macOS stdin fixture and LF checkout contracts for generated IPC and fr
 ### Next Steps
 
 - 实施 08-03-bounded-github-snapshot-lifecycle。
+
+
+## Session 83: 完成 GitHub 快照生命周期边界
+
+**Date**: 2026-08-03
+**Task**: 完成 GitHub 快照生命周期边界
+**Branch**: `dev`
+
+### Summary
+
+以 Arc 和 entry/byte/TTL/LRU policy 约束 Central snapshot cache；以严格 reservation、lease、CleanupPending 与 owning-target generation ack 约束 GitHub preview workspace，补齐 cancellation、cleanup failure、跨 target/kind 和并行测试隔离证据，并在 Node 22 下通过完整 CI。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c2aaea06774bc77eed7865255ed6509214ec2491` | (see git log) |
+
+### Status
+
+[OK] **Completed**

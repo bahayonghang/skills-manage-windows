@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 82
+- **Total Sessions**: 83
 - **Last Active**: 2026-08-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~899 | Active |
+| `journal-2.md` | ~920 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 83 | 2026-08-03 | 完成 GitHub 快照生命周期边界 | `c2aaea06774bc77eed7865255ed6509214ec2491` | `dev` |
 | 82 | 2026-08-03 | Marketplace Central 安装一致性 | `a52591c9` | `dev` |
 | 81 | 2026-08-01 | 工程交付流程优化父任务集成收尾 | `d68387bffdd2f9e0b9f05d978ed925976913ef42`, `d03548d3dbed17a69cef88b5f7ff08e760e6f6ad` | `dev` |
 | 80 | 2026-08-01 | 桌面发布可信度提升交付 | `f4dadb798acf0bdd22f82818379144de9eefe7eb` | `dev` |
