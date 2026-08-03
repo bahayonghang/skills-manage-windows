@@ -861,3 +861,39 @@ Fixed the macOS stdin fixture and LF checkout contracts for generated IPC and fr
 ### Next Steps
 
 - Azure Artifact Signing、desktop-release environment、updater staging、公开 Release 和 tag movement 仍需独立授权。
+
+
+## Session 82: Marketplace Central 安装一致性
+
+**Date**: 2026-08-03
+**Task**: Marketplace Central 安装一致性
+**Branch**: `dev`
+
+### Summary
+
+删除 registry-backed Marketplace 的缓存 URL 与展示名写入旁路，复用 pinned snapshot 和 central_update Saga 完成 Local/SSH/WSL 可恢复安装。
+
+### Main Changes
+
+- 以 candidate skill_id 和 GitHub repository provenance 作为安装身份。
+- 首次导入使用 central_update + hadTarget=false，同事务提交 skill、repository membership、commit/digest 与 journal phase。
+- installed marker 改为 durable Central state 的派生缓存并支持故障后修复。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a52591c9` | (see git log) |
+
+### Testing
+
+- [OK] Node 22.23.2 下 just ci 通过；Marketplace 22/22；GitHub import 137/137；Rust 1056 passed/6 ignored。
+- [OK] Fake SSH 与 Fake WSL 完整 Saga、恶意路径、DB rollback、marker 故障与 UID 保留回归通过。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 实施 08-03-bounded-github-snapshot-lifecycle。
