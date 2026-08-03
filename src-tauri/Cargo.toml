@@ -1,6 +1,6 @@
 [package]
 name = "skillport"
-version = "0.10.14"
+version = "1.0.0"
 default-run = "skillport"
 description = "AI Agent Skills Manager"
 authors = ["iamzhihuix"]
