@@ -952,3 +952,37 @@ Bounded external HTTP, SSE, Local, SSH, and WSL text ingestion before allocation
 ### Next Steps
 
 - Implement and verify 08-03-transactional-metadata-mutations.
+
+
+## Session 85: Complete transactional metadata mutations
+
+**Date**: 2026-08-03
+**Task**: Complete transactional metadata mutations
+**Branch**: `dev`
+
+### Summary
+
+Made metadata and Marketplace cache mutations atomic with bounded batching, rollback injection, and full-snapshot replacement semantics.
+
+### Main Changes
+
+- Added a shared 900-bind SQLite batching contract and transaction-scoped validation helpers.
+- Transactionalized repository, tag, AI review, collection, project, and Marketplace sync/remove mutations without schema or IPC changes.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1dfb7068` | (see git log) |
+
+### Testing
+
+- [OK] Node 22.23.2 just ci passed; Rust 1115 passed and 6 ignored; frontend 1609 passed and 1 skipped; Marketplace 22 passed.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Implement and verify 08-03-sql-central-pagination.

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 84
+- **Total Sessions**: 85
 - **Last Active**: 2026-08-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~954 | Active |
+| `journal-2.md` | ~988 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 85 | 2026-08-03 | Complete transactional metadata mutations | `1dfb7068` | `dev` |
 | 84 | 2026-08-03 | Complete bounded external text ingestion | `c126b3cf` | `dev` |
 | 83 | 2026-08-03 | 完成 GitHub 快照生命周期边界 | `c2aaea06774bc77eed7865255ed6509214ec2491` | `dev` |
 | 82 | 2026-08-03 | Marketplace Central 安装一致性 | `a52591c9` | `dev` |
