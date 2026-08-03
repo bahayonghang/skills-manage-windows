@@ -3,9 +3,11 @@
 //! delegate to the `*_impl` functions exposed here.
 
 use serde::{Deserialize, Serialize};
+use sqlx::{QueryBuilder, Sqlite};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+use crate::db::sqlite_batch::sqlite_rows_per_batch;
 use crate::secrets::SecretStore;
 use crate::services::{central_updates, github_import};
 use crate::targets::{remote_join, ActiveTarget};
@@ -257,10 +259,11 @@ pub async fn remove_registry_impl(
     pool: &crate::db::DbPool,
     registry_id: String,
 ) -> Result<(), MarketplaceError> {
+    let mut transaction = pool.begin().await?;
     // Don't allow removing built-in registries
     let row = sqlx::query("SELECT is_builtin FROM skill_registries WHERE id = ?")
         .bind(&registry_id)
-        .fetch_optional(pool)
+        .fetch_optional(&mut *transaction)
         .await?;
 
     if let Some(r) = &row {
@@ -273,15 +276,130 @@ pub async fn remove_registry_impl(
     // Delete cached skills first
     sqlx::query("DELETE FROM marketplace_skills WHERE registry_id = ?")
         .bind(&registry_id)
-        .execute(pool)
+        .execute(&mut *transaction)
         .await?;
 
     sqlx::query("DELETE FROM skill_registries WHERE id = ?")
         .bind(&registry_id)
-        .execute(pool)
+        .execute(&mut *transaction)
         .await?;
 
+    transaction.commit().await?;
     Ok(())
+}
+
+pub(crate) async fn replace_registry_cache_snapshot(
+    pool: &crate::db::DbPool,
+    registry_id: &str,
+    skills: &[MarketplaceSkill],
+    installed_skill_ids: &HashSet<String>,
+    attempt_time: &str,
+    synced_at: &str,
+) -> Result<(), MarketplaceError> {
+    let result = replace_registry_cache_snapshot_in_transaction(
+        pool,
+        registry_id,
+        skills,
+        installed_skill_ids,
+        attempt_time,
+        synced_at,
+    )
+    .await;
+    if let Err(error) = &result {
+        record_registry_sync_error_best_effort(pool, registry_id, attempt_time, error).await;
+    }
+    result
+}
+
+async fn replace_registry_cache_snapshot_in_transaction(
+    pool: &crate::db::DbPool,
+    registry_id: &str,
+    skills: &[MarketplaceSkill],
+    installed_skill_ids: &HashSet<String>,
+    attempt_time: &str,
+    synced_at: &str,
+) -> Result<(), MarketplaceError> {
+    let mut transaction = pool.begin().await?;
+
+    sqlx::query("DELETE FROM marketplace_skills WHERE registry_id = ?")
+        .bind(registry_id)
+        .execute(&mut *transaction)
+        .await?;
+
+    let rows_per_batch = sqlite_rows_per_batch(8)?;
+    for chunk in skills.chunks(rows_per_batch) {
+        let mut builder = QueryBuilder::<Sqlite>::new(
+            "INSERT INTO marketplace_skills
+             (id, registry_id, name, description, download_url, is_installed, synced_at, cache_updated_at) ",
+        );
+        builder.push_values(chunk, |mut row, skill| {
+            row.push_bind(&skill.id)
+                .push_bind(&skill.registry_id)
+                .push_bind(&skill.name)
+                .push_bind(&skill.description)
+                .push_bind(&skill.download_url)
+                .push_bind(installed_skill_ids.contains(&skill.id))
+                .push_bind(&skill.synced_at)
+                .push_bind(&skill.cache_updated_at);
+        });
+        builder.push(
+            " ON CONFLICT(id) DO UPDATE SET
+                registry_id = excluded.registry_id,
+                name = excluded.name,
+                description = excluded.description,
+                download_url = excluded.download_url,
+                is_installed = excluded.is_installed,
+                synced_at = excluded.synced_at,
+                cache_updated_at = excluded.cache_updated_at",
+        );
+        builder.build().execute(&mut *transaction).await?;
+    }
+
+    let result = sqlx::query(
+        "UPDATE skill_registries
+         SET last_synced = ?, last_attempted_sync = ?, last_sync_status = ?,
+             last_sync_error = NULL, cache_updated_at = ?
+         WHERE id = ?",
+    )
+    .bind(synced_at)
+    .bind(attempt_time)
+    .bind(RegistrySyncStatus::Success.as_str())
+    .bind(synced_at)
+    .bind(registry_id)
+    .execute(&mut *transaction)
+    .await?;
+    if result.rows_affected() != 1 {
+        return Err(MarketplaceError::RegistryNotFound);
+    }
+
+    transaction.commit().await?;
+    Ok(())
+}
+
+async fn record_registry_sync_error_best_effort(
+    pool: &crate::db::DbPool,
+    registry_id: &str,
+    attempt_time: &str,
+    error: &MarketplaceError,
+) {
+    if let Err(marker_error) = sqlx::query(
+        "UPDATE skill_registries
+         SET last_attempted_sync = ?, last_sync_status = ?, last_sync_error = ?
+         WHERE id = ?",
+    )
+    .bind(attempt_time)
+    .bind(RegistrySyncStatus::Error.as_str())
+    .bind(error.to_string())
+    .bind(registry_id)
+    .execute(pool)
+    .await
+    {
+        tracing::warn!(
+            registry_id,
+            error = %marker_error,
+            "failed to record marketplace registry sync error"
+        );
+    }
 }
 
 pub(crate) async fn sync_registry_impl(
@@ -375,51 +493,28 @@ pub(crate) async fn sync_registry_impl(
     let installed_identities = marketplace_installed_identities(pool).await?;
     let registry_repository_key = github_import::github_repository_key_from_source(&registry.url)?;
 
-    // Upsert skills into marketplace_skills
+    let mut installed_skill_ids = HashSet::new();
     for skill in &skills {
         let is_installed = marketplace_skill_candidate_id(skill).is_some_and(|candidate_id| {
             installed_identities
                 .get(candidate_id)
                 .is_some_and(|repository_key| repository_key == &registry_repository_key)
         });
-
-        sqlx::query(
-            "INSERT INTO marketplace_skills (id, registry_id, name, description, download_url, is_installed, synced_at, cache_updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-             ON CONFLICT(id) DO UPDATE SET
-                name = excluded.name,
-                description = excluded.description,
-                download_url = excluded.download_url,
-                is_installed = excluded.is_installed,
-                synced_at = excluded.synced_at,
-                cache_updated_at = excluded.cache_updated_at",
-        )
-        .bind(&skill.id)
-        .bind(&skill.registry_id)
-        .bind(&skill.name)
-        .bind(&skill.description)
-        .bind(&skill.download_url)
-        .bind(is_installed)
-        .bind(&skill.synced_at)
-        .bind(&skill.cache_updated_at)
-        .execute(pool)
-        .await?;
+        if is_installed {
+            installed_skill_ids.insert(skill.id.clone());
+        }
     }
 
-    // Update last_synced
     let now = chrono::Utc::now().to_rfc3339();
-    sqlx::query(
-        "UPDATE skill_registries
-         SET last_synced = ?, last_attempted_sync = ?, last_sync_status = ?, last_sync_error = NULL, cache_updated_at = ?
-         WHERE id = ?",
+    replace_registry_cache_snapshot(
+        pool,
+        &registry_id,
+        &skills,
+        &installed_skill_ids,
+        &attempt_time,
+        &now,
     )
-        .bind(&now)
-        .bind(&attempt_time)
-        .bind(RegistrySyncStatus::Success.as_str())
-        .bind(&now)
-        .bind(&registry_id)
-        .execute(pool)
-        .await?;
+    .await?;
 
     // Return the updated list
     search_marketplace_skills_impl(pool, Some(registry_id), None).await

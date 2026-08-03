@@ -3,7 +3,7 @@
   "name": "transactional-metadata-mutations",
   "title": "为元数据与 Marketplace 缓存批量写入补齐事务",
   "description": "收敛 repositories/tags/collections/projects 与 Marketplace cache 的多语句写入，保证全成或全回滚并清理远端已删除缓存。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

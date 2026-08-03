@@ -100,14 +100,8 @@ pub async fn update_project_last_scanned(
 }
 
 /// 删项目。`project_skill_installations` 通过 `ON DELETE CASCADE` 自动清理。
-/// 注意：SQLite 默认不开启外键，需要执行前 `PRAGMA foreign_keys = ON`，
-/// 或调用方先显式删 psi。这里走显式删除避免依赖 PRAGMA 状态。
+/// Production and test pools enable and verify foreign keys on every connection.
 pub async fn delete_project(pool: &DbPool, id: &str) -> Result<(), sqlx::Error> {
-    sqlx::query("DELETE FROM project_skill_installations WHERE project_id = ?")
-        .bind(id)
-        .execute(pool)
-        .await?;
-
     sqlx::query("DELETE FROM projects WHERE id = ?")
         .bind(id)
         .execute(pool)

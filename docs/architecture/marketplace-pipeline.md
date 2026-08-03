@@ -17,11 +17,19 @@ services::marketplace::sync — GitHub API: list repo tree
 parse SKILL.md frontmatter (name, description, downloadUrl)
        │
        ▼
-upsert into marketplace_skills with cache_updated_at
+derive installed hints, then begin a short DB transaction
        │
        ▼
-update skill_registries.last_synced / etag / last_modified
+delete old cache → insert the complete fresh snapshot
+       │
+       ▼
+publish skill_registries success metadata and commit
 ```
+
+Fetch and parse never hold the cache transaction. A fetch failure keeps the
+last good cache and records the attempt/error. After a successful fetch, cache
+rows and success metadata commit together; an empty snapshot clears stale rows,
+while any insert/status failure rolls back to the complete previous snapshot.
 
 Conditional fetch: the registry stores `etag` and `last_modified` from the previous response; subsequent syncs send them as conditional headers and skip parsing on `304 Not Modified`.
 

@@ -2713,6 +2713,514 @@ async fn test_replace_skill_ai_tags_does_not_remove_manual_tags() {
     assert!(ids.contains(&UNCATEGORIZED_TAG_ID));
 }
 
+#[tokio::test]
+async fn transactional_detach_remote_source_rolls_back_all_metadata() {
+    let pool = setup_test_db().await;
+    upsert_skill(
+        &pool,
+        &make_skill("detach-rollback", "Detach Rollback", true),
+    )
+    .await
+    .unwrap();
+    let repository = create_or_update_skill_repository(
+        &pool,
+        Some("repo-detach-rollback"),
+        "Detach Rollback",
+        "github",
+        None,
+        None,
+        None,
+        None,
+        false,
+    )
+    .await
+    .unwrap();
+    assign_skills_to_repository(
+        &pool,
+        &repository.id,
+        &["detach-rollback".to_string()],
+        None,
+    )
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_update_states (skill_id, source_type, status)
+         VALUES ('detach-rollback', 'github', 'up_to_date')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "CREATE TRIGGER fail_detach_member_delete
+         BEFORE DELETE ON skill_repository_members
+         WHEN OLD.skill_id = 'detach-rollback'
+         BEGIN SELECT RAISE(ABORT, 'injected detach failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let error = detach_skill_remote_source(&pool, "detach-rollback")
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("injected detach failure"));
+    for table in ["skill_update_states", "skill_repository_members"] {
+        let count = sqlx::query_scalar::<_, i64>(&format!(
+            "SELECT COUNT(*) FROM {table} WHERE skill_id = 'detach-rollback'"
+        ))
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(count, 1, "{table} must roll back");
+    }
+    assert!(get_skill_repository_by_id(&pool, &repository.id)
+        .await
+        .unwrap()
+        .is_some());
+
+    sqlx::query("DROP TRIGGER fail_detach_member_delete")
+        .execute(&pool)
+        .await
+        .unwrap();
+    detach_skill_remote_source(&pool, "detach-rollback")
+        .await
+        .unwrap();
+    assert!(get_skill_repository_by_id(&pool, &repository.id)
+        .await
+        .unwrap()
+        .is_none());
+}
+
+#[tokio::test]
+async fn transactional_repository_assignment_validates_first_and_rolls_back_later_chunk() {
+    let pool = setup_test_db().await;
+    let repository = create_or_update_skill_repository(
+        &pool,
+        Some("repo-batched-assignment"),
+        "Batched Assignment",
+        "github",
+        None,
+        None,
+        None,
+        None,
+        false,
+    )
+    .await
+    .unwrap();
+    upsert_skill(&pool, &make_skill("assign-valid", "Assign Valid", true))
+        .await
+        .unwrap();
+    let error = assign_skills_to_repository(
+        &pool,
+        &repository.id,
+        &["assign-valid".to_string(), "assign-missing".to_string()],
+        None,
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(error.to_string(), "Skill 'assign-missing' not found");
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM skill_repository_members WHERE repository_id = ?")
+            .bind(&repository.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 0);
+
+    let mut skill_ids = Vec::new();
+    for index in 0..181 {
+        let id = format!("assign-batch-{index:03}");
+        upsert_skill(&pool, &make_skill(&id, &id, true))
+            .await
+            .unwrap();
+        skill_ids.push(id);
+    }
+    sqlx::query(
+        "CREATE TRIGGER fail_later_repository_assignment_chunk
+         BEFORE INSERT ON skill_repository_members
+         WHEN NEW.skill_id = 'assign-batch-180'
+         BEGIN SELECT RAISE(ABORT, 'injected later assignment failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let error = assign_skills_to_repository(&pool, &repository.id, &skill_ids, None)
+        .await
+        .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("injected later assignment failure"));
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM skill_repository_members WHERE repository_id = ?")
+            .bind(&repository.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 0, "earlier assignment chunk must roll back");
+}
+
+#[tokio::test]
+async fn transactional_assign_skill_tags_validates_first_and_rolls_back_trigger() {
+    let pool = setup_test_db().await;
+    upsert_skill(&pool, &make_skill("tag-batch-skill", "Tag Batch", true))
+        .await
+        .unwrap();
+    let first = create_skill_tag(&pool, "transaction-first", None, None)
+        .await
+        .unwrap();
+    let second = create_skill_tag(&pool, "transaction-second", None, None)
+        .await
+        .unwrap();
+
+    let error = assign_skill_tags(
+        &pool,
+        &[
+            "tag-batch-skill".to_string(),
+            "tag-missing-skill".to_string(),
+        ],
+        std::slice::from_ref(&first.id),
+        "manual",
+        None,
+        None,
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(error.to_string(), "Skill 'tag-missing-skill' not found");
+    sqlx::query(
+        "CREATE TRIGGER fail_second_tag_assignment
+         BEFORE INSERT ON skill_tag_links
+         WHEN NEW.tag_id = 'transaction-second'
+         BEGIN SELECT RAISE(ABORT, 'injected tag assignment failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let error = assign_skill_tags(
+        &pool,
+        &["tag-batch-skill".to_string()],
+        &[first.id.clone(), second.id.clone()],
+        "manual",
+        None,
+        None,
+    )
+    .await
+    .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("injected tag assignment failure"));
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM skill_tag_links WHERE skill_id = 'tag-batch-skill'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn transactional_replace_ai_tags_preserves_manual_and_retries_after_failure() {
+    let pool = setup_test_db().await;
+    upsert_skill(&pool, &make_skill("replace-ai-skill", "Replace AI", true))
+        .await
+        .unwrap();
+    let manual = create_skill_tag(&pool, "replace-manual", None, None)
+        .await
+        .unwrap();
+    let old_ai = create_skill_tag(&pool, "replace-old-ai", None, None)
+        .await
+        .unwrap();
+    let first = create_skill_tag(&pool, "replace-new-first", None, None)
+        .await
+        .unwrap();
+    let second = create_skill_tag(&pool, "replace-new-second", None, None)
+        .await
+        .unwrap();
+    assign_skill_tags(
+        &pool,
+        &["replace-ai-skill".to_string()],
+        std::slice::from_ref(&manual.id),
+        "manual",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    assign_skill_tags(
+        &pool,
+        &["replace-ai-skill".to_string()],
+        std::slice::from_ref(&old_ai.id),
+        "ai",
+        Some(0.2),
+        Some("old"),
+    )
+    .await
+    .unwrap();
+
+    let invalid = replace_skill_ai_tags(
+        &pool,
+        "replace-ai-skill",
+        &[("replace-missing".to_string(), 0.5, "missing".to_string())],
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(invalid.to_string(), "Tag 'replace-missing' not found");
+    sqlx::query(
+        "CREATE TRIGGER fail_second_ai_tag_insert
+         BEFORE INSERT ON skill_tag_links
+         WHEN NEW.tag_id = 'replace-new-second' AND NEW.source = 'ai'
+         BEGIN SELECT RAISE(ABORT, 'injected AI tag failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let suggestions = vec![
+        (manual.id.clone(), 0.95, "already manual".to_string()),
+        (first.id.clone(), 0.8, "first".to_string()),
+        (second.id.clone(), 0.9, "second".to_string()),
+    ];
+    let error = replace_skill_ai_tags(&pool, "replace-ai-skill", &suggestions)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("injected AI tag failure"));
+    let before_retry = sqlx::query_as::<_, (String, String)>(
+        "SELECT tag_id, source FROM skill_tag_links
+         WHERE skill_id = 'replace-ai-skill' ORDER BY tag_id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        before_retry,
+        vec![
+            (manual.id.clone(), "manual".to_string()),
+            (old_ai.id.clone(), "ai".to_string())
+        ]
+    );
+
+    sqlx::query("DROP TRIGGER fail_second_ai_tag_insert")
+        .execute(&pool)
+        .await
+        .unwrap();
+    replace_skill_ai_tags(&pool, "replace-ai-skill", &suggestions)
+        .await
+        .unwrap();
+    let after_retry = sqlx::query_as::<_, (String, String)>(
+        "SELECT tag_id, source FROM skill_tag_links
+         WHERE skill_id = 'replace-ai-skill' ORDER BY tag_id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        after_retry,
+        vec![
+            (manual.id, "manual".to_string()),
+            (first.id, "ai".to_string()),
+            (second.id, "ai".to_string()),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn transactional_replace_pending_reviews_restores_old_set_and_retries() {
+    let pool = setup_test_db().await;
+    upsert_skill(
+        &pool,
+        &make_skill("review-rollback", "Review Rollback", true),
+    )
+    .await
+    .unwrap();
+    let old = create_skill_tag(&pool, "review-old", None, None)
+        .await
+        .unwrap();
+    let first = create_skill_tag(&pool, "review-first", None, None)
+        .await
+        .unwrap();
+    let second = create_skill_tag(&pool, "review-second", None, None)
+        .await
+        .unwrap();
+    let review = |tag_id: String| PendingAiTagReviewInput {
+        tag_id,
+        confidence: 0.7,
+        reason: "review".to_string(),
+        proposed_name: None,
+        proposed_description: None,
+    };
+    replace_pending_ai_tag_reviews(&pool, "review-rollback", &[review(old.id.clone())])
+        .await
+        .unwrap();
+    let invalid = replace_pending_ai_tag_reviews(
+        &pool,
+        "review-rollback",
+        &[review("review-missing".to_string())],
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(invalid.to_string(), "Tag 'review-missing' not found");
+    sqlx::query(
+        "CREATE TRIGGER fail_second_pending_review
+         BEFORE INSERT ON skill_ai_tag_reviews
+         WHEN NEW.tag_id = 'review-second'
+         BEGIN SELECT RAISE(ABORT, 'injected pending review failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let replacements = vec![review(first.id.clone()), review(second.id.clone())];
+    let error = replace_pending_ai_tag_reviews(&pool, "review-rollback", &replacements)
+        .await
+        .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("injected pending review failure"));
+    let pending = sqlx::query_scalar::<_, String>(
+        "SELECT tag_id FROM skill_ai_tag_reviews
+         WHERE skill_id = 'review-rollback' AND status = 'pending'",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(pending, vec![old.id]);
+
+    sqlx::query("DROP TRIGGER fail_second_pending_review")
+        .execute(&pool)
+        .await
+        .unwrap();
+    replace_pending_ai_tag_reviews(&pool, "review-rollback", &replacements)
+        .await
+        .unwrap();
+    let mut pending = sqlx::query_scalar::<_, String>(
+        "SELECT tag_id FROM skill_ai_tag_reviews
+         WHERE skill_id = 'review-rollback' AND status = 'pending' ORDER BY tag_id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    let mut expected = vec![first.id, second.id];
+    pending.sort();
+    expected.sort();
+    assert_eq!(pending, expected);
+}
+
+#[tokio::test]
+async fn transactional_collection_delete_restores_parent_and_child_on_trigger_failure() {
+    let pool = setup_test_db().await;
+    upsert_skill(
+        &pool,
+        &make_skill("collection-rollback-skill", "Collection Rollback", true),
+    )
+    .await
+    .unwrap();
+    let collection = create_collection(&pool, "Collection Rollback", None)
+        .await
+        .unwrap();
+    add_skill_to_collection(&pool, &collection.id, "collection-rollback-skill")
+        .await
+        .unwrap();
+    sqlx::query(
+        "CREATE TRIGGER fail_collection_parent_delete
+         BEFORE DELETE ON collections
+         BEGIN SELECT RAISE(ABORT, 'injected collection failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let error = delete_collection(&pool, &collection.id).await.unwrap_err();
+    assert!(error.to_string().contains("injected collection failure"));
+    assert!(get_collection_by_id(&pool, &collection.id)
+        .await
+        .unwrap()
+        .is_some());
+    let child_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM collection_skills WHERE collection_id = ?")
+            .bind(&collection.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(child_count, 1);
+}
+
+#[tokio::test]
+async fn transactional_project_delete_uses_per_connection_fk_and_cascade() {
+    let (pool, _dir) = crate::test_support::file_pool().await;
+    let mut connections = Vec::new();
+    for _ in 0..3 {
+        connections.push(pool.acquire().await.unwrap());
+    }
+    for connection in &mut connections {
+        let enabled: i64 = sqlx::query_scalar("PRAGMA foreign_keys")
+            .fetch_one(&mut **connection)
+            .await
+            .unwrap();
+        assert_eq!(enabled, 1);
+    }
+    drop(connections);
+
+    let project = Project {
+        id: "project-transactional-delete".to_string(),
+        path: "C:/project-transactional-delete".to_string(),
+        name: "Transactional Delete".to_string(),
+        pinned: false,
+        added_at: Utc::now().to_rfc3339(),
+        last_scanned_at: None,
+    };
+    insert_project(&pool, &project).await.unwrap();
+    upsert_project_skill_installation(
+        &pool,
+        &ProjectSkillInstallation {
+            project_id: project.id.clone(),
+            skill_id: "project-child".to_string(),
+            name: "Project Child".to_string(),
+            description: None,
+            file_path: "C:/project/SKILL.md".to_string(),
+            source_origin: "project".to_string(),
+            agent_id: "codex".to_string(),
+            installed_path: "C:/project/.agents/skills/project-child".to_string(),
+            link_type: "copy".to_string(),
+            symlink_target: None,
+            created_at: Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+    sqlx::query(
+        "CREATE TRIGGER fail_project_parent_delete
+         BEFORE DELETE ON projects
+         WHEN OLD.id = 'project-transactional-delete'
+         BEGIN SELECT RAISE(ABORT, 'injected project failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let error = delete_project(&pool, &project.id).await.unwrap_err();
+    assert!(error.to_string().contains("injected project failure"));
+    assert!(get_project_by_id(&pool, &project.id)
+        .await
+        .unwrap()
+        .is_some());
+    let child_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM project_skill_installations WHERE project_id = ?")
+            .bind(&project.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(child_count, 1);
+
+    sqlx::query("DROP TRIGGER fail_project_parent_delete")
+        .execute(&pool)
+        .await
+        .unwrap();
+    delete_project(&pool, &project.id).await.unwrap();
+    let child_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM project_skill_installations WHERE project_id = ?")
+            .bind(&project.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(child_count, 0);
+}
+
 // ── Scan Directories ──────────────────────────────────────────────────────
 
 /// Returns the number of *unique* global_skills_dir paths across all

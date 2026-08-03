@@ -5,10 +5,11 @@
 
 use std::collections::HashMap;
 
-use sqlx::{Row, Sqlite, Transaction};
+use sqlx::{QueryBuilder, Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::db::repos::skills_repo::upsert_skill_in_transaction;
+use crate::db::sqlite_batch::{sqlite_rows_per_batch, validate_text_ids_exist, TextIdTable};
 use crate::db::types::{
     DbPool, Skill, SkillRepository, SkillRepositoryAssignment, SkillRepositoryMember,
     SkillRepositorySyncSkip, SkillRepositoryWithStats, LOCAL_UNKNOWN_REPOSITORY_ID,
@@ -238,16 +239,17 @@ pub async fn delete_skill_repository_sync_skip(
 }
 
 pub async fn detach_skill_remote_source(pool: &DbPool, skill_id: &str) -> Result<(), sqlx::Error> {
+    let mut transaction = pool.begin().await?;
     sqlx::query("DELETE FROM skill_update_states WHERE skill_id = ?")
         .bind(skill_id)
-        .execute(pool)
+        .execute(&mut *transaction)
         .await?;
     sqlx::query("DELETE FROM skill_repository_members WHERE skill_id = ?")
         .bind(skill_id)
-        .execute(pool)
+        .execute(&mut *transaction)
         .await?;
-    prune_empty_skill_repositories(pool).await?;
-    Ok(())
+    prune_empty_skill_repositories_in_transaction(&mut transaction).await?;
+    transaction.commit().await
 }
 
 pub async fn delete_empty_skill_repository(
@@ -574,35 +576,44 @@ pub async fn assign_skills_to_repository(
     skill_ids: &[String],
     source_path: Option<&str>,
 ) -> Result<(), sqlx::Error> {
-    let existing = get_skill_repository_by_id(pool, repository_id).await?;
-    if existing.is_none() {
+    let mut transaction = pool.begin().await?;
+    let repository_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM skill_repositories WHERE id = ?)")
+            .bind(repository_id)
+            .fetch_one(&mut *transaction)
+            .await?;
+    if !repository_exists {
         return Err(sqlx::Error::InvalidArgument(format!(
             "Repository '{}' not found",
             repository_id
         )));
     }
+    validate_text_ids_exist(&mut transaction, TextIdTable::Skills, "Skill", skill_ids).await?;
 
     let now = now_rfc3339();
-    for skill_id in skill_ids {
-        sqlx::query(
+    let rows_per_batch = sqlite_rows_per_batch(5)?;
+    for chunk in skill_ids.chunks(rows_per_batch) {
+        let mut builder = QueryBuilder::<Sqlite>::new(
             "INSERT INTO skill_repository_members
-             (skill_id, repository_id, source_path, added_at, updated_at)
-             VALUES (?, ?, ?, ?, ?)
-             ON CONFLICT(skill_id) DO UPDATE SET
+             (skill_id, repository_id, source_path, added_at, updated_at) ",
+        );
+        builder.push_values(chunk, |mut row, skill_id| {
+            row.push_bind(skill_id)
+                .push_bind(repository_id)
+                .push_bind(source_path)
+                .push_bind(&now)
+                .push_bind(&now);
+        });
+        builder.push(
+            " ON CONFLICT(skill_id) DO UPDATE SET
                repository_id = excluded.repository_id,
                source_path = COALESCE(excluded.source_path, skill_repository_members.source_path),
                updated_at = excluded.updated_at",
-        )
-        .bind(skill_id)
-        .bind(repository_id)
-        .bind(source_path)
-        .bind(&now)
-        .bind(&now)
-        .execute(pool)
-        .await?;
+        );
+        builder.build().execute(&mut *transaction).await?;
     }
 
-    Ok(())
+    transaction.commit().await
 }
 
 pub async fn get_skill_repository_assignment(

@@ -23,6 +23,7 @@
 - [Local Archive Import Contract](./local-archive-import.md)
 - [Skill Deletion Integrity Contract](./skill-deletion-integrity.md)
 - [Versioned SQLite Migration Contract](./database-migrations.md)
+- [Transactional Metadata and Cache Mutations](./transactional-mutations.md)
 - [Recoverable FS + DB Operation Journal Contract](./fs-db-operation-journal.md)
 - [Settings Domain Boundary and Target Quarantine Contract](./settings-domain-boundary.md)
 - [Exclusive Job Lifecycle Contract](./exclusive-job-lifecycle.md)

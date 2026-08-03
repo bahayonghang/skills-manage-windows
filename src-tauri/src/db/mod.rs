@@ -14,6 +14,7 @@ mod pool;
 mod repos;
 mod schema;
 mod seed;
+pub(crate) mod sqlite_batch;
 mod types;
 mod util;
 

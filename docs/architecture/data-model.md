@@ -42,6 +42,12 @@ Before any repair or migration write, an existing database with pending work is 
 
 Repos hide raw `sqlx::query()` calls. Higher layers (commands / services) take a `&DbPool` and call repo methods.
 
+Batch metadata mutations validate all referenced IDs before writing, use a
+shared conservative SQLite bind budget, and keep every chunk in one top-level
+transaction. Repository/tag replacements and collection deletion therefore
+return either the complete new state or the unchanged old state. Project parent
+deletion uses the pool's per-connection foreign-key enforcement for cascade.
+
 ## Field Reference
 
 Field details are regenerated from `src-tauri/src/db/schema/*.rs` by `scripts/build-schema-table.mjs` — never edit the generated section by hand.

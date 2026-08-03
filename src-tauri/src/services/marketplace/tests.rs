@@ -5,9 +5,10 @@
 use super::{
     add_registry_impl, install_marketplace_pinned_snapshot, install_marketplace_skill_impl,
     marketplace_candidate_for_id, marketplace_skills_from_candidates, registry_has_cached_skills,
+    remove_registry_impl, replace_registry_cache_snapshot,
     resolve_skills_sh_candidate_from_snapshot, search_marketplace_skills_impl,
     skills_sh_file_entries_from_snapshot, source_to_github_url, sync_registry_impl,
-    RegistryCacheMetadata, RegistrySyncStatus, SyncRegistryOptions,
+    MarketplaceSkill, RegistryCacheMetadata, RegistrySyncStatus, SyncRegistryOptions,
 };
 use crate::db;
 use crate::secrets::{MockSecretStore, SecretStore, GITHUB_PAT_SECRET_KEY};
@@ -15,11 +16,24 @@ use crate::services::github_import::{
     GitHubRepoRef, GitHubRepoSnapshot, PinnedGitHubRepoSnapshot, RemoteSkillCandidate,
     ResolvedGitHubRepoSource,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tempfile::{tempdir, TempDir};
 
 async fn setup_test_db() -> (crate::db::DbPool, TempDir) {
     crate::test_support::file_pool().await
+}
+
+fn snapshot_skill(registry_id: &str, candidate_id: &str) -> MarketplaceSkill {
+    MarketplaceSkill {
+        id: format!("{registry_id}::{candidate_id}"),
+        registry_id: registry_id.to_string(),
+        name: candidate_id.to_string(),
+        description: Some(format!("{candidate_id} description")),
+        download_url: format!("https://example.invalid/{candidate_id}/SKILL.md"),
+        is_installed: false,
+        synced_at: "2026-08-03T01:00:00Z".to_string(),
+        cache_updated_at: Some("2026-08-03T01:00:00Z".to_string()),
+    }
 }
 
 #[test]
@@ -300,6 +314,429 @@ async fn force_refresh_failure_preserves_last_good_cached_data() {
         .expect("cached skills still queryable");
     assert_eq!(cached_skills.len(), 1);
     assert_eq!(cached_skills[0].name, "last-good");
+}
+
+#[tokio::test]
+async fn transactional_marketplace_remove_rolls_back_children_and_preserves_special_cases() {
+    let (pool, _dir) = setup_test_db().await;
+    let registry = add_registry_impl(
+        &pool,
+        "Remove rollback".to_string(),
+        "github".to_string(),
+        "https://github.com/example/remove-rollback".to_string(),
+        None,
+    )
+    .await
+    .unwrap();
+    for candidate_id in ["a", "b"] {
+        let skill = snapshot_skill(&registry.id, candidate_id);
+        sqlx::query(
+            "INSERT INTO marketplace_skills
+             (id, registry_id, name, description, download_url, is_installed, synced_at, cache_updated_at)
+             VALUES (?, ?, ?, ?, ?, 0, ?, ?)",
+        )
+        .bind(&skill.id)
+        .bind(&skill.registry_id)
+        .bind(&skill.name)
+        .bind(&skill.description)
+        .bind(&skill.download_url)
+        .bind(&skill.synced_at)
+        .bind(&skill.cache_updated_at)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    let trigger_sql = format!(
+        "CREATE TRIGGER fail_registry_parent_delete
+         BEFORE DELETE ON skill_registries
+         WHEN OLD.id = '{}'
+         BEGIN SELECT RAISE(ABORT, 'injected registry delete failure'); END",
+        registry.id
+    );
+    sqlx::query(&trigger_sql).execute(&pool).await.unwrap();
+
+    let error = remove_registry_impl(&pool, registry.id.clone())
+        .await
+        .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("injected registry delete failure"));
+    let child_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM marketplace_skills WHERE registry_id = ?")
+            .bind(&registry.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(child_count, 2);
+    let parent_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM skill_registries WHERE id = ?")
+            .bind(&registry.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(parent_count, 1);
+
+    sqlx::query("DROP TRIGGER fail_registry_parent_delete")
+        .execute(&pool)
+        .await
+        .unwrap();
+    remove_registry_impl(&pool, registry.id.clone())
+        .await
+        .unwrap();
+    remove_registry_impl(&pool, "missing-registry".to_string())
+        .await
+        .unwrap();
+
+    let builtin_id: String = sqlx::query_scalar(
+        "SELECT id FROM skill_registries WHERE is_builtin = 1 ORDER BY id LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let error = remove_registry_impl(&pool, builtin_id.clone())
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        super::MarketplaceError::BuiltinRegistryRemoval
+    ));
+    let builtin_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM skill_registries WHERE id = ?")
+            .bind(builtin_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(builtin_count, 1);
+}
+
+#[tokio::test]
+async fn transactional_marketplace_snapshot_replaces_clears_and_rolls_back_failures() {
+    let (pool, _dir) = setup_test_db().await;
+    let registry = add_registry_impl(
+        &pool,
+        "Snapshot rollback".to_string(),
+        "github".to_string(),
+        "https://github.com/example/snapshot-rollback".to_string(),
+        None,
+    )
+    .await
+    .unwrap();
+    let old = vec![
+        snapshot_skill(&registry.id, "a"),
+        snapshot_skill(&registry.id, "b"),
+    ];
+    replace_registry_cache_snapshot(
+        &pool,
+        &registry.id,
+        &old,
+        &HashSet::new(),
+        "2026-08-03T00:00:00Z",
+        "2026-08-03T00:00:01Z",
+    )
+    .await
+    .unwrap();
+
+    let fresh = vec![
+        snapshot_skill(&registry.id, "b"),
+        snapshot_skill(&registry.id, "c"),
+    ];
+    let trigger_sql = format!(
+        "CREATE TRIGGER fail_second_snapshot_insert
+         BEFORE INSERT ON marketplace_skills
+         WHEN NEW.id = '{}::c'
+         BEGIN SELECT RAISE(ABORT, 'injected second snapshot insert failure'); END",
+        registry.id
+    );
+    sqlx::query(&trigger_sql).execute(&pool).await.unwrap();
+    let error = replace_registry_cache_snapshot(
+        &pool,
+        &registry.id,
+        &fresh,
+        &HashSet::new(),
+        "2026-08-03T02:00:00Z",
+        "2026-08-03T02:00:01Z",
+    )
+    .await
+    .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("injected second snapshot insert failure"));
+    let ids = sqlx::query_scalar::<_, String>(
+        "SELECT id FROM marketplace_skills WHERE registry_id = ? ORDER BY id",
+    )
+    .bind(&registry.id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        ids,
+        vec![format!("{}::a", registry.id), format!("{}::b", registry.id)]
+    );
+    let status: String =
+        sqlx::query_scalar("SELECT last_sync_status FROM skill_registries WHERE id = ?")
+            .bind(&registry.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, RegistrySyncStatus::Error.as_str());
+
+    sqlx::query("DROP TRIGGER fail_second_snapshot_insert")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let installed = HashSet::from([format!("{}::b", registry.id)]);
+    replace_registry_cache_snapshot(
+        &pool,
+        &registry.id,
+        &fresh,
+        &installed,
+        "2026-08-03T03:00:00Z",
+        "2026-08-03T03:00:01Z",
+    )
+    .await
+    .unwrap();
+    let rows = sqlx::query_as::<_, (String, i64)>(
+        "SELECT id, is_installed FROM marketplace_skills
+         WHERE registry_id = ? ORDER BY id",
+    )
+    .bind(&registry.id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    let expected_fresh_rows = vec![
+        (format!("{}::b", registry.id), 1),
+        (format!("{}::c", registry.id), 0),
+    ];
+    assert_eq!(rows, expected_fresh_rows);
+    let last_synced_before_status_failure: Option<String> =
+        sqlx::query_scalar("SELECT last_synced FROM skill_registries WHERE id = ?")
+            .bind(&registry.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    sqlx::query(
+        "CREATE TRIGGER fail_snapshot_success_status
+         BEFORE UPDATE OF last_sync_status ON skill_registries
+         WHEN NEW.last_sync_status = 'success'
+         BEGIN SELECT RAISE(ABORT, 'injected success status failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let error = replace_registry_cache_snapshot(
+        &pool,
+        &registry.id,
+        &[],
+        &HashSet::new(),
+        "2026-08-03T04:00:00Z",
+        "2026-08-03T04:00:01Z",
+    )
+    .await
+    .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("injected success status failure"));
+    let rows_after_status_failure = sqlx::query_as::<_, (String, i64)>(
+        "SELECT id, is_installed FROM marketplace_skills
+         WHERE registry_id = ? ORDER BY id",
+    )
+    .bind(&registry.id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        rows_after_status_failure, expected_fresh_rows,
+        "status failure must preserve the complete B,C snapshot"
+    );
+    let registry_after_status_failure = sqlx::query_as::<_, (Option<String>, String)>(
+        "SELECT last_synced, last_sync_status FROM skill_registries WHERE id = ?",
+    )
+    .bind(&registry.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        registry_after_status_failure.0,
+        last_synced_before_status_failure
+    );
+    assert_eq!(
+        registry_after_status_failure.1,
+        RegistrySyncStatus::Error.as_str(),
+        "failed success metadata must never remain visible as success"
+    );
+    sqlx::query("DROP TRIGGER fail_snapshot_success_status")
+        .execute(&pool)
+        .await
+        .unwrap();
+    replace_registry_cache_snapshot(
+        &pool,
+        &registry.id,
+        &[],
+        &HashSet::new(),
+        "2026-08-03T05:00:00Z",
+        "2026-08-03T05:00:01Z",
+    )
+    .await
+    .unwrap();
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM marketplace_skills WHERE registry_id = ?")
+            .bind(&registry.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn transactional_marketplace_snapshot_rolls_back_a_later_batch() {
+    let (pool, _dir) = setup_test_db().await;
+    let registry = add_registry_impl(
+        &pool,
+        "Large snapshot rollback".to_string(),
+        "github".to_string(),
+        "https://github.com/example/large-snapshot".to_string(),
+        None,
+    )
+    .await
+    .unwrap();
+    let old = vec![
+        snapshot_skill(&registry.id, "old-a"),
+        snapshot_skill(&registry.id, "old-b"),
+    ];
+    replace_registry_cache_snapshot(
+        &pool,
+        &registry.id,
+        &old,
+        &HashSet::new(),
+        "2026-08-03T00:00:00Z",
+        "2026-08-03T00:00:01Z",
+    )
+    .await
+    .unwrap();
+    let fresh = (0..113)
+        .map(|index| snapshot_skill(&registry.id, &format!("fresh-{index:03}")))
+        .collect::<Vec<_>>();
+    let trigger_sql = format!(
+        "CREATE TRIGGER fail_later_snapshot_batch
+         BEFORE INSERT ON marketplace_skills
+         WHEN NEW.id = '{}::fresh-112'
+         BEGIN SELECT RAISE(ABORT, 'injected later snapshot batch failure'); END",
+        registry.id
+    );
+    sqlx::query(&trigger_sql).execute(&pool).await.unwrap();
+
+    let error = replace_registry_cache_snapshot(
+        &pool,
+        &registry.id,
+        &fresh,
+        &HashSet::new(),
+        "2026-08-03T06:00:00Z",
+        "2026-08-03T06:00:01Z",
+    )
+    .await
+    .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("injected later snapshot batch failure"));
+    let ids = sqlx::query_scalar::<_, String>(
+        "SELECT id FROM marketplace_skills WHERE registry_id = ? ORDER BY id",
+    )
+    .bind(&registry.id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        ids,
+        vec![
+            format!("{}::old-a", registry.id),
+            format!("{}::old-b", registry.id),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn transactional_marketplace_snapshot_rolls_back_commit_failure() {
+    let (pool, _dir) = setup_test_db().await;
+    let registry = add_registry_impl(
+        &pool,
+        "Commit rollback".to_string(),
+        "github".to_string(),
+        "https://github.com/example/commit-rollback".to_string(),
+        None,
+    )
+    .await
+    .unwrap();
+    let old = vec![snapshot_skill(&registry.id, "old")];
+    replace_registry_cache_snapshot(
+        &pool,
+        &registry.id,
+        &old,
+        &HashSet::new(),
+        "2026-08-03T00:00:00Z",
+        "2026-08-03T00:00:01Z",
+    )
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "CREATE TABLE deferred_snapshot_commit_guard (
+             registry_id TEXT NOT NULL,
+             FOREIGN KEY (registry_id) REFERENCES skill_registries(id)
+                 DEFERRABLE INITIALLY DEFERRED
+         )",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "CREATE TRIGGER fail_snapshot_commit
+         AFTER UPDATE OF last_sync_status ON skill_registries
+         WHEN NEW.last_sync_status = 'success'
+         BEGIN
+             INSERT INTO deferred_snapshot_commit_guard (registry_id)
+             VALUES ('missing-registry');
+         END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let attempt_time = "2026-08-03T07:00:00Z";
+    let error = replace_registry_cache_snapshot(
+        &pool,
+        &registry.id,
+        &[snapshot_skill(&registry.id, "fresh")],
+        &HashSet::new(),
+        attempt_time,
+        "2026-08-03T07:00:01Z",
+    )
+    .await
+    .unwrap_err();
+    assert!(error.to_string().contains("FOREIGN KEY constraint failed"));
+
+    let ids = sqlx::query_scalar::<_, String>(
+        "SELECT id FROM marketplace_skills WHERE registry_id = ? ORDER BY id",
+    )
+    .bind(&registry.id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(ids, vec![format!("{}::old", registry.id)]);
+    let marker = sqlx::query_as::<_, (Option<String>, String, Option<String>)>(
+        "SELECT last_attempted_sync, last_sync_status, last_sync_error
+         FROM skill_registries WHERE id = ?",
+    )
+    .bind(&registry.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(marker.0.as_deref(), Some(attempt_time));
+    assert_eq!(marker.1, RegistrySyncStatus::Error.as_str());
+    assert!(marker
+        .2
+        .as_deref()
+        .is_some_and(|message| message.contains("FOREIGN KEY constraint failed")));
 }
 
 #[tokio::test]

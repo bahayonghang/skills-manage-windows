@@ -39,15 +39,15 @@
 
 ## Acceptance Criteria
 
-- [ ] 每个scope API至少一条中间步骤SQLite trigger故障注入测试，断言error后所有前置row与旧集合逐项不变。
-- [ ] mixed valid/invalid skill/tag/repository输入的批量测试证明零partial rows；错误文本与现状一致。
-- [ ] AI replace测试覆盖manual preservation、invalid tag、第二条insert trigger failure和retry success。
-- [ ] collection/project/registry parent delete failure保留children/cache；project单delete证明每条acquired connection FK enabled且cascade生效。
-- [ ] Marketplace sync A,B -> fresh B,C后结果恰为B,C；empty结果清空；第二条insert或status update失败后仍完整为A,B且registry不显示success。
-- [ ] Marketplace fetch/parse期间不持有DB transaction；transaction测试可观测边界或代码结构证明锁时间只覆盖DB mutation。
-- [ ] 大batch按bind budget chunk且一个后段chunk失败时前段也rollback；无N x M逐条autocommit。
-- [ ] 没有新增schema时generated docs不变化；如实现需要schema，则先更新本task design并按migration/docs契约执行。
-- [ ] focused db/marketplace tests、Rust fmt、all-targets locked Clippy、locked tests和 `just ci` 通过。
+- [x] 每个scope API至少一条中间步骤SQLite trigger故障注入测试，断言error后所有前置row与旧集合逐项不变。
+- [x] mixed valid/invalid skill/tag/repository输入的批量测试证明零partial rows；错误文本与现状一致。
+- [x] AI replace测试覆盖manual preservation、invalid tag、第二条insert trigger failure和retry success。
+- [x] collection/project/registry parent delete failure保留children/cache；project单delete证明每条acquired connection FK enabled且cascade生效。
+- [x] Marketplace sync A,B -> fresh B,C后结果恰为B,C；empty结果清空；第二条insert、status update或commit失败后仍完整为旧snapshot且registry不显示success。
+- [x] Marketplace fetch/parse期间不持有DB transaction；transaction测试可观测边界或代码结构证明锁时间只覆盖DB mutation。
+- [x] 大batch按bind budget chunk且一个后段chunk失败时前段也rollback；无N x M逐条autocommit。
+- [x] 没有新增schema时generated docs不变化；如实现需要schema，则先更新本task design并按migration/docs契约执行。
+- [x] focused db/marketplace tests、Rust fmt、all-targets locked Clippy、locked tests和 `just ci` 通过。
 
 ## Non-Goals
 

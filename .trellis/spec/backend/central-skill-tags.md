@@ -51,6 +51,7 @@
 - A proposal whose trimmed name or derived ID matches an existing tag downgrades to ordinary reuse. If a derived ID belongs to a different name during tag creation, creation falls back to a UUID.
 - Custom tag creation is atomic: insert with conflict handling, then read by unique name. Concurrent same-name creates and accepting the same proposal for multiple skills reuse one row.
 - Accepting a proposal runs tag creation, skill-link upsert, and review status changes in one transaction. The link uses the actual tag ID returned by name-idempotent creation.
+- Manual/AI assignment and pending-review replacement validate every referenced tag and skill before mutation. Each public call uses one transaction and bounded inserts; AI replacement deletes only `source='ai'`, so validation or insert failure restores the old AI/pending set and preserves manual links.
 - Frontend ordinary filter surfaces must hide unused built-in tags and always hide `uncategorized`; custom tags remain visible even at zero usage. Tag management and assignment surfaces keep the full non-system taxonomy so an unused built-in can receive its first assignment.
 - Selected tag sanitization is based on known ids rather than current visibility. Special filter ids `uncategorized`, `updates`, and `ai-review` remain valid.
 
@@ -97,6 +98,7 @@
 - Rust AI tests: reuse-only, proposal-only, mixed, empty-envelope, and legacy-array formats parse; proposal collisions downgrade to reuse.
 - Rust DB tests: legacy review schema gains both proposal columns; proposal rows round-trip without creating tags; orphan rows are filtered.
 - Rust DB tests: concurrent same-name creation is idempotent; normalized-ID collisions fall back; accept reuses one tag across skills; skip leaves no tag/link.
+- Rust DB tests: mixed valid/missing assignment writes no links; AI and pending-review replacement survive a second-insert trigger with their old sets intact, then succeed on retry.
 - Rust service test: a proposal-only bulk result reports one proposal and one review count with no `uncategorized` link.
 - Vitest: the review drawer shows the localized proposal badge and description, and accept/skip receive the proposal tag ID.
 - Vitest: ordinary filter UI hides `uncategorized` and unused built-ins, shows used built-ins, and always shows custom tags.
