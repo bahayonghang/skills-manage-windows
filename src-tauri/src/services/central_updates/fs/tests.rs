@@ -284,6 +284,27 @@ fn batch_row_parser_preserves_partial_success() {
 }
 
 #[tokio::test]
+async fn remote_hash_fallback_bounds_entries_at_thirty_two_mib_plus_one() {
+    let (runner, fs) = fake_remote_fs();
+    let root = PathBuf::from("/home/tester/.skillsmanage/skills/demo");
+    runner.push_output(86, "", "");
+    runner.push_success("");
+    runner.push_success("SKILL.md\tfile\t\n");
+    runner.push_success("content");
+
+    let hashes = fs
+        .hash_directories(std::slice::from_ref(&root))
+        .await
+        .unwrap();
+    assert!(hashes.contains_key(&root));
+
+    let calls = runner.calls();
+    let read = &calls[3];
+    assert!(read.args.last().unwrap().contains("bs=33554433 count=1"));
+    assert_eq!(read.policy.stdout_limit, 33_554_433);
+}
+
+#[tokio::test]
 async fn ssh_and_wsl_fake_runners_cover_update_stage_swap_and_phase_loss_rollback() {
     use crate::services::central_operation::{UpdateManifest, MANIFEST_VERSION};
 

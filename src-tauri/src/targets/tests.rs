@@ -1138,6 +1138,43 @@ mkdir -p -- "$HOME/.skillsmanage/skills" && printf 'MKDIR_OK\n'"#
     }
 
     #[tokio::test]
+    async fn ssh_bounded_read_uses_size_probe_max_plus_one_policy_and_typed_overflow() {
+        let (runner, connection) = fake_ssh_connection();
+        runner.push_success("small");
+        runner.push_success("too-big");
+        runner.push_output(REMOTE_FILE_TOO_LARGE_EXIT, "", "must-not-leak");
+        runner.push_output(1, "", "secret remote stderr");
+
+        assert_eq!(
+            connection.read_file_bounded("/tmp/a", 5).await.unwrap(),
+            b"small"
+        );
+        assert!(matches!(
+            connection.read_file_bounded("/tmp/a", 5).await.unwrap_err(),
+            TargetsError::RemoteFileTooLarge { limit: 5 }
+        ));
+        let preflight = connection.read_file_bounded("/tmp/a", 5).await.unwrap_err();
+        assert!(matches!(
+            preflight,
+            TargetsError::RemoteFileTooLarge { limit: 5 }
+        ));
+        assert!(!preflight.to_string().contains("must-not-leak"));
+        let transport = connection.read_file_bounded("/tmp/a", 5).await.unwrap_err();
+        assert!(matches!(
+            transport,
+            TargetsError::RemoteFileReadFailed { transport: "ssh" }
+        ));
+        assert!(!transport.to_string().contains("secret remote stderr"));
+
+        let calls = runner.calls();
+        assert_eq!(calls.len(), 4);
+        assert!(calls[0].args.last().unwrap().contains("wc -c"));
+        assert!(calls[0].args.last().unwrap().contains("bs=6 count=1"));
+        assert_eq!(calls[0].policy.stdout_limit, 6);
+        assert_eq!(calls[0].policy.class.label(), "standard");
+    }
+
+    #[tokio::test]
     async fn ssh_runner_start_failure_maps_to_start_ssh_error() {
         let (runner, connection) = fake_ssh_connection();
         runner.push_error(RunnerPhase::Start, "program not found");
@@ -1196,6 +1233,23 @@ mkdir -p -- "$HOME/.skillsmanage/skills" && printf 'MKDIR_OK\n'"#
                 "test -e '/tmp/a'"
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn wsl_bounded_read_matches_ssh_script_and_policy() {
+        let (runner, connection) = fake_wsl_connection();
+        runner.push_success("small");
+
+        assert_eq!(
+            connection.read_file_bounded("/tmp/a", 5).await.unwrap(),
+            b"small"
+        );
+        let calls = runner.calls();
+        assert_eq!(calls[0].args[3..5], ["sh", "-lc"]);
+        assert!(calls[0].args.last().unwrap().contains("wc -c"));
+        assert!(calls[0].args.last().unwrap().contains("bs=6 count=1"));
+        assert_eq!(calls[0].policy.stdout_limit, 6);
+        assert_eq!(calls[0].policy.class.label(), "standard");
     }
 
     #[tokio::test]

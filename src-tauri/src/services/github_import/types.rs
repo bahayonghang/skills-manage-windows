@@ -369,7 +369,6 @@ pub(super) struct GitHubAccessDenial {
     pub(super) kind: GitHubAccessDenialKind,
     pub(super) operation: &'static str,
     pub(super) status: reqwest::StatusCode,
-    pub(super) github_message: Option<String>,
     pub(super) used_auth: bool,
 }
 
@@ -393,11 +392,7 @@ impl fmt::Display for GitHubAccessDenial {
                 if let Some(remaining) = remaining {
                     write!(f, " (remaining quota: {})", remaining)?;
                 }
-                if let Some(message) = &self.github_message {
-                    write!(f, ". GitHub said: {}", message)?;
-                } else {
-                    write!(f, ".")?;
-                }
+                write!(f, ".")?;
                 Ok(())
             }
             GitHubAccessDenialKind::AuthenticationOrPermission => {
@@ -414,11 +409,7 @@ impl fmt::Display for GitHubAccessDenial {
                         self.operation, status
                     )?;
                 }
-                if let Some(message) = &self.github_message {
-                    write!(f, ". GitHub said: {}", message)?;
-                } else {
-                    write!(f, ".")?;
-                }
+                write!(f, ".")?;
                 Ok(())
             }
         }

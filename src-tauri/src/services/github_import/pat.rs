@@ -50,7 +50,10 @@ pub(crate) fn github_client() -> Result<reqwest::Client, GithubImportError> {
         builder.build()
     }) {
         Ok(client) => Ok(client.clone()),
-        Err(error) => Err(GithubImportError::Http(error.to_string())),
+        Err(error) => Err(GithubImportError::Http(format!(
+            "Failed to create GitHub HTTP client: {}",
+            sanitized_github_transport_error(error)
+        ))),
     }
 }
 
@@ -309,7 +312,12 @@ pub(crate) async fn test_github_pat_impl(
         .bearer_auth(&token)
         .send()
         .await
-        .map_err(|e| GithubImportError::Http(format!("Failed to test GitHub token: {}", e)))?;
+        .map_err(|error| {
+            GithubImportError::Http(format!(
+                "Failed to test GitHub token: {}",
+                sanitized_github_transport_error(&error)
+            ))
+        })?;
     let status = response.status();
     if status.is_success() {
         return Ok(GitHubPatTestResult {

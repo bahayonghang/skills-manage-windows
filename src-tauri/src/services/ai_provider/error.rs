@@ -66,6 +66,15 @@ pub enum AiProviderError {
 
     #[error("AI explanation returned no content.")]
     EmptyExplanation,
+
+    #[error("ai.response_too_large:The AI provider {phase} exceeded the {limit}-byte limit.")]
+    ResponseTooLarge { phase: &'static str, limit: u64 },
+
+    #[error("ai.timeout:The AI provider {phase} timed out after {timeout_ms} ms.")]
+    ResponseTimeout {
+        phase: &'static str,
+        timeout_ms: u128,
+    },
 }
 
 impl AiProviderError {
@@ -159,7 +168,7 @@ pub(crate) fn classify_reqwest_error(
     let chain = parts.join(" → ");
     let low = chain.to_ascii_lowercase();
 
-    let (kind, code, message, retryable) = if low.contains("tunnel")
+    let (kind, code, message, details, retryable) = if low.contains("tunnel")
         || (low.contains("proxy") && low.contains("connect"))
         || (low.contains("proxy") && low.contains("unsuccessful"))
     {
@@ -168,6 +177,7 @@ pub(crate) fn classify_reqwest_error(
             AI_PROXY,
             "Proxy or network tunnel connection failed. Try another region endpoint, or clear HTTPS_PROXY, HTTP_PROXY, and ALL_PROXY before restarting the app."
                 .to_string(),
+            "The request failed while establishing a proxy or network tunnel.",
             true,
         )
     } else if low.contains("proxy") {
@@ -175,6 +185,7 @@ pub(crate) fn classify_reqwest_error(
             ExplanationErrorKind::Proxy,
             AI_PROXY,
             "A system proxy may be intercepting the request. Add a direct-connect rule for this domain or switch region endpoint.".to_string(),
+            "The request failed while using the configured proxy.",
             true,
         )
     } else if e.is_connect() || low.contains("connect") {
@@ -182,6 +193,7 @@ pub(crate) fn classify_reqwest_error(
             ExplanationErrorKind::Connect,
             AI_CONNECT,
             "Unable to connect. Confirm the URL is reachable from this machine, or try another region endpoint.".to_string(),
+            "The provider connection could not be established.",
             true,
         )
     } else if e.is_timeout() || low.contains("timed out") || low.contains("deadline has elapsed") {
@@ -189,6 +201,7 @@ pub(crate) fn classify_reqwest_error(
             ExplanationErrorKind::Timeout,
             AI_TIMEOUT,
             "The request timed out. The network may be blocked or intercepted by a firewall; verify connectivity with curl if needed.".to_string(),
+            "The provider request exceeded its deadline.",
             true,
         )
     } else if low.contains("dns") || low.contains("lookup") {
@@ -197,6 +210,7 @@ pub(crate) fn classify_reqwest_error(
             AI_DNS,
             "DNS lookup failed. Confirm the domain is correct, or try another DNS resolver."
                 .to_string(),
+            "The provider hostname could not be resolved.",
             true,
         )
     } else if low.contains("certificate") || low.contains("tls") || low.contains("handshake") {
@@ -204,6 +218,7 @@ pub(crate) fn classify_reqwest_error(
             ExplanationErrorKind::Tls,
             AI_TLS,
             "TLS or certificate handshake failed. Check the system clock and any intercepting proxy.".to_string(),
+            "The secure provider connection could not be established.",
             false,
         )
     } else {
@@ -211,6 +226,7 @@ pub(crate) fn classify_reqwest_error(
             ExplanationErrorKind::Unknown,
             AI_NETWORK,
             "The network request failed.".to_string(),
+            "The provider request failed before a response was available.",
             false,
         )
     };
@@ -218,7 +234,7 @@ pub(crate) fn classify_reqwest_error(
     ExplanationErrorInfo {
         code: Some(code.to_string()),
         message,
-        details: chain,
+        details: details.to_string(),
         kind,
         retryable,
         fallback_tried,

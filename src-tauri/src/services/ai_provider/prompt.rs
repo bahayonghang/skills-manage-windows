@@ -84,10 +84,11 @@ pub(crate) fn resolve_custom_url(raw_url: &str, protocol: ExplanationApiProtocol
 
 /// Truncate skill content to 8000 chars to keep prompts within typical context limits.
 pub(crate) fn truncate_content(content: &str) -> String {
-    if content.len() > 8000 {
-        format!("{}...\n\n(内容已截断)", &content[..8000])
+    let (prefix, truncated) = crate::services::bounded_ingestion::truncate_chars(content, 8_000);
+    if truncated {
+        format!("{prefix}...\n\n(内容已截断)")
     } else {
-        content.to_string()
+        prefix.to_string()
     }
 }
 

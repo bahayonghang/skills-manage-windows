@@ -28,6 +28,12 @@ pub(crate) enum ProcessCancellation<'a> {
 
 生产 policy 是单一来源：Probe = 30 s / 每流 1 MiB；Standard = 120 s / 每流 8 MiB；BulkTransfer = 15 min / 每流 32 MiB。测试通过 `ProcessPolicy::for_tests` 使用短 deadline/cap，不修改生产常量。
 
+Bounded remote file reads retain the Standard 120 s deadline but derive stdout
+capacity from the caller's explicit file budget: exactly `max_bytes + 1`.
+This permits a reviewed 32 MiB repository entry without silently falling back
+to the Standard 8 MiB cap, while still giving every read a hard allocation
+ceiling. Stderr remains capped at 1 MiB.
+
 ## 3. Contracts
 
 - 保留 `std::process::Command` 纯 builder；runner 转换为 `tokio::process::Command`，设置 `kill_on_drop(true)`，异步并发执行 stdin writer、stdout/stderr bounded reader 与 child wait。

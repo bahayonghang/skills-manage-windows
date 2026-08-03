@@ -32,14 +32,14 @@
 
 ## Acceptance Criteria
 
-- [ ] chunked oversized Git tree、AI JSON/error body 与 remote file 在 limit+1 后停止读取，测试证明没有完整 body 分配。
-- [ ] SSE 无换行超大 event、持续小 chunk 超总量、30 秒无进展、总期限、正常 fragmented UTF-8 event 都有 deterministic paused-time tests。
-- [ ] 8,000-byte 边界附近的中文、emoji、combining text、ASCII 和空内容不 panic，truncate 结果为合法 UTF-8 且满足 char/byte契约。
-- [ ] Local 文件在 metadata 后增长、remote 报告小但输出超限、缺失/invalid UTF-8 都返回 typed error。
-- [ ] 主 `SKILL.md` 与 arbitrary skill file 的 Local/SSH/WSL budget parity通过；正常 1 MiB 以下行为/文案不变。
-- [ ] AI success/auth/429/provider fallback/cache/event sequence保持；超限/timeout 不写 partial explanation cache或 complete event。
-- [ ] inventory 文档列出所有生产 `.text()`/`.bytes()`/`read_to_string`/remote read call site及其 cap/exemption。
-- [ ] focused AI/GitHub/Central/scanner/targets tests、Rust fmt、all-targets locked Clippy、locked tests和 `just ci` 通过。
+- [x] chunked oversized Git tree、AI JSON/error body 与 remote file 在 limit+1 后停止读取，测试证明没有完整 body 分配。
+- [x] SSE 无换行超大 event、持续小 chunk 超总量、30 秒无进展、总期限、正常 fragmented UTF-8 event 都有 deterministic paused-time tests。
+- [x] 8,000-byte 边界附近的中文、emoji、combining text、ASCII 和空内容不 panic，truncate 结果为合法 UTF-8 且满足 char/byte契约。
+- [x] Local 文件在 metadata 后增长、remote 报告小但输出超限、缺失/invalid UTF-8 都返回 typed error。
+- [x] 主 `SKILL.md` 与 arbitrary skill file 的 Local/SSH/WSL budget parity通过；正常 1 MiB 以下行为/文案不变。
+- [x] AI success/auth/429/provider fallback/cache/event sequence保持；超限/timeout 不写 partial explanation cache或 complete event。
+- [x] inventory 文档列出所有生产 `.text()`/`.bytes()`/`read_to_string`/remote read call site及其 cap/exemption。
+- [x] focused AI/GitHub/Central/scanner/targets tests、Rust fmt、all-targets locked Clippy、locked tests和 `just ci` 通过。
 
 ## Non-Goals
 

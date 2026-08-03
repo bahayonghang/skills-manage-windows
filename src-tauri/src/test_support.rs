@@ -186,13 +186,18 @@ impl FakeRunner {
 
     /// Queue a response with an explicit exit code, stdout and stderr.
     pub fn push_output(&self, code: i32, stdout: &str, stderr: &str) {
+        self.push_output_bytes(code, stdout.as_bytes(), stderr.as_bytes());
+    }
+
+    /// Queue raw output for protocol tests that need non-UTF-8 bytes.
+    pub fn push_output_bytes(&self, code: i32, stdout: &[u8], stderr: &[u8]) {
         self.responses
             .lock()
             .unwrap()
             .push_back(FakeResponse::Output(std::process::Output {
                 status: exit_status(code),
-                stdout: stdout.as_bytes().to_vec(),
-                stderr: stderr.as_bytes().to_vec(),
+                stdout: stdout.to_vec(),
+                stderr: stderr.to_vec(),
             }));
     }
 

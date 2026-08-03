@@ -123,6 +123,9 @@ pub enum CentralSkillsError {
         source: std::string::FromUtf8Error,
     },
 
+    #[error("{target} skill file is not valid UTF-8.")]
+    SkillFileNotUtf8 { target: &'static str },
+
     #[error("Path is not a file: {0}")]
     NotAFile(String),
 

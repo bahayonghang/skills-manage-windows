@@ -1,9 +1,15 @@
+use std::borrow::Cow;
+
 use reqwest::Client;
 use serde_json::Value;
 
 use crate::{
     db::{derive_skill_tag_id, Skill, SkillTag, UNCATEGORIZED_TAG_ID},
-    services::ai_provider,
+    services::{
+        ai_provider,
+        bounded_ingestion::{read_file_text_bounded, ReadLimit},
+        resource_budget::DEFAULT_FILE_BYTES,
+    },
 };
 
 use super::error::AiTaggingError;
@@ -16,11 +22,7 @@ pub(crate) async fn suggest_skill_tags_for_skill(
     context: &AiTaggingContext,
     skill: &Skill,
 ) -> Result<ResolvedAiSuggestions, AiTaggingError> {
-    let content = skill
-        .content
-        .clone()
-        .or_else(|| std::fs::read_to_string(&skill.file_path).ok())
-        .unwrap_or_default();
+    let content = load_skill_content(skill);
     let prompt = build_tagging_prompt(
         &skill.name,
         skill.description.as_deref(),
@@ -38,6 +40,19 @@ pub(crate) async fn suggest_skill_tags_for_skill(
     .await?;
     let parsed = parse_ai_tag_suggestions(&raw)?;
     resolve_ai_suggestions(&skill.id, &context.tags, parsed)
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+pub(super) fn load_skill_content(skill: &Skill) -> Cow<'_, str> {
+    match skill.content.as_deref() {
+        Some(content) => Cow::Borrowed(content),
+        None => read_file_text_bounded(
+            std::path::Path::new(&skill.file_path),
+            ReadLimit::new("AI tagging SKILL.md", DEFAULT_FILE_BYTES),
+        )
+        .map(Cow::Owned)
+        .unwrap_or_default(),
+    }
 }
 
 pub(crate) fn build_tagging_prompt(
@@ -111,32 +126,51 @@ async fn call_ai_for_tagging(
             .header("anthropic-version", "2023-06-01")
     };
 
-    let response = request.send().await.map_err(|e| {
-        AiTaggingError::Http(ai_provider::coded_error_with_details(
-            ai_provider::AI_REQUEST_FAILED,
-            "AI tagging request failed.",
-            e.to_string(),
-        ))
-    })?;
-    let status = response.status();
-    let text = response
-        .text()
+    let response = tokio::time::timeout(ai_provider::AI_HEADER_TIMEOUT, request.send())
         .await
-        .map_err(|e| AiTaggingError::Http(format!("Failed to read AI tagging response: {}", e)))?;
+        .map_err(|_| ai_provider::AiProviderError::ResponseTimeout {
+            phase: "tagging response header deadline",
+            timeout_ms: ai_provider::AI_HEADER_TIMEOUT.as_millis(),
+        })?
+        .map_err(|e| {
+            if e.is_timeout() {
+                AiTaggingError::Provider(ai_provider::AiProviderError::ResponseTimeout {
+                    phase: "tagging connection deadline",
+                    timeout_ms: ai_provider::AI_CONNECT_TIMEOUT.as_millis(),
+                })
+            } else {
+                AiTaggingError::Http(ai_provider::coded_error_with_details(
+                    ai_provider::AI_REQUEST_FAILED,
+                    "AI tagging request failed.",
+                    ai_provider::format_reqwest_error(&e),
+                ))
+            }
+        })?;
+    let status = response.status();
+    let body_limit = if status.is_success() {
+        ai_provider::AI_SUCCESS_BODY_BYTES
+    } else {
+        ai_provider::AI_ERROR_BODY_BYTES
+    };
+    let text_result =
+        ai_provider::read_ai_response_body(response, body_limit, "tagging response body").await;
     if !status.is_success() {
         if status.as_u16() == 429 {
             return Err(AiTaggingError::RateLimited(ai_provider::coded_error_with_details(
                 ai_provider::AI_RATE_LIMIT,
                 "AI tagging was rate limited. Reduce AI Tag concurrency or increase the request interval in Settings.",
-                format!("HTTP {status}: {text}"),
+                format!("HTTP {status}"),
             )));
         }
+        text_result?;
         return Err(AiTaggingError::Http(ai_provider::coded_error_with_details(
             ai_provider::AI_RESPONSE_ERROR,
             format!("AI tagging returned HTTP {status}."),
-            text,
+            format!("HTTP {status}"),
         )));
     }
+
+    let text = text_result?;
 
     extract_ai_response_text(&text, is_openai)
 }

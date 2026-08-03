@@ -14,6 +14,7 @@ use uuid::Uuid;
 use crate::fs_util::run_blocking_fs_with;
 use crate::services::github_import::{repo_file_relative_to_source, GitHubRepoSnapshot};
 use crate::services::installation::copy_dir_all;
+use crate::services::resource_budget::DEFAULT_ARCHIVE_ENTRY_BYTES;
 use crate::targets::{connect_remote_target, ActiveTarget, ConnectedRemoteTarget};
 
 use super::error::CentralUpdatesError;
@@ -350,7 +351,7 @@ async fn hash_remote_directory(
                         return Err(CentralUpdatesError::UnsupportedRemotePath(child_path));
                     }
                     let bytes = conn
-                        .read_file(&child_path)
+                        .read_file_bounded(&child_path, DEFAULT_ARCHIVE_ENTRY_BYTES)
                         .await
                         .map_err(|e| CentralUpdatesError::Remote(e.to_string()))?;
                     let digest = Sha256::digest(&bytes);

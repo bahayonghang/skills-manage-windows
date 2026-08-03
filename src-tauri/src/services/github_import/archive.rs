@@ -1,4 +1,7 @@
-use crate::services::resource_budget::ResourceBudget;
+use crate::services::{
+    bounded_ingestion::{read_response_bytes_bounded, BoundedReadError, ReadLimit},
+    resource_budget::{BudgetExceeded, ResourceBudget},
+};
 
 use super::*;
 
@@ -67,19 +70,17 @@ async fn download_repository_archive_with_budget(
         }));
     }
 
-    if let Some(content_length) = response.content_length() {
-        budget
-            .reject_archive_size(content_length)
-            .map_err(GithubImportError::Budget)?;
-    }
-
-    let bytes = response.bytes().await.map_err(|e| {
-        GithubImportError::Http(format!("Failed to read GitHub repository archive: {}", e))
-    })?;
-    budget
-        .reject_archive_size(bytes.len() as u64)
-        .map_err(GithubImportError::Budget)?;
-    Ok(bytes.to_vec())
+    read_response_bytes_bounded(
+        response,
+        ReadLimit::new("GitHub repository archive", budget.archive_bytes),
+    )
+    .await
+    .map_err(|error| match error {
+        BoundedReadError::LimitExceeded { actual, limit, .. } => GithubImportError::Budget(
+            BudgetExceeded::new("GitHub repository archive", actual, limit),
+        ),
+        _ => GithubImportError::Http("Failed to read GitHub repository archive.".to_string()),
+    })
 }
 
 pub(super) fn snapshot_from_repository_archive(

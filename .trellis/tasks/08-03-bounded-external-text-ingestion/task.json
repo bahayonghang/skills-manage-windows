@@ -3,7 +3,7 @@
   "name": "bounded-external-text-ingestion",
   "title": "统一外部响应与文本读取的有界输入契约",
   "description": "在网络响应和用户/远端文本进入内存前实施预算、期限与 UTF-8 安全截断，覆盖 AI、Marketplace、Git tree 与 SKILL.md 读取。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

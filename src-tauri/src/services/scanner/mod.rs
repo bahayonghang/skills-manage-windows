@@ -12,6 +12,10 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
 
 use crate::db::{self, AgentSkillObservation, DbPool, Skill, SkillInstallation};
+use crate::services::{
+    bounded_ingestion::{read_file_text_bounded, ReadLimit},
+    resource_budget::DEFAULT_FILE_BYTES,
+};
 use crate::skill_time::filesystem_timestamps_from_metadata;
 use crate::targets::{connect_remote_target, ActiveTarget};
 
@@ -89,7 +93,9 @@ struct DirectorySkillEntry {
 /// `description`. Returns `None` if the file is missing, cannot be read, lacks
 /// a frontmatter block, or is missing the required `name` field.
 pub fn parse_skill_md(path: &Path) -> Option<SkillInfo> {
-    let content = std::fs::read_to_string(path).ok()?;
+    let content =
+        read_file_text_bounded(path, ReadLimit::new("scanner SKILL.md", DEFAULT_FILE_BYTES))
+            .ok()?;
     parse_skill_md_content(&content)
 }
 
@@ -581,11 +587,15 @@ pub async fn scan_remote_skills_impl(
     let content_by_path = if unique_skill_paths.is_empty() {
         HashMap::new()
     } else {
-        let read_output = connection
-            .run_script(&build_batch_read_script(&unique_skill_paths), &[])
-            .await
-            .map_err(|e| ScannerError::Remote(e.to_string()))?;
-        parse_batch_read_output(&read_output)
+        let mut contents = HashMap::new();
+        for paths in unique_skill_paths.chunks(ssh_batch::REMOTE_READ_CHUNK_SIZE) {
+            let read_output = connection
+                .run_script(&build_batch_read_script(paths), &[])
+                .await
+                .map_err(|e| ScannerError::Remote(e.to_string()))?;
+            contents.extend(parse_batch_read_output(&read_output));
+        }
+        contents
     };
 
     let mut total_skills: usize = 0;

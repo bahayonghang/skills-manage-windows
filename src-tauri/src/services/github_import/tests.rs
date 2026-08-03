@@ -938,7 +938,6 @@ metadata:
             },
             operation: "inspecting the repository",
             status: reqwest::StatusCode::FORBIDDEN,
-            github_message: Some("API rate limit exceeded for 1.2.3.4.".to_string()),
             used_auth: false,
         };
 
@@ -947,7 +946,8 @@ metadata:
         assert!(message.contains("rate limit was exceeded"));
         assert!(message.contains("Retry later after 2026-04-17 12:34:56 UTC"));
         assert!(message.contains("authenticated GitHub requests"));
-        assert!(message.contains("API rate limit exceeded"));
+        assert!(!message.contains("API rate limit exceeded"));
+        assert!(!message.contains("1.2.3.4"));
     }
 
     #[test]
@@ -956,7 +956,6 @@ metadata:
             kind: GitHubAccessDenialKind::AuthenticationOrPermission,
             operation: "reading repository contents",
             status: reqwest::StatusCode::UNAUTHORIZED,
-            github_message: Some("Requires authentication".to_string()),
             used_auth: false,
         };
 
@@ -965,7 +964,7 @@ metadata:
         assert!(message.contains("denied access"));
         assert!(message.contains("require authentication"));
         assert!(message.contains("token/permissions are insufficient"));
-        assert!(message.contains("Requires authentication"));
+        assert!(!message.contains("Requires authentication"));
     }
 
     #[test]
@@ -1232,6 +1231,32 @@ metadata:
 
         assert!(message.contains("timeout"));
         assert!(message.contains("HTTP 502"));
+    }
+
+    #[tokio::test]
+    async fn github_transport_error_summary_omits_request_url() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind closed port");
+        let address = listener.local_addr().expect("closed port address");
+        let server = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept request");
+            drop(stream);
+        });
+        let secret = "transport-secret";
+        let request_url = format!("http://{address}/private?token={secret}");
+        let error = reqwest::Client::builder()
+            .no_proxy()
+            .build()
+            .expect("client")
+            .get(&request_url)
+            .send()
+            .await
+            .expect_err("closed port should fail");
+
+        let summary = sanitized_github_transport_error(&error);
+        assert!(!summary.contains(secret));
+        assert!(!summary.contains(&request_url));
+        assert!(!summary.contains(&address.to_string()));
+        server.join().expect("server join");
     }
 
     #[test]
@@ -3177,7 +3202,8 @@ metadata:
     // fully specified before it is wired into preview/import.
     mod tree_manifest_parser {
         use super::super::tree_manifest::{
-            classify_tree_entry, parse_tree_response, RepositoryFileKind,
+            classify_tree_entry, parse_tree_response, read_tree_response_with_budget,
+            RepositoryFileKind,
         };
         use super::*;
         use crate::services::resource_budget::{ResourceBudget, DEFAULT_TREE_ENTRIES};
@@ -3207,6 +3233,46 @@ metadata:
                 "{{\"sha\":\"abc\",\"url\":\"https://api.github.com/\",\"tree\":[{joined}],\"truncated\":{truncated}}}",
                 truncated = truncated
             )
+        }
+
+        #[tokio::test]
+        async fn chunked_tree_body_stops_at_limit_before_eof() {
+            use std::io::{Read, Write};
+            use std::net::TcpListener;
+            use std::sync::mpsc;
+
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+            let address = listener.local_addr().expect("address");
+            let (release_tx, release_rx) = mpsc::channel();
+            let server = std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().expect("accept");
+                let mut request = [0_u8; 1024];
+                let _ = stream.read(&mut request).expect("read request");
+                stream
+                    .write_all(
+                        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n11\r\n{\"tree\":[]}xxxxxx\r\n",
+                    )
+                    .expect("write over-limit chunk");
+                release_rx.recv().expect("reader returned before EOF");
+            });
+
+            let response = github_client()
+                .expect("client")
+                .get(format!("http://{address}/tree"))
+                .send()
+                .await
+                .expect("chunked response");
+            let budget = ResourceBudget {
+                tree_response_bytes: 16,
+                ..ResourceBudget::default_skill()
+            };
+
+            let error = read_tree_response_with_budget(response, &sample_repo(), budget)
+                .await
+                .expect_err("cap+1 chunk should fail before EOF");
+            assert!(matches!(error, GithubImportError::Budget(_)));
+            release_tx.send(()).unwrap();
+            server.join().expect("server join");
         }
 
         #[test]

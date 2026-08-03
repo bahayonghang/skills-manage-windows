@@ -173,6 +173,21 @@ impl ConnectedRemoteTarget {
         }
     }
 
+    pub async fn read_file_bounded(
+        &self,
+        path: &str,
+        max_bytes: u64,
+    ) -> Result<Vec<u8>, TargetsError> {
+        match self {
+            ConnectedRemoteTarget::Ssh(connection) => {
+                connection.read_file_bounded(path, max_bytes).await
+            }
+            ConnectedRemoteTarget::Wsl(connection) => {
+                connection.read_file_bounded(path, max_bytes).await
+            }
+        }
+    }
+
     pub async fn copy_dir(&self, source: &str, target: &str) -> Result<(), TargetsError> {
         match self {
             ConnectedRemoteTarget::Ssh(connection) => connection.copy_dir(source, target).await,

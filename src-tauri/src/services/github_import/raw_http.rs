@@ -1,5 +1,7 @@
-use crate::services::resource_budget::{BudgetExceeded, ResourceBudget};
-use futures_util::StreamExt;
+use crate::services::bounded_ingestion::{
+    read_response_bytes_bounded, read_response_text_bounded, BoundedReadError, ReadLimit,
+};
+use crate::services::resource_budget::ResourceBudget;
 
 use super::*;
 
@@ -113,54 +115,32 @@ pub(super) async fn read_raw_response_with_budget(
     budget_kind: RawBytesBudget,
     path: &str,
 ) -> Result<Vec<u8>, GithubImportError> {
-    if let Some(content_length) = response.content_length() {
-        reject_raw_bytes_budget(budget, budget_kind, path, content_length)?;
-    }
-
-    let mut bytes = Vec::new();
-    let mut total = 0_u64;
-    let mut stream = response.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| {
-            GithubImportError::Http(format!("Failed to read skill metadata: {}", e))
-        })?;
-        let chunk_len = u64::try_from(chunk.len())
-            .map_err(|_| raw_budget_overflow_error(budget, budget_kind, path))?;
-        total = total
-            .checked_add(chunk_len)
-            .ok_or_else(|| raw_budget_overflow_error(budget, budget_kind, path))?;
-        reject_raw_bytes_budget(budget, budget_kind, path, total)?;
-        bytes.extend_from_slice(&chunk);
-    }
-    Ok(bytes)
+    let limit = match budget_kind {
+        RawBytesBudget::Metadata => ReadLimit::new("GitHub skill metadata", budget.file_bytes),
+        RawBytesBudget::RepositoryFile => {
+            ReadLimit::new("GitHub repository file", budget.archive_entry_bytes)
+        }
+    };
+    read_response_bytes_bounded(response, limit)
+        .await
+        .map_err(|error| map_raw_read_error(error, budget, budget_kind, path))
 }
 
-fn raw_budget_overflow_error(
+fn map_raw_read_error(
+    error: BoundedReadError,
     budget: ResourceBudget,
     budget_kind: RawBytesBudget,
     path: &str,
 ) -> GithubImportError {
-    let (label, limit) = match budget_kind {
-        RawBytesBudget::Metadata => (format!("File '{path}'"), budget.file_bytes),
-        RawBytesBudget::RepositoryFile => (
-            format!("GitHub repository archive entry '{path}'"),
-            budget.archive_entry_bytes,
-        ),
-    };
-    GithubImportError::Budget(BudgetExceeded::new(label, u64::MAX, limit))
-}
-
-fn reject_raw_bytes_budget(
-    budget: ResourceBudget,
-    budget_kind: RawBytesBudget,
-    path: &str,
-    size: u64,
-) -> Result<(), GithubImportError> {
-    match budget_kind {
-        RawBytesBudget::Metadata => budget.reject_file_read_size(path, size),
-        RawBytesBudget::RepositoryFile => budget.reject_archive_entry_size(path, size),
+    if let Some((actual, _)) = error.actual_and_limit() {
+        let budget_error = match budget_kind {
+            RawBytesBudget::Metadata => budget.reject_file_read_size(path, actual),
+            RawBytesBudget::RepositoryFile => budget.reject_archive_entry_size(path, actual),
+        }
+        .expect_err("bounded reader reported an over-limit size");
+        return GithubImportError::Budget(budget_error);
     }
-    .map_err(GithubImportError::Budget)
+    GithubImportError::Http("Failed to read skill metadata.".to_string())
 }
 
 pub(super) fn validate_repo_ref(repo: &GitHubRepoRef) -> Result<(), GithubImportError> {
@@ -483,7 +463,7 @@ where
                             "{} mirror '{}' failed: {}",
                             surface_label(surface),
                             endpoint.label,
-                            error
+                            sanitized_github_transport_error(&error)
                         ),
                     });
                     continue;
@@ -491,7 +471,8 @@ where
 
                 return Err(GithubImportError::Http(format!(
                     "{}: {}",
-                    failure_prefix, error
+                    failure_prefix,
+                    sanitized_github_transport_error(&error)
                 )));
             }
         }
@@ -524,6 +505,26 @@ pub(super) fn should_retry_via_mirror_status(
 
 pub(super) fn is_retryable_github_transport_error(error: &reqwest::Error) -> bool {
     error.is_timeout() || error.is_connect() || error.is_request() || error.is_body()
+}
+
+pub(super) fn sanitized_github_transport_error(error: &reqwest::Error) -> &'static str {
+    if error.is_timeout() {
+        "request timed out"
+    } else if error.is_connect() {
+        "connection failed"
+    } else if error.is_redirect() {
+        "redirect failed"
+    } else if error.is_body() {
+        "response body failed"
+    } else if error.is_decode() {
+        "response decoding failed"
+    } else if error.is_builder() {
+        "request configuration failed"
+    } else if error.is_request() {
+        "request failed"
+    } else {
+        "network request failed"
+    }
 }
 
 pub(super) fn summarize_mirror_attempts(attempts: &[MirrorAttemptOutcome]) -> String {
@@ -564,7 +565,10 @@ pub(super) async fn parse_github_denial_response(
     }
 
     let headers = response.headers().clone();
-    let body = response.text().await.ok();
+    let body =
+        read_response_text_bounded(response, ReadLimit::new("GitHub error response", 64 * 1024))
+            .await
+            .ok();
     let github_message = body.as_deref().and_then(parse_github_error_message);
 
     let remaining = header_value(&headers, "x-ratelimit-remaining");
@@ -595,7 +599,6 @@ pub(super) async fn parse_github_denial_response(
         kind,
         operation,
         status,
-        github_message,
         used_auth,
     })
 }

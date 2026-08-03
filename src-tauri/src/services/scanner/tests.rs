@@ -1488,6 +1488,22 @@ async fn test_rescan_removes_deleted_skills_from_db() {
         .is_none());
 }
 
+#[test]
+fn parse_skill_md_skips_oversized_and_invalid_utf8_files() {
+    let tmp = TempDir::new().unwrap();
+    let oversized = tmp.path().join("oversized.md");
+    fs::write(
+        &oversized,
+        vec![b'a'; crate::services::resource_budget::DEFAULT_FILE_BYTES as usize + 1],
+    )
+    .unwrap();
+    let invalid = tmp.path().join("invalid.md");
+    fs::write(&invalid, [0xff, 0xfe]).unwrap();
+
+    assert!(parse_skill_md(&oversized).is_none());
+    assert!(parse_skill_md(&invalid).is_none());
+}
+
 // ── Regression: is_central preserved when codex shares the central dir ───
 
 /// When a central-category agent and a coding-category agent (codex) both

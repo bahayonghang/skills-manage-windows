@@ -226,9 +226,17 @@ pub(super) async fn read_snapshot_repo_file(
                 .await
                 .map_err(|e| GithubImportError::Remote(e.to_string()))?;
             connection
-                .read_file(&remote_join(&workspace.remote_repo_dir, repo_path))
+                .read_file_bounded(
+                    &remote_join(&workspace.remote_repo_dir, repo_path),
+                    expected.byte_len,
+                )
                 .await
-                .map_err(|e| GithubImportError::Remote(e.to_string()))?
+                .map_err(|error| match error {
+                    crate::targets::TargetsError::RemoteFileTooLarge { .. } => {
+                        GithubImportError::PreviewSnapshotIntegrity
+                    }
+                    error => GithubImportError::Remote(error.to_string()),
+                })?
         }
     };
     crate::services::resource_budget::ResourceBudget::default_skill()
