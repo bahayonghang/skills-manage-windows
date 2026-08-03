@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 85
+- **Total Sessions**: 86
 - **Last Active**: 2026-08-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~988 | Active |
+| `journal-2.md` | ~1009 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 86 | 2026-08-03 | 完成 SQL Central 分页下推 | `dc7aa090d097f85da6479669f66829bab08ed284` | `dev` |
 | 85 | 2026-08-03 | Complete transactional metadata mutations | `1dfb7068` | `dev` |
 | 84 | 2026-08-03 | Complete bounded external text ingestion | `c126b3cf` | `dev` |
 | 83 | 2026-08-03 | 完成 GitHub 快照生命周期边界 | `c2aaea06774bc77eed7865255ed6509214ec2491` | `dev` |

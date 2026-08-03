@@ -986,3 +986,24 @@ Made metadata and Marketplace cache mutations atomic with bounded batching, roll
 ### Next Steps
 
 - Implement and verify 08-03-sql-central-pagination.
+
+
+## Session 86: 完成 SQL Central 分页下推
+
+**Date**: 2026-08-03
+**Task**: 完成 SQL Central 分页下推
+**Branch**: `dev`
+
+### Summary
+
+将 Central filter/count/order/limit/offset 下推 SQLite，仅富化当前页；完成 5k 等价性、EXPLAIN、release p50/p95、Node 22 just ci 验证并归档子任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dc7aa090d097f85da6479669f66829bab08ed284` | (see git log) |
+
+### Status
+
+[OK] **Completed**
