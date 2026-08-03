@@ -57,7 +57,7 @@ afterEach(() => {
 });
 
 describe("version metadata synchronization", () => {
-  it("keeps just ci read-only and exposes explicit check and write recipes", () => {
+  it("auto-syncs version before local ci/check while keeping CI read-only", () => {
     const justfile = readFileSync("justfile", "utf8");
     const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
       scripts: Record<string, string>;
@@ -65,8 +65,8 @@ describe("version metadata synchronization", () => {
 
     expect(justfile).toMatch(/version-check:\r?\n\s+pnpm version:check/);
     expect(justfile).toMatch(/sync-version:\r?\n\s+node scripts\/sync-version\.mjs/);
-    expect(justfile).toMatch(/ci:\r?\n\s+node scripts\/run-ci\.mjs/);
-    expect(justfile).not.toContain("ci: sync-version");
+    expect(justfile).toMatch(/ci: sync-version\r?\n\s+node scripts\/run-ci\.mjs/);
+    expect(justfile).toMatch(/check: sync-version\r?\n\s+node scripts\/run-ci\.mjs --lane quick/);
     expect(packageJson.scripts["version:check"]).toBe("node scripts/sync-version.mjs --check");
   });
 

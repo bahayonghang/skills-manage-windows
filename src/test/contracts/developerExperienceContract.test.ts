@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
 type WorkflowStep = {
+  run?: string;
   uses?: string;
   with?: Record<string, unknown>;
 };
@@ -54,12 +55,18 @@ describe("developer and PR experience contract", () => {
     expect(rustSetupSteps.every((step) => step.with?.toolchain === "1.97.0")).toBe(true);
   });
 
-  it("exposes read-only doctor and quick check entries without weakening full gates", () => {
+  it("exposes read-only doctor and audit gates while local check/ci auto-sync version", () => {
     expect(packageJson.scripts.doctor).toBe("node scripts/doctor.mjs");
     expect(justfile).toMatch(/doctor:\r?\n\s+node scripts\/doctor\.mjs/);
-    expect(justfile).toMatch(/check:\r?\n\s+node scripts\/run-ci\.mjs --lane quick/);
-    expect(justfile).toMatch(/ci:\r?\n\s+node scripts\/run-ci\.mjs/);
+    expect(justfile).toMatch(/check: sync-version\r?\n\s+node scripts\/run-ci\.mjs --lane quick/);
+    expect(justfile).toMatch(/ci: sync-version\r?\n\s+node scripts\/run-ci\.mjs/);
     expect(justfile).toMatch(/audit:\r?\n\s+pnpm audit:dependencies/);
+  });
+
+  it("runs CI lanes through run-ci.mjs without the just CLI so version drift still fails", () => {
+    const runs = allSteps().flatMap((step) => step.run ?? []);
+    expect(runs.some((run) => /\bjust\b/.test(run))).toBe(false);
+    expect(runs.filter((run) => /sync-version\.mjs --check/.test(run)).length).toBeGreaterThan(0);
   });
 
   it("requires review inputs for task and promotion pull requests", () => {

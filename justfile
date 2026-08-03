@@ -17,18 +17,21 @@ version-check:
 doctor:
     node scripts/doctor.mjs
 
-# 快速反馈入口；提交前仍必须运行 just ci 与 just audit
-check:
+# 快速反馈入口；先自动同步版本元数据，再运行 quick lane
+# 提交前仍必须运行 just ci 与 just audit
+check: sync-version
     node scripts/run-ci.mjs --lane quick
 
 # ========================================================================
 # 步骤2：检查工作流
 # ========================================================================
 # 目标：
-# 1) common 与当前平台 Rust lane 并行运行
-# 2) 版本与生成物检查保持只读，漂移时失败而不修改工作树
-# 3) common 负责前端、文档、格式与静态合同；Rust lane 负责 Clippy 与测试
-ci:
+# 1) 本地入口先自动同步版本元数据（与 sync-version 相同），避免 version:check 因漂移中断
+# 2) common 与当前平台 Rust lane 并行运行
+# 3) 生成物检查保持只读，漂移时失败而不修改工作树
+# 4) GitHub Actions 直接调用 run-ci.mjs，不经过 just，因此 CI 侧版本检查仍然只读
+# 5) common 负责前端、文档、格式与静态合同；Rust lane 负责 Clippy 与测试
+ci: sync-version
     node scripts/run-ci.mjs
 
 # ========================================================================
