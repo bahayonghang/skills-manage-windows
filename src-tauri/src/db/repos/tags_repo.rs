@@ -8,7 +8,9 @@ use sqlx::{QueryBuilder, Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::db::repos::repositories_repo::normalize_repository_component;
-use crate::db::sqlite_batch::{sqlite_rows_per_batch, validate_text_ids_exist, TextIdTable};
+use crate::db::sqlite_batch::{
+    sqlite_rows_per_batch, validate_text_ids_exist, TextIdTable, SQLITE_IN_QUERY_BATCH_SIZE,
+};
 use crate::db::types::{DbPool, PendingAiTagReviewInput, SkillAiTagReview, SkillTag};
 use crate::db::util::now_rfc3339;
 
@@ -538,43 +540,44 @@ pub async fn get_skill_tags_for_skills(
         return Ok(HashMap::new());
     }
 
-    let placeholders = skill_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-    let sql = format!(
-        "SELECT
-            l.skill_id AS skill_id,
-            t.id AS tag_id,
-            t.name AS tag_name,
-            t.description AS tag_description,
-            t.color AS tag_color,
-            t.is_builtin AS tag_is_builtin,
-            t.created_at AS tag_created_at,
-            t.updated_at AS tag_updated_at,
-            t.group_id AS tag_group_id
-         FROM skill_tag_links l
-         JOIN skill_tags t ON t.id = l.tag_id
-         WHERE l.skill_id IN ({})
-         ORDER BY l.skill_id, t.is_builtin DESC, t.name",
-        placeholders
-    );
-    let mut query = sqlx::query(&sql);
-    for skill_id in skill_ids {
-        query = query.bind(skill_id);
-    }
-
-    let rows = query.fetch_all(pool).await?;
     let mut grouped: HashMap<String, Vec<SkillTag>> = HashMap::new();
-    for row in rows {
-        let skill_id: String = row.try_get("skill_id")?;
-        grouped.entry(skill_id).or_default().push(SkillTag {
-            id: row.try_get("tag_id")?,
-            name: row.try_get("tag_name")?,
-            description: row.try_get("tag_description")?,
-            color: row.try_get("tag_color")?,
-            is_builtin: row.try_get("tag_is_builtin")?,
-            created_at: row.try_get("tag_created_at")?,
-            updated_at: row.try_get("tag_updated_at")?,
-            group_id: row.try_get("tag_group_id")?,
-        });
+    for chunk in skill_ids.chunks(SQLITE_IN_QUERY_BATCH_SIZE) {
+        let placeholders = chunk.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT
+                l.skill_id AS skill_id,
+                t.id AS tag_id,
+                t.name AS tag_name,
+                t.description AS tag_description,
+                t.color AS tag_color,
+                t.is_builtin AS tag_is_builtin,
+                t.created_at AS tag_created_at,
+                t.updated_at AS tag_updated_at,
+                t.group_id AS tag_group_id
+             FROM skill_tag_links l
+             JOIN skill_tags t ON t.id = l.tag_id
+             WHERE l.skill_id IN ({})
+             ORDER BY l.skill_id, t.is_builtin DESC, t.name",
+            placeholders
+        );
+        let mut query = sqlx::query(&sql);
+        for skill_id in chunk {
+            query = query.bind(skill_id);
+        }
+
+        for row in query.fetch_all(pool).await? {
+            let skill_id: String = row.try_get("skill_id")?;
+            grouped.entry(skill_id).or_default().push(SkillTag {
+                id: row.try_get("tag_id")?,
+                name: row.try_get("tag_name")?,
+                description: row.try_get("tag_description")?,
+                color: row.try_get("tag_color")?,
+                is_builtin: row.try_get("tag_is_builtin")?,
+                created_at: row.try_get("tag_created_at")?,
+                updated_at: row.try_get("tag_updated_at")?,
+                group_id: row.try_get("tag_group_id")?,
+            });
+        }
     }
 
     Ok(grouped)

@@ -52,6 +52,9 @@ pub enum CentralSkillsError {
     #[error("Multiple skills are named '{0}'; use uid or slug")]
     AmbiguousSkillReference(String),
 
+    #[error("Central skills {field} filter accepts at most {limit} unique values")]
+    PageFilterValuesExceeded { field: &'static str, limit: usize },
+
     // ── Central skill deletion ───────────────────────────────────────────────
     #[error("Skill '{0}' is not a Central skill")]
     NotCentralSkill(String),

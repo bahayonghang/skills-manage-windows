@@ -35,8 +35,10 @@ pub fn filesystem_timestamps_from_metadata(
 /// Return filesystem-backed creation/update timestamps for a skill.
 ///
 /// Falls back to `skill.scanned_at` when the platform or filesystem cannot
-/// provide the requested metadata. Scan-time cache values are used first so
-/// list APIs do not synchronously stat every row on the hot path.
+/// provide the requested metadata. This best-effort filesystem fallback is for
+/// detail and legacy unpaged APIs; paginated lists use
+/// [`skill_persisted_timestamps`] so SQL order and displayed values share one
+/// persisted authority.
 pub fn skill_filesystem_timestamps(skill: &db::Skill) -> (String, String) {
     let mut created_at = skill.fs_created_at.clone();
     let mut updated_at = skill.fs_updated_at.clone();
@@ -62,6 +64,23 @@ pub fn skill_filesystem_timestamps(skill: &db::Skill) -> (String, String) {
     (
         created_at.unwrap_or_else(|| skill.scanned_at.clone()),
         updated_at.unwrap_or_else(|| skill.scanned_at.clone()),
+    )
+}
+
+/// Return the persisted timestamp snapshot used by paginated skill lists.
+///
+/// Scanner/refresh owns `fs_created_at` and `fs_updated_at`. Missing cache
+/// values fall back to `scanned_at`; this helper never performs filesystem IO.
+pub fn skill_persisted_timestamps(skill: &db::Skill) -> (String, String) {
+    (
+        skill
+            .fs_created_at
+            .clone()
+            .unwrap_or_else(|| skill.scanned_at.clone()),
+        skill
+            .fs_updated_at
+            .clone()
+            .unwrap_or_else(|| skill.scanned_at.clone()),
     )
 }
 
@@ -111,6 +130,19 @@ mod tests {
             skill_filesystem_timestamps(&skill),
             (
                 "2026-05-18T00:00:00Z".to_string(),
+                "2026-05-18T00:00:00Z".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn skill_persisted_timestamps_uses_cache_and_scanned_at_without_filesystem_fallback() {
+        let skill = skill_with_timestamp_cache(Some("2026-05-17T01:00:00Z"), None);
+
+        assert_eq!(
+            skill_persisted_timestamps(&skill),
+            (
+                "2026-05-17T01:00:00Z".to_string(),
                 "2026-05-18T00:00:00Z".to_string()
             )
         );

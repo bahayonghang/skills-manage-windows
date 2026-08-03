@@ -6,6 +6,7 @@
 //! SQL here and gradually migrating services to narrower repo imports.
 
 pub(crate) mod agents_repo;
+pub(crate) mod central_skills_page_repo;
 pub(crate) mod collections_repo;
 pub(crate) mod fs_db_operations_repo;
 pub(crate) mod installations_repo;

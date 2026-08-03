@@ -6,6 +6,9 @@ use sqlx::{QueryBuilder, Sqlite, SqliteConnection};
 
 /// Keep generated statements below SQLite's historical 999-variable floor.
 pub(crate) const SQLITE_SAFE_BIND_BUDGET: usize = 900;
+/// Cap dynamic `IN (...)` lists used by read-side batch enrichment.
+pub(crate) const SQLITE_IN_QUERY_BATCH_SIZE: usize = 500;
+const _: () = assert!(SQLITE_IN_QUERY_BATCH_SIZE <= SQLITE_SAFE_BIND_BUDGET);
 
 #[derive(Clone, Copy)]
 pub(crate) enum TextIdTable {

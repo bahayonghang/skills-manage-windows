@@ -28,6 +28,7 @@ pub use migrations::{open_database, open_database_for_remote_home};
 #[cfg(test)]
 pub(crate) use pool::{create_memory_pool, create_memory_pool_single_conn, create_pool};
 pub use repos::agents_repo::*;
+pub use repos::central_skills_page_repo::*;
 pub use repos::collections_repo::*;
 pub use repos::fs_db_operations_repo::*;
 pub use repos::installations_repo::*;
