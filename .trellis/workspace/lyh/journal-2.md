@@ -918,3 +918,37 @@ Fixed the macOS stdin fixture and LF checkout contracts for generated IPC and fr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 84: Complete bounded external text ingestion
+
+**Date**: 2026-08-03
+**Task**: Complete bounded external text ingestion
+**Branch**: `dev`
+
+### Summary
+
+Bounded external HTTP, SSE, Local, SSH, and WSL text ingestion before allocation while preserving typed errors and redaction.
+
+### Main Changes
+
+- Added shared bounded HTTP/local readers, UTF-8-safe truncation, and a deadline-aware SSE state machine.
+- Migrated AI, GitHub, Central Skills, scanner, AI tagging, Central Updates, and targets call sites with Local/SSH/WSL parity.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c126b3cf` | (see git log) |
+
+### Testing
+
+- [OK] Node 22.23.2 just ci passed; Rust 1103 passed and 6 ignored; frontend 1609 passed and 1 skipped; GitHub import 154 passed.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Implement and verify 08-03-transactional-metadata-mutations.
