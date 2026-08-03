@@ -135,6 +135,31 @@ pub(super) fn candidate_content_digest(
     Ok(aggregate_digest(SKILL_CONTENT_DIGEST_DOMAIN, &entries))
 }
 
+pub(crate) fn candidate_content_digest_from_snapshot(
+    snapshot: &GitHubRepoSnapshot,
+    source_path: &str,
+) -> Result<String, GithubImportError> {
+    let mut files = snapshot_files_from_local(snapshot)
+        .into_iter()
+        .filter_map(|file| {
+            repo_file_relative_to_source(&file.repo_path, source_path).map(|path| {
+                GitHubSkillPreviewFile {
+                    path,
+                    byte_len: file.byte_len,
+                    sha256: encode_file_digest(&file.sha256),
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    files.sort_by(|left, right| left.path.as_bytes().cmp(right.path.as_bytes()));
+    if !files.iter().any(|file| file.path == "SKILL.md") {
+        return Err(GithubImportError::PreviewFileManifestIncomplete(
+            source_path.to_string(),
+        ));
+    }
+    candidate_content_digest(&files)
+}
+
 pub(super) fn encode_file_digest(sha256: &[u8; 32]) -> String {
     format!("sha256-v1:{}", hex_encode(sha256))
 }

@@ -79,13 +79,15 @@ pub(crate) use pat::{
 #[cfg(test)]
 use pat::{GITHUB_PAT_MIGRATION_SETTING_KEY, LEGACY_GITHUB_PAT_SETTING_KEY};
 pub(crate) use preview::{
-    preview_github_repo_import_remote_with_auth, preview_github_repo_import_with_auth,
-    preview_github_repo_import_with_branch_and_auth,
+    acquire_pinned_repo_snapshot, preview_github_repo_import_remote_with_auth,
+    preview_github_repo_import_with_auth, preview_github_repo_import_with_branch_and_auth,
 };
 pub(crate) use raw_http::fetch_raw_text;
 pub(crate) use remote::discard_preview_snapshot_for_target;
 pub(crate) use remote::import_github_repo_skills_remote_with_auth;
-pub(crate) use snapshot::fetch_github_skill_markdown_from_snapshot;
+pub(crate) use snapshot::{
+    candidate_content_digest_from_snapshot, fetch_github_skill_markdown_from_snapshot,
+};
 #[cfg(test)]
 use snapshot_import::import_github_repo_skills_from_preview;
 pub(crate) use snapshot_import::import_github_repo_skills_from_preview_with_branch;
@@ -94,7 +96,7 @@ pub(crate) use source::{
     inspect_github_repo_skills_with_auth, inspect_repo_skill_candidates_from_snapshot_at_path,
     repo_file_relative_to_source, resolve_repo_source, resolve_repo_source_with_branch,
 };
-pub(crate) use source_parse::normalize_github_source_url;
+pub(crate) use source_parse::{github_repository_key_from_source, normalize_github_source_url};
 pub use types::{
     DuplicateResolution, GitHubImportProgressPayload, GitHubImportProgressPhase, GitHubPatState,
     GitHubPatTestResult, GitHubRepoImportResult, GitHubRepoPreview, GitHubRepoRef,
@@ -103,7 +105,7 @@ pub use types::{
 };
 pub(crate) use types::{
     GitHubRepoSnapshot, InspectedGitHubRepoSkills, InvalidRemoteSkillCandidate,
-    RemoteSkillCandidate, ResolvedGitHubRepoSource,
+    PinnedGitHubRepoSnapshot, RemoteSkillCandidate, ResolvedGitHubRepoSource,
 };
 
 pub(crate) type Duration = ChronoDuration;

@@ -143,6 +143,8 @@ pub(crate) fn load_remote_skill_content(
         remote_hash,
         local_hash,
         target_dir,
+        resolved_commit_sha: None,
+        content_digest: None,
     }))
 }
 

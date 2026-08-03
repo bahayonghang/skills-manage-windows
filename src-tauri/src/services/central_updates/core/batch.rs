@@ -251,6 +251,7 @@ async fn commit_staged_update(
         .await?;
         persist_updated_skill_in_transaction(
             &mut transaction,
+            fs.target_kind_value(),
             &update.plan.skill,
             &update.plan.remote,
         )
@@ -453,17 +454,19 @@ async fn refresh_and_finalize_copies(
 
 async fn persist_updated_skill_in_transaction(
     transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    target_kind: crate::targets::TargetKind,
     skill: &Skill,
     remote: &RemoteSkillContent,
 ) -> Result<(), sqlx::Error> {
-    let skill_md_path = remote.target_dir.join("SKILL.md");
+    let (skill_md_path, canonical_path) =
+        central_skill_persistence_paths(target_kind, &remote.target_dir);
     let updated_skill = Skill {
         id: skill.id.clone(),
         uid: skill.uid.clone(),
         name: remote.candidate.skill_name.clone(),
         description: remote.candidate.description.clone(),
-        file_path: skill_md_path.to_string_lossy().into_owned(),
-        canonical_path: Some(remote.target_dir.to_string_lossy().into_owned()),
+        file_path: skill_md_path,
+        canonical_path: Some(canonical_path),
         is_central: true,
         source: Some(format!(
             "github:{}/{}",
@@ -482,11 +485,28 @@ async fn persist_updated_skill_in_transaction(
         &remote.source.repo.branch,
         &remote.source.repo.normalized_url,
         &remote.source.source_path,
-        None,
-        None,
+        remote.resolved_commit_sha.as_deref(),
+        remote.content_digest.as_deref(),
     )
     .await?;
     Ok(())
+}
+
+fn central_skill_persistence_paths(
+    target_kind: crate::targets::TargetKind,
+    target_dir: &Path,
+) -> (String, String) {
+    match target_kind {
+        crate::targets::TargetKind::Local => (
+            target_dir.join("SKILL.md").to_string_lossy().into_owned(),
+            target_dir.to_string_lossy().into_owned(),
+        ),
+        crate::targets::TargetKind::Ssh | crate::targets::TargetKind::Wsl => {
+            let canonical_path = target_dir.to_string_lossy().replace('\\', "/");
+            let file_path = crate::targets::remote_join(&canonical_path, "SKILL.md");
+            (file_path, canonical_path)
+        }
+    }
 }
 
 async fn insert_update_operation(

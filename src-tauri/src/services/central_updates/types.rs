@@ -84,6 +84,8 @@ pub(crate) struct RemoteSkillContent {
     pub(crate) remote_hash: String,
     pub(crate) local_hash: String,
     pub(crate) target_dir: PathBuf,
+    pub(crate) resolved_commit_sha: Option<String>,
+    pub(crate) content_digest: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]

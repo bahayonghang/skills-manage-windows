@@ -2,10 +2,10 @@
 
 ## 1. Scope / Trigger
 
-- Central skill delete or update mutates both canonical filesystem state and target-scoped SQLite state, so it must use this contract.
+- Central skill delete, update, or GitHub-backed content upsert mutates both canonical filesystem state and target-scoped SQLite state, so it must use this contract.
 - Local, SSH, and WSL share the same phase model, durable manifest, per-target lease, and recovery rules.
 - `fs_db_operations` is recovery state. It is separate from user-facing `operation_logs` and must never be included in operation-log export or telemetry.
-- This contract does not replace the general job/cancel registry. It only owns Central delete/update consistency and recovery.
+- This contract does not replace the general job/cancel registry. It only owns Central delete/update/content-upsert consistency and recovery.
 
 ## 2. Signatures (Command / Service / DB)
 
@@ -64,7 +64,8 @@ Delete may use `fs_staged -> db_committed` because its backup rename is the dest
 - Staging, backup, marker creation, swap, restore, finalize, phase transition, and copy refresh are idempotent. Before restore/finalize, verify the marker identity and expected fingerprint; collision preserves evidence and fails closed.
 - The business DB mutation and `db_committed` phase transition share one SQLite transaction. A visible `db_committed` row is the commit point; commit-unknown handling reads the row before deciding rollback or roll-forward.
 - Delete renames Central/native installation paths to operation-scoped sibling backups, deletes only the `skills` parent in the DB transaction, and relies on FK cascade for the seven owned relations. Retained copy installations are not moved or deleted.
-- Update keeps `update_skills_batch` as the only production orchestrator. It stages new contents, swaps canonical data, commits skill/repository state with the marker, then refreshes copied installations as a derived projection.
+- Update and GitHub-backed content upsert keep `update_skills_batch` as the only production orchestrator. They stage new contents, swap canonical data, and commit skill/repository state with the marker; update may then refresh copied installations as a derived projection.
+- A first content upsert uses `OperationKind::CentralUpdate` plus `UpdateManifest(had_target=false)`. It does not introduce a parallel journal kind or schema. Candidate validation and snapshot acquisition finish before the target lock; final apply acquires that lock, recovers pending rows, and commits the skill row, repository membership, commit/digest provenance, and `db_committed` transition in one SQLite transaction.
 - Copy refresh failure leaves `copies_pending`; it does not roll back committed canonical state. Recovery retries only incomplete projections, then finalizes backup and transitions to `completed`.
 - Cancellation may prevent an operation before its destructive phase. After durable staging begins, the operation must synchronously settle or retain recoverable journal state; it must not be returned as an unjournaled cancellation.
 - Every Central delete/update/recovery acquires the same target-derived cross-process lease. New mutations recover pending rows for that target under the lease before proceeding. There is no unlocked fallback.
@@ -81,6 +82,7 @@ Delete may use `fs_staged -> db_committed` because its backup rename is the dest
 | Invalid phase shortcut or stale expected phase | Repository returns `sqlx::Error`; no row update |
 | Marker/fingerprint mismatch or occupied restore target | Typed recovery collision; preserve row and artifacts |
 | DB apply fails before commit | Roll back SQLite, restore old FS state, transition to `rolled_back` |
+| First content upsert DB apply fails after swap | Remove the new target, keep Marketplace installed cache false, transition to `rolled_back` |
 | Commit returns error but `db_committed` is visible | Roll forward; never restore old canonical data |
 | Journal/error/rollback/finalize write fails | Propagate the failure; never silently continue |
 | Copy projection fails after commit | Keep `copies_pending`, record a bounded redacted error, allow retry |
@@ -105,6 +107,7 @@ Delete may use `fs_staged -> db_committed` because its backup rename is the dest
 - Subprocess kill matrix at prepared, staged, swapped, DB apply/commit, copies pending, and pre-completion; reopen must converge to complete old or new state and preserve collision evidence.
 - Delete DB/marker/rename/remote failures prove rollback propagation, retained copies, FK cascade, symlink/native/copy semantics, and idempotent retry.
 - Update normal/force/mirror use one Saga; 33 remote writes remain three chunks and copy refresh remains chunks of 32.
+- A multi-file first content upsert preserves identical `SKILL.md`, references, scripts, and assets payloads across Local, Fake SSH, and Fake WSL, with `had_target=false` and per-skill commit/digest provenance.
 - SSH and WSL FakeRunner tests assert complete supervised scripts, marker/fingerprint protocol, rollback/finalize idempotence, and redacted errors. Real WSL smoke stays ignored unless `SKILLPORT_TEST_WSL_DISTRO` is set.
 - Frontend tests cover loading, empty, pending, retry success/failure, offline target, target-switch latest-wins, cached-log availability, and narrow-screen no-overlap.
 - Minimum closeout gate: focused frontend/Rust tests, `cargo fmt --all -- --check`, locked all-target Clippy/tests, default-concurrency `just ci`, task validation, and `git diff --check`.

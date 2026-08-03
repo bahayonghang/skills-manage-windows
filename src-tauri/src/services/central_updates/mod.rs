@@ -29,9 +29,10 @@ pub use types::{
 
 pub(crate) use core::{
     check_central_skill_updates_impl, get_central_skill_update_states_impl,
-    keep_remote_missing_central_skills_impl, load_remote_skill_content, prepare_skill_updates,
-    recover_pending_update_operations, state_from_relocated_source, state_from_remote,
-    update_central_skills_impl, update_skills_batch, SkillUpdatePlan,
+    journaled_central_content_upsert, keep_remote_missing_central_skills_impl,
+    load_remote_skill_content, prepare_skill_updates, recover_pending_update_operations,
+    state_from_relocated_source, state_from_remote, update_central_skills_impl,
+    update_skills_batch, JournaledCentralContentUpsert, SkillUpdatePlan,
 };
 pub(crate) use fs::{normalize_repo_path, CentralFs};
 pub(crate) use repository_sync::{

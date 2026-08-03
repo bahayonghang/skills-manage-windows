@@ -1,19 +1,21 @@
 #![cfg(test)]
-//! Marketplace service tests: registry CRUD round-trips, sync caching, and
-//! install path helpers. AI-explanation tests live in `services::ai_provider::tests`.
+//! Marketplace service tests: registry CRUD, sync caching, candidate identity,
+//! and journaled Central installation.
 
 use super::{
-    add_registry_impl, central_skill_dir_for_name, is_skill_installed_in_central,
-    marketplace_skills_from_candidates, registry_has_cached_skills,
+    add_registry_impl, install_marketplace_pinned_snapshot, install_marketplace_skill_impl,
+    marketplace_candidate_for_id, marketplace_skills_from_candidates, registry_has_cached_skills,
     resolve_skills_sh_candidate_from_snapshot, search_marketplace_skills_impl,
     skills_sh_file_entries_from_snapshot, source_to_github_url, sync_registry_impl,
     RegistryCacheMetadata, RegistrySyncStatus, SyncRegistryOptions,
 };
 use crate::db;
-use crate::secrets::MockSecretStore;
-use crate::services::github_import::{GitHubRepoRef, GitHubRepoSnapshot, RemoteSkillCandidate};
+use crate::secrets::{MockSecretStore, SecretStore, GITHUB_PAT_SECRET_KEY};
+use crate::services::github_import::{
+    GitHubRepoRef, GitHubRepoSnapshot, PinnedGitHubRepoSnapshot, RemoteSkillCandidate,
+    ResolvedGitHubRepoSource,
+};
 use std::collections::HashMap;
-use std::path::Path;
 use tempfile::{tempdir, TempDir};
 
 async fn setup_test_db() -> (crate::db::DbPool, TempDir) {
@@ -50,7 +52,8 @@ fn marketplace_skills_from_candidates_supports_namespaced_layouts() {
                         .to_string(),
             },
         ],
-    );
+    )
+    .expect("candidate mapping");
 
     assert_eq!(skills.len(), 2);
     assert_eq!(skills[0].id, "openai::openai-docs");
@@ -63,6 +66,59 @@ fn marketplace_skills_from_candidates_supports_namespaced_layouts() {
     assert!(skills[1]
         .download_url
         .contains("skills/.system/skill-creator"));
+}
+
+#[test]
+fn marketplace_candidate_mapping_rejects_duplicate_stable_ids_but_keeps_duplicate_names() {
+    let mut first = RemoteSkillCandidate {
+        source_path: "skills/first".to_string(),
+        skill_id: "first".to_string(),
+        skill_name: "Shared display name".to_string(),
+        description: None,
+        plugin_name: None,
+        root_directory: "skills".to_string(),
+        skill_directory_name: "first".to_string(),
+        download_url: "https://example.invalid/first".to_string(),
+    };
+    let mut second = first.clone();
+    second.source_path = "skills/second".to_string();
+    second.skill_id = "second".to_string();
+    second.skill_directory_name = "second".to_string();
+
+    let mapped = marketplace_skills_from_candidates("registry", vec![first.clone(), second])
+        .expect("duplicate display names remain distinct");
+    assert_eq!(mapped.len(), 2);
+
+    first.source_path = "skills/duplicate".to_string();
+    let error = marketplace_skills_from_candidates(
+        "registry",
+        vec![
+            first.clone(),
+            RemoteSkillCandidate {
+                source_path: "skills/other-duplicate".to_string(),
+                ..first
+            },
+        ],
+    )
+    .expect_err("duplicate stable ids fail closed");
+    assert!(matches!(error, super::MarketplaceError::CandidateAmbiguous));
+
+    let stale = marketplace_candidate_for_id(
+        "registry",
+        "registry::missing",
+        &[RemoteSkillCandidate {
+            source_path: "skills/present".to_string(),
+            skill_id: "present".to_string(),
+            skill_name: "Present".to_string(),
+            description: None,
+            plugin_name: None,
+            root_directory: "skills".to_string(),
+            skill_directory_name: "present".to_string(),
+            download_url: "https://example.invalid/present".to_string(),
+        }],
+    )
+    .expect_err("missing stable id is stale");
+    assert!(matches!(stale, super::MarketplaceError::CandidateStale));
 }
 
 #[tokio::test]
@@ -361,24 +417,241 @@ async fn registry_has_cached_skills_detects_persisted_rows() {
         .expect("cached"));
 }
 
-#[test]
-fn central_skill_dir_for_name_uses_the_given_central_dir() {
-    let central_dir = Path::new(r"C:\Users\lyh\.skillsmanage\skills");
-    let skill_dir = central_skill_dir_for_name(central_dir, "demo-skill");
+#[tokio::test]
+async fn installed_state_does_not_match_an_unrelated_same_name_central_skill() {
+    let (pool, dir) = setup_test_db().await;
+    let registry = add_registry_impl(
+        &pool,
+        "Identity registry".to_string(),
+        "github".to_string(),
+        "https://github.com/owner/repo".to_string(),
+        None,
+    )
+    .await
+    .expect("registry created");
+    let marketplace_id = format!("{}::wanted-skill", registry.id);
+    sqlx::query(
+        "INSERT INTO marketplace_skills
+         (id, registry_id, name, description, download_url, is_installed, synced_at)
+         VALUES (?, ?, 'Shared display name', NULL, 'https://example.invalid/ignored', 1, ?)",
+    )
+    .bind(&marketplace_id)
+    .bind(&registry.id)
+    .bind("2026-08-03T00:00:00Z")
+    .execute(&pool)
+    .await
+    .expect("marketplace row");
 
-    assert_eq!(skill_dir, central_dir.join("demo-skill"));
+    let unrelated_dir = dir.path().join("unrelated-skill");
+    let unrelated = crate::db::Skill {
+        id: "unrelated-skill".to_string(),
+        uid: "uid-unrelated-skill".to_string(),
+        name: "Shared display name".to_string(),
+        description: None,
+        file_path: unrelated_dir
+            .join("SKILL.md")
+            .to_string_lossy()
+            .into_owned(),
+        canonical_path: Some(unrelated_dir.to_string_lossy().into_owned()),
+        is_central: true,
+        source: Some("github:owner/repo".to_string()),
+        content: None,
+        scanned_at: chrono::Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
+    };
+    db::upsert_skill_with_github_repository(
+        &pool,
+        &unrelated,
+        "owner",
+        "repo",
+        "main",
+        "https://github.com/owner/repo",
+        "skills/unrelated-skill",
+        Some("0123456789abcdef0123456789abcdef01234567"),
+        Some("sha256-v1:unrelated"),
+    )
+    .await
+    .expect("unrelated Central skill with provenance");
+
+    let visible = search_marketplace_skills_impl(&pool, Some(registry.id), None)
+        .await
+        .expect("Marketplace search");
+    assert_eq!(visible.len(), 1);
+    assert!(!visible[0].is_installed);
+    let cached =
+        sqlx::query_scalar::<_, i64>("SELECT is_installed FROM marketplace_skills WHERE id = ?")
+            .bind(marketplace_id)
+            .fetch_one(&pool)
+            .await
+            .expect("repaired marker");
+    assert_eq!(cached, 0);
 }
 
-#[test]
-fn is_skill_installed_in_central_checks_for_skill_md() {
-    let dir = tempdir().expect("create tempdir");
-    let skill_dir = dir.path().join("demo-skill");
-    std::fs::create_dir_all(&skill_dir).expect("create skill dir");
-    std::fs::write(skill_dir.join("SKILL.md"), "---\nname: demo-skill\n---\n")
-        .expect("write skill md");
+#[tokio::test]
+async fn installed_state_matches_candidate_and_repository_case_insensitively() {
+    let (pool, dir) = setup_test_db().await;
+    let registry = add_registry_impl(
+        &pool,
+        "Case registry".to_string(),
+        "github".to_string(),
+        "https://github.com/Owner/Repo".to_string(),
+        None,
+    )
+    .await
+    .expect("registry created");
+    let marketplace_id = format!("{}::wanted-skill", registry.id);
+    sqlx::query(
+        "INSERT INTO marketplace_skills
+         (id, registry_id, name, description, download_url, is_installed, synced_at)
+         VALUES (?, ?, 'Current display name', NULL, 'https://example.invalid/ignored', 0, ?)",
+    )
+    .bind(&marketplace_id)
+    .bind(&registry.id)
+    .bind("2026-08-03T00:00:00Z")
+    .execute(&pool)
+    .await
+    .expect("marketplace row");
 
-    assert!(is_skill_installed_in_central(dir.path(), "demo-skill"));
-    assert!(!is_skill_installed_in_central(dir.path(), "missing-skill"));
+    let central_dir = dir.path().join("wanted-skill");
+    let central = crate::db::Skill {
+        id: "wanted-skill".to_string(),
+        uid: "uid-wanted-skill".to_string(),
+        name: "Old display name".to_string(),
+        description: None,
+        file_path: central_dir.join("SKILL.md").to_string_lossy().into_owned(),
+        canonical_path: Some(central_dir.to_string_lossy().into_owned()),
+        is_central: true,
+        source: Some("github:owner/repo".to_string()),
+        content: None,
+        scanned_at: chrono::Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
+    };
+    db::upsert_skill_with_github_repository(
+        &pool,
+        &central,
+        "owner",
+        "repo",
+        "main",
+        "https://github.com/owner/repo",
+        "skills/wanted-skill",
+        Some("0123456789abcdef0123456789abcdef01234567"),
+        Some("sha256-v1:wanted"),
+    )
+    .await
+    .expect("Central skill with provenance");
+
+    let visible = search_marketplace_skills_impl(&pool, Some(registry.id), None)
+        .await
+        .expect("Marketplace search");
+    assert_eq!(visible.len(), 1);
+    assert!(visible[0].is_installed);
+}
+
+#[tokio::test]
+async fn registry_install_rejects_disabled_source_before_acquisition_or_mutation() {
+    let (pool, _dir) = setup_test_db().await;
+    let registry = add_registry_impl(
+        &pool,
+        "Disabled registry".to_string(),
+        "github".to_string(),
+        "https://github.com/owner/repo".to_string(),
+        None,
+    )
+    .await
+    .expect("registry created");
+    sqlx::query("UPDATE skill_registries SET is_enabled = 0 WHERE id = ?")
+        .bind(&registry.id)
+        .execute(&pool)
+        .await
+        .expect("disable registry");
+    let marketplace_id = format!("{}::safe-skill", registry.id);
+    sqlx::query(
+        "INSERT INTO marketplace_skills
+         (id, registry_id, name, description, download_url, is_installed, synced_at)
+         VALUES (?, ?, 'Safe skill', NULL, 'https://attacker.invalid/ignored', 0, ?)",
+    )
+    .bind(&marketplace_id)
+    .bind(&registry.id)
+    .bind("2026-08-03T00:00:00Z")
+    .execute(&pool)
+    .await
+    .expect("marketplace row");
+
+    let error = install_marketplace_skill_impl(
+        &pool,
+        &pool,
+        &MockSecretStore::default(),
+        crate::targets::ActiveTarget::Local,
+        marketplace_id,
+    )
+    .await
+    .expect_err("disabled source fails closed");
+    assert!(matches!(error, super::MarketplaceError::RegistryDisabled));
+    let operation_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM fs_db_operations")
+        .fetch_one(&pool)
+        .await
+        .expect("operation count");
+    assert_eq!(operation_count, 0);
+}
+
+#[tokio::test]
+async fn registry_install_reads_github_auth_from_the_explicit_auth_pool() {
+    let (target_pool, _target_dir) = setup_test_db().await;
+    let (auth_pool, _auth_dir) = setup_test_db().await;
+    let registry = add_registry_impl(
+        &target_pool,
+        "Invalid registry".to_string(),
+        "github".to_string(),
+        "not-a-valid-github-url".to_string(),
+        None,
+    )
+    .await
+    .expect("registry created");
+    let marketplace_id = format!("{}::safe-skill", registry.id);
+    sqlx::query(
+        "INSERT INTO marketplace_skills
+         (id, registry_id, name, description, download_url, is_installed, synced_at)
+         VALUES (?, ?, 'Safe skill', NULL, 'https://attacker.invalid/ignored', 0, ?)",
+    )
+    .bind(&marketplace_id)
+    .bind(&registry.id)
+    .bind("2026-08-03T00:00:00Z")
+    .execute(&target_pool)
+    .await
+    .expect("marketplace row");
+    db::set_setting(&auth_pool, "github_pat", "auth-pool-token")
+        .await
+        .expect("legacy auth setting");
+    let secrets = MockSecretStore::default();
+
+    let error = install_marketplace_skill_impl(
+        &target_pool,
+        &auth_pool,
+        &secrets,
+        crate::targets::ActiveTarget::Local,
+        marketplace_id,
+    )
+    .await
+    .expect_err("invalid source stops before network acquisition");
+    assert!(matches!(error, super::MarketplaceError::GithubImport(_)));
+    assert_eq!(
+        secrets.get(GITHUB_PAT_SECRET_KEY).expect("secret read"),
+        Some("auth-pool-token".to_string())
+    );
+    assert_eq!(
+        db::get_setting(&auth_pool, "github_pat")
+            .await
+            .expect("legacy auth removed"),
+        None
+    );
+    assert_eq!(
+        db::get_setting(&target_pool, "github_pat")
+            .await
+            .expect("target auth absent"),
+        None
+    );
 }
 
 fn sample_skill(name: &str, description: &str) -> String {
@@ -400,6 +673,388 @@ fn repo_ref() -> GitHubRepoRef {
         repo: "repo".to_string(),
         branch: "main".to_string(),
         normalized_url: "https://github.com/owner/repo".to_string(),
+    }
+}
+
+#[test]
+fn marketplace_candidate_identity_ignores_adversarial_frontmatter_display_names() {
+    for display_name in [
+        "../escape",
+        "/absolute",
+        r"C:\outside",
+        r"\\server\share",
+        "nested/name",
+        r"nested\name",
+        ".",
+        "..",
+        "技能 名称",
+    ] {
+        let snapshot = repo_snapshot(&[(
+            "skills/safe-skill/SKILL.md",
+            format!("---\nname: '{display_name}'\ndescription: adversarial display name\n---\n"),
+        )]);
+        let candidates =
+            crate::services::github_import::build_repo_skill_candidates_from_snapshot_at_path(
+                &repo_ref(),
+                &snapshot,
+                None,
+            )
+            .expect("candidate discovery");
+        let candidate =
+            marketplace_candidate_for_id("registry", "registry::safe-skill", &candidates)
+                .expect("stable candidate identity");
+
+        assert_eq!(candidate.skill_id, "safe-skill", "display={display_name}");
+        assert_eq!(candidate.source_path, "skills/safe-skill");
+        assert_eq!(candidate.skill_name, display_name);
+    }
+}
+
+#[tokio::test]
+async fn journaled_marketplace_content_upsert_preserves_peers_provenance_and_repairs_marker() {
+    let (pool, dir) = setup_test_db().await;
+    let central_root = dir.path().join("central");
+    crate::test_support::set_agent_dir(&pool, "central", &central_root).await;
+    let registry = add_registry_impl(
+        &pool,
+        "Journaled registry".to_string(),
+        "github".to_string(),
+        "https://github.com/owner/repo".to_string(),
+        None,
+    )
+    .await
+    .expect("registry");
+    let marketplace_id = format!("{}::safe-skill", registry.id);
+    sqlx::query(
+        "INSERT INTO marketplace_skills
+         (id, registry_id, name, description, download_url, is_installed, synced_at)
+         VALUES (?, ?, ?, ?, ?, 0, ?)",
+    )
+    .bind(&marketplace_id)
+    .bind(&registry.id)
+    .bind("../escape")
+    .bind("adversarial display name")
+    .bind("https://attacker.invalid/ignored")
+    .bind("2026-08-03T00:00:00Z")
+    .execute(&pool)
+    .await
+    .expect("marketplace row");
+
+    let snapshot = repo_snapshot(&[
+        (
+            "skills/safe-skill/SKILL.md",
+            "---\nname: '../escape'\ndescription: journaled install\n---\n".to_string(),
+        ),
+        (
+            "skills/safe-skill/references/guide.md",
+            "# guide\n".to_string(),
+        ),
+        (
+            "skills/safe-skill/scripts/run.ps1",
+            "Write-Output safe\n".to_string(),
+        ),
+        ("skills/safe-skill/assets/data.txt", "asset\n".to_string()),
+    ]);
+    let candidates =
+        crate::services::github_import::build_repo_skill_candidates_from_snapshot_at_path(
+            &repo_ref(),
+            &snapshot,
+            None,
+        )
+        .expect("candidate discovery");
+    let candidate = marketplace_candidate_for_id(&registry.id, &marketplace_id, &candidates)
+        .expect("candidate match");
+    let content_digest = crate::services::github_import::candidate_content_digest_from_snapshot(
+        &snapshot,
+        &candidate.source_path,
+    )
+    .expect("content digest");
+    let target_dir = central_root.join(&candidate.skill_id);
+    let commit = "0123456789abcdef0123456789abcdef01234567";
+    sqlx::query(
+        "CREATE TRIGGER fail_marketplace_marker
+         BEFORE UPDATE OF is_installed ON marketplace_skills
+         BEGIN SELECT RAISE(FAIL, 'marker failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .expect("failure trigger");
+    install_marketplace_pinned_snapshot(
+        &pool,
+        crate::targets::ActiveTarget::Local,
+        &marketplace_id,
+        &registry.id,
+        PinnedGitHubRepoSnapshot {
+            resolved: ResolvedGitHubRepoSource {
+                repo: repo_ref(),
+                source_path: None,
+            },
+            resolved_commit_sha: commit.to_string(),
+            snapshot,
+            candidates,
+        },
+    )
+    .await
+    .expect("Marketplace pinned install");
+
+    for relative in [
+        "SKILL.md",
+        "references/guide.md",
+        "scripts/run.ps1",
+        "assets/data.txt",
+    ] {
+        assert!(target_dir.join(relative).is_file(), "missing {relative}");
+    }
+    assert!(!central_root.parent().unwrap().join("escape").exists());
+    let stored = db::get_skill_by_id(&pool, "safe-skill")
+        .await
+        .expect("skill query")
+        .expect("skill row");
+    let original_uid = stored.uid.clone();
+    assert_eq!(stored.name, "../escape");
+    assert_eq!(
+        stored.canonical_path.as_deref(),
+        Some(target_dir.to_string_lossy().as_ref())
+    );
+    let assignment = db::get_skill_repository_assignment(&pool, "safe-skill")
+        .await
+        .expect("repository assignment");
+    assert_eq!(assignment.source_path.as_deref(), Some("skills/safe-skill"));
+    let provenance = db::get_skill_repository_provenance(&pool, "safe-skill")
+        .await
+        .expect("provenance query")
+        .expect("provenance row");
+    assert_eq!(provenance.0.as_deref(), Some(commit));
+    assert_eq!(provenance.1.as_deref(), Some(content_digest.as_str()));
+    let journal = sqlx::query(
+        "SELECT operation_kind, phase, manifest_json
+         FROM fs_db_operations WHERE skill_id = ? ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind("safe-skill")
+    .fetch_one(&pool)
+    .await
+    .expect("journal row");
+    use sqlx::Row;
+    assert_eq!(journal.get::<String, _>("operation_kind"), "central_update");
+    assert_eq!(journal.get::<String, _>("phase"), "completed");
+    let manifest: serde_json::Value =
+        serde_json::from_str(&journal.get::<String, _>("manifest_json")).unwrap();
+    assert_eq!(manifest["payload"]["hadTarget"], false);
+
+    let cached_before_repair =
+        sqlx::query_scalar::<_, i64>("SELECT is_installed FROM marketplace_skills WHERE id = ?")
+            .bind(&marketplace_id)
+            .fetch_one(&pool)
+            .await
+            .expect("cached marker after best-effort failure");
+    assert_eq!(cached_before_repair, 0);
+    let visible = search_marketplace_skills_impl(&pool, Some(registry.id.clone()), None)
+        .await
+        .expect("live-state search");
+    assert!(visible[0].is_installed);
+    sqlx::query("DROP TRIGGER fail_marketplace_marker")
+        .execute(&pool)
+        .await
+        .expect("drop trigger");
+    let repaired = search_marketplace_skills_impl(&pool, Some(registry.id.clone()), None)
+        .await
+        .expect("repair search");
+    assert!(repaired[0].is_installed);
+    let cached =
+        sqlx::query_scalar::<_, i64>("SELECT is_installed FROM marketplace_skills WHERE id = ?")
+            .bind(&marketplace_id)
+            .fetch_one(&pool)
+            .await
+            .expect("cached marker");
+    assert_eq!(cached, 1);
+
+    let updated_snapshot = repo_snapshot(&[
+        (
+            "skills/safe-skill/SKILL.md",
+            "---\nname: '../escape'\ndescription: updated install\n---\n".to_string(),
+        ),
+        (
+            "skills/safe-skill/references/guide.md",
+            "# updated guide\n".to_string(),
+        ),
+        (
+            "skills/safe-skill/scripts/run.ps1",
+            "Write-Output updated\n".to_string(),
+        ),
+        (
+            "skills/safe-skill/assets/data.txt",
+            "updated asset\n".to_string(),
+        ),
+    ]);
+    let updated_candidates =
+        crate::services::github_import::build_repo_skill_candidates_from_snapshot_at_path(
+            &repo_ref(),
+            &updated_snapshot,
+            None,
+        )
+        .expect("updated candidate discovery");
+    install_marketplace_pinned_snapshot(
+        &pool,
+        crate::targets::ActiveTarget::Local,
+        &marketplace_id,
+        &registry.id,
+        PinnedGitHubRepoSnapshot {
+            resolved: ResolvedGitHubRepoSource {
+                repo: repo_ref(),
+                source_path: None,
+            },
+            resolved_commit_sha: "fedcba9876543210fedcba9876543210fedcba98".to_string(),
+            snapshot: updated_snapshot,
+            candidates: updated_candidates,
+        },
+    )
+    .await
+    .expect("Marketplace overwrite install");
+    let overwritten = db::get_skill_by_id(&pool, "safe-skill")
+        .await
+        .expect("overwritten skill query")
+        .expect("overwritten skill row");
+    assert_eq!(overwritten.uid, original_uid);
+    assert_eq!(
+        std::fs::read_to_string(target_dir.join("references/guide.md")).expect("updated peer"),
+        "# updated guide\n"
+    );
+    let latest_manifest = sqlx::query_scalar::<_, String>(
+        "SELECT manifest_json FROM fs_db_operations
+         WHERE skill_id = 'safe-skill' ORDER BY created_at DESC, rowid DESC LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("latest overwrite journal");
+    let latest_manifest: serde_json::Value =
+        serde_json::from_str(&latest_manifest).expect("latest manifest JSON");
+    assert_eq!(latest_manifest["payload"]["hadTarget"], true);
+}
+
+#[tokio::test]
+async fn marketplace_content_upsert_db_failure_rolls_back_first_import_and_keeps_marker_false() {
+    let (pool, dir) = setup_test_db().await;
+    let central_root = dir.path().join("central");
+    crate::test_support::set_agent_dir(&pool, "central", &central_root).await;
+    let registry = add_registry_impl(
+        &pool,
+        "Rollback registry".to_string(),
+        "github".to_string(),
+        "https://github.com/owner/repo".to_string(),
+        None,
+    )
+    .await
+    .expect("registry");
+    let marketplace_id = format!("{}::db-fail", registry.id);
+    sqlx::query(
+        "INSERT INTO marketplace_skills
+         (id, registry_id, name, description, download_url, is_installed, synced_at)
+         VALUES (?, ?, 'DB failure', NULL, 'https://example.invalid/ignored', 0, ?)",
+    )
+    .bind(&marketplace_id)
+    .bind(&registry.id)
+    .bind("2026-08-03T00:00:00Z")
+    .execute(&pool)
+    .await
+    .expect("marketplace row");
+    sqlx::query(
+        "CREATE TRIGGER fail_marketplace_skill_upsert
+         BEFORE INSERT ON skills WHEN NEW.id = 'db-fail'
+         BEGIN SELECT RAISE(FAIL, 'forced skill upsert failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .expect("failure trigger");
+
+    let snapshot = repo_snapshot(&[
+        (
+            "skills/db-fail/SKILL.md",
+            "---\nname: DB failure\n---\n".to_string(),
+        ),
+        (
+            "skills/db-fail/references/guide.md",
+            "# must roll back\n".to_string(),
+        ),
+    ]);
+    let candidates =
+        crate::services::github_import::build_repo_skill_candidates_from_snapshot_at_path(
+            &repo_ref(),
+            &snapshot,
+            None,
+        )
+        .expect("candidate discovery");
+    let candidate = marketplace_candidate_for_id(&registry.id, &marketplace_id, &candidates)
+        .expect("candidate match");
+    let target_dir = central_root.join(&candidate.skill_id);
+    let result = crate::services::central_updates::journaled_central_content_upsert(
+        &pool,
+        &crate::targets::ActiveTarget::Local,
+        crate::services::central_updates::JournaledCentralContentUpsert {
+            skill: crate::db::Skill {
+                id: candidate.skill_id.clone(),
+                uid: "uid-db-fail".to_string(),
+                name: candidate.skill_name.clone(),
+                description: candidate.description.clone(),
+                file_path: target_dir.join("SKILL.md").to_string_lossy().into_owned(),
+                canonical_path: Some(target_dir.to_string_lossy().into_owned()),
+                is_central: true,
+                source: Some("github:owner/repo".to_string()),
+                content: None,
+                scanned_at: chrono::Utc::now().to_rfc3339(),
+                fs_created_at: None,
+                fs_updated_at: None,
+            },
+            repo: repo_ref(),
+            candidate,
+            snapshot: &snapshot,
+            target_dir: target_dir.clone(),
+            resolved_commit_sha: Some("0123456789abcdef0123456789abcdef01234567".to_string()),
+            content_digest: Some("sha256-v1:db-failure".to_string()),
+        },
+    )
+    .await;
+
+    assert!(result.is_err());
+    assert!(!target_dir.exists());
+    assert!(db::get_skill_by_id(&pool, "db-fail")
+        .await
+        .expect("skill query")
+        .is_none());
+    let marker =
+        sqlx::query_scalar::<_, i64>("SELECT is_installed FROM marketplace_skills WHERE id = ?")
+            .bind(&marketplace_id)
+            .fetch_one(&pool)
+            .await
+            .expect("installed marker");
+    assert_eq!(marker, 0);
+    let phase = sqlx::query_scalar::<_, String>(
+        "SELECT phase FROM fs_db_operations WHERE skill_id = 'db-fail'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("journal phase");
+    assert_eq!(phase, "rolled_back");
+}
+
+#[test]
+fn registry_install_has_no_direct_url_or_display_name_writer() {
+    let source = include_str!("mod.rs");
+    let install = source
+        .split("// ─── Install")
+        .nth(1)
+        .expect("install section");
+    assert!(install.contains("journaled_central_content_upsert"));
+    for forbidden in [
+        "central_skill_dir_for_name",
+        "Client::builder",
+        ".get(&skill.download_url)",
+        "std::fs::write",
+        ".write_file(",
+    ] {
+        assert!(
+            !install.contains(forbidden),
+            "forbidden direct writer: {forbidden}"
+        );
     }
 }
 

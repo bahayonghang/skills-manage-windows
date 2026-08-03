@@ -3,13 +3,12 @@
 //! delegate to the `*_impl` functions exposed here.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 
-use crate::paths;
 use crate::secrets::SecretStore;
-use crate::services::github_import;
-use crate::targets::{connect_remote_target, remote_join, ActiveTarget};
+use crate::services::{central_updates, github_import};
+use crate::targets::{remote_join, ActiveTarget};
 
 mod error;
 mod skills_sh;
@@ -93,9 +92,20 @@ pub struct SyncRegistryOptions {
 }
 
 #[derive(sqlx::FromRow)]
-struct MarketplaceSkillRow {
-    name: String,
-    download_url: String,
+struct MarketplaceInstallSourceRow {
+    registry_id: String,
+    source_type: String,
+    url: String,
+    is_enabled: bool,
+}
+
+#[derive(sqlx::FromRow)]
+struct CentralMarketplaceIdentityRow {
+    skill_id: String,
+    owner: Option<String>,
+    repo: Option<String>,
+    resolved_commit_sha: Option<String>,
+    content_digest: Option<String>,
 }
 
 // ─── Registry Fetcher ────────────────────────────────────────────────────────
@@ -117,24 +127,25 @@ async fn fetch_github_skills(
         auth.as_deref(),
     )
     .await?;
-    Ok(marketplace_skills_from_candidates(registry_id, candidates))
+    marketplace_skills_from_candidates(registry_id, candidates)
 }
 
 pub(crate) fn marketplace_skills_from_candidates(
     registry_id: &str,
     candidates: Vec<github_import::RemoteSkillCandidate>,
-) -> Vec<MarketplaceSkill> {
+) -> Result<Vec<MarketplaceSkill>, MarketplaceError> {
     let now = chrono::Utc::now().to_rfc3339();
-    let mut seen_names = HashSet::new();
+    let mut seen_ids = HashSet::new();
     let mut skills = Vec::new();
 
     for candidate in candidates {
-        if !seen_names.insert(candidate.skill_name.clone()) {
-            continue;
+        let id = marketplace_candidate_id(registry_id, &candidate);
+        if !seen_ids.insert(id.clone()) {
+            return Err(MarketplaceError::CandidateAmbiguous);
         }
 
         skills.push(MarketplaceSkill {
-            id: format!("{}::{}", registry_id, candidate.skill_id),
+            id,
             registry_id: registry_id.to_string(),
             name: candidate.skill_name,
             description: candidate.description,
@@ -145,7 +156,14 @@ pub(crate) fn marketplace_skills_from_candidates(
         });
     }
 
-    skills
+    Ok(skills)
+}
+
+fn marketplace_candidate_id(
+    registry_id: &str,
+    candidate: &github_import::RemoteSkillCandidate,
+) -> String {
+    format!("{}::{}", registry_id, candidate.skill_id)
 }
 
 // ─── Registry CRUD ───────────────────────────────────────────────────────────
@@ -354,15 +372,16 @@ pub(crate) async fn sync_registry_impl(
         }
     };
 
-    let installed_central_names: HashSet<String> = crate::db::get_central_skills(pool)
-        .await?
-        .into_iter()
-        .flat_map(|skill| [skill.id, skill.name])
-        .collect();
+    let installed_identities = marketplace_installed_identities(pool).await?;
+    let registry_repository_key = github_import::github_repository_key_from_source(&registry.url)?;
 
     // Upsert skills into marketplace_skills
     for skill in &skills {
-        let is_installed = installed_central_names.contains(&skill.name);
+        let is_installed = marketplace_skill_candidate_id(skill).is_some_and(|candidate_id| {
+            installed_identities
+                .get(candidate_id)
+                .is_some_and(|repository_key| repository_key == &registry_repository_key)
+        });
 
         sqlx::query(
             "INSERT INTO marketplace_skills (id, registry_id, name, description, download_url, is_installed, synced_at, cache_updated_at)
@@ -438,7 +457,12 @@ pub(crate) async fn search_marketplace_skills_impl(
     }
 
     let rows = q.fetch_all(pool).await?;
-    Ok(rows.iter().map(row_to_marketplace_skill).collect())
+    let mut skills = rows
+        .iter()
+        .map(row_to_marketplace_skill)
+        .collect::<Vec<_>>();
+    repair_marketplace_installed_state(pool, &mut skills).await?;
+    Ok(skills)
 }
 
 pub(crate) async fn registry_has_cached_skills(
@@ -470,93 +494,203 @@ fn row_to_marketplace_skill(row: &sqlx::sqlite::SqliteRow) -> MarketplaceSkill {
     }
 }
 
-// ─── Install ─────────────────────────────────────────────────────────────────
-
-pub(crate) fn central_skill_dir_for_name(central_dir: &Path, skill_name: &str) -> PathBuf {
-    central_dir.join(skill_name)
+fn marketplace_skill_candidate_id(skill: &MarketplaceSkill) -> Option<&str> {
+    skill
+        .id
+        .strip_prefix(&format!("{}::", skill.registry_id))
+        .filter(|candidate_id| !candidate_id.is_empty())
 }
 
-#[cfg(test)]
-pub(crate) fn is_skill_installed_in_central(central_dir: &Path, skill_name: &str) -> bool {
-    central_skill_dir_for_name(central_dir, skill_name)
-        .join("SKILL.md")
-        .exists()
+async fn repair_marketplace_installed_state(
+    pool: &crate::db::DbPool,
+    skills: &mut [MarketplaceSkill],
+) -> Result<(), MarketplaceError> {
+    let installed_identities = marketplace_installed_identities(pool).await?;
+    let registry_repository_keys = list_registries_impl(pool)
+        .await?
+        .into_iter()
+        .filter(|registry| registry.source_type == "github")
+        .filter_map(|registry| {
+            github_import::github_repository_key_from_source(&registry.url)
+                .ok()
+                .map(|key| (registry.id, key))
+        })
+        .collect::<HashMap<_, _>>();
+    for skill in skills {
+        let installed = marketplace_skill_candidate_id(skill).is_some_and(|candidate_id| {
+            let Some(registry_repository_key) = registry_repository_keys.get(&skill.registry_id)
+            else {
+                return false;
+            };
+            installed_identities
+                .get(candidate_id)
+                .is_some_and(|repository_key| repository_key == registry_repository_key)
+        });
+        if installed != skill.is_installed {
+            skill.is_installed = installed;
+            repair_marketplace_marker_best_effort(pool, &skill.id, installed).await;
+        }
+    }
+    Ok(())
+}
+
+async fn marketplace_installed_identities(
+    pool: &crate::db::DbPool,
+) -> Result<HashMap<String, String>, MarketplaceError> {
+    let rows = sqlx::query_as::<_, CentralMarketplaceIdentityRow>(
+        "SELECT s.id AS skill_id, r.owner, r.repo,
+                m.resolved_commit_sha, m.content_digest
+         FROM skills s
+         JOIN skill_repository_members m ON m.skill_id = s.id
+         JOIN skill_repositories r ON r.id = m.repository_id
+         WHERE s.is_central = 1 AND r.source_type = 'github'",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            let owner = row.owner?.to_ascii_lowercase();
+            let repo = row.repo?.to_ascii_lowercase();
+            let commit = row.resolved_commit_sha?.trim().to_string();
+            let digest = row.content_digest?.trim().to_string();
+            (!commit.is_empty() && !digest.is_empty())
+                .then(|| (row.skill_id, format!("{owner}/{repo}")))
+        })
+        .collect())
+}
+
+async fn repair_marketplace_marker_best_effort(
+    pool: &crate::db::DbPool,
+    skill_id: &str,
+    installed: bool,
+) {
+    if sqlx::query("UPDATE marketplace_skills SET is_installed = ? WHERE id = ?")
+        .bind(installed)
+        .bind(skill_id)
+        .execute(pool)
+        .await
+        .is_err()
+    {
+        tracing::warn!(
+            "Marketplace installed-state cache repair failed after deriving live Central state"
+        );
+    }
+}
+
+// ─── Install ─────────────────────────────────────────────────────────────────
+
+pub(crate) fn marketplace_candidate_for_id(
+    registry_id: &str,
+    requested_id: &str,
+    candidates: &[github_import::RemoteSkillCandidate],
+) -> Result<github_import::RemoteSkillCandidate, MarketplaceError> {
+    marketplace_skills_from_candidates(registry_id, candidates.to_vec())?;
+    let mut matches = candidates
+        .iter()
+        .filter(|candidate| marketplace_candidate_id(registry_id, candidate) == requested_id);
+    let candidate = matches
+        .next()
+        .cloned()
+        .ok_or(MarketplaceError::CandidateStale)?;
+    if matches.next().is_some() {
+        return Err(MarketplaceError::CandidateAmbiguous);
+    }
+    Ok(candidate)
 }
 
 pub async fn install_marketplace_skill_impl(
     pool: &crate::db::DbPool,
+    auth_pool: &crate::db::DbPool,
+    secrets: &dyn SecretStore,
     active_target: ActiveTarget,
     skill_id: String,
 ) -> Result<(), MarketplaceError> {
-    // Get skill info
-    let skill = sqlx::query_as::<_, MarketplaceSkillRow>(
-        "SELECT id, registry_id, name, description, download_url, is_installed, synced_at
-         FROM marketplace_skills WHERE id = ?",
+    let source = sqlx::query_as::<_, MarketplaceInstallSourceRow>(
+        "SELECT ms.registry_id, sr.source_type, sr.url, sr.is_enabled
+         FROM marketplace_skills ms
+         JOIN skill_registries sr ON sr.id = ms.registry_id
+         WHERE ms.id = ?",
     )
     .bind(&skill_id)
     .fetch_optional(pool)
     .await?
     .ok_or(MarketplaceError::SkillNotFound)?;
-
-    // Download SKILL.md content
-    let client = reqwest::Client::builder()
-        .user_agent(crate::commands::APP_USER_AGENT)
-        .build()
-        .map_err(|e| MarketplaceError::Http(e.to_string()))?;
-
-    let resp = client
-        .get(&skill.download_url)
-        .send()
-        .await
-        .map_err(|e| MarketplaceError::Http(format!("Download failed: {}", e)))?;
-
-    if !resp.status().is_success() {
-        return Err(MarketplaceError::Http(format!(
-            "Download returned {}",
-            resp.status()
-        )));
+    if !source.is_enabled {
+        return Err(MarketplaceError::RegistryDisabled);
+    }
+    if source.source_type != "github" {
+        return Err(MarketplaceError::UnsupportedSourceType(source.source_type));
     }
 
-    let content = resp
-        .text()
+    let auth = github_import::github_direct_auth_from_secret_store(auth_pool, secrets).await?;
+    let resolved = github_import::resolve_repo_source(&source.url, auth.as_deref()).await?;
+    let pinned = github_import::acquire_pinned_repo_snapshot(resolved, auth.as_deref()).await?;
+    install_marketplace_pinned_snapshot(pool, active_target, &skill_id, &source.registry_id, pinned)
         .await
-        .map_err(|e| MarketplaceError::Http(format!("Failed to read response: {}", e)))?;
+}
 
-    match &active_target {
-        ActiveTarget::Local => {
-            let skill_dir = central_skill_dir_for_name(&paths::central_skills_dir(), &skill.name);
-            std::fs::create_dir_all(&skill_dir)
-                .map_err(|e| MarketplaceError::io("Failed to create directory", e))?;
-
-            let skill_md_path = skill_dir.join("SKILL.md");
-            std::fs::write(&skill_md_path, &content)
-                .map_err(|e| MarketplaceError::io("Failed to write SKILL.md", e))?;
-        }
+async fn install_marketplace_pinned_snapshot(
+    pool: &crate::db::DbPool,
+    active_target: ActiveTarget,
+    skill_id: &str,
+    registry_id: &str,
+    pinned: github_import::PinnedGitHubRepoSnapshot,
+) -> Result<(), MarketplaceError> {
+    let candidate = marketplace_candidate_for_id(registry_id, skill_id, &pinned.candidates)?;
+    let content_digest = github_import::candidate_content_digest_from_snapshot(
+        &pinned.snapshot,
+        &candidate.source_path,
+    )?;
+    let central = crate::db::get_agent_by_id(pool, "central")
+        .await?
+        .ok_or(MarketplaceError::CentralAgentMissing)?;
+    let target_directory = match &active_target {
+        ActiveTarget::Local => PathBuf::from(&central.global_skills_dir).join(&candidate.skill_id),
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
-            let central = crate::db::get_agent_by_id(pool, "central")
-                .await?
-                .ok_or(MarketplaceError::CentralAgentMissing)?;
-            let skill_dir = remote_join(&central.global_skills_dir, &skill.name);
-            let skill_md_path = remote_join(&skill_dir, "SKILL.md");
-            let connection = connect_remote_target(&active_target)
-                .await
-                .map_err(|e| MarketplaceError::Remote(e.to_string()))?;
-            connection
-                .mkdir_p(&skill_dir)
-                .await
-                .map_err(|e| MarketplaceError::Remote(e.to_string()))?;
-            connection
-                .write_file(&skill_md_path, content.as_bytes())
-                .await
-                .map_err(|e| MarketplaceError::Remote(e.to_string()))?;
+            PathBuf::from(remote_join(&central.global_skills_dir, &candidate.skill_id))
         }
-    }
+    };
+    let file_path = match &active_target {
+        ActiveTarget::Local => target_directory
+            .join("SKILL.md")
+            .to_string_lossy()
+            .into_owned(),
+        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+            remote_join(&target_directory.to_string_lossy(), "SKILL.md")
+        }
+    };
+    let repo = pinned.resolved.repo;
+    let db_skill = crate::db::Skill {
+        id: candidate.skill_id.clone(),
+        uid: uuid::Uuid::new_v4().to_string(),
+        name: candidate.skill_name.clone(),
+        description: candidate.description.clone(),
+        file_path,
+        canonical_path: Some(target_directory.to_string_lossy().into_owned()),
+        is_central: true,
+        source: Some(format!("github:{}/{}", repo.owner, repo.repo)),
+        content: None,
+        scanned_at: chrono::Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
+    };
+    central_updates::journaled_central_content_upsert(
+        pool,
+        &active_target,
+        central_updates::JournaledCentralContentUpsert {
+            skill: db_skill,
+            repo,
+            candidate,
+            snapshot: &pinned.snapshot,
+            target_dir: target_directory,
+            resolved_commit_sha: Some(pinned.resolved_commit_sha),
+            content_digest: Some(content_digest),
+        },
+    )
+    .await?;
 
-    // Mark as installed in DB
-    sqlx::query("UPDATE marketplace_skills SET is_installed = 1 WHERE id = ?")
-        .bind(&skill_id)
-        .execute(pool)
-        .await?;
+    repair_marketplace_marker_best_effort(pool, skill_id, true).await;
 
     Ok(())
 }

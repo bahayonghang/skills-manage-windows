@@ -326,6 +326,29 @@ async fn acquire_pinned_preview_snapshot(
     }
 }
 
+pub(crate) async fn acquire_pinned_repo_snapshot(
+    resolved: ResolvedGitHubRepoSource,
+    auth: Option<&str>,
+) -> Result<PinnedGitHubRepoSnapshot, GithubImportError> {
+    let client = github_client()?;
+    let resolved_commit_sha = resolve_commit_sha(&client, &resolved.repo, auth).await?;
+    let pinned_repo = pinned_repo_ref(&resolved.repo, &resolved_commit_sha);
+    let (snapshot, candidates) = acquire_pinned_preview_snapshot(
+        &client,
+        &pinned_repo,
+        &resolved.repo,
+        resolved.source_path.as_deref(),
+        auth,
+    )
+    .await?;
+    Ok(PinnedGitHubRepoSnapshot {
+        resolved,
+        resolved_commit_sha,
+        snapshot,
+        candidates,
+    })
+}
+
 pub(crate) async fn preview_github_repo_import_with_auth(
     pool: &DbPool,
     repo_url: &str,

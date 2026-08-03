@@ -48,8 +48,30 @@ fn update_plan(target_dir: std::path::PathBuf) -> SkillUpdatePlan {
             remote_hash: "remote-new".to_string(),
             local_hash: "local-old".to_string(),
             target_dir,
+            resolved_commit_sha: None,
+            content_digest: None,
         },
         refresh_copies: false,
+    }
+}
+
+#[test]
+fn remote_central_skill_persistence_paths_remain_posix_on_windows() {
+    let target = std::path::Path::new("/home/tester/.skillsmanage/skills/safe-skill");
+    for kind in [
+        crate::targets::TargetKind::Ssh,
+        crate::targets::TargetKind::Wsl,
+    ] {
+        let (file_path, canonical_path) = central_skill_persistence_paths(kind, target);
+        assert_eq!(
+            canonical_path,
+            "/home/tester/.skillsmanage/skills/safe-skill"
+        );
+        assert_eq!(
+            file_path,
+            "/home/tester/.skillsmanage/skills/safe-skill/SKILL.md"
+        );
+        assert!(!file_path.contains('\\'));
     }
 }
 

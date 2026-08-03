@@ -51,6 +51,20 @@ Extract/generalize the existing skills.sh snapshot helper instead of constructin
 
 After import success, update the requested cache row or re-enrich the query from live Central IDs/names. A cache update failure is logged as a redacted derived-state repair condition; it must not return a generic install failure after filesystem/DB commit. The next search/sync repairs the hint. Before import success, no true marker is written.
 
+## 5.1 Approved journal persistence decision
+
+The existing `central_update` Saga is generalized from "replace an existing Central skill" to "durably upsert Central content". A first import uses `OperationKind::CentralUpdate` with `UpdateManifest(had_target=false)` because the existing stage/swap/rollback/finalize and recovery state machine already models an absent target. This is an approved extension of the persisted operation-kind semantics; it does not add a migration or a parallel journal.
+
+The shared final-apply helper must:
+
+- acquire the target mutation guard and recover pending Central operations before apply;
+- insert the prepared operation row, durably stage and swap the complete candidate directory;
+- in one SQLite transaction upsert the skill, repository membership, commit/digest provenance, and transition the operation to `db_committed`;
+- roll back or roll forward through the existing `UpdateManifest` recovery rules, including Local, SSH and WSL;
+- preserve existing update callers and public pending-operation DTOs.
+
+Do not route Marketplace through `update_skills_batch` if that would require a pre-existing `SkillUpdatePlan`. Extract or generalize the internal journaled content-upsert boundary so GitHub import and Central update share the Saga without coupling Marketplace to update inventory semantics.
+
 ## 6. Error and compatibility boundary
 
 - Reuse `MarketplaceError::GithubImport`/typed variants; add semantic stale/ambiguous candidate variants if needed.
@@ -66,4 +80,4 @@ After import success, update the requested cache row or re-enrich the query from
 
 ## 8. Rollback
 
-First add tests and shared use case, then switch registry-backed install, then delete direct writer. Until the switch, no persisted schema changes are required. After the security fix is selected for implementation, rollback must disable/fail closed on the registry-backed install rather than restore the name-derived direct writer; it must never delete a successfully imported user skill or provenance row.
+First add tests and shared use case, then switch registry-backed install, then delete direct writer. The approved implementation reuses the existing `central_update` row and `UpdateManifest`; no persisted schema changes are required. After the security fix is selected for implementation, rollback must disable/fail closed on the registry-backed install rather than restore the name-derived direct writer; it must never delete a successfully imported user skill or provenance row.

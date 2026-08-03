@@ -23,11 +23,13 @@ use super::types::{
 const UPDATE_PROGRESS_EVENT: &str = "central://skill-update-progress";
 
 mod batch;
+mod content_upsert;
 mod state;
 #[cfg(test)]
 mod tests;
 
 pub(crate) use batch::{recover_pending_update_operations, update_skills_batch, SkillUpdatePlan};
+pub(crate) use content_upsert::{journaled_central_content_upsert, JournaledCentralContentUpsert};
 #[allow(unused_imports)]
 pub(crate) use state::repository_url;
 pub(crate) use state::{

@@ -172,6 +172,14 @@ pub(crate) struct GitHubRepoSnapshot {
     pub(crate) files: HashMap<String, Vec<u8>>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct PinnedGitHubRepoSnapshot {
+    pub(crate) resolved: ResolvedGitHubRepoSource,
+    pub(crate) resolved_commit_sha: String,
+    pub(crate) snapshot: GitHubRepoSnapshot,
+    pub(crate) candidates: Vec<RemoteSkillCandidate>,
+}
+
 pub(super) const NO_IMPORTABLE_SKILLS_ERROR: &str = "No importable skills found in this repository. Supported layouts include root SKILL.md, common skill directories such as skills/, .agents/skills/, .claude/skills/, direct repository subpaths, and bounded recursive SKILL.md discovery.";
 pub(super) const REMOTE_PREVIEW_WORKSPACE_TTL_MINUTES: i64 = 30;
 pub(super) const RECURSIVE_DISCOVERY_MAX_DEPTH: usize = 5;

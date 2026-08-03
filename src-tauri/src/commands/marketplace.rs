@@ -144,17 +144,66 @@ pub async fn install_marketplace_skill(
     state: State<'_, AppState>,
     skill_id: String,
 ) -> crate::ipc_error::IpcResult<()> {
-    crate::ipc_boundary!(
-        async move {
-            let request_context = state.resolve_target_context().await?;
-            let active_target = request_context.target().clone();
-            let pool = request_context.db().clone();
-            marketplace::install_marketplace_skill_impl(&pool, active_target, skill_id)
-                .await
-                .map_err(|e| e.to_string())
-        }
+    let request_context = state
+        .resolve_target_context()
         .await
+        .map_err(crate::ipc_error::IpcError::from)?;
+    let active_target = request_context.target().clone();
+    let pool = request_context.db().clone();
+    marketplace::install_marketplace_skill_impl(
+        &pool,
+        &state.db,
+        state.secrets.as_ref(),
+        active_target,
+        skill_id,
     )
+    .await
+    .map_err(marketplace_install_ipc_error)
+}
+
+fn marketplace_install_ipc_error(
+    error: marketplace::MarketplaceError,
+) -> crate::ipc_error::IpcError {
+    use marketplace::MarketplaceError;
+
+    match error {
+        MarketplaceError::SkillNotFound => crate::ipc_error::IpcError::new(
+            "resource.not_found",
+            "The requested resource was not found.",
+            false,
+        ),
+        MarketplaceError::RegistryDisabled => crate::ipc_error::IpcError::new(
+            "marketplace.registry_disabled",
+            "The Marketplace registry is disabled.",
+            false,
+        ),
+        MarketplaceError::CandidateStale => crate::ipc_error::IpcError::new(
+            "marketplace.registry_stale",
+            "The Marketplace cache is stale. Sync the registry and try again.",
+            false,
+        ),
+        MarketplaceError::CandidateAmbiguous => crate::ipc_error::IpcError::new(
+            "marketplace.identity_ambiguous",
+            "The Marketplace registry contains an ambiguous skill identity.",
+            false,
+        ),
+        MarketplaceError::UnsupportedSourceType(_) => crate::ipc_error::IpcError::new(
+            "marketplace.source_unsupported",
+            "The Marketplace registry source is not supported.",
+            false,
+        ),
+        MarketplaceError::CentralAgentMissing => crate::ipc_error::IpcError::new(
+            "marketplace.install_unavailable",
+            "Marketplace installation is unavailable for the selected target.",
+            false,
+        ),
+        MarketplaceError::GithubImport(error) => crate::ipc_error::IpcError::from_display(error),
+        _ => crate::ipc_error::IpcError::new(
+            "marketplace.install_failed",
+            "The Marketplace skill could not be installed.",
+            false,
+        ),
+    }
 }
 
 #[tauri::command]
@@ -374,4 +423,57 @@ pub async fn refresh_skill_explanation(
         }
         .await
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn marketplace_install_semantic_errors_have_stable_public_codes() {
+        for (error, expected_code) in [
+            (
+                marketplace::MarketplaceError::RegistryDisabled,
+                "marketplace.registry_disabled",
+            ),
+            (
+                marketplace::MarketplaceError::CandidateStale,
+                "marketplace.registry_stale",
+            ),
+            (
+                marketplace::MarketplaceError::CandidateAmbiguous,
+                "marketplace.identity_ambiguous",
+            ),
+            (
+                marketplace::MarketplaceError::UnsupportedSourceType("private source".to_string()),
+                "marketplace.source_unsupported",
+            ),
+        ] {
+            let ipc = marketplace_install_ipc_error(error);
+            assert_eq!(ipc.code, expected_code);
+            assert!(!ipc.message.contains("private"));
+        }
+    }
+
+    #[test]
+    fn marketplace_install_internal_errors_do_not_expose_dynamic_diagnostics() {
+        let secret = r"C:\Users\alice\private\skill?token=ghp_secret";
+        for error in [
+            marketplace::MarketplaceError::CentralUpdates(
+                crate::services::central_updates::CentralUpdatesError::Batch(secret.to_string()),
+            ),
+            marketplace::MarketplaceError::GithubImport(
+                crate::services::github_import::GithubImportError::InvalidUrl(secret.to_string()),
+            ),
+        ] {
+            let ipc = marketplace_install_ipc_error(error);
+            let serialized = serde_json::to_string(&ipc).expect("serialize IPC error");
+            assert!(matches!(
+                ipc.code.as_str(),
+                "marketplace.install_failed" | "internal.unexpected"
+            ));
+            assert!(!serialized.contains(secret));
+            assert!(!serialized.contains("ghp_secret"));
+        }
+    }
 }
