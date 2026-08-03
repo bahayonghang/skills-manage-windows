@@ -362,21 +362,3 @@ pub(crate) async fn fetch_github_skill_markdown_from_snapshot(
         GithubImportError::Parse(format!("Preview SKILL.md is not valid UTF-8: {}", e))
     })
 }
-
-/// Release the storage owned by a snapshot that left the registry.
-pub(super) async fn release_snapshot_storage(
-    active_target: &ActiveTarget,
-    snapshot: &PreviewSnapshot,
-) {
-    let Some(workspace) = snapshot.remote_workspace() else {
-        return;
-    };
-    if !active_target.is_remote_like() || active_target.id() != snapshot.target_id {
-        return;
-    }
-    if let Ok(connection) = connect_remote_target(active_target).await {
-        let _ = connection
-            .remove_tree(&workspace.remote_workspace_dir)
-            .await;
-    }
-}

@@ -37,6 +37,64 @@ pub(super) mod suite {
         }))
     }
 
+    fn fake_ssh_connection(
+        id: &str,
+        runner: Arc<crate::test_support::FakeRunner>,
+    ) -> ConnectedRemoteTarget {
+        ConnectedRemoteTarget::Ssh(crate::targets::ConnectedSshTarget::for_tests_with_runner(
+            crate::targets::RemoteTargetConfig {
+                id: id.to_string(),
+                label: format!("SSH {id}"),
+                host: "example.com".to_string(),
+                username: "alice".to_string(),
+                port: 22,
+                auth_method: crate::targets::SshAuthMethod::Key,
+                key_path: "~/.ssh/id_ed25519".to_string(),
+                credential_key: None,
+                protected_password: None,
+                password: None,
+                remote_home: "/home/alice".to_string(),
+                remote_os: "Linux".to_string(),
+                symlink_enabled: true,
+            },
+            runner,
+        ))
+    }
+
+    fn register_expired_remote_snapshot(target_id: &str) -> String {
+        register_expired_remote_snapshot_with_kind(target_id, TargetKind::Ssh)
+    }
+
+    fn register_expired_remote_snapshot_with_kind(
+        target_id: &str,
+        target_kind: TargetKind,
+    ) -> String {
+        let now = Utc::now();
+        let mut reservation = match reserve_remote_preview_snapshot(
+            target_id,
+            target_kind,
+            now - Duration::minutes(2),
+        )
+        .expect("reserve remote preview")
+        {
+            RemoteReservationAttempt::Reserved(reservation) => reservation,
+            other => panic!("expected remote reservation, got {other:?}"),
+        };
+        let id = reservation.preview_id().to_string();
+        let mut snapshot = remote_test_snapshot(None);
+        snapshot.id = id.clone();
+        snapshot.target_id = target_id.to_string();
+        snapshot.target_kind = target_kind;
+        snapshot.created_at = now - Duration::minutes(2);
+        snapshot.expires_at = now - Duration::minutes(1);
+        if let PreviewSnapshotStorage::Remote(workspace) = &mut snapshot.storage {
+            workspace.remote_workspace_dir = format!("/tmp/{target_id}");
+            workspace.remote_repo_dir = format!("/tmp/{target_id}/repo");
+        }
+        reservation.fill(snapshot).expect("fill remote preview");
+        id
+    }
+
     /// A registered remote snapshot bound to `ssh-demo` / `openai/skills@main`.
     fn remote_test_snapshot(source_path: Option<&str>) -> PreviewSnapshot {
         let now = Utc::now();
@@ -953,6 +1011,80 @@ metadata:
                 "dangerous URL should be rejected: {url}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn owning_target_cleanup_failure_remains_pending_until_retry_ack() {
+        let target_id = "ssh-cleanup-retry";
+        let preview_id = register_expired_remote_snapshot(target_id);
+        let runner = Arc::new(crate::test_support::FakeRunner::new());
+        runner.push_output(1, "", "remove failed");
+        let connection = fake_ssh_connection(target_id, Arc::clone(&runner));
+
+        let tickets = sweep_preview_snapshots_for_target(target_id, Utc::now());
+        assert_eq!(tickets.len(), 1);
+        assert!(!cleanup_preview_tickets_for_connection(&connection, tickets).await);
+        assert!(matches!(
+            lookup_preview_snapshot(&preview_id, Utc::now()),
+            Err(GithubImportError::PreviewCleanupPending)
+        ));
+        assert!(matches!(
+            acquire_import_lease(&preview_id, Utc::now()),
+            Err(GithubImportError::PreviewCleanupPending)
+        ));
+
+        runner.push_success("");
+        let retry = sweep_preview_snapshots_for_target(target_id, Utc::now());
+        assert_eq!(retry.len(), 1);
+        assert!(cleanup_preview_tickets_for_connection(&connection, retry).await);
+        assert!(!preview_snapshot_is_registered(&preview_id));
+        assert_eq!(runner.calls().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn target_a_connection_never_removes_target_b_workspace() {
+        let target_a = "ssh-cleanup-a";
+        let target_b = "ssh-cleanup-b";
+        let preview_a = register_expired_remote_snapshot(target_a);
+        let preview_b = register_expired_remote_snapshot(target_b);
+        let runner_a = Arc::new(crate::test_support::FakeRunner::new());
+        let runner_b = Arc::new(crate::test_support::FakeRunner::new());
+        runner_a.push_success("");
+        runner_b.push_success("");
+        let connection_a = fake_ssh_connection(target_a, Arc::clone(&runner_a));
+        let connection_b = fake_ssh_connection(target_b, Arc::clone(&runner_b));
+
+        let tickets_a = sweep_preview_snapshots_for_target(target_a, Utc::now());
+        assert!(cleanup_preview_tickets_for_connection(&connection_a, tickets_a).await);
+        assert!(!preview_snapshot_is_registered(&preview_a));
+        assert!(preview_snapshot_is_registered(&preview_b));
+        assert_eq!(runner_a.calls().len(), 1);
+        assert!(runner_b.calls().is_empty());
+
+        let tickets_b = sweep_preview_snapshots_for_target(target_b, Utc::now());
+        assert!(cleanup_preview_tickets_for_connection(&connection_b, tickets_b).await);
+        assert!(!preview_snapshot_is_registered(&preview_b));
+        assert_eq!(runner_b.calls().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn connection_kind_mismatch_never_removes_or_acknowledges_workspace() {
+        let target_id = "same-id-different-kind";
+        let preview_id = register_expired_remote_snapshot_with_kind(target_id, TargetKind::Wsl);
+        let runner = Arc::new(crate::test_support::FakeRunner::new());
+        runner.push_success("");
+        let connection = fake_ssh_connection(target_id, Arc::clone(&runner));
+
+        let tickets = sweep_preview_snapshots_for_target(target_id, Utc::now());
+        assert_eq!(tickets.len(), 1);
+        assert!(!cleanup_preview_tickets_for_connection(&connection, tickets.clone()).await);
+        assert!(runner.calls().is_empty());
+        assert!(matches!(
+            lookup_preview_snapshot(&preview_id, Utc::now()),
+            Err(GithubImportError::PreviewCleanupPending)
+        ));
+
+        assert!(ack_preview_snapshot_cleanup(&tickets[0]));
     }
 
     #[test]
@@ -4048,7 +4180,7 @@ metadata:
         fn register_local_snapshot(id: &str, snapshot: GitHubRepoSnapshot) -> PreviewSnapshot {
             let mut registered = local_test_snapshot(&demo_repo(), None, snapshot, Vec::new());
             registered.id = id.to_string();
-            register_preview_snapshot(registered.clone());
+            register_preview_snapshot(registered.clone()).expect("register local snapshot");
             registered
         }
 
@@ -4088,7 +4220,7 @@ metadata:
             assert!(acquire_import_lease(id, Utc::now()).is_ok());
 
             // Success consumes the token; every later read or import fails.
-            assert!(consume_preview_snapshot(id).is_some());
+            assert!(consume_preview_snapshot(id).is_none());
             assert!(!preview_snapshot_is_registered(id));
             assert!(matches!(
                 lookup_preview_snapshot(id, Utc::now()),
@@ -4112,21 +4244,22 @@ metadata:
 
             // Releasing the lease applies the pending discard and hands the
             // snapshot back so the caller can release remote storage.
-            assert!(release_import_lease(id).is_some());
+            assert!(release_import_lease(id).is_none());
             assert!(!preview_snapshot_is_registered(id));
         }
 
         /// Register an already-expired snapshot.
         ///
-        /// Expiry is encoded on the entry (not on the prune clock) so this test
-        /// cannot prune snapshots registered by other tests running in parallel.
-        fn register_expired_local_snapshot(id: &str) -> PreviewSnapshot {
+        /// The target is unique to this test so target-scoped pruning cannot
+        /// observe snapshots registered by parallel lifecycle tests.
+        fn register_expired_local_snapshot(id: &str, target_id: &str) -> PreviewSnapshot {
             let mut registered =
                 local_test_snapshot(&demo_repo(), None, root_repo_snapshot(), Vec::new());
             registered.id = id.to_string();
+            registered.target_id = target_id.to_string();
             registered.created_at = Utc::now() - Duration::minutes(60);
             registered.expires_at = Utc::now() - Duration::minutes(30);
-            register_preview_snapshot(registered.clone());
+            register_preview_snapshot(registered.clone()).expect("register expired snapshot");
             registered
         }
 
@@ -4134,17 +4267,18 @@ metadata:
         fn expiry_pruning_removes_only_unleased_snapshots() {
             let leased = "github-preview-prune-leased";
             let expired = "github-preview-prune-expired";
-            register_expired_local_snapshot(leased);
-            register_expired_local_snapshot(expired);
+            let target_id = "github-preview-prune-expired-target";
+            register_expired_local_snapshot(leased, target_id);
+            register_expired_local_snapshot(expired, target_id);
             // An expired snapshot can never start a new import.
             assert!(matches!(
                 acquire_import_lease(leased, Utc::now()),
-                Err(GithubImportError::PreviewWorkspaceExpired)
+                Err(GithubImportError::PreviewSnapshotMissing)
             ));
 
-            let pruned = prune_expired_preview_snapshots(Utc::now());
+            let pruned = prune_expired_preview_snapshots_for_target(target_id, Utc::now());
             assert!(pruned.iter().any(|snapshot| snapshot.id == expired));
-            assert!(pruned.iter().any(|snapshot| snapshot.id == leased));
+            assert!(pruned.iter().all(|snapshot| snapshot.id != leased));
             assert!(!preview_snapshot_is_registered(expired));
             assert!(!preview_snapshot_is_registered(leased));
         }
@@ -4152,17 +4286,19 @@ metadata:
         #[tokio::test]
         async fn pruning_never_removes_a_snapshot_with_an_active_import_lease() {
             let id = "github-preview-prune-active-lease";
+            let target_id = "github-preview-prune-active-target";
             // A short TTL keeps the prune clock at "now", so snapshots
             // registered by tests running in parallel are never pruned.
             let mut registered =
                 local_test_snapshot(&demo_repo(), None, root_repo_snapshot(), Vec::new());
             registered.id = id.to_string();
+            registered.target_id = target_id.to_string();
             registered.expires_at = Utc::now() + Duration::milliseconds(50);
-            register_preview_snapshot(registered);
+            register_preview_snapshot(registered).expect("register leased snapshot");
             assert!(acquire_import_lease(id, Utc::now()).is_ok());
 
             tokio::time::sleep(std::time::Duration::from_millis(120)).await;
-            let pruned = prune_expired_preview_snapshots(Utc::now());
+            let pruned = prune_expired_preview_snapshots_for_target(target_id, Utc::now());
             assert!(pruned.iter().all(|snapshot| snapshot.id != id));
             assert!(preview_snapshot_is_registered(id));
 
@@ -4181,7 +4317,7 @@ metadata:
                 source_path: ".".to_string(),
                 content_digest: "sha256-v1:candidate".to_string(),
             }];
-            register_preview_snapshot(registered);
+            register_preview_snapshot(registered).expect("register markdown snapshot");
 
             for _ in 0..2 {
                 let markdown = fetch_github_skill_markdown_from_snapshot(
@@ -4255,7 +4391,7 @@ metadata:
                     file.sha256 = [0_u8; 32];
                 }
             }
-            register_preview_snapshot(registered);
+            register_preview_snapshot(registered).expect("register integrity snapshot");
 
             assert!(matches!(
                 fetch_github_skill_markdown_from_snapshot(
@@ -4314,7 +4450,7 @@ metadata:
                 local_test_snapshot(&repo, None, snapshot_files, snapshot_candidates.clone());
             registered.id = id.to_string();
             let expected_commit = registered.resolved_commit_sha.clone();
-            register_preview_snapshot(registered);
+            register_preview_snapshot(registered).expect("register import snapshot");
 
             let result = import_github_repo_skills_from_preview(
                 &pool,
@@ -4406,7 +4542,7 @@ metadata:
                 local_test_snapshot(&repo, None, snapshot_files, snapshot_candidates.clone());
             registered.id = id.to_string();
             let expected_commit = registered.resolved_commit_sha.clone();
-            register_preview_snapshot(registered);
+            register_preview_snapshot(registered).expect("register renamed import snapshot");
 
             let result = import_github_repo_skills_from_preview(
                 &pool,
@@ -4486,7 +4622,7 @@ metadata:
             let mut registered =
                 local_test_snapshot(&repo, None, snapshot_files, snapshot_candidates);
             registered.id = id.to_string();
-            register_preview_snapshot(registered);
+            register_preview_snapshot(registered).expect("register binding snapshot");
 
             let selections = vec![GitHubSkillImportSelection {
                 source_path: "skills/demo".to_string(),
@@ -4598,7 +4734,7 @@ metadata:
                 local_test_snapshot(&repo, None, snapshot_files, snapshot_candidates);
             registered.id = id.to_string();
             registered.snapshot_digest = "sha256-v1:stale".to_string();
-            register_preview_snapshot(registered);
+            register_preview_snapshot(registered).expect("register digest snapshot");
 
             assert!(matches!(
                 import_github_repo_skills_from_preview(
@@ -4696,6 +4832,11 @@ metadata:
                     "preview_integrity",
                 ),
                 (GithubImportError::PreviewSnapshotBusy, "preview_busy"),
+                (GithubImportError::PreviewCapacity, "preview_capacity"),
+                (
+                    GithubImportError::PreviewCleanupPending,
+                    "preview_cleanup_pending",
+                ),
                 (
                     GithubImportError::PreviewCommitUnresolved,
                     "preview_commit_unresolved",

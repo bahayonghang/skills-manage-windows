@@ -122,7 +122,9 @@ fn snapshots_cache_with(
 ) -> CentralUpdateSnapshotCache {
     let cache = CentralUpdateSnapshotCache::default();
     for (repo, snapshot) in items {
-        cache.insert(repo_cache_key(&repo), snapshot);
+        cache
+            .insert(repo_cache_key(&repo), snapshot)
+            .expect("seed snapshot cache");
     }
     cache
 }

@@ -27,14 +27,14 @@
 
 ## Acceptance Criteria
 
-- [ ] pointer/Arc identity 测试证明 cache hit 与 request result共享同一 snapshot payload，未深 clone file bytes。
-- [ ] Central cache 的 entry、byte、TTL、LRU、oversized-not-cached 和 checked-size-overflow 测试全部通过。
-- [ ] Preview registry 的 per-target ready cap、Local byte cap、global cap、active lease、deferred discard 和 capacity rejection 测试全部通过。
-- [ ] 两个 remote target A/B：在 A connection 上清理时，B 的 expired workspace 不从 registry 消失；连接 B 后才由 B adapter 删除。
-- [ ] `remove_tree` 故障注入后 snapshot 进入 cleanup-pending 且不可 lookup/import；重试成功后 entry 与 workspace ownership 一起释放。
-- [ ] import failure 仍释放 lease 供 retry；import success consume；cleanup/eviction 不改变 digest/binding/provenance。
-- [ ] 所有容量路径有 deterministic test policy，测试不依赖 process-global wall clock 或其他并行测试的 registry entry。
-- [ ] focused snapshot tests、Rust fmt、all-targets locked Clippy、locked Rust tests和 `just ci` 通过。
+- [x] pointer/Arc identity 测试证明 cache hit 与 request result共享同一 snapshot payload，未深 clone file bytes。
+- [x] Central cache 的 entry、byte、TTL、LRU、oversized-not-cached 和 checked-size-overflow 测试全部通过。
+- [x] Preview registry 的 per-target ready cap、Local byte cap、global cap、active lease、deferred discard 和 capacity rejection 测试全部通过。
+- [x] 两个 remote target A/B：在 A connection 上清理时，B 的 expired workspace 不从 registry 消失；连接 B 后才由 B adapter 删除。
+- [x] `remove_tree` 故障注入后 snapshot 进入 cleanup-pending 且不可 lookup/import；重试成功后 entry 与 workspace ownership 一起释放。
+- [x] import failure 仍释放 lease 供 retry；import success consume；cleanup/eviction 不改变 digest/binding/provenance。
+- [x] 所有容量路径有 deterministic test policy，测试不依赖 process-global wall clock 或其他并行测试的 registry entry。
+- [x] focused snapshot tests、Rust fmt、all-targets locked Clippy、locked Rust tests和 `just ci` 通过。
 
 ## Non-Goals
 

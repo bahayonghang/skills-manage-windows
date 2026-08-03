@@ -261,6 +261,12 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
             Some("GitHub preview content changed. Preview the repository again.")
         }
         "github_import.preview_busy" => Some("GitHub preview is already being imported."),
+        "github_import.preview_capacity" => {
+            Some("GitHub preview capacity is full. Close an older preview and try again.")
+        }
+        "github_import.preview_cleanup_pending" => {
+            Some("GitHub preview cleanup is still pending. Preview the repository again.")
+        }
         "github_import.preview_commit_unresolved" => {
             Some("GitHub repository commit could not be resolved. Preview again.")
         }

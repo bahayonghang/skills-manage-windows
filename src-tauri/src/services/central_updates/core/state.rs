@@ -12,7 +12,7 @@ use super::super::fs::{
     collect_remote_skill_files, ensure_remote_skill_manifest, hash_remote_files,
     normalize_repo_path, CentralFs,
 };
-use super::super::snapshots::{repo_cache_key, snapshot_cache_ttl};
+use super::super::snapshots::{repo_cache_key, snapshot_cache_ttl, SharedGitHubSnapshots};
 use super::super::types::{
     GitHubUpdateSource, PreparedSkillUpdate, RemoteSkillContent, RemoteSkillLoadError,
     SkillUpdateStatus,
@@ -109,7 +109,7 @@ pub(crate) async fn prepare_skill_updates(
 
 pub(crate) fn load_remote_skill_content(
     prepared: &PreparedSkillUpdate,
-    snapshots: &HashMap<String, GitHubRepoSnapshot>,
+    snapshots: &SharedGitHubSnapshots,
 ) -> Result<Option<RemoteSkillContent>, RemoteSkillLoadError> {
     let skill = &prepared.skill;
     let Some(source) = prepared.source.clone() else {
@@ -280,7 +280,7 @@ pub(crate) fn state_from_relocated_source(
     prepared: &PreparedSkillUpdate,
     repo: &GitHubRepoRef,
     source_path: &str,
-    snapshots: &HashMap<String, GitHubRepoSnapshot>,
+    snapshots: &SharedGitHubSnapshots,
 ) -> Result<SkillUpdateState, RemoteSkillLoadError> {
     let mut relocated = prepared.clone();
     relocated.source = Some(GitHubUpdateSource {

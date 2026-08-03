@@ -789,15 +789,16 @@ pub async fn discard_github_repo_preview_snapshot(
 Registry (module-private, session-scoped, never persisted across restarts):
 
 ```rust
-fn register_preview_snapshot(snapshot: PreviewSnapshot);
+fn register_preview_snapshot(snapshot: PreviewSnapshot) -> Result<(), GithubImportError>;
+fn reserve_remote_preview_snapshot(target_id: &str, target_kind: TargetKind, now: DateTime<Utc>)
+    -> Result<RemoteReservationAttempt<'static>, GithubImportError>;
 fn lookup_preview_snapshot(preview_id: &str, now: DateTime<Utc>)
     -> Result<Arc<PreviewSnapshot>, GithubImportError>;
 fn acquire_import_lease(preview_id: &str, now: DateTime<Utc>)
     -> Result<Arc<PreviewSnapshot>, GithubImportError>;
-fn release_import_lease(preview_id: &str) -> Option<Arc<PreviewSnapshot>>;
-fn consume_preview_snapshot(preview_id: &str) -> Option<Arc<PreviewSnapshot>>;
-fn discard_preview_snapshot(preview_id: &str) -> Option<Arc<PreviewSnapshot>>;
-fn prune_expired_preview_snapshots(now: DateTime<Utc>) -> Vec<Arc<PreviewSnapshot>>;
+fn sweep_preview_snapshots_for_target(target_id: &str, now: DateTime<Utc>)
+    -> Vec<CleanupTicket>;
+fn ack_preview_snapshot_cleanup(ticket: &CleanupTicket) -> bool;
 ```
 
 Digest v1 (`services/github_import/digest.rs`):
@@ -842,14 +843,28 @@ DTO fields, required on both sides — none of these are optional:
 - The lease is single-holder. `Ready` + acquire becomes `Importing`; failure
   releases back to `Ready` so the same token can be retried; success consumes the
   entry atomically; a discard requested during a lease is deferred to release.
+- Registry production policy is deterministic and bounded: at most four `Ready`
+  previews per target, at most 256 MiB of Local retained bytes per target, and at
+  most 64 total entries. Active imports count toward retained bytes and global
+  ownership but are never eviction victims. LRU uses a monotonic access sequence,
+  not wall-clock tie ordering.
 - Expiry is enforced on every `lookup_preview_snapshot` and
-  `acquire_import_lease`, so a stale token can never reach storage. Storage
-  reclamation for expired entries only runs via
-  `cleanup_expired_preview_snapshots_for_connection` (remote preview creation), so
-  a Local-only session may retain at most about one snapshot directory until the
-  renderer discards it. Prune-on-lookup was tried and reverted: the registry is
-  process-global and parallel Rust tests encode expiry on the entry, so
-  prune-on-access created cross-test coupling.
+  `acquire_import_lease`, so a stale token can never reach storage. Local expired
+  entries are reclaimed synchronously on target-scoped register/sweep. Remote
+  expiry, LRU eviction, discard, and import success transition to
+  `CleanupPending`; lookup/import then fail closed until the owning target removes
+  the workspace and acknowledges the generation-tagged cleanup ticket.
+- Remote preview reserves per-target/global admission before creating a workspace.
+  Cancellation before workspace ownership drops the reservation. A returned
+  workspace is synchronously claimed into that reservation before any further
+  await; cancellation after the claim transitions the same slot to
+  `CleanupPending`. If cleanup of a newly created but unusable workspace fails,
+  the same reservation remains `CleanupPending`, so ownership stays retryable
+  without ever creating entry 65.
+- Sweeps accept one `target_id` and return tickets only for that owner. A connection
+  for target A never removes or acknowledges target B. Remote deletion runs outside
+  the registry mutex; failed deletion leaves the ticket pending for the next owning
+  connection, preview, discard, or import attempt.
 - The renderer must discard explicitly on reset, on replacement by a new preview,
   on target change, and on wizard close.
 - Per-skill provenance is written in the same transaction as the skill upsert and
@@ -863,10 +878,11 @@ DTO fields, required on both sides — none of these are optional:
   retains candidate subtrees while a remote workspace holds the whole repo, so the
   value differs by transport for the same repo; per-candidate manifests stay
   identical.
-- `to_ipc_error()` emits `github_import.<code>:<fixed English summary>` for the six
-  lifecycle variants only (`preview_missing`, `preview_expired`,
+- `to_ipc_error()` emits `github_import.<code>:<fixed English summary>` for the eight
+  lifecycle variants (`preview_missing`, `preview_expired`,
   `preview_mismatch`, `preview_integrity`, `preview_busy`,
-  `preview_commit_unresolved`). Every other variant keeps its historical Display
+  `preview_capacity`, `preview_cleanup_pending`, `preview_commit_unresolved`).
+  Every other variant keeps its historical Display
   text so PAT guidance and existing toasts are unchanged. No code path logs or
   serializes a token, workspace path, digest, or file content.
 
@@ -880,12 +896,14 @@ DTO fields, required on both sides — none of these are optional:
 | Snapshot repo, source root, or target differs from the request | `PreviewWorkspaceMismatch` / `PreviewTargetChanged` -> `github_import.preview_mismatch` |
 | Retained bytes no longer match the registered per-file `sha256` | `PreviewSnapshotIntegrity` -> `github_import.preview_integrity`; no mutation |
 | A second import already leases the same token | `PreviewSnapshotBusy` -> `github_import.preview_busy`; fail closed |
+| Per-target/global admission has no safe victim | `PreviewCapacity` -> `github_import.preview_capacity`; create no remote workspace |
+| Remote workspace deletion failed | Keep `CleanupPending`; lookup/import -> `github_import.preview_cleanup_pending` until owning-target retry ack |
 | Tip commit cannot be resolved during preview | `PreviewCommitUnresolved` -> `github_import.preview_commit_unresolved` |
 | Selection names a `sourcePath` absent from the snapshot | Fail before mutation |
 | Import fails after the lease is taken | Release lease, keep the snapshot, allow retry with the same token |
 | Import succeeds | Consume the token atomically and release storage |
 
-Every one of these fails before FS or DB mutation. All six coded variants map to a
+Every one of these fails before FS or DB mutation. All eight coded variants map to a
 bilingual "preview again" state in the renderer.
 
 ### 5. Good / Base / Bad Cases
@@ -910,7 +928,9 @@ bilingual "preview again" state in the renderer.
   `digest_framing_prevents_path_boundary_collisions`.
 - Registry lifecycle: unknown/expired rejection,
   `import_lease_is_exclusive_and_released_for_retry`, deferred discard under
-  lease, `expiry_pruning_removes_only_unleased_snapshots`.
+  lease, `expiry_pruning_removes_only_unleased_snapshots`, deterministic
+  per-target/byte/global limits, active-lease protection, concurrent reservation,
+  cleanup-pending retry, and stale generation acknowledgement.
 - Immutability: `import_uses_preview_bytes_and_persists_per_skill_provenance`
   (branch bytes change after preview) plus the structural guard
   `preview_import_module_cannot_acquire_repository_content`.
@@ -925,6 +945,8 @@ bilingual "preview again" state in the renderer.
 - Cross-transport parity:
   `remote_inventory_digest_matches_the_local_snapshot_digest` and
   `tree_selection_repository_files_match_archive_for_candidate_subtrees`.
+- Remote ownership: FakeRunner tests must prove failed `remove_tree` leaves lookup
+  and import closed until retry ack, and target A cannot execute target B's ticket.
 - Renderer contract: `src/test/contracts/githubPreviewSnapshotContract.test.ts`
   proving zero `previewWorkspaceId` references and a single
   `invoke("import_github_repo_skills")` call site.

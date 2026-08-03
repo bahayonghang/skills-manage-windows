@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::db::{DbPool, SkillRepository, SkillUpdateState};
+use crate::services::central_updates::snapshots::SharedGitHubSnapshots;
 use crate::services::central_updates::{
     normalize_repo_path, state_from_relocated_source, CentralRemoteAddedSkill, CentralUpdatesError,
     PreparedSkillUpdate, RemoteSkillLoadError, SkillUpdateStatus,
@@ -13,7 +14,7 @@ use super::{repository_id_for_state, FailedRepository, UpdatableSkill};
 pub(crate) struct RelocationContext<'a> {
     pub pool: &'a DbPool,
     pub prepared_by_skill_id: &'a HashMap<String, PreparedSkillUpdate>,
-    pub snapshots: &'a HashMap<String, github_import::GitHubRepoSnapshot>,
+    pub snapshots: &'a SharedGitHubSnapshots,
     pub repo_by_id: &'a HashMap<String, SkillRepository>,
     pub repo_ref_by_id: &'a HashMap<String, github_import::GitHubRepoRef>,
     pub remote_missing_states: &'a mut Vec<SkillUpdateState>,

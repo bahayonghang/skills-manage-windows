@@ -307,7 +307,7 @@ async fn force_import_remote_added(
     auth_token: Option<&str>,
     repository_ids: &[String],
     valid_repositories: &[(db::SkillRepository, github_import::GitHubRepoRef)],
-    snapshots: &HashMap<String, github_import::GitHubRepoSnapshot>,
+    snapshots: &super::super::snapshots::SharedGitHubSnapshots,
 ) -> Result<
     (
         Vec<ImportedGitHubSkillSummary>,

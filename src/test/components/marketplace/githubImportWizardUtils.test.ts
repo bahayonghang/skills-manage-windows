@@ -22,6 +22,8 @@ describe("formatGitHubImportToast", () => {
     ["github_import.preview_mismatch:mismatch", "preview_mismatch"],
     ["github_import.preview_integrity:changed", "preview_integrity"],
     ["github_import.preview_busy:busy", "preview_busy"],
+    ["github_import.preview_capacity:full", "preview_capacity"],
+    ["github_import.preview_cleanup_pending:pending", "preview_cleanup_pending"],
   ])("localizes %s", (envelope, code) => {
     expect(isPreviewSnapshotFailure(envelope)).toBe(true);
     const formatted = formatGitHubImportToast(new Error(envelope), i18n.t);

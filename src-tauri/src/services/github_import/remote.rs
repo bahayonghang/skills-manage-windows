@@ -4,16 +4,72 @@ use super::*;
 pub(super) async fn cleanup_expired_preview_snapshots_for_connection(
     connection: &ConnectedRemoteTarget,
 ) {
-    for snapshot in prune_expired_preview_snapshots(Utc::now()) {
-        let Some(workspace) = snapshot.remote_workspace() else {
+    let tickets = sweep_preview_snapshots_for_target(connection.target_id(), Utc::now());
+    let _ = cleanup_preview_tickets_for_connection(connection, tickets).await;
+}
+
+pub(super) async fn cleanup_preview_tickets_for_connection(
+    connection: &ConnectedRemoteTarget,
+    tickets: Vec<CleanupTicket>,
+) -> bool {
+    let mut all_cleaned = true;
+    for ticket in tickets {
+        let target_kind = ticket.target_kind();
+        if ticket.target_id() != connection.target_id()
+            || target_kind != connection_target_kind(connection)
+        {
+            all_cleaned = false;
             continue;
-        };
-        if snapshot.target_id == connection.target_id() {
-            let _ = connection
-                .remove_tree(&workspace.remote_workspace_dir)
-                .await;
+        }
+        match connection.remove_tree(ticket.workspace_dir()).await {
+            Ok(()) => {
+                let _ = ack_preview_snapshot_cleanup(&ticket);
+            }
+            Err(_) => {
+                all_cleaned = false;
+                tracing::warn!(
+                    count = 1,
+                    reason = "remove_failed",
+                    target_kind = ?target_kind,
+                    "GitHub preview snapshot cleanup remains pending"
+                );
+            }
         }
     }
+    all_cleaned
+}
+
+pub(super) async fn cleanup_preview_ticket_for_target(
+    active_target: &ActiveTarget,
+    ticket: CleanupTicket,
+) -> bool {
+    if !active_target.is_remote_like()
+        || active_target.id() != ticket.target_id()
+        || active_target.kind() != ticket.target_kind()
+    {
+        return false;
+    }
+    let Ok(connection) = connect_remote_target(active_target).await else {
+        return false;
+    };
+    cleanup_preview_tickets_for_connection(&connection, vec![ticket]).await
+}
+
+fn connection_target_kind(connection: &ConnectedRemoteTarget) -> TargetKind {
+    match connection {
+        ConnectedRemoteTarget::Ssh(_) => TargetKind::Ssh,
+        ConnectedRemoteTarget::Wsl(_) => TargetKind::Wsl,
+    }
+}
+
+pub(super) async fn retry_pending_preview_cleanup_for_target(active_target: &ActiveTarget) {
+    if !active_target.is_remote_like() {
+        return;
+    }
+    let Ok(connection) = connect_remote_target(active_target).await else {
+        return;
+    };
+    cleanup_expired_preview_snapshots_for_connection(&connection).await;
 }
 
 /// Create a bounded remote workspace holding the extracted repository at
@@ -456,8 +512,9 @@ pub(crate) async fn discard_preview_snapshot_for_target(
     active_target: &ActiveTarget,
     preview_id: &str,
 ) {
-    let Some(snapshot) = discard_preview_snapshot(preview_id) else {
-        return;
-    };
-    release_snapshot_storage(active_target, &snapshot).await;
+    let ticket = discard_preview_snapshot_for_target_transition(active_target.id(), preview_id);
+    if let Some(ticket) = ticket {
+        let _ = cleanup_preview_ticket_for_target(active_target, ticket).await;
+    }
+    retry_pending_preview_cleanup_for_target(active_target).await;
 }

@@ -172,6 +172,22 @@ pub(crate) struct GitHubRepoSnapshot {
     pub(crate) files: HashMap<String, Vec<u8>>,
 }
 
+impl GitHubRepoSnapshot {
+    pub(crate) fn retained_bytes(&self) -> Result<u64, GithubImportError> {
+        checked_retained_bytes(self.files.values().map(|bytes| bytes.len() as u64))
+    }
+}
+
+pub(super) fn checked_retained_bytes(
+    lengths: impl IntoIterator<Item = u64>,
+) -> Result<u64, GithubImportError> {
+    lengths.into_iter().try_fold(0_u64, |total, length| {
+        total
+            .checked_add(length)
+            .ok_or(GithubImportError::SnapshotSizeOverflow)
+    })
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct PinnedGitHubRepoSnapshot {
     pub(crate) resolved: ResolvedGitHubRepoSource,
@@ -236,8 +252,6 @@ pub(super) const PRIORITY_SKILL_ROOTS: &[&str] = &[
     ".zencoder/skills",
 ];
 
-pub(super) static GITHUB_PREVIEW_SNAPSHOTS: OnceLock<Mutex<HashMap<String, PreviewSnapshotEntry>>> =
-    OnceLock::new();
 pub(super) static GITHUB_SHARED_CLIENT: OnceLock<Result<reqwest::Client, reqwest::Error>> =
     OnceLock::new();
 pub(super) static GITHUB_HOST_RATE_LIMITERS: OnceLock<
@@ -325,16 +339,6 @@ impl PreviewSnapshot {
             PreviewSnapshotStorage::Local(_) => None,
         }
     }
-}
-
-/// Registry lifecycle state. Only one import lease may exist per snapshot; a
-/// discard requested while the lease is held is deferred until the lease ends
-/// so an in-flight read cannot lose its remote workspace.
-#[derive(Debug, Clone)]
-pub(super) struct PreviewSnapshotEntry {
-    pub(super) snapshot: Arc<PreviewSnapshot>,
-    pub(super) importing: bool,
-    pub(super) discard_pending: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

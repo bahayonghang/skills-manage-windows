@@ -12,8 +12,7 @@ use crate::services::central_skills::{
     self, BatchDeleteCentralSkillRequest, BatchDeleteCentralSkillResult,
 };
 use crate::services::github_import::{
-    self, GitHubRepoImportResult, GitHubRepoRef, GitHubRepoSnapshot, GitHubSkillImportSelection,
-    GitHubSkillPreview,
+    self, GitHubRepoImportResult, GitHubRepoRef, GitHubSkillImportSelection, GitHubSkillPreview,
 };
 use crate::targets::ActiveTarget;
 
@@ -560,7 +559,7 @@ pub(crate) async fn collect_remote_added_skills(
     pool: &DbPool,
     repository_ids: &[String],
     repositories: &[(SkillRepository, GitHubRepoRef)],
-    snapshots: &HashMap<String, GitHubRepoSnapshot>,
+    snapshots: &super::snapshots::SharedGitHubSnapshots,
     failed_repositories: &mut Vec<CentralRepositorySyncFailure>,
 ) -> Result<CentralRemoteAddedCollection, CentralUpdatesError> {
     let members = db::get_central_repository_members_by_repositories(pool, repository_ids).await?;

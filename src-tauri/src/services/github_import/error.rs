@@ -125,6 +125,9 @@ pub enum GithubImportError {
     #[error("GitHub repository expanded archive contents size overflowed.")]
     ArchiveSizeOverflow,
 
+    #[error("GitHub repository snapshot retained byte size overflowed.")]
+    SnapshotSizeOverflow,
+
     #[error("GitHub repository archive contains an unsupported path.")]
     ArchiveUnsupportedPath,
 
@@ -249,6 +252,12 @@ pub enum GithubImportError {
     #[error("This GitHub preview is already being imported. Wait for it to finish.")]
     PreviewSnapshotBusy,
 
+    #[error("GitHub preview capacity is full. Close an older preview and try again.")]
+    PreviewCapacity,
+
+    #[error("GitHub preview cleanup is still pending. Preview the repository again.")]
+    PreviewCleanupPending,
+
     /// The retained snapshot no longer matches the digest confirmed at preview
     /// time. Fails closed before any Central or database mutation.
     #[error(
@@ -316,6 +325,8 @@ impl GithubImportError {
             Self::PreviewWorkspaceMismatch | Self::PreviewTargetChanged => Some("preview_mismatch"),
             Self::PreviewSnapshotIntegrity => Some("preview_integrity"),
             Self::PreviewSnapshotBusy => Some("preview_busy"),
+            Self::PreviewCapacity => Some("preview_capacity"),
+            Self::PreviewCleanupPending => Some("preview_cleanup_pending"),
             Self::PreviewCommitUnresolved => Some("preview_commit_unresolved"),
             _ => None,
         }

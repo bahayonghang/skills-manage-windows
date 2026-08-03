@@ -95,6 +95,8 @@
       "preview_mismatch": "The repository preview no longer matches the active target or repository. Preview the repository again.",
       "preview_integrity": "The previewed repository contents changed. Preview the repository again and review the update.",
       "preview_busy": "This preview is already being imported. Wait for it to finish before retrying.",
+      "preview_capacity": "Too many repository previews are open. Close an older preview, then try again.",
+      "preview_cleanup_pending": "An older repository preview is still being cleaned up. Preview the repository again.",
       "preview_commit_unresolved": "The repository commit could not be resolved. Preview the repository again.",
       "branch_invalid": "Enter a safe single-segment branch name without slashes.",
       "branch_conflict": "The branch in the repository URL differs from the branch field. Make them match, then preview again."

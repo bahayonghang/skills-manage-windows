@@ -32,6 +32,7 @@ Insert 顺序：
 
 1. 计算 bytes，先 prune expired。
 2. 如果单项超过 cache aggregate cap，返回“当前请求可用但未缓存” outcome。
+   同 key 的旧 cache entry 必须失效，避免后续 UseFresh 返回已被刷新替代的旧 bytes。
 3. 替换同 key 时先扣旧 bytes。
 4. 从 oldest non-current entry 淘汰，直到新值满足 count+bytes。
 5. 插入 Arc，更新计数。
@@ -61,11 +62,20 @@ Local storage drop 是同步成功清理，可直接 Removed。Remote storage �
 
 ## 6. Register failure
 
-Remote acquisition 先创建 workspace、构造 snapshot，再向 registry register。若 per-target/global cap 无法接纳：
+Remote acquisition 在创建 workspace 前先取得 registry reservation。reservation
+预先占用 per-target ready admission 与 global entry slot，并携带内部
+`preview_id + generation`；因此并发 acquisition 不能越过 4/64 上限。
 
-1. 尝试 owning connection 删除刚创建的 workspace。
-2. 删除成功则返回 capacity error。
-3. 删除失败则把新 snapshot登记为 CleanupPending，再返回 capacity/cleanup error；不能遗失 path。
+1. reservation 因容量不足被拒绝时，不创建 workspace，直接返回 capacity error。
+2. acquisition 在产生 workspace 前失败或被取消时，RAII drop 释放 reservation；
+   workspace 一旦产生，必须在下一次 await 前同步 claim 到 reservation，之后取消
+   只能把原槽位转为 CleanupPending。
+3. workspace 已产生但后续 inventory/register fill 失败时，先由 owning connection
+   删除；删除成功后释放 reservation。
+4. 删除失败时，把同一个 reserved entry 原位转为 CleanupPending。它仍占原来的
+   global slot，不会临时产生第 65 个 entry，也不会遗失 path。
+5. reservation fill 与 cleanup-pending transition 都校验 generation；过期 ack
+   不能删除复用同 id 的新 entry。
 
 ## 7. Concurrency
 

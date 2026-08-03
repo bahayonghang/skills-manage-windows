@@ -95,6 +95,8 @@
       "preview_mismatch": "仓库预览与当前目标或仓库不一致，请重新预览。",
       "preview_integrity": "预览的仓库内容已变化，请重新预览并确认更新。",
       "preview_busy": "该预览正在导入中，请等待完成后重试。",
+      "preview_capacity": "打开的仓库预览过多，请关闭较早的预览后重试。",
+      "preview_cleanup_pending": "较早的仓库预览仍在清理中，请重新预览仓库。",
       "preview_commit_unresolved": "无法解析仓库提交，请重新预览。",
       "branch_invalid": "请输入不含斜杠的安全单段分支名。",
       "branch_conflict": "仓库 URL 中的分支与分支输入框不一致，请调整一致后重新预览。"
