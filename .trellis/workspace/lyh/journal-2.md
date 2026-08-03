@@ -1007,3 +1007,24 @@ Made metadata and Marketplace cache mutations atomic with bounded batching, roll
 ### Status
 
 [OK] **Completed**
+
+
+## Session 87: 完成 src-tauri 优化父任务验收
+
+**Date**: 2026-08-03
+**Task**: 完成 src-tauri 优化父任务验收
+**Branch**: `dev`
+
+### Summary
+
+完成五个优化子任务的跨域验收，确认旧旁路消失、锁与事务顺序一致、资源与文档无漂移；Node 22 just ci 和 just audit 通过后归档父任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ae75eb84212d8b65fac0ed3c64336cd9b779aaaa` | (see git log) |
+
+### Status
+
+[OK] **Completed**
