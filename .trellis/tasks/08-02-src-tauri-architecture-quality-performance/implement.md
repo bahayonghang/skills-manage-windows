@@ -6,8 +6,8 @@
 - [x] 保存 `research/src-tauri-deep-audit.md`。
 - [x] 创建 5 个可独立验收的 child，并写明依赖。
 - [x] 六个任务均通过 `task.py validate`，规划基线 `just ci` 通过。
-- [ ] 用户评审父任务与 child 规划。
-- [ ] 只在用户明确批准后，对选定 child 执行 `task.py start`；不要 start 父任务。
+- [x] 用户评审父任务与 child 规划。
+- [x] 只在用户明确批准后，对选定 child 执行 `task.py start`；不要 start 父任务。
 
 ## 1. Child execution order
 
@@ -26,23 +26,23 @@ Snapshot、transaction 和 pagination 在文件所有权不重叠时可独立排
 
 ## 2. Per-child review gate
 
-- [ ] 重新读取 child PRD/design/implement 与 context manifests。
-- [ ] 记录实现前代码基线；确认没有被其他 task 改写关键假设。
-- [ ] 先补失败回归或 benchmark/reference oracle。
-- [ ] 按 child rollback point 分小步实现，保持 IPC/CLI/schema 兼容。
-- [ ] 跑定向测试，再跑 Rust fmt、all-targets locked Clippy、locked tests。
-- [ ] 涉及 schema/IPC 时运行 `pnpm docs:gen` 并检查两份 generated docs。
-- [ ] 运行 `just ci`，检查 final diff，提交并按 Trellis 生命周期 archive child。
+- [x] 重新读取 child PRD/design/implement 与 context manifests。
+- [x] 记录实现前代码基线；确认没有被其他 task 改写关键假设。
+- [x] 先补失败回归或 benchmark/reference oracle。
+- [x] 按 child rollback point 分小步实现，保持 IPC/CLI/schema 兼容。
+- [x] 跑定向测试，再跑 Rust fmt、all-targets locked Clippy、locked tests。
+- [x] 涉及 schema/IPC 时运行 `pnpm docs:gen` 并检查两份 generated docs。
+- [x] 运行 `just ci`，检查 final diff，提交并按 Trellis 生命周期 archive child。
 
 ## 3. Parent integration review
 
-- [ ] 五个 child 均已完成或有用户明确接受的风险记录。
-- [ ] 搜索并确认旧 Marketplace direct writer、无界 response readers、unbounded cache path、page full-enrichment path 和非事务 mutation 已消失。
-- [ ] 审核 Central lock / DB transaction / remote cleanup 的获取顺序，无嵌套自锁或连接泄漏。
-- [ ] 审核资源常量无重复定义，typed error 与 redaction 仍符合 spec。
-- [ ] 对生成 docs、architecture docs 和活动 backend specs 做 drift 检查。
-- [ ] 最终 `just ci` 通过；若任何平台/GUI/field evidence 未运行，明确保留为 open gate。
-- [ ] 写 final cross-child acceptance，再 archive 父任务并记录 session。
+- [x] 五个 child 均已完成或有用户明确接受的风险记录。
+- [x] 搜索并确认旧 Marketplace direct writer、无界 response readers、unbounded cache path、page full-enrichment path 和非事务 mutation 已消失。
+- [x] 审核 Central lock / DB transaction / remote cleanup 的获取顺序，无嵌套自锁或连接泄漏。
+- [x] 审核资源常量无重复定义，typed error 与 redaction 仍符合 spec。
+- [x] 对生成 docs、architecture docs 和活动 backend specs 做 drift 检查。
+- [x] 最终 `just ci` 通过；若任何平台/GUI/field evidence 未运行，明确保留为 open gate。
+- [x] 写 final cross-child acceptance，再 archive 父任务并记录 session。
 
 ## 4. Rollback rule
 

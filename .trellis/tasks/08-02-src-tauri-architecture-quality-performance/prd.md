@@ -28,13 +28,13 @@
 
 ## Cross-Child Acceptance Criteria
 
-- [ ] P0 安装任务证明恶意 frontmatter name 不能写出 Central 根，Local/SSH/WSL 均通过同一受控 use case 安装完整技能目录，并且失败不写 installed 状态。
-- [ ] 两类 GitHub snapshot 状态都有明确 entry/byte 上限；过期或被淘汰的远端 workspace 只由其 owning target 释放，活跃 import lease 不被回收。
-- [ ] 所有纳入范围的 HTTP body、SSE、主 `SKILL.md` 和 scanner/AI 文件读取在完整分配前受限；多字节 UTF-8 截断不 panic。
-- [ ] Central page 对筛选、排序、total、offset/limit 与特殊标签/安装状态的行为有等价性测试；当前页最多富化 `limit <= 500` 行，大 fixture 不再走全量 enrichment。
-- [ ] metadata/cache 批量写入在混合有效/无效输入和故障注入下全回滚；成功 Marketplace sync 原子替换该 registry 的缓存并删除 stale rows。
-- [ ] 所有子任务分别通过定向测试、Rust fmt、all-targets locked Clippy、locked Rust tests 和最终 `just ci`；schema/IPC 改动同时通过生成文档检查。
-- [ ] 父任务最终复核任务间没有重复 helper、锁顺序冲突、资源预算漂移或文档与代码不一致。
+- [x] P0 安装任务证明恶意 frontmatter name 不能写出 Central 根，Local/SSH/WSL 均通过同一受控 use case 安装完整技能目录，并且失败不写 installed 状态。
+- [x] 两类 GitHub snapshot 状态都有明确 entry/byte 上限；过期或被淘汰的远端 workspace 只由其 owning target 释放，活跃 import lease 不被回收。
+- [x] 所有纳入范围的 HTTP body、SSE、主 `SKILL.md` 和 scanner/AI 文件读取在完整分配前受限；多字节 UTF-8 截断不 panic。
+- [x] Central page 对筛选、排序、total、offset/limit 与特殊标签/安装状态的行为有等价性测试；当前页最多富化 `limit <= 500` 行，大 fixture 不再走全量 enrichment。
+- [x] metadata/cache 批量写入在混合有效/无效输入和故障注入下全回滚；成功 Marketplace sync 原子替换该 registry 的缓存并删除 stale rows。
+- [x] 所有子任务分别通过定向测试、Rust fmt、all-targets locked Clippy、locked Rust tests 和最终 `just ci`；schema/IPC 改动同时通过生成文档检查。
+- [x] 父任务最终复核任务间没有重复 helper、锁顺序冲突、资源预算漂移或文档与代码不一致。
 
 ## Non-Goals
 
