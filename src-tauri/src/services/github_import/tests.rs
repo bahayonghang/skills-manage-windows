@@ -9,7 +9,9 @@ pub(super) mod suite {
     use flate2::{write::GzEncoder, Compression};
     use serde_json::Value;
     use std::collections::HashMap;
-    use std::sync::Arc;
+    use std::io::{Read, Write};
+    use std::net::{SocketAddr, TcpListener};
+    use std::sync::{Arc, Mutex};
     use tempfile::tempdir;
 
     async fn setup_test_db() -> DbPool {
@@ -167,6 +169,47 @@ pub(super) mod suite {
                 raw_base: mirror_url,
             },
         ]
+    }
+
+    fn spawn_http_sequence<F>(
+        build_responses: F,
+    ) -> (String, Arc<Mutex<Vec<String>>>, std::thread::JoinHandle<()>)
+    where
+        F: FnOnce(SocketAddr) -> Vec<Vec<u8>>,
+    {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let address = listener.local_addr().expect("addr");
+        let responses = build_responses(address);
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let captured_requests = Arc::clone(&requests);
+        let server = std::thread::spawn(move || {
+            for response in responses {
+                let (mut stream, _) = listener.accept().expect("accept");
+                let mut buffer = [0_u8; 4096];
+                let bytes_read = stream.read(&mut buffer).expect("read");
+                captured_requests
+                    .lock()
+                    .expect("lock")
+                    .push(String::from_utf8_lossy(&buffer[..bytes_read]).to_string());
+                stream.write_all(&response).expect("write response");
+            }
+        });
+
+        (format!("http://{address}"), requests, server)
+    }
+
+    fn http_response(status: &str, locations: &[String], body: &[u8]) -> Vec<u8> {
+        let locations = locations
+            .iter()
+            .map(|location| format!("Location: {location}\r\n"))
+            .collect::<String>();
+        let headers = format!(
+            "HTTP/1.1 {status}\r\n{locations}Content-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        let mut response = headers.into_bytes();
+        response.extend_from_slice(body);
+        response
     }
 
     fn sample_frontmatter(name: &str, description: &str) -> String {
@@ -1273,6 +1316,514 @@ metadata:
 
         assert!(snapshot.files.contains_key("skills/demo/SKILL.md"));
         assert!(snapshot.files.contains_key("README.md"));
+    }
+
+    #[test]
+    fn archive_redirect_validator_accepts_only_exact_codeload_location() {
+        let repo = GitHubRepoRef {
+            owner: "openai".to_string(),
+            repo: "skills".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/openai/skills".to_string(),
+        };
+        let expected = "https://codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/main";
+
+        assert_eq!(
+            validate_archive_redirect_url(expected, &repo)
+                .expect("valid codeload redirect")
+                .as_str(),
+            expected
+        );
+        assert!(validate_archive_redirect_url(
+            "https://codeload.github.com:443/openai/skills/legacy.tar.gz/refs/heads/main",
+            &repo,
+        )
+        .is_ok());
+        assert!(validate_archive_redirect_url(
+            "https://codeload.github.com/OpenAI/SKILLS/legacy.tar.gz/refs/heads/main",
+            &repo,
+        )
+        .is_ok());
+
+        let commit_sha = "A1234567890ABCDEF1234567890ABCDEF1234567";
+        let pinned_repo = GitHubRepoRef {
+            branch: commit_sha.to_string(),
+            ..repo.clone()
+        };
+        assert!(validate_archive_redirect_url(
+            &format!("https://codeload.github.com/openai/skills/legacy.tar.gz/{commit_sha}"),
+            &pinned_repo,
+        )
+        .is_ok());
+        for rejected in [
+            format!(
+                "https://codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/{commit_sha}"
+            ),
+            "https://codeload.github.com/openai/skills/legacy.tar.gz/a1234567890abcdef1234567890abcdef1234567"
+                .to_string(),
+        ] {
+            assert!(matches!(
+                validate_archive_redirect_url(&rejected, &pinned_repo),
+                Err(GithubImportError::ArchiveRedirectRejected)
+            ));
+        }
+
+        for rejected in [
+            "http://codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/main",
+            "https://user@codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/main",
+            "https://codeload.github.com:444/openai/skills/legacy.tar.gz/refs/heads/main",
+            "https://codeload.github.com.evil.example/openai/skills/legacy.tar.gz/refs/heads/main",
+            "https://127.0.0.1/openai/skills/legacy.tar.gz/refs/heads/main",
+            "https://169.254.169.254/openai/skills/legacy.tar.gz/refs/heads/main",
+            "https://codeload.github.com/other/skills/legacy.tar.gz/refs/heads/main",
+            "https://codeload.github.com/openai/other/legacy.tar.gz/refs/heads/main",
+            "https://codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/dev",
+            "https://codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/main/extra",
+            "https://codeload.github.com/openai/other/../skills/legacy.tar.gz/refs/heads/main",
+            "https://codeload.github.com/openai/other/%2e%2e/skills/legacy.tar.gz/refs/heads/main",
+            r"https://codeload.github.com/openai/other\..\skills/legacy.tar.gz/refs/heads/main",
+            "https://codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/main?token=secret",
+            "https://codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/main#fragment",
+            "https://codeload.github.com/openai%2fother/skills/legacy.tar.gz/refs/heads/main",
+            "https://codeload.github.com/openai%5cother/skills/legacy.tar.gz/refs/heads/main",
+            "https://@codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/main",
+            "https://codeload.github.com/openai/skills/legacy.tar.gz/main",
+            "/openai/skills/legacy.tar.gz/refs/heads/main",
+            "not a url",
+        ] {
+            assert!(
+                matches!(
+                    validate_archive_redirect_url(rejected, &repo),
+                    Err(GithubImportError::ArchiveRedirectRejected)
+                ),
+                "unexpectedly accepted {rejected}",
+            );
+        }
+    }
+
+    #[test]
+    fn archive_numeric_redirect_validator_accepts_only_exact_same_ref_api_location() {
+        let repo = GitHubRepoRef {
+            owner: "legacy-owner".to_string(),
+            repo: "legacy-repo".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/legacy-owner/legacy-repo".to_string(),
+        };
+        let expected = "https://api.github.com/repositories/123456789/tarball/main";
+
+        assert_eq!(
+            validate_archive_api_redirect_url(expected, &repo)
+                .expect("valid numeric API redirect")
+                .as_str(),
+            expected
+        );
+        assert!(validate_archive_api_redirect_url(
+            "https://api.github.com:443/repositories/123456789/tarball/main",
+            &repo,
+        )
+        .is_ok());
+
+        for rejected in [
+            "https://api.github.com/repositories/not-a-number/tarball/main",
+            "https://api.github.com/repositories/0/tarball/main",
+            "https://api.github.com/repositories/18446744073709551616/tarball/main",
+            "https://api.github.com/repositories/+1/tarball/main",
+            "https://api.github.com/repositories/1/tarball/dev",
+            "https://api.github.com/repositories/1/tarball/main/extra",
+            "https://api.github.com/repositories/1/../1/tarball/main",
+            "https://api.github.com/repositories/1/%2e%2e/1/tarball/main",
+            r"https://api.github.com/repositories\999\..\1\tarball\main",
+            "https://api.github.com/repositories%2f1/tarball/main",
+            "https://api.github.com/repositories%5c1/tarball/main",
+            "https://user@api.github.com/repositories/1/tarball/main",
+            "https://@api.github.com/repositories/1/tarball/main",
+            "https://api.github.com/repositories/1/tarball/main?token=secret",
+            "https://api.github.com/repositories/1/tarball/main#fragment",
+            "http://api.github.com/repositories/1/tarball/main",
+            "https://api.github.com:444/repositories/1/tarball/main",
+            "https://api.github.com.evil.example/repositories/1/tarball/main",
+            "/repositories/1/tarball/main",
+        ] {
+            assert!(
+                matches!(
+                    validate_archive_api_redirect_url(rejected, &repo),
+                    Err(GithubImportError::ArchiveRedirectRejected)
+                ),
+                "unexpectedly accepted {rejected}",
+            );
+        }
+    }
+
+    #[test]
+    fn archive_redirect_headers_require_exactly_one_location() {
+        use reqwest::header::{HeaderMap, HeaderValue, LOCATION};
+
+        let repo = GitHubRepoRef {
+            owner: "openai".to_string(),
+            repo: "skills".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/openai/skills".to_string(),
+        };
+        let location = HeaderValue::from_static(
+            "https://codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/main",
+        );
+
+        assert!(matches!(
+            validate_archive_redirect_headers(&HeaderMap::new(), &repo),
+            Err(GithubImportError::ArchiveRedirectRejected)
+        ));
+
+        let mut duplicate = HeaderMap::new();
+        duplicate.append(LOCATION, location.clone());
+        duplicate.append(LOCATION, location);
+        assert!(matches!(
+            validate_archive_redirect_headers(&duplicate, &repo),
+            Err(GithubImportError::ArchiveRedirectRejected)
+        ));
+    }
+
+    #[tokio::test]
+    async fn archive_redirect_request_rejects_invalid_structured_repo_before_transport() {
+        let repo = GitHubRepoRef {
+            owner: "openai".to_string(),
+            repo: "skills".to_string(),
+            branch: "feature/unsafe".to_string(),
+            normalized_url: "https://github.com/openai/skills".to_string(),
+        };
+        let endpoints = test_mirror_endpoints(
+            "http://127.0.0.1:9".to_string(),
+            "http://127.0.0.1:10".to_string(),
+        );
+
+        let error = download_repository_archive_with_test_endpoints(
+            &github_client().expect("client"),
+            &repo,
+            None,
+            ResourceBudget::default_skill(),
+            &endpoints,
+            "http://127.0.0.1:11",
+        )
+        .await
+        .expect_err("invalid structured ref must fail before transport");
+
+        assert!(matches!(
+            error,
+            GithubImportError::InvalidRepoComponent {
+                field: "branch",
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn archive_redirect_follows_one_hop_without_forwarding_bearer() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        use std::sync::{Arc, Mutex};
+
+        let commit_sha = "a1234567890abcdef1234567890abcdef1234567";
+        for (branch, redirect_path) in [
+            (
+                "main",
+                "/openai/skills/legacy.tar.gz/refs/heads/main".to_string(),
+            ),
+            (
+                commit_sha,
+                format!("/openai/skills/legacy.tar.gz/{commit_sha}"),
+            ),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+            let address = listener.local_addr().expect("addr");
+            let archive = repository_archive(&[(
+                "skills/demo/SKILL.md",
+                b"---\nname: demo\ndescription: demo\n---\n",
+            )]);
+            let requests = Arc::new(Mutex::new(Vec::<String>::new()));
+            let requests_clone = Arc::clone(&requests);
+
+            let server = std::thread::spawn(move || {
+                for request_index in 0..2 {
+                    let (mut stream, _) = listener.accept().expect("accept");
+                    let mut buffer = [0_u8; 4096];
+                    let bytes_read = stream.read(&mut buffer).expect("read");
+                    requests_clone
+                        .lock()
+                        .expect("lock")
+                        .push(String::from_utf8_lossy(&buffer[..bytes_read]).to_string());
+
+                    if request_index == 0 {
+                        let location = format!("http://{address}{redirect_path}");
+                        let response = format!(
+                            "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        );
+                        stream
+                            .write_all(response.as_bytes())
+                            .expect("write redirect");
+                    } else {
+                        let headers = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                            archive.len()
+                        );
+                        stream.write_all(headers.as_bytes()).expect("write headers");
+                        stream.write_all(&archive).expect("write archive");
+                    }
+                }
+            });
+
+            let repo = GitHubRepoRef {
+                owner: "openai".to_string(),
+                repo: "skills".to_string(),
+                branch: branch.to_string(),
+                normalized_url: "https://github.com/openai/skills".to_string(),
+            };
+            let base_url = format!("http://{address}");
+            let endpoints = test_mirror_endpoints(base_url.clone(), format!("{base_url}/mirror"));
+            let client = github_client().expect("client");
+            let bytes = download_repository_archive_with_test_endpoints(
+                &client,
+                &repo,
+                Some("direct-token"),
+                ResourceBudget::default_skill(),
+                &endpoints,
+                &base_url,
+            )
+            .await
+            .expect("download redirected archive");
+            let snapshot = snapshot_from_repository_archive(&bytes).expect("snapshot");
+            assert!(snapshot.files.contains_key("skills/demo/SKILL.md"));
+
+            server.join().expect("server join");
+            let captured = requests.lock().expect("captured");
+            assert_eq!(captured.len(), 2);
+            assert!(captured[0]
+                .to_ascii_lowercase()
+                .contains("authorization: bearer direct-token"));
+            assert!(!captured[1].to_ascii_lowercase().contains("authorization:"));
+        }
+    }
+
+    #[tokio::test]
+    async fn archive_redirect_follows_trusted_numeric_canonicalization_with_scoped_bearer() {
+        let archive = repository_archive(&[(
+            "skills/demo/SKILL.md",
+            b"---\nname: demo\ndescription: demo\n---\n",
+        )]);
+        let (base_url, requests, server) = spawn_http_sequence(move |address| {
+            let base_url = format!("http://{address}");
+            vec![
+                http_response(
+                    "301 Moved Permanently",
+                    &[format!("{base_url}/repositories/123/tarball/main")],
+                    &[],
+                ),
+                http_response(
+                    "302 Found",
+                    &[format!(
+                        "{base_url}/CanonicalOwner/renamed-repo/legacy.tar.gz/refs/heads/main"
+                    )],
+                    &[],
+                ),
+                http_response("200 OK", &[], &archive),
+            ]
+        });
+        let repo = GitHubRepoRef {
+            owner: "legacy-owner".to_string(),
+            repo: "legacy-repo".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/legacy-owner/legacy-repo".to_string(),
+        };
+        let endpoints = test_mirror_endpoints(base_url.clone(), format!("{base_url}/mirror"));
+
+        let bytes = download_repository_archive_with_test_endpoints(
+            &github_client().expect("client"),
+            &repo,
+            Some("direct-token"),
+            ResourceBudget::default_skill(),
+            &endpoints,
+            &base_url,
+        )
+        .await
+        .expect("download renamed repository archive");
+        let snapshot = snapshot_from_repository_archive(&bytes).expect("snapshot");
+        assert!(snapshot.files.contains_key("skills/demo/SKILL.md"));
+
+        server.join().expect("server join");
+        let captured = requests.lock().expect("captured");
+        assert_eq!(captured.len(), 3);
+        assert!(captured[0].starts_with("GET /repos/legacy-owner/legacy-repo/tarball/main "));
+        assert!(captured[1].starts_with("GET /repositories/123/tarball/main "));
+        assert!(captured[2]
+            .starts_with("GET /CanonicalOwner/renamed-repo/legacy.tar.gz/refs/heads/main "));
+        assert!(captured[0]
+            .to_ascii_lowercase()
+            .contains("authorization: bearer direct-token"));
+        assert!(captured[1]
+            .to_ascii_lowercase()
+            .contains("authorization: bearer direct-token"));
+        assert!(!captured[2].to_ascii_lowercase().contains("authorization:"));
+    }
+
+    #[tokio::test]
+    async fn archive_redirect_rejects_numeric_canonicalization_from_a_mirror() {
+        let (direct_url, _, direct_server) =
+            spawn_http_sequence(|_| vec![http_response("502 Bad Gateway", &[], &[])]);
+        let (mirror_url, mirror_requests, mirror_server) = spawn_http_sequence(|address| {
+            vec![http_response(
+                "301 Moved Permanently",
+                &[format!("http://{address}/repositories/123/tarball/main")],
+                &[],
+            )]
+        });
+        let repo = GitHubRepoRef {
+            owner: "legacy-owner".to_string(),
+            repo: "legacy-repo".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/legacy-owner/legacy-repo".to_string(),
+        };
+        let endpoints = test_mirror_endpoints(direct_url, mirror_url.clone());
+
+        let error = download_repository_archive_with_test_endpoints(
+            &github_client().expect("client"),
+            &repo,
+            Some("direct-token"),
+            ResourceBudget::default_skill(),
+            &endpoints,
+            &mirror_url,
+        )
+        .await
+        .expect_err("mirror 301 must not authorize canonicalization");
+
+        direct_server.join().expect("direct server join");
+        mirror_server.join().expect("mirror server join");
+        assert_eq!(mirror_requests.lock().expect("captured").len(), 1);
+        assert!(matches!(error, GithubImportError::ArchiveRedirectRejected));
+    }
+
+    #[tokio::test]
+    async fn archive_redirect_rejects_non_302_numeric_hop() {
+        let (base_url, requests, server) = spawn_http_sequence(|address| {
+            vec![
+                http_response(
+                    "301 Moved Permanently",
+                    &[format!("http://{address}/repositories/123/tarball/main")],
+                    &[],
+                ),
+                http_response("200 OK", &[], &[]),
+            ]
+        });
+        let repo = GitHubRepoRef {
+            owner: "legacy-owner".to_string(),
+            repo: "legacy-repo".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/legacy-owner/legacy-repo".to_string(),
+        };
+        let endpoints = test_mirror_endpoints(base_url.clone(), format!("{base_url}/mirror"));
+
+        let error = download_repository_archive_with_test_endpoints(
+            &github_client().expect("client"),
+            &repo,
+            None,
+            ResourceBudget::default_skill(),
+            &endpoints,
+            &base_url,
+        )
+        .await
+        .expect_err("numeric API hop must return 302");
+
+        server.join().expect("server join");
+        assert_eq!(requests.lock().expect("captured").len(), 2);
+        assert!(matches!(error, GithubImportError::ArchiveRedirectRejected));
+    }
+
+    #[tokio::test]
+    async fn archive_redirect_rejects_a_redirect_after_numeric_codeload() {
+        let (base_url, requests, server) = spawn_http_sequence(|address| {
+            let base_url = format!("http://{address}");
+            vec![
+                http_response(
+                    "301 Moved Permanently",
+                    &[format!("{base_url}/repositories/123/tarball/main")],
+                    &[],
+                ),
+                http_response(
+                    "302 Found",
+                    &[format!(
+                        "{base_url}/CanonicalOwner/renamed-repo/legacy.tar.gz/refs/heads/main"
+                    )],
+                    &[],
+                ),
+                http_response("302 Found", &[format!("{base_url}/another-redirect")], &[]),
+            ]
+        });
+        let repo = GitHubRepoRef {
+            owner: "legacy-owner".to_string(),
+            repo: "legacy-repo".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/legacy-owner/legacy-repo".to_string(),
+        };
+        let endpoints = test_mirror_endpoints(base_url.clone(), format!("{base_url}/mirror"));
+
+        let error = download_repository_archive_with_test_endpoints(
+            &github_client().expect("client"),
+            &repo,
+            None,
+            ResourceBudget::default_skill(),
+            &endpoints,
+            &base_url,
+        )
+        .await
+        .expect_err("codeload redirect must terminate the chain");
+
+        server.join().expect("server join");
+        assert_eq!(requests.lock().expect("captured").len(), 3);
+        assert!(matches!(error, GithubImportError::ArchiveRedirectRejected));
+    }
+
+    #[tokio::test]
+    async fn archive_redirect_rejects_a_second_redirect() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let address = listener.local_addr().expect("addr");
+        let server = std::thread::spawn(move || {
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().expect("accept");
+                let mut buffer = [0_u8; 4096];
+                let _ = stream.read(&mut buffer).expect("read");
+                let location =
+                    format!("http://{address}/openai/skills/legacy.tar.gz/refs/heads/main");
+                let response = format!(
+                    "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .expect("write redirect");
+            }
+        });
+
+        let repo = GitHubRepoRef {
+            owner: "openai".to_string(),
+            repo: "skills".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/openai/skills".to_string(),
+        };
+        let base_url = format!("http://{address}");
+        let endpoints = test_mirror_endpoints(base_url.clone(), format!("{base_url}/mirror"));
+        let client = github_client().expect("client");
+        let error = download_repository_archive_with_test_endpoints(
+            &client,
+            &repo,
+            None,
+            ResourceBudget::default_skill(),
+            &endpoints,
+            &base_url,
+        )
+        .await
+        .expect_err("second redirect must fail closed");
+
+        server.join().expect("server join");
+        assert!(matches!(error, GithubImportError::ArchiveRedirectRejected));
     }
 
     #[test]

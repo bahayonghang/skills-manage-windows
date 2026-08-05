@@ -55,6 +55,7 @@ const TAB_ORDER: readonly UpdateCenterTab[] = [
   "added",
   "missing",
   "failed",
+  "unsupported",
   "duplicates",
   "deletedPlatformCopies",
   "orphans",

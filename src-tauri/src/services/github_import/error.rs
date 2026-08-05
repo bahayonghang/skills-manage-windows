@@ -119,6 +119,9 @@ pub enum GithubImportError {
     #[error("GitHub repository archive is unavailable.")]
     ArchiveUnavailable,
 
+    #[error("GitHub repository archive redirect was rejected.")]
+    ArchiveRedirectRejected,
+
     #[error("GitHub repository archive exceeds the resource budget (more than {0} files).")]
     ArchiveFileBudgetExceeded(usize),
 
@@ -332,13 +335,75 @@ impl GithubImportError {
         }
     }
 
-    /// Stable IPC codes for reviewed GitHub-import failures.
+    /// Fully-qualified stable IPC code for reviewed GitHub-import failures.
+    ///
+    /// This is the single source of truth for both the IPC envelope and the
+    /// Operation Log / Runtime Log diagnostics, so a coded failure can never be
+    /// stable on one surface and opaque on another. Every code is a `&'static
+    /// str` literal: no dynamic detail, path, URL, or token can reach it.
+    pub fn ipc_error_code(&self) -> Option<&'static str> {
+        let code = match self {
+            // ── Preview snapshot lifecycle ──────────────────────────────────
+            Self::PreviewSnapshotMissing => "github_import.preview_missing",
+            Self::PreviewWorkspaceExpired => "github_import.preview_expired",
+            Self::PreviewWorkspaceMismatch | Self::PreviewTargetChanged => {
+                "github_import.preview_mismatch"
+            }
+            Self::PreviewSnapshotIntegrity => "github_import.preview_integrity",
+            Self::PreviewSnapshotBusy => "github_import.preview_busy",
+            Self::PreviewCapacity => "github_import.preview_capacity",
+            Self::PreviewCleanupPending => "github_import.preview_cleanup_pending",
+            Self::PreviewCommitUnresolved => "github_import.preview_commit_unresolved",
+
+            // ── Branch selection ────────────────────────────────────────────
+            Self::InvalidBranchSelection => "github_import.branch_invalid",
+            Self::BranchSelectionConflict => "github_import.branch_conflict",
+
+            // ── Network / archive acquisition ───────────────────────────────
+            Self::ArchiveRedirectRejected => "github_import.archive_redirect_rejected",
+            Self::Http(_) => "github_import.transport_failed",
+            Self::RateLimited(_) => "github_import.rate_limited",
+            Self::AccessDenied(_) => "github_import.access_denied",
+            Self::RepoNotFound => "github_import.repo_not_found",
+            Self::ArchiveUnavailable => "github_import.archive_unavailable",
+            Self::Parse(_) => "github_import.response_invalid",
+            Self::InvalidUrl(_) => "github_import.invalid_url",
+            Self::Budget(_)
+            | Self::ArchiveFileBudgetExceeded(_)
+            | Self::ArchiveSizeOverflow
+            | Self::SnapshotSizeOverflow
+            | Self::TreeManifestEntryBudgetExceeded(_)
+            | Self::TreeManifestSizeOverflow => "github_import.budget_exceeded",
+            Self::Secret(_) => "github_import.credential_unavailable",
+
+            _ => return None,
+        };
+        Some(code)
+    }
+
+    /// Stable IPC codes for reviewed GitHub-import failures, without the
+    /// `github_import.` prefix. Derived from [`Self::ipc_error_code`] so the
+    /// two can never disagree.
     pub fn ipc_code(&self) -> Option<&'static str> {
-        self.preview_snapshot_code().or(match self {
-            Self::InvalidBranchSelection => Some("branch_invalid"),
-            Self::BranchSelectionConflict => Some("branch_conflict"),
-            _ => None,
-        })
+        self.ipc_error_code()
+            .map(|code| code.trim_start_matches("github_import."))
+    }
+
+    /// Static category label for runtime-log diagnostics. Coded failures report
+    /// their IPC code; uncoded ones report a fixed variant family so an
+    /// unmapped failure is still identifiable without logging its Display text.
+    pub fn diagnostic_category(&self) -> &'static str {
+        if let Some(code) = self.ipc_error_code() {
+            return code;
+        }
+        match self {
+            Self::Io { .. } => "github_import.io",
+            Self::Db(_) => "github_import.db",
+            Self::CentralMutation(_) => "github_import.central_mutation",
+            Self::Remote(_) => "github_import.remote",
+            Self::TaskJoin { .. } => "github_import.task_join",
+            _ => "github_import.other",
+        }
     }
 
     /// Serialize for the IPC boundary.

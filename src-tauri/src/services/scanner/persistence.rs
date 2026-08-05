@@ -13,6 +13,7 @@ pub(super) struct ScanPersistenceBatch {
     pub(super) found_install_ids_by_agent: HashMap<String, HashSet<String>>,
     pub(super) found_observation_row_ids_by_agent: HashMap<String, HashSet<String>>,
     pub(super) global_found_skill_ids: HashSet<String>,
+    pub(super) central_root_scanned: bool,
 }
 
 impl ScanPersistenceBatch {
@@ -45,6 +46,10 @@ impl ScanPersistenceBatch {
             .entry(agent_id.to_string())
             .or_default()
             .insert(row_id.to_string());
+    }
+
+    pub(super) fn mark_central_root_scanned(&mut self) {
+        self.central_root_scanned = true;
     }
 }
 
@@ -290,6 +295,7 @@ async fn persist_scan_keep_tables(
 
 async fn delete_scan_stale_rows(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    central_root_scanned: bool,
 ) -> Result<(), ScannerError> {
     let independently_scoped_statements = [
         "DELETE FROM skill_installations
@@ -319,8 +325,10 @@ async fn delete_scan_stale_rows(
              WHERE NOT EXISTS (
                SELECT 1 FROM scan_keep_skills keep
                WHERE keep.skill_id = skills.id
-             )",
-        ),
+             )
+               AND (skills.is_central = 0 OR ? = 1)",
+        )
+        .bind(central_root_scanned),
     )
     .await?;
     db::prune_empty_skill_repositories_in_transaction(tx).await?;
@@ -354,7 +362,7 @@ pub(super) async fn persist_scan_batch(
     }
 
     persist_scan_keep_tables(&mut tx, &batch).await?;
-    delete_scan_stale_rows(&mut tx).await?;
+    delete_scan_stale_rows(&mut tx, batch.central_root_scanned).await?;
     tx.commit().await?;
     Ok(())
 }

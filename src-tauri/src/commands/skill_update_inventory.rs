@@ -23,8 +23,8 @@ use crate::services::central_updates::inventory::{
     SkillRefreshScopeKind, SkillUpdateApplyResult, SkillUpdateDecisions, SkillUpdateInventory,
 };
 use crate::services::central_updates::{
-    CentralFs, SnapshotCachePolicy, SnapshotProgressEvent, SnapshotProgressReporter,
-    SnapshotProgressStatus,
+    CentralFs, CentralUpdatesError, SnapshotCachePolicy, SnapshotProgressEvent,
+    SnapshotProgressReporter, SnapshotProgressStatus,
 };
 use crate::services::github_import;
 use crate::AppState;
@@ -42,18 +42,58 @@ struct SkillUpdateInventoryProgressPayload {
     repository_name: Option<String>,
 }
 
+/// Legacy string-error call sites (apply / force update / force mirror) have no
+/// typed domain error to classify, so they report this fixed family instead of
+/// leaking the stringified cause.
+const UNCLASSIFIED_CATEGORY: &str = "central_updates.unclassified";
+
 #[derive(Debug)]
-struct UpdateCommandError(String);
+struct UpdateCommandError {
+    ipc_error: String,
+    error_code: Option<&'static str>,
+    phase: Option<&'static str>,
+    category: &'static str,
+}
 
 impl UpdateCommandError {
     fn into_inner(self) -> String {
-        self.0
+        self.ipc_error
+    }
+
+    fn from_central_updates(error: CentralUpdatesError) -> Self {
+        let (error_code, phase) = error
+            .reviewed_operation_failure()
+            .map_or((None, None), |(code, phase)| (Some(code), Some(phase)));
+        Self {
+            ipc_error: error.to_ipc_error(),
+            error_code,
+            phase,
+            category: error.diagnostic_category(),
+        }
+    }
+
+    /// Operation Log payload. `errorCategory` is always present so a failure
+    /// without a reviewed IPC code is still attributable; `errorCode`/`phase`
+    /// are added when the domain classified the failure. Every value is a
+    /// `&'static str` literal.
+    fn operation_details(&self) -> Value {
+        let mut details = json!({ "errorCategory": self.category });
+        if let (Some(error_code), Some(phase)) = (self.error_code, self.phase) {
+            details["errorCode"] = json!(error_code);
+            details["phase"] = json!(phase);
+        }
+        details
     }
 }
 
 impl From<String> for UpdateCommandError {
     fn from(error: String) -> Self {
-        Self(error)
+        Self {
+            ipc_error: error,
+            error_code: None,
+            phase: None,
+            category: UNCLASSIFIED_CATEGORY,
+        }
     }
 }
 
@@ -128,7 +168,7 @@ pub async fn refresh_skill_update_inventory(
                         Some(progress),
                     )
                     .await
-                    .map_err(|e| UpdateCommandError(e.to_string()))
+                    .map_err(UpdateCommandError::from_central_updates)
                 },
             )
             .await
@@ -224,7 +264,7 @@ pub async fn apply_skill_update_decisions(
                         decisions,
                     )
                     .await
-                    .map_err(|e| UpdateCommandError(e.to_string()))
+                    .map_err(|e| UpdateCommandError::from(e.to_string()))
                 },
             )
             .await
@@ -287,7 +327,7 @@ pub async fn force_update_central_skills(
                         request,
                     )
                     .await
-                    .map_err(|e| UpdateCommandError(e.to_string()))
+                    .map_err(|e| UpdateCommandError::from(e.to_string()))
                 },
             )
             .await
@@ -359,7 +399,7 @@ pub async fn force_mirror_central_repositories(
                         request,
                     )
                     .await
-                    .map_err(|e| UpdateCommandError(e.to_string()))
+                    .map_err(|e| UpdateCommandError::from(e.to_string()))
                 },
             )
             .await
@@ -404,12 +444,24 @@ where
                 duration_ms,
             )
         },
-        move |_: &UpdateCommandError, duration_ms| {
+        move |error: &UpdateCommandError, duration_ms| {
+            // Runtime Log counterpart of the Operation Log row. Without this the
+            // "See runtime logs for details" fallback message points at a file
+            // that only ever contained the frontend's own generic re-log.
+            tracing::error!(
+                target: "skillport::update_center",
+                action,
+                error_code = error.error_code.unwrap_or("none"),
+                error_category = error.category,
+                phase = error.phase.unwrap_or("none"),
+                duration_ms,
+                "Update Center action failed"
+            );
             update_operation_event(
                 action,
                 "failed",
                 failure_summary,
-                failure_details,
+                merge_details(failure_details, error.operation_details()),
                 duration_ms,
             )
         },
@@ -493,10 +545,68 @@ mod tests {
     #[test]
     fn update_command_error_hides_sensitive_details_from_operation_log_display() {
         let original = "ssh host secret.example failed at /home/alice/private".to_string();
-        let error = UpdateCommandError(original.clone());
+        let error = UpdateCommandError::from(original.clone());
 
         assert_eq!(error.to_string(), "Update Center action failed");
         assert_eq!(error.into_inner(), original);
+    }
+
+    #[test]
+    fn archive_redirect_error_keeps_only_static_ipc_and_operation_details() {
+        let error = UpdateCommandError::from_central_updates(CentralUpdatesError::GithubImport(
+            crate::services::github_import::GithubImportError::ArchiveRedirectRejected,
+        ));
+
+        assert_eq!(error.to_string(), "Update Center action failed");
+        assert_eq!(
+            error.operation_details(),
+            json!({
+                "errorCode": "github_import.archive_redirect_rejected",
+                "errorCategory": "github_import.archive_redirect_rejected",
+                "phase": "repository_snapshot",
+            })
+        );
+        assert_eq!(
+            error.into_inner(),
+            "github_import.archive_redirect_rejected:GitHub repository archive redirect was rejected."
+        );
+    }
+
+    #[test]
+    fn github_transport_failure_reaches_the_operation_log_with_a_stable_code() {
+        let error = UpdateCommandError::from_central_updates(CentralUpdatesError::GithubImport(
+            crate::services::github_import::GithubImportError::Http(
+                "Failed to download GitHub repository archive: HTTP 301 https://secret/path"
+                    .to_string(),
+            ),
+        ));
+
+        assert_eq!(
+            error.operation_details(),
+            json!({
+                "errorCode": "github_import.transport_failed",
+                "errorCategory": "github_import.transport_failed",
+                "phase": "repository_snapshot",
+            })
+        );
+        let details = serde_json::to_string(&error.operation_details()).expect("serialize");
+        assert!(!details.contains("secret"));
+        assert!(!details.contains("301"));
+    }
+
+    #[test]
+    fn unclassified_failures_still_record_a_category_instead_of_nothing() {
+        let error = UpdateCommandError::from_central_updates(CentralUpdatesError::Remote(
+            "ssh host secret.example failed at /home/alice/private".to_string(),
+        ));
+
+        assert_eq!(
+            error.operation_details(),
+            json!({ "errorCategory": "central_updates.remote" })
+        );
+        let details = serde_json::to_string(&error.operation_details()).expect("serialize");
+        assert!(!details.contains("secret.example"));
+        assert!(!details.contains("alice"));
     }
 
     #[test]

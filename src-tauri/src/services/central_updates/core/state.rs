@@ -14,8 +14,9 @@ use super::super::fs::{
 };
 use super::super::snapshots::{repo_cache_key, snapshot_cache_ttl, SharedGitHubSnapshots};
 use super::super::types::{
-    GitHubUpdateSource, PreparedSkillUpdate, RemoteSkillContent, RemoteSkillLoadError,
-    SkillUpdateStatus,
+    normalized_github_source_path, unsupported_reason_code, GitHubUpdateSource,
+    PreparedSkillUpdate, RemoteSkillContent, RemoteSkillLoadError, SkillUpdateStatus,
+    UnsupportedSkillReasonCode,
 };
 
 pub(crate) async fn load_selected_central_skills(
@@ -196,13 +197,7 @@ async fn resolve_github_update_source_from_assignment(
         return Ok(None);
     }
 
-    let Some(source_path) = assignment
-        .source_path
-        .as_deref()
-        .map(normalize_repo_path)
-        .transpose()?
-        .filter(|path| !path.is_empty())
-    else {
+    let Some(source_path) = normalized_github_source_path(assignment) else {
         return Ok(None);
     };
 
@@ -379,25 +374,21 @@ pub(crate) fn error_state_from_assignment(
 }
 
 fn unsupported_reason(assignment: &SkillRepositoryAssignment) -> String {
-    if assignment.is_source_unknown || assignment.repository.is_unknown {
-        return "Source is unknown or manually assigned.".to_string();
-    }
-    if assignment.repository.source_type != "github" {
-        return format!(
+    match unsupported_reason_code(assignment) {
+        UnsupportedSkillReasonCode::UnknownSource => {
+            "Source is unknown or manually assigned.".to_string()
+        }
+        UnsupportedSkillReasonCode::UnsupportedSourceType => format!(
             "Source type '{}' is not supported for automatic updates.",
             assignment.repository.source_type
-        );
+        ),
+        UnsupportedSkillReasonCode::MissingSourcePath => {
+            "GitHub source path is missing.".to_string()
+        }
+        UnsupportedSkillReasonCode::UnsupportedSource => {
+            "Automatic update is not supported for this source.".to_string()
+        }
     }
-    if assignment
-        .source_path
-        .as_deref()
-        .unwrap_or("")
-        .trim()
-        .is_empty()
-    {
-        return "GitHub source path is missing.".to_string();
-    }
-    "Automatic update is not supported for this source.".to_string()
 }
 
 fn skill_target_dir(skill: &Skill) -> Result<PathBuf, CentralUpdatesError> {

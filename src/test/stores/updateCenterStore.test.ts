@@ -193,8 +193,25 @@ describe("updateCenterStore", () => {
     expect(useUpdateCenterStore.getState()).toMatchObject({
       isRefreshing: false,
       refreshProgress: null,
-      error: "network unavailable",
+      error: "storage.unavailable:network unavailable",
     });
+  });
+
+  it("preserves the archive redirect code and drops legacy dynamic details", async () => {
+    const seed = "ghp_secret https://example.invalid/private C:\\private\\SKILL.md";
+    mockInvoke.mockRejectedValueOnce(
+      `github_import.archive_redirect_rejected:${seed}`,
+    );
+
+    await expect(
+      useUpdateCenterStore.getState().refresh({ kind: "all", mode: "sync" }),
+    ).rejects.toThrow("GitHub repository archive redirect was rejected.");
+
+    const error = useUpdateCenterStore.getState().error;
+    expect(error).toBe(
+      "github_import.archive_redirect_rejected:GitHub repository archive redirect was rejected.",
+    );
+    expect(error).not.toContain(seed);
   });
 
   it("passes a renderer-owned job ID when applying decisions", async () => {

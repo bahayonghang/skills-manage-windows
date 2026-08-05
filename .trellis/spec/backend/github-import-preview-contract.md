@@ -50,7 +50,9 @@ fetchGitHubSkillMarkdown(repo: GitHubRepoRef, sourcePath: string): Promise<void>
   base-path prefix, has no userinfo or fragment, and uses the standard HTTPS
   port. Bearer auth is sent only to the direct GitHub endpoint.
 - The shared client has a 5-second connect timeout, a 30-second total timeout,
-  and `redirect::Policy::none()`. A 3xx response cannot select a second URL.
+  and `redirect::Policy::none()`. API/raw requests never follow a 3xx. Archive
+  acquisition alone may execute one of the finite, explicitly validated redirect
+  chains described under _Archive Canonical Redirect Boundary_ below.
 - Raw response bodies are checked against `content_length` when present and are
   then accumulated with checked arithmetic through `bytes_stream()`. The budget
   is checked before each chunk is appended.
@@ -65,7 +67,8 @@ fetchGitHubSkillMarkdown(repo: GitHubRepoRef, sourcePath: string): Promise<void>
 | Snapshot repo/source/target differs from submitted values            | Return `PreviewWorkspaceMismatch`; read no file     |
 | `previewId` unknown, expired, or target changed                      | Preserve the typed snapshot lifecycle error         |
 | Snapshot file bytes no longer match the registered `sha256`          | Return `PreviewSnapshotIntegrity`; return no bytes  |
-| 3xx points to another host or private address                        | Do not follow; classify/fallback as an HTTP attempt |
+| API/raw 3xx points to any destination                                | Do not follow; classify/fallback as an HTTP attempt |
+| Archive 302 target violates the codeload policy                      | Return `ArchiveRedirectRejected`; issue no second request |
 | Declared or streamed body exceeds its budget                         | Return `Budget` before appending excess bytes       |
 | Mirror fallback follows a direct denial/transport failure            | Never forward the direct GitHub bearer token        |
 
@@ -89,9 +92,9 @@ fetchGitHubSkillMarkdown(repo: GitHubRepoRef, sourcePath: string): Promise<void>
   fragments, and nonstandard ports.
 - A policy test that every API/raw URL generated for every built-in endpoint
   satisfies that endpoint's declared policy.
-- HTTP fixtures proving redirects are not followed, mirror fallback remains
-  functional, direct PAT auth is not forwarded, and a chunked cap-plus-one body
-  returns `Budget` before EOF.
+- HTTP fixtures proving API/raw redirects are not followed, archive redirects
+  follow only one validated codeload hop without Bearer auth, mirror fallback
+  remains functional, and a chunked cap-plus-one body returns `Budget` before EOF.
 - A snapshot binding test asserting a mismatched repo returns
   `PreviewWorkspaceMismatch`.
 - A test proving repeated reads return the preview bytes and never consume the
@@ -119,6 +122,151 @@ fetch_github_skill_markdown_from_snapshot(active_target, &preview_id, &repo, &so
 The service validates the snapshot binding and returns bytes the user already
 confirmed. Acquisition-time requests, issued during preview only, are built from
 structured repository identity and built-in endpoints — never from renderer URLs.
+
+## Scenario: Archive Canonical Redirect Boundary
+
+### 1. Scope / Trigger
+
+Apply this scenario when GitHub archive acquisition, the shared request fallback
+helper, archive URL validation, or archive download errors change. It covers
+preview, import, Marketplace, and Central Update consumers of
+`download_repo_snapshot`; it does not grant redirect authority to API/raw reads.
+
+### 2. Signatures
+
+```rust
+struct GitHubArchiveInitialResponse {
+    response: reqwest::Response,
+    provenance: GitHubEndpointProvenance,
+}
+
+enum GitHubEndpointProvenance {
+    TrustedDirect,
+    Mirror,
+}
+
+async fn finish_repository_archive_response(
+    client: &reqwest::Client,
+    repo: &GitHubRepoRef,
+    initial: GitHubArchiveInitialResponse,
+    auth_token: Option<&str>,
+    budget: ResourceBudget,
+    redirect_policy: &ArchiveRedirectPolicy,
+) -> Result<Vec<u8>, GithubImportError>;
+```
+
+### 3. Contracts
+
+- The shared reqwest client remains `redirect::Policy::none()`. A dedicated
+  archive wrapper may return initial `301 Moved Permanently` or `302 Found`
+  responses plus their endpoint provenance; every standard API/raw wrapper
+  remains success-only.
+- `TrustedDirect` is derived from the distinct built-in direct endpoint that
+  issued the response, never from a renderer URL or from the `Location` host.
+  A mirror response can authorize a direct codeload 302 only; it cannot authorize
+  numeric repository canonicalization.
+- An initial 302 `Location` must occur exactly once and parse as an absolute
+  HTTPS URL whose ASCII host is exactly `codeload.github.com`, effective port is
+  443, and userinfo, query, and fragment are absent. Owner and repo compare
+  ASCII-case-insensitively with the structured input.
+- An initial 301 is accepted only from `TrustedDirect`. Its single `Location`
+  must be exactly `https://api.github.com/repositories/{positive_u64}/tarball/{same_ref}`
+  under the production authority policy. That API request may be rebuilt with
+  Bearer auth and must return exactly one 302 to codeload.
+- After the trusted numeric hop, codeload may use a renamed canonical owner/repo;
+  both components still pass the repository component validators and the ref
+  remains byte-for-byte equal to the structured input. Repository identity and
+  provenance rows are not rewritten as a side effect of update checking.
+- Before URL normalization, raw backslashes, encoded `/` or `\`, empty or
+  non-empty userinfo, and literal or percent-encoded `.` / `..` path segments
+  are rejected. For an ordinary branch, parsed codeload segments must equal
+  `{owner}/{repo}/legacy.tar.gz/refs/heads/{branch}` exactly. When the structured
+  ref is exactly 40 ASCII hexadecimal characters (the pinned preview ref), the
+  only accepted path is `{owner}/{repo}/legacy.tar.gz/{same_sha}`. The two shapes
+  are not interchangeable and neither accepts a suffix or encoded separator.
+- Every hop is a new request. Bearer is permitted only on the original trusted
+  API request and its validated numeric API hop. Codeload and mirror requests
+  never receive Bearer. Codeload must return a terminal non-3xx response, so a
+  chain uses at most three requests.
+- A successful terminal response uses the same bounded archive reader and
+  extraction budgets as a direct 2xx archive. Existing 404, denial, transport,
+  mirror-auth isolation, and resource-budget semantics remain unchanged.
+- `ArchiveRedirectRejected` has no dynamic fields and maps to
+  `github_import.archive_redirect_rejected`; URLs, headers, repository paths,
+  response bodies, and credentials never enter the error value.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+| --- | --- |
+| Direct or mirror 302 to a case-equivalent codeload identity | Fetch once without Bearer; continue bounded archive handling |
+| Trusted direct 301 to exact numeric API, then canonical codeload 302 | API hop may use Bearer; codeload does not; continue bounded handling |
+| Mirror 301, non-numeric/zero/overflow ID, changed ref, or extra API segment | `ArchiveRedirectRejected`; do not authorize canonical identity |
+| Missing, duplicate, relative, or malformed `Location` | `ArchiveRedirectRejected`; issue no next request |
+| HTTP, userinfo, query, fragment, non-443 port, lookalike/IP host | `ArchiveRedirectRejected`; no second request |
+| Raw backslash, encoded separator, dot segment, branch, path, or suffix differs | `ArchiveRedirectRejected`; issue no next request |
+| Direct 302 changes owner/repo beyond ASCII case | `ArchiveRedirectRejected`; renamed identity needs the trusted numeric proof chain |
+| Pinned 40-hex SHA uses `refs/heads`, or ordinary branch uses direct suffix | `ArchiveRedirectRejected`; no second request |
+| Numeric API response is not 302, or codeload response is 3xx | `ArchiveRedirectRejected`; do not continue the chain |
+| API/raw endpoint returns 3xx | Preserve the global no-redirect behavior |
+
+### 5. Good / Base / Bad Cases
+
+- Good: a stale owner/repo receives direct `301 -> /repositories/123/tarball/main`,
+  then `302 -> codeload/{renamed_owner}/{renamed_repo}/.../main`; only the two API
+  requests contain Bearer and the bounded archive is accepted.
+- Base: direct or mirror returns a 302 whose owner/repo differs only by ASCII
+  case; the unauthenticated codeload response is accepted.
+- Bad: a mirror returns the numeric 301, or a direct 302 changes repository
+  identity beyond case. Neither response proves GitHub canonical ownership.
+- Bad: `Url::parse` would normalize `other\..\repo` into an accepted path. The
+  raw-syntax guard rejects it before parsing.
+
+### 6. Tests Required
+
+- Pure production-policy matrices for direct codeload and numeric API targets,
+  including scheme/authority/port/path/query/fragment/userinfo, raw backslash,
+  `%2f`, `%5c`, dot segment, ref, numeric ID, ordinary branch, and pinned SHA.
+- Header tests for zero, one, and multiple `Location` values.
+- Test-only local transport fixture proving both branch and pinned-SHA
+  `302 -> 200 tar.gz -> snapshot` paths, first-hop Bearer presence, second-hop
+  Bearer absence, and second-hop 3xx rejection.
+- A three-request fixture proving trusted direct
+  `301 numeric API -> 302 canonical codeload -> 200 archive`, Bearer on only the
+  API hops, and safe renamed owner/repo acceptance.
+- Hostile transport fixtures proving mirror numeric 301, non-302 numeric
+  response, codeload redirect, and additional hops fail without another request.
+- Existing no-redirect, mirror auth isolation, archive budget, and unsafe-entry tests.
+- Full gate: `just ci`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```rust
+if response.status().is_redirection() {
+    client.get(response.headers()[LOCATION].to_str()?).send().await?
+}
+```
+
+This follows an unproven chain, lets mirrors authorize identity changes, and can
+copy credentials across authorities.
+
+#### Correct
+
+```rust
+match (initial.provenance, initial.response.status()) {
+    (_, StatusCode::FOUND) => validate_same_repository_codeload(...),
+    (GitHubEndpointProvenance::TrustedDirect, StatusCode::MOVED_PERMANENTLY) => {
+        validate_numeric_api_target(...)
+    }
+    _ => return Err(GithubImportError::ArchiveRedirectRejected),
+}
+```
+
+The archive-only finite state machine carries provenance explicitly, validates
+each target before rebuilding the next request, and scopes Bearer to trusted API
+authorities.
 
 ## Scenario: Plugin Manifest Grouping
 

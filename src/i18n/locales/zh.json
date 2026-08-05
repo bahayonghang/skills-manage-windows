@@ -99,7 +99,20 @@
       "preview_cleanup_pending": "较早的仓库预览仍在清理中，请重新预览仓库。",
       "preview_commit_unresolved": "无法解析仓库提交，请重新预览。",
       "branch_invalid": "请输入不含斜杠的安全单段分支名。",
-      "branch_conflict": "仓库 URL 中的分支与分支输入框不一致，请调整一致后重新预览。"
+      "branch_conflict": "仓库 URL 中的分支与分支输入框不一致，请调整一致后重新预览。",
+      "archive_redirect_rejected": "GitHub 返回了不安全或异常的仓库压缩包跳转，已停止检查更新。请重试。",
+      "transport_failed": "无法连接 GitHub。请检查网络后重试。",
+      "rate_limited": "GitHub 限流了本次请求。请等待配额重置后重试。",
+      "access_denied": "GitHub 拒绝访问该仓库。请确认令牌具备读取权限。",
+      "repo_not_found": "该 GitHub 仓库不存在，或当前令牌不可见。",
+      "archive_unavailable": "GitHub 当前无法提供该仓库的压缩包。请稍后重试。",
+      "response_invalid": "GitHub 返回了无法解析的响应。",
+      "invalid_url": "该仓库的请求地址不被允许。",
+      "budget_exceeded": "该仓库超出了安全下载上限。",
+      "credential_unavailable": "无法读取已保存的 GitHub 令牌。请在设置中重新保存。"
+    },
+    "central_updates": {
+      "repository_check_failed": "该仓库检查失败。"
     },
     "local_archive": {
       "archive_not_found": "未找到所选 ZIP 压缩包。",
@@ -1335,7 +1348,8 @@
         "duplicates": "平台冗余 ({{count}})",
         "orphans": "失链 ({{count}})",
         "deletedPlatformCopies": "平台残留 ({{count}})",
-        "failed": "失败 ({{count}})"
+        "failed": "失败 ({{count}})",
+        "unsupported": "无法检查 ({{count}})"
       },
       "applyAll": "应用全部 ({{count}})",
       "applySelected": "应用已选项 ({{count}})",
@@ -1343,6 +1357,13 @@
       "clearInventory": "清空检查结果",
       "emptyAllClean": "所有内容都是最新的",
       "tabEmpty": "该分类暂无条目",
+      "unsupportedDescription": "以下技能缺少受支持的远端来源，因此无法检查更新。",
+      "unsupportedReasons": {
+        "unknown_source": "没有可用于自动检查的远端来源。",
+        "unsupported_source_type": "此远端来源类型不支持自动检查。",
+        "missing_source_path": "GitHub 来源缺少仓库内路径。",
+        "unsupported_source": "此来源不支持自动检查。"
+      },
       "lastRefreshedAt": "上次刷新：{{time}}",
       "actions": {
         "apply": "应用",
@@ -1479,10 +1500,10 @@
       "progress": {
         "scope": "当前范围：{{scope}}。",
         "preparing": "正在准备仓库检查…",
-        "checking": "已检查 {{completed}} / {{total}} 个仓库",
+        "checking": "已检查 {{completed}} / {{total}} 个可查询的去重远端仓库",
         "finalizing": "正在整理检查结果…",
-        "activeRepositories": "正在检查的仓库",
-        "aria": "更新检查进度：已完成 {{completed}} / {{total}} 个仓库",
+        "activeRepositories": "正在检查的可查询远端仓库",
+        "aria": "更新检查进度：已完成 {{completed}} / {{total}} 个可查询的去重远端仓库",
         "ariaPreparing": "正在准备更新检查"
       },
       "inlineLabel": "更新模式",

@@ -8,7 +8,7 @@ pub use crate::db::SkillUpdateStatus;
 use crate::db::{Skill, SkillRepositoryAssignment, SkillUpdateState};
 use crate::services::github_import::{GitHubRepoRef, RemoteSkillCandidate};
 
-use super::fs::RemoteSkillFile;
+use super::fs::{normalize_repo_path, RemoteSkillFile};
 
 /// Cache policy for GitHub repository snapshots during update checks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,6 +94,41 @@ pub(crate) struct UpdateCounters {
     pub(crate) succeeded: usize,
     pub(crate) failed: usize,
     pub(crate) skipped: usize,
+}
+
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum UnsupportedSkillReasonCode {
+    UnknownSource,
+    UnsupportedSourceType,
+    MissingSourcePath,
+    UnsupportedSource,
+}
+
+pub(crate) fn unsupported_reason_code(
+    assignment: &SkillRepositoryAssignment,
+) -> UnsupportedSkillReasonCode {
+    if assignment.is_source_unknown || assignment.repository.is_unknown {
+        return UnsupportedSkillReasonCode::UnknownSource;
+    }
+    if assignment.repository.source_type != "github" {
+        return UnsupportedSkillReasonCode::UnsupportedSourceType;
+    }
+    if normalized_github_source_path(assignment).is_none() {
+        return UnsupportedSkillReasonCode::MissingSourcePath;
+    }
+    UnsupportedSkillReasonCode::UnsupportedSource
+}
+
+pub(crate) fn normalized_github_source_path(
+    assignment: &SkillRepositoryAssignment,
+) -> Option<String> {
+    let source_path = assignment.source_path.as_deref()?.trim();
+    if source_path.is_empty() {
+        return None;
+    }
+    normalize_repo_path(source_path).ok()
 }
 
 /// Classification of a failed remote-skill load: `RemoteMissing` reasons are

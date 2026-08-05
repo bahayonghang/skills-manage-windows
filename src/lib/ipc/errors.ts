@@ -116,6 +116,22 @@ function canonicalMessage(code: string): string | null {
     case "github_import.access_denied":
     case "github_import.configured_token_failed":
       return "GitHub denied access to the repository.";
+    case "github_import.archive_redirect_rejected":
+      return "GitHub repository archive redirect was rejected.";
+    case "github_import.transport_failed":
+      return "Could not reach GitHub. Check the network and try again.";
+    case "github_import.repo_not_found":
+      return "The GitHub repository was not found.";
+    case "github_import.archive_unavailable":
+      return "The GitHub repository archive is unavailable.";
+    case "github_import.response_invalid":
+      return "GitHub returned an unreadable response.";
+    case "github_import.invalid_url":
+      return "The GitHub request address is not allowed.";
+    case "github_import.budget_exceeded":
+      return "The GitHub repository exceeds the import resource limits.";
+    case "github_import.credential_unavailable":
+      return "The stored GitHub token could not be read. Save it again in Settings.";
     case "credential.ssh_password_unavailable":
       return "The SSH password is unavailable. Open Settings, save it, and retry.";
     case "runtime.desktop_required":

@@ -6,6 +6,7 @@ import {
   buildInitialState,
   countDeletedPlatformCopyPaths,
   countDecisionSelections,
+  countsFromInventory,
   summarizeDecisionSelections,
 } from "@/components/central/updateCenter/decisionAggregation";
 import {
@@ -13,6 +14,7 @@ import {
   coerceRefreshScopeKind,
   isRefreshScopeEnabled,
 } from "@/lib/updateCenterRefreshScope";
+import { preferredUpdateCenterTab } from "@/pages/centralUpdateCheckMode";
 import type {
   SkillUpdateInventory,
   RemoteMissingSkill,
@@ -50,6 +52,20 @@ function remoteMissing(skillId: string): RemoteMissingSkill {
 }
 
 describe("updateCenter decision aggregation", () => {
+  it("counts unsupported skills without making them applyable", () => {
+    const inventory = emptyInventory({
+      unsupported: [
+        { skillId: "local-only", reasonCode: "unknown_source" },
+        { skillId: "missing-path", reasonCode: "missing_source_path" },
+      ],
+    });
+    const decisions = buildInitialState(inventory);
+
+    expect(countsFromInventory(inventory).unsupported).toBe(2);
+    expect(countDecisionSelections(decisions, inventory)).toBe(0);
+    expect(preferredUpdateCenterTab(inventory)).toBe("unsupported");
+  });
+
   it("treats default keep for remote-missing rows as an applyable detach decision", () => {
     const inventory = emptyInventory({
       remoteMissing: [remoteMissing("keep-local")],

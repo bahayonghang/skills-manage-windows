@@ -21,23 +21,45 @@ import {
   type DeletedPlatformCopyRowState,
 } from "@/components/central/updateCenter/DeletedPlatformCopiesTabPanel";
 import { OrphansTabPanel } from "@/components/central/updateCenter/OrphansTabPanel";
+import { UnsupportedTabPanel } from "@/components/central/updateCenter/UnsupportedTabPanel";
 import {
   countsFromInventory,
   type DecisionState,
 } from "@/components/central/updateCenter/decisionAggregation";
 
 import type { UpdateCenterTab } from "@/stores/updateCenterStore";
-import type { SkillUpdateInventory } from "@/types/skillUpdateInventory";
+import type { TFunction } from "i18next";
+
+import type {
+  FailedRepository,
+  SkillUpdateInventory,
+} from "@/types/skillUpdateInventory";
 import type {
   RepositorySourceDisplayInfo,
   SkillConflictSourceInfo,
 } from "@/lib/centralConflictSource";
 
+/**
+ * Prefer the backend's stable code so the reason is localized; fall back to the
+ * stored sentence for reconciliation reasons that carry their own text and for
+ * inventories persisted before codes existed.
+ */
+function failedRepositoryReason(item: FailedRepository, t: TFunction): string {
+  if (!item.errorCode) return item.error;
+  const translated = t(`backendErrors.${item.errorCode}`, {
+    defaultValue: "",
+  }) as string;
+  return translated || item.error;
+}
+
 export interface UpdateCenterTabHandlers {
   updateUpdatable: (skillId: string, patch: Partial<UpdatableRowState>) => void;
   toggleAllUpdatable: (selected: boolean) => void;
   updateAdded: (key: string, patch: Partial<RemoteAddedRowState>) => void;
-  updateMissing: (skillId: string, patch: Partial<RemoteMissingRowState>) => void;
+  updateMissing: (
+    skillId: string,
+    patch: Partial<RemoteMissingRowState>,
+  ) => void;
   updateDuplicates: (
     key: string,
     patch: Partial<PlatformDuplicateRowState>,
@@ -80,7 +102,12 @@ export function UpdateCenterTabContent({
   }
 
   if (tab === "failed") {
-    return <FailedRepositoriesPanel inventory={inventory} repositorySources={repositorySources} />;
+    return (
+      <FailedRepositoriesPanel
+        inventory={inventory}
+        repositorySources={repositorySources}
+      />
+    );
   }
 
   const counts = countsFromInventory(inventory);
@@ -122,6 +149,8 @@ export function UpdateCenterTabContent({
           onChange={handlers.updateMissing}
         />
       );
+    case "unsupported":
+      return <UnsupportedTabPanel items={inventory.unsupported ?? []} />;
     case "duplicates":
       return (
         <PlatformDuplicatesTabPanel
@@ -162,13 +191,16 @@ function FailedRepositoriesPanel({
     <div className="space-y-2">
       {inventory.failedRepositories.map((item) => (
         <div
-          key={`${item.repositoryId}:${item.error}`}
+          key={`${item.repositoryId}:${item.errorCode ?? item.error}`}
           className="rounded-lg border border-destructive/30 bg-destructive/5 p-3"
         >
           <div className="text-sm font-medium">
-            {repositorySources.get(item.repositoryId)?.label ?? item.repositoryId}
+            {repositorySources.get(item.repositoryId)?.label ??
+              item.repositoryId}
           </div>
-          <p className="mt-1 text-xs text-destructive-text">{item.error}</p>
+          <p className="mt-1 text-xs text-destructive-text">
+            {failedRepositoryReason(item, t)}
+          </p>
         </div>
       ))}
     </div>

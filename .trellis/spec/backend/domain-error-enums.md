@@ -135,7 +135,17 @@ pub type IpcResult<T> = Result<T, IpcError>;
 - 仅当 mapper 能证明 mutation 前失败且重试安全时设 `retryable=true`。
 - 已审查的域错误映射为固定 code/message；未知 Display 只得到
   `internal.unexpected` 固定摘要，不能把原文复制进 payload。
-- payload 内部业务字段（例如 `FailedInstall.error`）不属于 command rejection，保持原契约。
+- `GithubImportError::ArchiveRedirectRejected` 是零动态字段的已审查变体；
+  `CentralUpdatesError::GithubImport` 透明保留其 envelope，并固定映射为
+  `github_import.archive_redirect_rejected`、`retryable=false`。禁止通过错误
+  文本或 code 字符串嗅探判断该变体。
+- GitHub 网络族（传输、限流、拒绝访问、仓库不存在、archive 不可用、响应不可解析、
+  地址不合法、预算超限、凭据不可读）同样是已审查变体，各自映射固定
+  `github_import.*` code。`ipc_error_code` 返回完全限定 `&'static str`，`ipc_code`
+  由它裁剪而来，二者不可能不一致。新增变体时只改这一张表。
+- payload 内部业务字段（例如 `FailedInstall.error`、`FailedRepository.error`）不属于
+  command rejection，保持原契约；但当该字段来自已分类的域错误时，必须写稳定
+  `error_code` 与经审阅文案，而不是域错误的 Display。
 
 ### 4. Validation & Error Matrix
 
@@ -145,6 +155,7 @@ pub type IpcResult<T> = Result<T, IpcError>;
 | cancellation | `operation.cancelled`, `retryable=false` |
 | proven pre-mutation rate limit | stable rate-limit code, `retryable=true` |
 | path/credential/command/output in unknown error | `internal.unexpected`; raw text absent |
+| trusted archive redirect validation fails | `github_import.archive_redirect_rejected`; fixed public message; `retryable=false` |
 | fallible command returns `Result<_, String>` | contract test fails |
 
 ### 5. Good / Base / Bad Cases
@@ -157,6 +168,8 @@ pub type IpcResult<T> = Result<T, IpcError>;
 
 - `ipc_error` serialization asserts exactly `code/message/retryable`.
 - Seed PAT, AI key, SSH password, absolute/relative paths, command/output and file content; none may survive serialization.
+- Archive redirect tests seed PAT, URL, repository/file path, and response text;
+  the serialized payload retains only its fixed code/message/retryable fields.
 - IPC coverage asserts 184 runtime, 180 fallible, 4 infallible and zero raw string command boundaries.
 
 ### 7. Wrong vs Correct

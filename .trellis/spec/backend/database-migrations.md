@@ -27,6 +27,13 @@ pool-only initialization are test-only or documented legacy-fixture seams.
 - `schema_migrations(version, checksum, applied_at)` versions start at 1 and
   are contiguous. Released migration sources and locked SHA-256 digests are
   immutable; later changes add a descriptor.
+- If a released binary already wrote a platform-dependent checksum for
+  logically identical immutable source, compatibility is an explicit,
+  version-bound alias on that descriptor. Preflight accepts the exact canonical
+  checksum or an exact alias for the same version; it never accepts prefixes,
+  case variants, aliases from another version, or dynamically learned values.
+  New metadata always writes the canonical checksum, and accepting an alias
+  does not rewrite the existing row.
 - A migration checksum includes only dedicated immutable migration material.
   Shared compile-time contracts such as `skill_relations_spec.rs` must be
   isolated from mutable runtime repair/repository code before their source is
@@ -74,6 +81,7 @@ foreign_key_check -> seed -> publish pool`.
 | ------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | Descriptor or DB version gap                                  | Fail preflight; no backup or write                                     |
 | Future version or checksum mismatch                           | Fail preflight; no backup or write                                     |
+| Exact published legacy checksum alias for the same version    | Accept without backup or metadata rewrite                              |
 | Existing non-empty DB with pending migration                  | Create and validate a new source-version backup                        |
 | Empty/new or checksum-current DB                              | Do not create a backup                                                 |
 | Backup creation or validation fails                           | Block before repair/migration                                          |
@@ -95,10 +103,16 @@ repair audit, restore, and FK validation are never best effort.
   pre-existing provenance columns `NULL`.
 - Base: a checksum-current DB passes checks, seeds idempotently, and creates no
   additional backup.
+- Good: a migration-1 database containing the published Windows checksum alias
+  opens with all data intact, keeps that metadata row unchanged, and creates no
+  migration backup because no migration is pending.
 - Good: a reserved rebuild-table collision restores the exact unversioned
   source and returns the migration error.
 - Bad: add a column to released migration-1 schema source, update its checksum,
   and silently redefine history.
+- Bad: replace a published checksum with a normalized value without retaining
+  the exact old value as a version-bound alias. Healthy databases will fail
+  startup preflight even though their schema and pages are valid.
 - Bad: checksum an entire runtime repository module just because migration code
   consumes one constant from it; later repair-only edits would rewrite history.
 - Bad: let `core.autocrlf` rewrite a frozen SQL fixture and refresh its manifest
@@ -125,6 +139,9 @@ repair audit, restore, and FK validation are never best effort.
   (`test_github_provenance_is_written_once_and_preserved_by_later_writers`).
 - Multiple simultaneous pool connections each report `foreign_keys=1`.
 - Checksum drift, applied gap, and future version reject without backup/write.
+- The exact migration-1 Windows alias opens without rewrite or backup; a random
+  checksum, uppercase alias, prefixed alias, and cross-version alias all reject
+  before backup/write.
 - Backup refusal prevents schema writes; injected migration failure restores;
   injected restore failure reports both errors and keeps recovery artifacts.
 - Parent deletion cascades the seven owned relations while observations,

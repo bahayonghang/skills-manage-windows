@@ -18,7 +18,7 @@
 //! 不重新实现业务逻辑，只组合既有 helper。旧命令仍并行存在以保证不破坏前端；
 //! Tauri IPC 壳层在 `crate::commands::skill_update_inventory`。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicBool;
 
 use chrono::Utc;
@@ -37,10 +37,12 @@ use super::error::CentralUpdatesError;
 use super::fs::{normalize_repo_path, CentralFs};
 use super::repository_sync::{collect_remote_added_skills, CentralRepositorySyncFailure};
 use super::snapshots::{
-    prepare_snapshots_for_repo_refs_with_policy_and_progress, CentralUpdateSnapshotCache,
-    SnapshotProgressEvent, SnapshotProgressReporter,
+    prepare_snapshots_for_repo_refs_collecting_failures, repo_cache_key,
+    CentralUpdateSnapshotCache, SnapshotProgressEvent, SnapshotProgressReporter,
 };
-use super::types::{RemoteSkillLoadError, SkillUpdateStatus, SnapshotCachePolicy};
+use super::types::{
+    unsupported_reason_code, RemoteSkillLoadError, SkillUpdateStatus, SnapshotCachePolicy,
+};
 
 mod apply_steps;
 mod force;
@@ -135,9 +137,8 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
      * 步骤2：准备 skills + snapshots，拉远端 hash 对比
      * ========================================================================
      * 复用 prepare_skill_updates / prepare_snapshots_for_repo_refs。
-     * refresh 会持久化每个已检查 skill 的最新状态（包括 up_to_date /
-     * unsupported / error），这样旧的 update_available / remote_missing
-     * 不会在后续 get_inventory 纯读视图中残留。
+     * refresh 会计算 scope 内每个 skill，但只把当前 inventory bucket
+     * 持久化；安装 baseline 仍由成功的 apply/update 维护。
      */
     let skills = if let Some(ids) = &skill_ids_filter {
         if ids.is_empty() {
@@ -161,7 +162,23 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         .collect::<Vec<_>>();
     snapshot_repos.extend(valid_repositories.iter().map(|(_, repo)| repo.clone()));
 
-    let snapshots = prepare_snapshots_for_repo_refs_with_policy_and_progress(
+    // 2.2 快照失败按仓库结算，不终止整轮。检查范围覆盖全部可同步 GitHub 仓库，
+    // 任意一个仓库不可达就丢弃其余仓库的结果会让整轮检查无任何持久化产出。
+    let mut repository_id_by_snapshot_key = HashMap::<String, String>::new();
+    for (repository, repo) in &valid_repositories {
+        repository_id_by_snapshot_key
+            .entry(repo_cache_key(repo))
+            .or_insert_with(|| repository.id.clone());
+    }
+    for prepared_skill in &prepared {
+        if let Some(repo) = prepared_repo_ref(prepared_skill) {
+            repository_id_by_snapshot_key
+                .entry(repo_cache_key(&repo))
+                .or_insert_with(|| prepared_skill.assignment.repository.id.clone());
+        }
+    }
+
+    let acquisition = prepare_snapshots_for_repo_refs_collecting_failures(
         client,
         auth_token,
         &snapshot_repos,
@@ -170,6 +187,24 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         progress.clone(),
     )
     .await?;
+    let snapshots = acquisition.snapshots;
+    let snapshot_failures = acquisition
+        .failures
+        .into_iter()
+        .map(|failure| {
+            let key = repo_cache_key(&failure.repo);
+            let (error, error_code) = failed_repository_reason(&failure.error);
+            FailedRepository {
+                repository_id: repository_id_by_snapshot_key
+                    .get(&key)
+                    .cloned()
+                    .unwrap_or(key),
+                error,
+                error_code,
+                diagnostics: None,
+            }
+        })
+        .collect::<Vec<_>>();
     if let Some(progress) = &progress {
         progress(SnapshotProgressEvent::finalizing(
             snapshots.len(),
@@ -181,8 +216,9 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
      * ========================================================================
      * 步骤3：算出每个 skill 的 update state，区分 updatable / remote_missing
      * ========================================================================
-     * 每个已检查 skill 都写入 skill_update_states，inventory 只返回
-     * actionable 桶。
+     * refresh 只构建当前 inventory；skill_update_states 是 apply/update 成功后的
+     * 安装 baseline，此处不能写入。up_to_date 不是可操作结果，unsupported
+     * 则必须保留在 inventory 中供用户查看。
      */
     let repo_by_id = valid_repositories
         .iter()
@@ -195,7 +231,8 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
 
     let mut updatable = Vec::new();
     let mut remote_missing_states = Vec::new();
-    let mut failed_repositories = Vec::new();
+    let mut unsupported = Vec::new();
+    let mut failed_repositories = snapshot_failures;
     let mut prepared_by_skill_id = HashMap::new();
 
     for prepared_skill in prepared {
@@ -214,6 +251,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
                             "{} Switch to incremental and removal mode to decide whether to keep or delete '{}'.",
                             reason, skill.id
                         ),
+                        error_code: None,
                         diagnostics: Some(diagnostic_from_state(
                             &error_state_from_assignment(skill, &prepared_skill.assignment, &reason),
                             cache_policy,
@@ -241,8 +279,14 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
             SkillUpdateStatus::RemoteMissing => {
                 remote_missing_states.push(state_result);
             }
+            SkillUpdateStatus::Unsupported => {
+                unsupported.push(UnsupportedSkill {
+                    skill_id: skill.id.clone(),
+                    reason_code: unsupported_reason_code(&prepared_skill.assignment),
+                });
+            }
             _ => {
-                // up_to_date / unsupported / error / cancelled 不进入 inventory
+                // up_to_date / error / cancelled 不进入 actionable inventory
             }
         }
         prepared_by_skill_id.insert(skill.id.clone(), prepared_skill);
@@ -311,6 +355,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
             failed_repositories.push(FailedRepository {
                 repository_id: failure.repository_id,
                 error: failure.error,
+                error_code: None,
                 diagnostics: None,
             });
         }
@@ -352,10 +397,17 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         }
     }
 
+    // Inventory entries are keyed by (bucket, repository_id), so a repository
+    // may only appear once. Snapshot acquisition failures are seeded first, so
+    // the root cause wins over the downstream reasons it produced.
+    let mut seen_failed_repositories = HashSet::new();
+    failed_repositories.retain(|item| seen_failed_repositories.insert(item.repository_id.clone()));
+
     let inventory = SkillUpdateInventory {
         updatable,
         remote_added,
         remote_missing,
+        unsupported,
         platform_duplicates,
         deleted_platform_copies,
         orphans: Vec::new(),
@@ -575,5 +627,22 @@ fn snapshot_cache_policy(policy: SkillRefreshCachePolicy) -> SnapshotCachePolicy
     match policy {
         SkillRefreshCachePolicy::UseFresh => SnapshotCachePolicy::UseFresh,
         SkillRefreshCachePolicy::Bypass => SnapshotCachePolicy::Bypass,
+    }
+}
+
+/// Reduce a snapshot acquisition failure to what the inventory may persist and
+/// show: a stable code plus its reviewed public sentence. The domain error's
+/// Display text is never used, because it can carry a URL, path, mirror label,
+/// or transport detail.
+fn failed_repository_reason(error: &CentralUpdatesError) -> (String, Option<String>) {
+    match error
+        .reviewed_operation_failure()
+        .and_then(|(code, _)| crate::ipc_error::public_message_for_code(code).map(|m| (code, m)))
+    {
+        Some((code, message)) => (message.to_string(), Some(code.to_string())),
+        None => (
+            "The repository could not be checked.".to_string(),
+            Some("central_updates.repository_check_failed".to_string()),
+        ),
     }
 }

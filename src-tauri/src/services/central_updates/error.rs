@@ -221,4 +221,52 @@ impl CentralUpdatesError {
     pub(crate) fn task_join(label: &'static str, message: String) -> Self {
         Self::TaskJoin { label, message }
     }
+
+    /// Stable `(error_code, phase)` pair recorded in the Operation Log.
+    ///
+    /// Both halves are `&'static str` literals, so no dynamic detail can reach
+    /// the persisted log. GitHub failures delegate to the domain's own code
+    /// table, which keeps the Operation Log, the IPC envelope, and the Runtime
+    /// Log on the same identifier.
+    pub(crate) fn reviewed_operation_failure(&self) -> Option<(&'static str, &'static str)> {
+        match self {
+            Self::GithubImport(error) => error
+                .ipc_error_code()
+                .map(|code| (code, "repository_snapshot")),
+            Self::BatchCancelled => Some(("operation.cancelled", "refresh")),
+            _ => None,
+        }
+    }
+
+    /// Static category label for runtime-log diagnostics.
+    ///
+    /// Unlike [`Self::reviewed_operation_failure`] this is total: every variant
+    /// resolves to a fixed family name, so a failure without a reviewed IPC
+    /// code is still identifiable in the Runtime Log without writing its
+    /// Display text (which may carry paths, URLs, or command output).
+    pub(crate) fn diagnostic_category(&self) -> &'static str {
+        match self {
+            Self::Io { .. } => "central_updates.io",
+            Self::Db(_) => "central_updates.db",
+            Self::CentralMutation(_) => "central_updates.central_mutation",
+            Self::CentralOperation(_) => "central_updates.central_operation",
+            Self::GithubImport(error) => error.diagnostic_category(),
+            Self::Installation(_) => "central_updates.installation",
+            Self::CentralSkills(_) => "central_updates.central_skills",
+            Self::Remote(_) => "central_updates.remote",
+            Self::Batch(_) => "central_updates.batch",
+            Self::BatchCancelled => "central_updates.cancelled",
+            Self::Json(_) => "central_updates.json",
+            Self::TaskJoin { .. } => "central_updates.task_join",
+            Self::SnapshotDownloaderClosed => "central_updates.snapshot_downloader_closed",
+            _ => "central_updates.validation",
+        }
+    }
+
+    pub(crate) fn to_ipc_error(&self) -> String {
+        match self {
+            Self::GithubImport(error) => error.to_ipc_error(),
+            _ => self.to_string(),
+        }
+    }
 }

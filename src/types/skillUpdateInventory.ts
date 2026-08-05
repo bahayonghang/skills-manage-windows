@@ -8,7 +8,8 @@ import type {
   CentralRepositoryAdditionUnskipRequest,
 } from "@/types/centralRepositorySync";
 
-export type SkillRefreshScopeKind = "all" | "skills" | "repositories" | "platform";
+export type SkillRefreshScopeKind =
+  "all" | "skills" | "repositories" | "platform";
 export type SkillRefreshMode = "regular" | "sync";
 export type SkillRefreshCachePolicy = "use_fresh" | "bypass";
 
@@ -79,6 +80,17 @@ export interface RemoteMissingSkill {
   diagnostics?: SkillUpdateDiagnostic | null;
 }
 
+export type UnsupportedSkillReasonCode =
+  | "unknown_source"
+  | "unsupported_source_type"
+  | "missing_source_path"
+  | "unsupported_source";
+
+export interface UnsupportedSkill {
+  skillId: string;
+  reasonCode: UnsupportedSkillReasonCode;
+}
+
 export interface PlatformDuplicateGroup {
   agentId: string;
   skillId: string;
@@ -102,6 +114,8 @@ export interface OrphanSkillEntry {
 export interface FailedRepository {
   repositoryId: string;
   error: string;
+  /** Stable backend code for localizable reasons; absent on older inventories. */
+  errorCode?: string | null;
   diagnostics?: SkillUpdateDiagnostic | null;
 }
 
@@ -123,6 +137,8 @@ export interface SkillUpdateInventory {
   updatable: UpdatableSkill[];
   remoteAdded: RemoteAddedSkill[];
   remoteMissing: RemoteMissingSkill[];
+  /** Read-only classification for skills without a queryable remote source. */
+  unsupported?: UnsupportedSkill[];
   platformDuplicates: PlatformDuplicateGroup[];
   deletedPlatformCopies: DeletedPlatformCopyGroup[];
   /** P2 始终空，保留位给未来的 broken symlink / 孤儿副本扫描。 */

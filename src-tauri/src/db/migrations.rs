@@ -48,14 +48,21 @@ struct MigrationState {
     has_pending: bool,
 }
 
-fn descriptor_checksum(version: i64) -> Result<String, sqlx::Error> {
-    let descriptor = versions::MIGRATIONS
+fn descriptor(version: i64) -> Result<&'static versions::MigrationDescriptor, sqlx::Error> {
+    versions::MIGRATIONS
         .iter()
         .find(|descriptor| descriptor.version == version)
-        .ok_or_else(|| {
-            sqlx::Error::InvalidArgument(format!("Unknown migration version {version}"))
-        })?;
-    Ok(versions::checksum(descriptor.source))
+        .ok_or_else(|| sqlx::Error::InvalidArgument(format!("Unknown migration version {version}")))
+}
+
+fn descriptor_checksum(version: i64) -> Result<String, sqlx::Error> {
+    Ok(versions::checksum(descriptor(version)?.source))
+}
+
+fn descriptor_accepts_checksum(version: i64, stored_checksum: &str) -> Result<bool, sqlx::Error> {
+    let descriptor = descriptor(version)?;
+    Ok(stored_checksum == versions::checksum(descriptor.source)
+        || descriptor.legacy_checksums.contains(&stored_checksum))
 }
 
 fn validate_descriptors() -> Result<(), sqlx::Error> {
@@ -120,8 +127,7 @@ async fn preflight(pool: &DbPool) -> Result<MigrationState, sqlx::Error> {
             )));
         }
         let stored_checksum = row.try_get::<String, _>("checksum")?;
-        let expected_checksum = descriptor_checksum(version)?;
-        if stored_checksum != expected_checksum {
+        if !descriptor_accepts_checksum(version, &stored_checksum)? {
             return Err(sqlx::Error::InvalidArgument(format!(
                 "Migration checksum mismatch for version {version}"
             )));

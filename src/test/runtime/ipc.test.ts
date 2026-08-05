@@ -121,6 +121,34 @@ describe("ipc adapter", () => {
       );
     });
 
+    it("records only the public archive redirect code and message", async () => {
+      enableTauriRuntime();
+      const recorder = vi.fn();
+      const seed = "ghp_secret https://example.invalid/private C:\\private\\SKILL.md";
+      registerIpcFailureRecorder(recorder);
+      mockTauriInvoke.mockRejectedValueOnce({
+        code: "github_import.archive_redirect_rejected",
+        message: "GitHub repository archive redirect was rejected.",
+        retryable: false,
+        details: seed,
+      });
+
+      await expect(invoke("dangerous_command")).rejects.toThrow(
+        "GitHub repository archive redirect was rejected.",
+      );
+
+      expect(recorder).toHaveBeenCalledWith(
+        "dangerous_command",
+        undefined,
+        expect.objectContaining({
+          code: "github_import.archive_redirect_rejected",
+          message: "GitHub repository archive redirect was rejected.",
+          retryable: false,
+        }),
+      );
+      expect(JSON.stringify(recorder.mock.calls)).not.toContain(seed);
+    });
+
     it("does not recursively record runtime-log IPC failures", async () => {
       enableTauriRuntime();
       const recorder = vi.fn();
@@ -201,6 +229,12 @@ describe("ipc adapter", () => {
         "Legacy failure",
         "internal.unexpected",
         "The operation failed. See runtime logs for details.",
+      ],
+      [
+        "archive redirect coded string",
+        "github_import.archive_redirect_rejected:ghp_secret https://example.invalid/private",
+        "github_import.archive_redirect_rejected",
+        "GitHub repository archive redirect was rejected.",
       ],
       [
         "JavaScript Error",

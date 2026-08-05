@@ -66,6 +66,8 @@ pub use error::GithubImportError;
 
 pub(crate) use archive::download_repo_snapshot;
 #[cfg(test)]
+pub(crate) use archive::download_repo_snapshot_with_test_endpoint;
+#[cfg(test)]
 pub(crate) use import::import_github_repo_skills_impl;
 pub(crate) use import::{
     build_preview_skills, central_skills_root, import_github_repo_skills_from_snapshot_partially,

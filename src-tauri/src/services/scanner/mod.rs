@@ -177,13 +177,10 @@ fn build_scanned_skill(entry: &DirectorySkillEntry, is_central: bool) -> Scanned
     }
 }
 
-fn scan_directory_entries(dir: &Path) -> Vec<DirectorySkillEntry> {
+fn scan_directory_entries_result(dir: &Path) -> std::io::Result<Vec<DirectorySkillEntry>> {
     let mut skills = Vec::new();
 
-    let entries = match std::fs::read_dir(dir) {
-        Ok(entries) => entries,
-        Err(_) => return skills,
-    };
+    let entries = std::fs::read_dir(dir)?;
 
     for entry in entries.flatten() {
         let entry_path = entry.path();
@@ -229,7 +226,11 @@ fn scan_directory_entries(dir: &Path) -> Vec<DirectorySkillEntry> {
         });
     }
 
-    skills
+    Ok(skills)
+}
+
+fn scan_directory_entries(dir: &Path) -> Vec<DirectorySkillEntry> {
+    scan_directory_entries_result(dir).unwrap_or_default()
 }
 
 fn normalize_scan_key(dir: &Path) -> String {
@@ -274,7 +275,17 @@ async fn scan_directory_blocking(
 ) -> Result<Vec<ScannedSkill>, ScannerError> {
     crate::fs_util::run_blocking_fs_with(
         "directory scan",
-        move || Ok(scan_directory(&dir, is_central)),
+        move || {
+            let entries = match scan_directory_entries_result(&dir) {
+                Ok(entries) => entries,
+                Err(source) if is_central => return Err(ScannerError::CentralRootRead(source)),
+                Err(_) => Vec::new(),
+            };
+            Ok(entries
+                .into_iter()
+                .map(|entry| build_scanned_skill(&entry, is_central))
+                .collect())
+        },
         ScannerError::task_join,
     )
     .await
@@ -324,9 +335,11 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, ScannerEr
 
         if existing_roots.is_empty() {
             persistence.set_agent_detected(&agent.id, false);
-            persistence.touch_install_agent(&agent.id);
-            if agent_tracks_observations(&agent.id) {
-                persistence.touch_observation_agent(&agent.id);
+            if !is_central {
+                persistence.touch_install_agent(&agent.id);
+                if agent_tracks_observations(&agent.id) {
+                    persistence.touch_observation_agent(&agent.id);
+                }
             }
             skills_by_agent.insert(agent.id.clone(), 0);
             continue;
@@ -389,6 +402,13 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, ScannerEr
                     .as_ref()
                     .map(|central| crate::paths::paths_equivalent(&root.path, central))
                     .unwrap_or(false);
+            let is_authoritative_central_root = central_root
+                .as_ref()
+                .map(|central| crate::paths::paths_equivalent(&root.path, central))
+                .unwrap_or(false);
+            if is_authoritative_central_root {
+                persistence.mark_central_root_scanned();
+            }
             let root_scanned = root_scanned.unwrap_or_default();
             let scan_key = normalize_scan_key(&root.path);
             if counted_scan_roots.insert(scan_key) {
@@ -573,7 +593,7 @@ pub async fn scan_remote_skills_impl(
             RemoteScanItem::RootParentOk { root } => {
                 root_parent_exists.insert(root.clone());
             }
-            RemoteScanItem::RootMiss { .. } => {}
+            RemoteScanItem::RootMiss { .. } | RemoteScanItem::RootUnreadable { .. } => {}
             RemoteScanItem::Skill { root, .. } => {
                 skill_items_by_root
                     .entry(root.clone())
@@ -616,18 +636,25 @@ pub async fn scan_remote_skills_impl(
 
         if existing_roots.is_empty() && !parent_visible {
             persistence.set_agent_detected(&agent.id, false);
-            persistence.touch_install_agent(&agent.id);
-            if agent_tracks_observations(&agent.id) {
-                persistence.touch_observation_agent(&agent.id);
+            if agent.category != "central" {
+                persistence.touch_install_agent(&agent.id);
+                if agent_tracks_observations(&agent.id) {
+                    persistence.touch_observation_agent(&agent.id);
+                }
             }
             skills_by_agent.insert(agent.id.clone(), 0);
             continue;
         }
 
         persistence.set_agent_detected(&agent.id, true);
-        persistence.touch_install_agent(&agent.id);
-        if agent_tracks_observations(&agent.id) {
-            persistence.touch_observation_agent(&agent.id);
+        let central_root_available = existing_roots
+            .iter()
+            .any(|root| central_root.as_deref() == Some(root.path.to_string_lossy().as_ref()));
+        if agent.category != "central" || central_root_available {
+            persistence.touch_install_agent(&agent.id);
+            if agent_tracks_observations(&agent.id) {
+                persistence.touch_observation_agent(&agent.id);
+            }
         }
         if existing_roots.is_empty() {
             skills_by_agent.insert(agent.id.clone(), 0);
@@ -640,6 +667,9 @@ pub async fn scan_remote_skills_impl(
             let root_str = root.path.to_string_lossy().into_owned();
             let root_uses_central_storage =
                 agent.category == "central" || central_root.as_deref() == Some(root_str.as_str());
+            if central_root.as_deref() == Some(root_str.as_str()) {
+                persistence.mark_central_root_scanned();
+            }
             let root_scanned = if let Some(cached) = scanned_root_cache.get(&root_str) {
                 cached.clone()
             } else {

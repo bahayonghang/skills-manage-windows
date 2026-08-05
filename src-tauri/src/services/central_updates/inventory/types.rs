@@ -7,6 +7,8 @@ use crate::services::central_skills::{
 use crate::services::central_updates;
 use crate::services::github_import::ImportedGitHubSkillSummary;
 
+pub use crate::services::central_updates::types::UnsupportedSkillReasonCode;
+
 /*
  * ========================================================================
  * 类型定义
@@ -72,6 +74,10 @@ pub struct SkillUpdateInventory {
     pub updatable: Vec<UpdatableSkill>,
     pub remote_added: Vec<RemoteAddedSkill>,
     pub remote_missing: Vec<RemoteMissingSkill>,
+    #[serde(default)]
+    // Keep serde(default) deserialize-only in Specta's phased metadata.
+    #[cfg_attr(feature = "ipc-codegen", serde(rename(deserialize = "unsupported")))]
+    pub unsupported: Vec<UnsupportedSkill>,
     pub platform_duplicates: Vec<PlatformDuplicateGroup>,
     #[serde(default)]
     // Keep serde(default) deserialize-only in Specta's phased metadata.
@@ -120,6 +126,14 @@ pub struct RemoteMissingSkill {
 #[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct UnsupportedSkill {
+    pub skill_id: String,
+    pub reason_code: UnsupportedSkillReasonCode,
+}
+
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PlatformDuplicateGroup {
     pub agent_id: String,
     pub skill_id: String,
@@ -152,6 +166,12 @@ pub struct OrphanSkillEntry {
 pub struct FailedRepository {
     pub repository_id: String,
     pub error: String,
+    /// Stable IPC-style code for failures the domain classified, so the UI can
+    /// localize the reason instead of showing backend English. `None` for the
+    /// pre-existing reconciliation reasons that carry their own sentence, and
+    /// for inventories persisted before this field existed.
+    #[serde(default)]
+    pub error_code: Option<String>,
     #[serde(default)]
     pub diagnostics: Option<SkillUpdateDiagnostic>,
 }

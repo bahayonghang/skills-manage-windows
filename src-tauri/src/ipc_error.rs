@@ -173,7 +173,12 @@ fn valid_code_segment(segment: &str) -> bool {
 }
 
 fn retryable_for_code(code: &str) -> bool {
-    matches!(code, "github_import.rate_limited")
+    matches!(
+        code,
+        "github_import.rate_limited"
+            | "github_import.transport_failed"
+            | "github_import.archive_unavailable"
+    )
 }
 
 fn legacy_plain_message(original: &str, lower: &str) -> Option<(&'static str, &'static str)> {
@@ -231,6 +236,15 @@ fn legacy_plain_message(original: &str, lower: &str) -> Option<(&'static str, &'
     }
 }
 
+/// Reviewed public message for a stable IPC code.
+///
+/// Exposed so surfaces other than the IPC envelope (Update Center inventory
+/// rows, Operation Log summaries) can show the same reviewed sentence instead
+/// of a domain error's Display text.
+pub fn public_message_for_code(code: &str) -> Option<&'static str> {
+    legacy_code_message(code)
+}
+
 fn legacy_code_message(code: &str) -> Option<&'static str> {
     match code {
         "ai.missing_api_key" => Some("Configure an AI API key before retrying."),
@@ -273,6 +287,26 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
         "github_import.branch_invalid" => Some("GitHub branch must be a safe single-segment name."),
         "github_import.branch_conflict" => {
             Some("GitHub branch in the repository URL does not match the selected branch.")
+        }
+        "github_import.archive_redirect_rejected" => {
+            Some("GitHub repository archive redirect was rejected.")
+        }
+        "github_import.transport_failed" => {
+            Some("Could not reach GitHub. Check the network and try again.")
+        }
+        "github_import.rate_limited" => Some("GitHub rate limited the request. Try again later."),
+        "github_import.access_denied" => Some("GitHub denied access to the repository."),
+        "github_import.repo_not_found" => Some("The GitHub repository was not found."),
+        "github_import.archive_unavailable" => {
+            Some("The GitHub repository archive is unavailable.")
+        }
+        "github_import.response_invalid" => Some("GitHub returned an unreadable response."),
+        "github_import.invalid_url" => Some("The GitHub request address is not allowed."),
+        "github_import.budget_exceeded" => {
+            Some("The GitHub repository exceeds the import resource limits.")
+        }
+        "github_import.credential_unavailable" => {
+            Some("The stored GitHub token could not be read. Save it again in Settings.")
         }
         "local_archive.archive_not_found" => Some("The selected archive was not found."),
         "local_archive.archive_read_failed" => Some("The selected archive could not be read."),
@@ -383,6 +417,26 @@ mod tests {
             assert_eq!(error.code, code);
             assert_eq!(error.message, message);
             assert!(!error.message.contains("private"));
+        }
+    }
+
+    #[test]
+    fn archive_redirect_code_keeps_only_the_reviewed_public_message() {
+        let seeds = [
+            "ghp_super_secret",
+            "https://codeload.github.com/private/repo?token=secret",
+            r"C:\Users\alice\private\SKILL.md",
+            "private response body",
+        ];
+        for seed in seeds {
+            let error = IpcError::from(format!("github_import.archive_redirect_rejected:{seed}"));
+            assert_eq!(error.code, "github_import.archive_redirect_rejected");
+            assert_eq!(
+                error.message,
+                "GitHub repository archive redirect was rejected."
+            );
+            assert!(!error.retryable);
+            assert!(!serde_json::to_string(&error).unwrap().contains(seed));
         }
     }
 

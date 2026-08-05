@@ -10,6 +10,8 @@
 
 - Store action 仍负责业务状态：`isLoading/isRefreshing`、`error`、rethrow。
 - 可见 UI 调用方负责交互反馈：捕获错误、显示当前界面内联错误，并发出 toast。
+- 可见 UI 渲染 backend rejection 时必须经 `formatBackendError(err, t)` 保留稳定 code 的
+  i18n 语义并丢弃动态 details；不得用 `String(err)` 直接拼入 toast 或内联错误。
 - 新一轮提交或关闭弹窗时必须清除上一次内联错误。
 - 成功路径不得因为失败处理改变原有导航/打开面板参数。
 - 被多处 fire-and-forget 复用的共享 loader（如 `loadCentralSkills`）不得直接改成 rethrow；用可选参数（如 `{ throwOnError?: boolean }`，默认保持吞错写 store error）让需要反馈的可见 UI 调用方显式选择 rethrow，避免给既有调用点制造 unhandled rejection。
@@ -21,6 +23,7 @@
 | --- | --- |
 | Store action resolves | Continue existing success flow and clear local error |
 | Store action rejects before target panel opens | Keep current dialog/view open, show inline error, show toast, re-enable submit |
+| Store action rejects with a reviewed backend code | Render the localized public message; never expose legacy details |
 | User retries after failure | Clear stale inline error before the new request starts |
 | User closes the dialog/view | Clear dialog-local error |
 
@@ -28,6 +31,7 @@
 
 - Component-level test for the presentational inline error state.
 - View/controller test proving rejected store action shows toast + inline error and does not open the success-only panel.
+- Coded-error test proving the localized public message is visible and adversarial token/URL/path details are absent.
 - Retry coverage proving stale inline error is cleared before the next request.
 
 ## Wrong vs Correct
@@ -52,7 +56,9 @@ try {
   const result = await store.refresh(scope);
   openResultDialog(result);
 } catch (err) {
-  const message = t("central.updateCheckError", { error: String(err) });
+  const message = t("central.updateCheckError", {
+    error: formatBackendError(err, t),
+  });
   setSubmitError(message);
   toast.error(message);
 } finally {

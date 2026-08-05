@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import { invoke, isTauriRuntime, listen } from "@/lib/ipc";
+import { backendErrorStateValue } from "@/lib/backendError";
 import type {
   ActiveRefreshRepository,
   ForceRepositoryMirrorRequest,
@@ -45,6 +46,7 @@ export type UpdateCenterTab =
   | "added"
   | "missing"
   | "failed"
+  | "unsupported"
   | "duplicates"
   | "deletedPlatformCopies"
   | "orphans";
@@ -178,6 +180,7 @@ function emptyInventory(): SkillUpdateInventory {
     updatable: [],
     remoteAdded: [],
     remoteMissing: [],
+    unsupported: [],
     platformDuplicates: [],
     deletedPlatformCopies: [],
     orphans: [],
@@ -262,7 +265,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
       });
       return inventory;
     } catch (err) {
-      set({ error: String(err), isRefreshing: false });
+      set({ error: backendErrorStateValue(err), isRefreshing: false });
       throw err;
     } finally {
       try {

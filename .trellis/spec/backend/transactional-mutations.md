@@ -3,7 +3,8 @@
 ## Scope
 
 Applies to repository membership, tags and AI reviews, collection/project
-deletion, and Marketplace registry cache mutation.
+deletion, Marketplace registry cache mutation, and Update Center inventory
+replacement.
 
 ## Contracts
 
@@ -28,6 +29,16 @@ deletion, and Marketplace registry cache mutation.
 - Marketplace snapshot failure preserves the complete old cache. Only after
   rollback may a named best-effort helper publish the derived error marker; it
   must warn if that marker cannot be written.
+- `replace_skill_update_inventory` replaces the scoped inventory run and all of
+  its entries in one top-level transaction. Entry serialization completes
+  before the write transaction; deleting the old run, inserting the new run,
+  and inserting every bucket entry either all commit or all roll back.
+- Inventory refresh is isolated from the installed update baseline. It must not
+  call `upsert_skill_update_state` or otherwise mutate `skill_update_states`;
+  non-actionable results such as `unsupported` belong only to inventory entries.
+- Trigger-injected failure on any later inventory entry must preserve the
+  previous run and entries exactly. Rollback evidence must also compare the
+  complete `skill_update_states` rows before and after, not only row counts.
 
 ## Required Tests
 
@@ -42,3 +53,6 @@ deletion, and Marketplace registry cache mutation.
 - Marketplace tests cover A,B -> B,C, empty, second-insert failure,
   success-status failure, deferred commit failure, later-chunk failure, and
   remove rollback.
+- Update inventory tests cover mixed actionable/unsupported buckets, reload,
+  legacy payloads without `unsupported`, a later-entry trigger failure, and
+  byte-for-byte/field-for-field baseline preservation.

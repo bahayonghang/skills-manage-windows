@@ -99,7 +99,20 @@
       "preview_cleanup_pending": "An older repository preview is still being cleaned up. Preview the repository again.",
       "preview_commit_unresolved": "The repository commit could not be resolved. Preview the repository again.",
       "branch_invalid": "Enter a safe single-segment branch name without slashes.",
-      "branch_conflict": "The branch in the repository URL differs from the branch field. Make them match, then preview again."
+      "branch_conflict": "The branch in the repository URL differs from the branch field. Make them match, then preview again.",
+      "archive_redirect_rejected": "GitHub returned an unsafe or unexpected repository archive redirect. Try checking for updates again.",
+      "transport_failed": "GitHub could not be reached. Check the network connection, then try again.",
+      "rate_limited": "GitHub rate limited the request. Wait for the limit to reset, then try again.",
+      "access_denied": "GitHub denied access to this repository. Check that the token can read it.",
+      "repo_not_found": "The GitHub repository no longer exists or is not visible to the configured token.",
+      "archive_unavailable": "The repository archive is unavailable on GitHub right now. Try again later.",
+      "response_invalid": "GitHub returned a response that could not be read.",
+      "invalid_url": "The request address for this repository is not allowed.",
+      "budget_exceeded": "The repository exceeds the safe download limits.",
+      "credential_unavailable": "The stored GitHub token could not be read. Save it again in Settings."
+    },
+    "central_updates": {
+      "repository_check_failed": "This repository could not be checked."
     },
     "local_archive": {
       "archive_not_found": "The selected ZIP archive was not found.",
@@ -1335,7 +1348,8 @@
         "duplicates": "Platform duplicates ({{count}})",
         "orphans": "Orphans ({{count}})",
         "deletedPlatformCopies": "Platform leftovers ({{count}})",
-        "failed": "Failed ({{count}})"
+        "failed": "Failed ({{count}})",
+        "unsupported": "Unsupported ({{count}})"
       },
       "applyAll": "Apply all ({{count}})",
       "applySelected": "Apply selected ({{count}})",
@@ -1343,6 +1357,13 @@
       "clearInventory": "Clear inventory",
       "emptyAllClean": "Everything is up to date",
       "tabEmpty": "No entries in this category",
+      "unsupportedDescription": "These skills could not be checked because they do not have a supported remote source.",
+      "unsupportedReasons": {
+        "unknown_source": "No remote source is available for automatic checks.",
+        "unsupported_source_type": "This remote source type does not support automatic checks.",
+        "missing_source_path": "The GitHub source is missing its repository path.",
+        "unsupported_source": "This source does not support automatic checks."
+      },
       "lastRefreshedAt": "Last refreshed: {{time}}",
       "actions": {
         "apply": "Apply",
@@ -1479,10 +1500,10 @@
       "progress": {
         "scope": "Current scope: {{scope}}.",
         "preparing": "Preparing repository check…",
-        "checking": "Checked {{completed}} / {{total}} repositories",
+        "checking": "Checked {{completed}} / {{total}} queryable, deduplicated remote repositories",
         "finalizing": "Finalizing check results…",
-        "activeRepositories": "Repositories being checked",
-        "aria": "Update check progress: {{completed}} of {{total}} repositories completed",
+        "activeRepositories": "Queryable remote repositories being checked",
+        "aria": "Update check progress: {{completed}} of {{total}} queryable, deduplicated remote repositories completed",
         "ariaPreparing": "Preparing update check"
       },
       "inlineLabel": "Update mode",

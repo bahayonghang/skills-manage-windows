@@ -320,6 +320,13 @@ export type FailedInstall = {
 export type FailedRepository = {
 	repositoryId: string,
 	error: string,
+	/**
+	 *  Stable IPC-style code for failures the domain classified, so the UI can
+	 *  localize the reason instead of showing backend English. `None` for the
+	 *  pre-existing reconciliation reasons that carry their own sentence, and
+	 *  for inventories persisted before this field existed.
+	 */
+	errorCode?: string | null,
 	diagnostics?: SkillUpdateDiagnostic | null,
 };
 
@@ -640,6 +647,7 @@ export type SkillUpdateInventory_Deserialize = {
 	updatable: UpdatableSkill[],
 	remoteAdded: RemoteAddedSkill[],
 	remoteMissing: RemoteMissingSkill[],
+	unsupported?: UnsupportedSkill[],
 	platformDuplicates: PlatformDuplicateGroup[],
 	deletedPlatformCopies?: DeletedPlatformCopyGroup[],
 	/**  Phase P2 始终空，留位给后续 orphan 扫描（broken symlink / 孤儿 .copy 目录）。 */
@@ -652,6 +660,7 @@ export type SkillUpdateInventory_Serialize = {
 	updatable: UpdatableSkill[],
 	remoteAdded: RemoteAddedSkill[],
 	remoteMissing: RemoteMissingSkill[],
+	unsupported: UnsupportedSkill[],
 	platformDuplicates: PlatformDuplicateGroup[],
 	deletedPlatformCopies: DeletedPlatformCopyGroup[],
 	/**  Phase P2 始终空，留位给后续 orphan 扫描（broken symlink / 孤儿 .copy 目录）。 */
@@ -682,6 +691,13 @@ export type SkippedInstall = {
 	target_path: string,
 	reason: string,
 };
+
+export type UnsupportedSkill = {
+	skillId: string,
+	reasonCode: UnsupportedSkillReasonCode,
+};
+
+export type UnsupportedSkillReasonCode = "unknown_source" | "unsupported_source_type" | "missing_source_path" | "unsupported_source";
 
 export type UpdatableSkill = {
 	state: SkillUpdateState,

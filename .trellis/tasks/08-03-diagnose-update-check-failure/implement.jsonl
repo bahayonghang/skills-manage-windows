@@ -1,1 +1,13 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/tasks/08-03-diagnose-update-check-failure/research/diagnosis.md","reason":"已验证 PAT、HTTP 302 根因、调用链和错误丢失边界，实施时必须保持证据约束。"}
+{"file":".trellis/spec/backend/github-import-preview-contract.md","reason":"约束共享 no-redirect client、GitHub endpoint、Bearer 目的地和 archive acquisition 安全边界。"}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"要求新增语义化域错误并通过稳定 typed IPC 映射，禁止字符串嗅探。"}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"约束 IPC、Operation Log 与 Runtime Log 只保留固定 code/public message，禁止 secret、URL 和路径泄露。"}
+{"file":".trellis/spec/backend/central-update-inventory-progress.md","reason":"约束 repository refresh 成功/失败进度结算和持久化边界。"}
+{"file":".trellis/tasks/08-03-diagnose-update-check-failure/research/all-skills-inventory-gap.md","reason":"确认 scope 技能数、去重 repository 进度、unsupported 丢失与 provenance 不可自动恢复的第二缺陷。"}
+{"file":".trellis/spec/backend/transactional-mutations.md","reason":"约束 inventory run 与 entries 同事务提交，并保持 refresh 与安装 baseline 隔离。"}
+{"file":".trellis/spec/backend/skill-deletion-integrity.md","reason":"约束 scanner 只有在权威 Central 根成功扫描时才能执行 Central parent stale deletion，并保留 FK owned relations。"}
+{"file":".trellis/spec/frontend/async-ui-test-stability.md","reason":"约束 Update Center unsupported tab、preferred tab 与进度文案的用户可见回归测试。"}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"约束 GitHub import、Update Center、IPC 与前端回归测试的归属和最终门禁。"}
+{"file":".trellis/tasks/08-03-diagnose-update-check-failure/research/startup-rebuild-provenance-loss.md","reason":"记录迁移 checksum 回归、Healthy 重建时间线与 111 条无冲突恢复候选。"}
+{"file":".trellis/spec/backend/database-migrations.md","reason":"约束已发布 checksum 兼容别名、canonical metadata 与 preflight fail-closed 行为。"}
+{"file":".trellis/spec/backend/startup-recovery.md","reason":"约束 Healthy schema failure 不得提供有损 rebuild，以及恢复备份保留语义。"}

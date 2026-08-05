@@ -105,6 +105,7 @@ pub(crate) async fn reconcile_relocated_remote_skills(
                             state.skill_id,
                             remote_load_error_message(error)
                         ),
+                        error_code: None,
                         diagnostics: None,
                     });
                     continue;

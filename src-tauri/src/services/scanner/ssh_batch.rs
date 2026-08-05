@@ -20,6 +20,9 @@ pub(super) enum RemoteScanItem {
     RootMiss {
         root: String,
     },
+    RootUnreadable {
+        root: String,
+    },
     Skill {
         root: String,
         skill_md_path: String,
@@ -37,23 +40,27 @@ pub(super) fn build_probe_script(roots: &[String]) -> String {
     }
     script.push_str("; do\n");
     script.push_str("  if [ -d \"$root\" ]; then\n");
-    script.push_str("    printf 'ROOT_OK\\t%s\\n' \"$root\"\n");
-    script.push_str("    for dir in \"$root\"/* \"$root\"/.[!.]* \"$root\"/..?*; do\n");
-    script.push_str("      [ -e \"$dir\" ] || continue\n");
-    script.push_str("      if [ -d \"$dir\" ] || [ -L \"$dir\" ]; then\n");
-    script.push_str("        file=\"$dir/SKILL.md\"\n");
-    script.push_str("        if [ -f \"$file\" ]; then\n");
-    script.push_str("          if [ -L \"$dir\" ]; then\n");
-    script.push_str("            link=$(readlink \"$dir\" 2>/dev/null || true)\n");
+    script.push_str("    if [ -r \"$root\" ] && [ -x \"$root\" ]; then\n");
+    script.push_str("      printf 'ROOT_OK\\t%s\\n' \"$root\"\n");
+    script.push_str("      for dir in \"$root\"/* \"$root\"/.[!.]* \"$root\"/..?*; do\n");
+    script.push_str("        [ -e \"$dir\" ] || continue\n");
+    script.push_str("        if [ -d \"$dir\" ] || [ -L \"$dir\" ]; then\n");
+    script.push_str("          file=\"$dir/SKILL.md\"\n");
+    script.push_str("          if [ -f \"$file\" ]; then\n");
+    script.push_str("            if [ -L \"$dir\" ]; then\n");
+    script.push_str("              link=$(readlink \"$dir\" 2>/dev/null || true)\n");
     script.push_str(
-        "            printf 'SKILL\\t%s\\t%s\\tsymlink\\t%s\\n' \"$root\" \"$file\" \"$link\"\n",
+        "              printf 'SKILL\\t%s\\t%s\\tsymlink\\t%s\\n' \"$root\" \"$file\" \"$link\"\n",
     );
-    script.push_str("          else\n");
-    script.push_str("            printf 'SKILL\\t%s\\t%s\\tdir\\t\\n' \"$root\" \"$file\"\n");
+    script.push_str("            else\n");
+    script.push_str("              printf 'SKILL\\t%s\\t%s\\tdir\\t\\n' \"$root\" \"$file\"\n");
+    script.push_str("            fi\n");
     script.push_str("          fi\n");
     script.push_str("        fi\n");
-    script.push_str("      fi\n");
-    script.push_str("    done\n");
+    script.push_str("      done\n");
+    script.push_str("    else\n");
+    script.push_str("      printf 'ROOT_UNREADABLE\\t%s\\n' \"$root\"\n");
+    script.push_str("    fi\n");
     script.push_str("  elif [ -d \"$(dirname \"$root\")\" ]; then\n");
     script.push_str("    printf 'ROOT_PARENT_OK\\t%s\\n' \"$root\"\n");
     script.push_str("  else\n");
@@ -76,6 +83,9 @@ pub(super) fn parse_probe_output(output: &str) -> Vec<RemoteScanItem> {
                     root: parts.next()?.to_string(),
                 }),
                 "ROOT_MISS" => Some(RemoteScanItem::RootMiss {
+                    root: parts.next()?.to_string(),
+                }),
+                "ROOT_UNREADABLE" => Some(RemoteScanItem::RootUnreadable {
                     root: parts.next()?.to_string(),
                 }),
                 "SKILL" => Some(RemoteScanItem::Skill {
@@ -214,12 +224,14 @@ mod tests {
         assert!(script.contains("'/home/alice/.claude/skills'"));
         assert!(script.contains("ROOT_OK"));
         assert!(script.contains("ROOT_MISS"));
+        assert!(script.contains("ROOT_UNREADABLE"));
+        assert!(script.contains("[ -r \"$root\" ] && [ -x \"$root\" ]"));
     }
 
     #[test]
     fn parse_probe_output_recovers_roots_and_skills() {
         let items = parse_probe_output(
-            "ROOT_OK\t/home/alice/.claude/skills\nSKILL\t/home/alice/.claude/skills\t/home/alice/.claude/skills/foo/SKILL.md\nROOT_MISS\t/home/alice/.kiro/skills\n",
+            "ROOT_OK\t/home/alice/.claude/skills\nSKILL\t/home/alice/.claude/skills\t/home/alice/.claude/skills/foo/SKILL.md\nROOT_MISS\t/home/alice/.kiro/skills\nROOT_UNREADABLE\t/home/alice/.agents/skills\n",
         );
 
         assert_eq!(
@@ -236,7 +248,10 @@ mod tests {
                 },
                 RemoteScanItem::RootMiss {
                     root: "/home/alice/.kiro/skills".to_string()
-                }
+                },
+                RemoteScanItem::RootUnreadable {
+                    root: "/home/alice/.agents/skills".to_string()
+                },
             ]
         );
     }

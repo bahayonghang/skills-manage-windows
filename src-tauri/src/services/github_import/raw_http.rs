@@ -156,7 +156,7 @@ fn invalid_repo_component(field: &'static str, value: &str) -> GithubImportError
     }
 }
 
-fn validate_repo_owner(value: &str) -> Result<(), GithubImportError> {
+pub(super) fn validate_repo_owner(value: &str) -> Result<(), GithubImportError> {
     if value.is_empty()
         || value.trim() != value
         || value.starts_with('-')
@@ -170,7 +170,7 @@ fn validate_repo_owner(value: &str) -> Result<(), GithubImportError> {
     Ok(())
 }
 
-fn validate_repo_name(value: &str) -> Result<(), GithubImportError> {
+pub(super) fn validate_repo_name(value: &str) -> Result<(), GithubImportError> {
     if value.is_empty()
         || value.trim() != value
         || matches!(value, "." | "..")
@@ -308,7 +308,40 @@ where
 {
     send_github_request_with_endpoints(
         client,
-        surface,
+        RequestPolicy::standard(surface),
+        GITHUB_MIRROR_ENDPOINTS,
+        true,
+        build_url,
+        failure_prefix,
+        auth_token,
+    )
+    .await
+    .map(|response| response.response)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum GitHubEndpointProvenance {
+    TrustedDirect,
+    Mirror,
+}
+
+pub(super) struct GitHubArchiveInitialResponse {
+    pub(super) response: reqwest::Response,
+    pub(super) provenance: GitHubEndpointProvenance,
+}
+
+pub(super) async fn send_github_archive_request_with_fallback<F>(
+    client: &reqwest::Client,
+    build_url: F,
+    failure_prefix: &str,
+    auth_token: Option<&str>,
+) -> Result<GitHubArchiveInitialResponse, GithubImportError>
+where
+    F: Fn(&GitHubMirrorEndpoint) -> String,
+{
+    send_github_request_with_endpoints(
+        client,
+        RequestPolicy::archive(),
         GITHUB_MIRROR_ENDPOINTS,
         true,
         build_url,
@@ -332,7 +365,31 @@ where
 {
     send_github_request_with_endpoints(
         client,
-        surface,
+        RequestPolicy::standard(surface),
+        endpoints,
+        false,
+        build_url,
+        failure_prefix,
+        auth_token,
+    )
+    .await
+    .map(|response| response.response)
+}
+
+#[cfg(test)]
+pub(super) async fn send_github_archive_request_with_test_endpoints<F>(
+    client: &reqwest::Client,
+    endpoints: &[GitHubMirrorEndpoint],
+    build_url: F,
+    failure_prefix: &str,
+    auth_token: Option<&str>,
+) -> Result<GitHubArchiveInitialResponse, GithubImportError>
+where
+    F: Fn(&GitHubMirrorEndpoint) -> String,
+{
+    send_github_request_with_endpoints(
+        client,
+        RequestPolicy::archive(),
         endpoints,
         false,
         build_url,
@@ -342,18 +399,58 @@ where
     .await
 }
 
+#[derive(Clone, Copy)]
+enum ResponseAcceptance {
+    SuccessOnly,
+    ArchiveInitialRedirect,
+}
+
+impl ResponseAcceptance {
+    fn accepts(self, status: reqwest::StatusCode) -> bool {
+        status.is_success()
+            || matches!(self, Self::ArchiveInitialRedirect)
+                && matches!(
+                    status,
+                    reqwest::StatusCode::MOVED_PERMANENTLY | reqwest::StatusCode::FOUND
+                )
+    }
+}
+
+#[derive(Clone, Copy)]
+struct RequestPolicy {
+    surface: GitHubFetchSurface,
+    acceptance: ResponseAcceptance,
+}
+
+impl RequestPolicy {
+    fn standard(surface: GitHubFetchSurface) -> Self {
+        Self {
+            surface,
+            acceptance: ResponseAcceptance::SuccessOnly,
+        }
+    }
+
+    fn archive() -> Self {
+        Self {
+            surface: GitHubFetchSurface::Api,
+            acceptance: ResponseAcceptance::ArchiveInitialRedirect,
+        }
+    }
+}
+
 async fn send_github_request_with_endpoints<F>(
     client: &reqwest::Client,
-    surface: GitHubFetchSurface,
+    policy: RequestPolicy,
     endpoints: &[GitHubMirrorEndpoint],
     require_https: bool,
     build_url: F,
     failure_prefix: &str,
     auth_token: Option<&str>,
-) -> Result<reqwest::Response, GithubImportError>
+) -> Result<GitHubArchiveInitialResponse, GithubImportError>
 where
     F: Fn(&GitHubMirrorEndpoint) -> String,
 {
+    let surface = policy.surface;
     let mut attempts = Vec::new();
     let mut last_retryable_denial = None;
 
@@ -373,7 +470,12 @@ where
             .iter()
             .filter(|(candidate, _)| candidate.label != "github")
             .any(|(_, candidate_url)| candidate_url == url);
-        if endpoint.label == "github" && !mirrors_share_same_url {
+        let provenance = if endpoint.label == "github" && !mirrors_share_same_url {
+            GitHubEndpointProvenance::TrustedDirect
+        } else {
+            GitHubEndpointProvenance::Mirror
+        };
+        if provenance == GitHubEndpointProvenance::TrustedDirect {
             if let Some(token) = auth_token {
                 request = request.bearer_auth(token);
             }
@@ -418,8 +520,11 @@ where
                         }));
                 }
 
-                if status.is_success() {
-                    return Ok(response);
+                if policy.acceptance.accepts(status) {
+                    return Ok(GitHubArchiveInitialResponse {
+                        response,
+                        provenance,
+                    });
                 }
 
                 if status == reqwest::StatusCode::NOT_FOUND {
@@ -434,7 +539,10 @@ where
                         });
                         continue;
                     }
-                    return Ok(response);
+                    return Ok(GitHubArchiveInitialResponse {
+                        response,
+                        provenance,
+                    });
                 }
 
                 if should_retry_via_mirror_status(surface, status) {
