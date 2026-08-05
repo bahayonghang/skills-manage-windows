@@ -17,9 +17,10 @@ use crate::services::central_updates::inventory::{
     apply_skill_update_decisions_impl, clear_skill_update_inventory_impl,
     force_mirror_central_repositories_impl, force_update_central_skills_impl,
     get_skill_update_inventory_impl_scoped, refresh_skill_update_inventory_impl,
-    scan_deleted_platform_copies_with_pool, scan_platform_duplicate_skills_with_pool,
-    DeletedPlatformCopyGroup, ForceRepositoryMirrorRequest, ForceRepositoryMirrorResult,
-    ForceSkillUpdateRequest, ForceSkillUpdateResult, PlatformDuplicateGroup, SkillRefreshScope,
+    retry_failed_repositories_impl, scan_deleted_platform_copies_with_pool,
+    scan_platform_duplicate_skills_with_pool, DeletedPlatformCopyGroup,
+    ForceRepositoryMirrorRequest, ForceRepositoryMirrorResult, ForceSkillUpdateRequest,
+    ForceSkillUpdateResult, PlatformDuplicateGroup, SkillRefreshMode, SkillRefreshScope,
     SkillRefreshScopeKind, SkillUpdateApplyResult, SkillUpdateDecisions, SkillUpdateInventory,
 };
 use crate::services::central_updates::{
@@ -118,25 +119,7 @@ pub async fn refresh_skill_update_inventory(
             let pool = request_context.db().clone();
             let target_context = target_context_from_active_target(&active_target);
             let request_details = refresh_request_details(&scope);
-            let progress_app = Arc::new(app);
-            let progress: SnapshotProgressReporter =
-                Arc::new(move |event: SnapshotProgressEvent| {
-                    let payload = SkillUpdateInventoryProgressPayload {
-                        operation_id: operation_id.clone(),
-                        status: match event.status {
-                            SnapshotProgressStatus::Started => "started",
-                            SnapshotProgressStatus::RepositoryStarted => "repository_started",
-                            SnapshotProgressStatus::RepositoryCompleted => "repository_completed",
-                            SnapshotProgressStatus::RepositoryFailed => "repository_failed",
-                            SnapshotProgressStatus::Finalizing => "finalizing",
-                        },
-                        total: event.total,
-                        completed: event.completed,
-                        repository_key: event.repository_key,
-                        repository_name: event.repository_name,
-                    };
-                    let _ = progress_app.emit(UPDATE_INVENTORY_PROGRESS_EVENT, payload);
-                });
+            let progress = inventory_progress_reporter(app, operation_id);
             with_operation_log(
                 &state,
                 update_operation_spec(
@@ -165,6 +148,71 @@ pub async fn refresh_skill_update_inventory(
                         &client,
                         &state.central_update_snapshots,
                         scope,
+                        Some(progress),
+                    )
+                    .await
+                    .map_err(UpdateCommandError::from_central_updates)
+                },
+            )
+            .await
+            .map_err(UpdateCommandError::into_inner)
+        }
+        .await
+    )
+}
+
+/// Re-check only the given repositories and merge the result into the
+/// inventory stored for `scope`. `mode_override` lets a failed row that needs a
+/// keep-or-delete decision be re-checked in incremental mode without changing
+/// the panel's own mode.
+#[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn retry_failed_update_repositories(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    scope: SkillRefreshScope,
+    repository_ids: Vec<String>,
+    mode_override: Option<SkillRefreshMode>,
+    operation_id: String,
+) -> crate::ipc_error::IpcResult<SkillUpdateInventory> {
+    crate::ipc_boundary!(
+        async move {
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let pool = request_context.db().clone();
+            let target_context = target_context_from_active_target(&active_target);
+            let request_details = retry_request_details(&scope, &repository_ids, mode_override);
+            let progress = inventory_progress_reporter(app, operation_id);
+            with_operation_log(
+                &state,
+                update_operation_spec(
+                    target_context,
+                    "update_center.retry_repositories",
+                    "Retried failed update repositories",
+                    "Failed to retry update repositories",
+                    request_details,
+                    refresh_result_details,
+                ),
+                || async {
+                    let fs = CentralFs::from_active_target(active_target)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    let auth = github_import::github_direct_auth_from_secret_store(
+                        &state.db,
+                        state.secrets.as_ref(),
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+                    let client = github_import::github_client().map_err(|e| e.to_string())?;
+                    retry_failed_repositories_impl(
+                        &pool,
+                        &fs,
+                        auth.as_deref(),
+                        &client,
+                        &state.central_update_snapshots,
+                        scope,
+                        repository_ids,
+                        mode_override,
                         Some(progress),
                     )
                     .await
@@ -487,6 +535,41 @@ fn refresh_request_details(scope: &SkillRefreshScope) -> Value {
         "requestedSkills": scope.skill_ids.as_ref().map_or(0, Vec::len),
         "requestedRepositories": scope.repository_ids.as_ref().map_or(0, Vec::len),
         "requestedAgents": scope.agent_ids.as_ref().map_or(0, Vec::len),
+    })
+}
+
+fn retry_request_details(
+    scope: &SkillRefreshScope,
+    repository_ids: &[String],
+    mode_override: Option<SkillRefreshMode>,
+) -> Value {
+    let mut details = refresh_request_details(scope);
+    details["retriedRepositories"] = json!(repository_ids.len());
+    details["modeOverride"] = json!(mode_override.map(|mode| match mode {
+        SkillRefreshMode::Regular => "regular",
+        SkillRefreshMode::Sync => "sync",
+    }));
+    details
+}
+
+fn inventory_progress_reporter(app: AppHandle, operation_id: String) -> SnapshotProgressReporter {
+    let progress_app = Arc::new(app);
+    Arc::new(move |event: SnapshotProgressEvent| {
+        let payload = SkillUpdateInventoryProgressPayload {
+            operation_id: operation_id.clone(),
+            status: match event.status {
+                SnapshotProgressStatus::Started => "started",
+                SnapshotProgressStatus::RepositoryStarted => "repository_started",
+                SnapshotProgressStatus::RepositoryCompleted => "repository_completed",
+                SnapshotProgressStatus::RepositoryFailed => "repository_failed",
+                SnapshotProgressStatus::Finalizing => "finalizing",
+            },
+            total: event.total,
+            completed: event.completed,
+            repository_key: event.repository_key,
+            repository_name: event.repository_name,
+        };
+        let _ = progress_app.emit(UPDATE_INVENTORY_PROGRESS_EVENT, payload);
     })
 }
 

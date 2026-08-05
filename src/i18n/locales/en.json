@@ -112,7 +112,9 @@
       "credential_unavailable": "The stored GitHub token could not be read. Save it again in Settings."
     },
     "central_updates": {
-      "repository_check_failed": "This repository could not be checked."
+      "repository_check_failed": "This repository could not be checked.",
+      "skill_source_missing": "The tracked source path no longer contains this skill, and no unique new location was found. Re-check in incremental mode to keep or delete it.",
+      "relocation_failed": "The moved skill could not be reattached to its new location."
     },
     "local_archive": {
       "archive_not_found": "The selected ZIP archive was not found.",
@@ -1424,6 +1426,14 @@
         "cleanupAllSuccess": "{{count}} platform leftover path(s) cleaned",
         "cleanupAllPartial": "{{succeeded}} platform leftover path(s) cleaned, {{failed}} failed",
         "cleanupAllError": "Failed to clean platform leftovers: {{error}}"
+      },
+      "failed": {
+        "retry": "Retry",
+        "retryAll": "Retry all failures ({{count}})",
+        "recheckWithSync": "Re-check in incremental mode",
+        "retrySuccess": "Re-checked {{count}} repository(s) successfully",
+        "retryPartial": "Re-checked {{succeeded}} repository(s); {{failed}} still failing",
+        "retryError": "Retry failed: {{error}}"
       }
     },
     "sortByInstalledPlatformCount": "Installed platform count",

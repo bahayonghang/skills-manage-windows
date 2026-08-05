@@ -30,3 +30,4 @@
 - [Exclusive Job Lifecycle Contract](./exclusive-job-lifecycle.md)
 - [Bounded External Text Ingestion Contract](./external-text-ingestion.md)
 - [Recoverable Desktop Startup Contract](./startup-recovery.md)
+- [Update Inventory Retry and Relocation Contract](./update-inventory-retry.md)

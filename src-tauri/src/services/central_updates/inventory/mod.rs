@@ -49,6 +49,7 @@ mod force;
 mod persistence;
 mod relocation;
 mod repositories;
+mod retry;
 mod scan;
 mod scope;
 mod types;
@@ -62,6 +63,7 @@ pub(crate) use force::*;
 use persistence::*;
 pub(crate) use relocation::*;
 pub(crate) use repositories::*;
+pub(crate) use retry::*;
 pub(crate) use scan::*;
 pub(crate) use scope::*;
 pub use types::*;
@@ -79,6 +81,35 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
     client: &reqwest::Client,
     snapshots_cache: &CentralUpdateSnapshotCache,
     scope: SkillRefreshScope,
+    progress: Option<SnapshotProgressReporter>,
+) -> Result<SkillUpdateInventory, CentralUpdatesError> {
+    let mode = scope.mode.unwrap_or(SkillRefreshMode::Sync);
+    let cache_policy = scope
+        .cache_policy
+        .unwrap_or(SkillRefreshCachePolicy::Bypass);
+    let inventory = compute_skill_update_inventory(
+        pool,
+        fs,
+        auth_token,
+        client,
+        snapshots_cache,
+        &scope,
+        progress,
+    )
+    .await?;
+    persist_refresh_inventory(pool, &scope, mode, cache_policy, &inventory).await?;
+    Ok(inventory)
+}
+
+/// Build an inventory without persisting it. Retry merges several computed
+/// slices into one stored inventory, so the write stays with the caller.
+pub(crate) async fn compute_skill_update_inventory(
+    pool: &DbPool,
+    fs: &CentralFs,
+    auth_token: Option<&str>,
+    client: &reqwest::Client,
+    snapshots_cache: &CentralUpdateSnapshotCache,
+    scope: &SkillRefreshScope,
     progress: Option<SnapshotProgressReporter>,
 ) -> Result<SkillUpdateInventory, CentralUpdatesError> {
     /*
@@ -201,6 +232,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
                     .unwrap_or(key),
                 error,
                 error_code,
+                retry: FailedRepositoryRetry::Retryable,
                 diagnostics: None,
             }
         })
@@ -234,33 +266,32 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
     let mut unsupported = Vec::new();
     let mut failed_repositories = snapshot_failures;
     let mut prepared_by_skill_id = HashMap::new();
+    // Regular mode has no remote-addition listing to pair a vanished path with,
+    // so these are resolved against the repository snapshot after the loop.
+    let mut pending_relocations = Vec::new();
 
     for prepared_skill in prepared {
+        let skill_id = prepared_skill.skill.id.clone();
+        let load_result = load_remote_skill_content(&prepared_skill, &snapshots);
+
+        if mode == SkillRefreshMode::Regular
+            && matches!(load_result, Err(RemoteSkillLoadError::RemoteMissing(_)))
+        {
+            pending_relocations.push(PendingRelocation {
+                skill_id: skill_id.clone(),
+                repository_id: prepared_skill.assignment.repository.id.clone(),
+            });
+            prepared_by_skill_id.insert(skill_id, prepared_skill);
+            continue;
+        }
+
         let skill = &prepared_skill.skill;
-        let state_result = match load_remote_skill_content(&prepared_skill, &snapshots) {
+        let state_result = match load_result {
             Ok(Some(remote)) => state_from_remote(skill, &remote, false),
             Ok(None) => unsupported_state_from_assignment(skill, &prepared_skill.assignment, None),
-            Err(RemoteSkillLoadError::RemoteMissing(reason)) => match mode {
-                SkillRefreshMode::Sync => {
-                    remote_missing_state_from_assignment(skill, &prepared_skill.assignment, &reason)
-                }
-                SkillRefreshMode::Regular => {
-                    failed_repositories.push(FailedRepository {
-                        repository_id: prepared_skill.assignment.repository.id.clone(),
-                        error: format!(
-                            "{} Switch to incremental and removal mode to decide whether to keep or delete '{}'.",
-                            reason, skill.id
-                        ),
-                        error_code: None,
-                        diagnostics: Some(diagnostic_from_state(
-                            &error_state_from_assignment(skill, &prepared_skill.assignment, &reason),
-                            cache_policy,
-                            false,
-                        )),
-                    });
-                    error_state_from_assignment(skill, &prepared_skill.assignment, &reason)
-                }
-            },
+            Err(RemoteSkillLoadError::RemoteMissing(reason)) => {
+                remote_missing_state_from_assignment(skill, &prepared_skill.assignment, &reason)
+            }
             Err(RemoteSkillLoadError::Other(error)) => {
                 error_state_from_assignment(skill, &prepared_skill.assignment, &error)
             }
@@ -281,7 +312,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
             }
             SkillUpdateStatus::Unsupported => {
                 unsupported.push(UnsupportedSkill {
-                    skill_id: skill.id.clone(),
+                    skill_id: skill_id.clone(),
                     reason_code: unsupported_reason_code(&prepared_skill.assignment),
                 });
             }
@@ -289,7 +320,19 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
                 // up_to_date / error / cancelled 不进入 actionable inventory
             }
         }
-        prepared_by_skill_id.insert(skill.id.clone(), prepared_skill);
+        prepared_by_skill_id.insert(skill_id, prepared_skill);
+    }
+
+    if !pending_relocations.is_empty() {
+        resolve_regular_mode_relocations(
+            pool,
+            &pending_relocations,
+            &prepared_by_skill_id,
+            &snapshots,
+            &mut updatable,
+            &mut failed_repositories,
+        )
+        .await?;
     }
 
     /*
@@ -352,10 +395,13 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
             remote_added.push(remote_added_from_item(item));
         }
         for failure in failed_collector {
+            // The collector's text can carry transport detail, so only the
+            // reviewed sentence for the stable code is surfaced.
             failed_repositories.push(FailedRepository {
                 repository_id: failure.repository_id,
-                error: failure.error,
-                error_code: None,
+                error: repository_check_failed_message(),
+                error_code: Some(REPOSITORY_CHECK_FAILED_CODE.to_string()),
+                retry: FailedRepositoryRetry::Retryable,
                 diagnostics: None,
             });
         }
@@ -403,7 +449,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
     let mut seen_failed_repositories = HashSet::new();
     failed_repositories.retain(|item| seen_failed_repositories.insert(item.repository_id.clone()));
 
-    let inventory = SkillUpdateInventory {
+    Ok(SkillUpdateInventory {
         updatable,
         remote_added,
         remote_missing,
@@ -413,9 +459,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         orphans: Vec::new(),
         failed_repositories,
         generated_at: now,
-    };
-    persist_refresh_inventory(pool, &scope, mode, cache_policy, &inventory).await?;
-    Ok(inventory)
+    })
 }
 
 /// 内核版本：把面板决策一次性应用。步骤 5 直接调 `update_central_skills_impl`

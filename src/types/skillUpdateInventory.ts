@@ -111,11 +111,20 @@ export interface OrphanSkillEntry {
   brokenPath: string;
 }
 
+/**
+ * What the Failed tab may offer on a row: `retryable` re-checks the repository,
+ * `decision_required` re-checks it in incremental mode so the skill lands in the
+ * removal bucket, `unknown` (inventories stored before this field) offers none.
+ */
+export type FailedRepositoryRetry =
+  "retryable" | "decision_required" | "unknown";
+
 export interface FailedRepository {
   repositoryId: string;
   error: string;
   /** Stable backend code for localizable reasons; absent on older inventories. */
   errorCode?: string | null;
+  retry?: FailedRepositoryRetry;
   diagnostics?: SkillUpdateDiagnostic | null;
 }
 

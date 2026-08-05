@@ -15,6 +15,7 @@ pub(crate) mod operation_logs_repo;
 pub(crate) mod pending_additions_repo;
 pub(crate) mod projects_repo;
 pub(crate) mod repositories_repo;
+pub(crate) mod repository_members_repo;
 pub(crate) mod saved_views_repo;
 pub(crate) mod scan_dirs_repo;
 pub(crate) mod settings_repo;

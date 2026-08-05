@@ -160,6 +160,22 @@ pub struct OrphanSkillEntry {
     pub broken_path: String,
 }
 
+/// What the Update Center may offer on a failed repository row.
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum FailedRepositoryRetry {
+    /// Snapshot acquisition, relocation and addition-collection failures:
+    /// running the same scope again can produce a different result.
+    Retryable,
+    /// The tracked source path is gone and no unique new path was found, so a
+    /// user decision (keep or delete) is required in incremental mode.
+    DecisionRequired,
+    /// Entries persisted before this field existed. No in-place action.
+    #[default]
+    Unknown,
+}
+
 #[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -172,6 +188,8 @@ pub struct FailedRepository {
     /// for inventories persisted before this field existed.
     #[serde(default)]
     pub error_code: Option<String>,
+    #[serde(default)]
+    pub retry: FailedRepositoryRetry,
     #[serde(default)]
     pub diagnostics: Option<SkillUpdateDiagnostic>,
 }

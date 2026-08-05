@@ -112,7 +112,9 @@
       "credential_unavailable": "无法读取已保存的 GitHub 令牌。请在设置中重新保存。"
     },
     "central_updates": {
-      "repository_check_failed": "该仓库检查失败。"
+      "repository_check_failed": "该仓库检查失败。",
+      "skill_source_missing": "该技能记录的源路径已不存在，且未能唯一定位到新位置。用增量和删减模式重查后可选择保留或删除。",
+      "relocation_failed": "该技能已移动，但重新绑定新位置失败。"
     },
     "local_archive": {
       "archive_not_found": "未找到所选 ZIP 压缩包。",
@@ -1424,6 +1426,14 @@
         "cleanupAllSuccess": "已清理 {{count}} 条平台残留路径",
         "cleanupAllPartial": "已清理 {{succeeded}} 条平台残留路径，失败 {{failed}} 条",
         "cleanupAllError": "清理平台残留失败：{{error}}"
+      },
+      "failed": {
+        "retry": "重试",
+        "retryAll": "重试全部失败项（{{count}}）",
+        "recheckWithSync": "用增量和删减模式重查",
+        "retrySuccess": "已重新检查 {{count}} 个仓库",
+        "retryPartial": "已重新检查 {{succeeded}} 个仓库，{{failed}} 个仍然失败",
+        "retryError": "重试失败：{{error}}"
       }
     },
     "sortByInstalledPlatformCount": "安装平台数",

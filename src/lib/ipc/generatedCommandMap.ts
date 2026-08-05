@@ -53,6 +53,7 @@ export const GENERATED_IPC_COMMANDS = {
   remove_registry: command<{ registryId: string }, null>(),
   remove_scan_directory: command<{ path: string }, null>(),
   remove_skill_from_collection: command<{ collectionId: string; skillId: string }, null>(),
+  retry_failed_update_repositories: command<{ scope: SkillRefreshScope; repositoryIds: string[]; modeOverride: "regular" | "sync" | null; operationId: string }, SkillUpdateInventory_Serialize>(),
   scan_deleted_platform_copies: command<{ agentIds: string[] | null }, DeletedPlatformCopyGroup[]>(),
   scan_platform_duplicate_skills: command<{ agentIds: string[] | null }, PlatformDuplicateGroup[]>(),
   set_ai_api_key: command<{ value: string; provider: string | null }, AiApiKeyState_Serialize>(),
@@ -98,6 +99,7 @@ export const GENERATED_IPC_COMMAND_NAMES = [
   "remove_registry",
   "remove_scan_directory",
   "remove_skill_from_collection",
+  "retry_failed_update_repositories",
   "scan_deleted_platform_copies",
   "scan_platform_duplicate_skills",
   "set_ai_api_key",
@@ -327,8 +329,24 @@ export type FailedRepository = {
 	 *  for inventories persisted before this field existed.
 	 */
 	errorCode?: string | null,
+	retry?: FailedRepositoryRetry,
 	diagnostics?: SkillUpdateDiagnostic | null,
 };
+
+/**  What the Update Center may offer on a failed repository row. */
+export type FailedRepositoryRetry = 
+/**
+ *  Snapshot acquisition, relocation and addition-collection failures:
+ *  running the same scope again can produce a different result.
+ */
+"retryable" | 
+/**
+ *  The tracked source path is gone and no unique new path was found, so a
+ *  user decision (keep or delete) is required in incremental mode.
+ */
+"decision_required" | 
+/**  Entries persisted before this field existed. No in-place action. */
+"unknown";
 
 export type ForceRepositoryMirrorRequest = {
 	repositoryIds: string[],

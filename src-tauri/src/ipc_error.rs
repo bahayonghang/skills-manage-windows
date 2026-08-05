@@ -339,6 +339,15 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
             Some("Local ZIP import is unavailable for remote targets.")
         }
         "local_archive.internal" => Some("The local archive import failed."),
+        "central_updates.repository_check_failed" => {
+            Some("The repository could not be checked.")
+        }
+        "central_updates.skill_source_missing" => Some(
+            "The tracked source path no longer contains a skill, and no unique new location was found.",
+        ),
+        "central_updates.relocation_failed" => {
+            Some("The moved skill could not be reattached to its new location.")
+        }
         "job.invalid_id" => Some("The job identifier is invalid."),
         "job.id_mismatch" => Some("The cancellation request does not match the active job."),
         "job.registry_unavailable" => Some("The job registry is unavailable."),

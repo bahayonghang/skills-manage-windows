@@ -34,9 +34,12 @@ describe("Update Center unsupported tab", () => {
           updateMissing: vi.fn(),
           updateDuplicates: vi.fn(),
           updateDeletedPlatformCopies: vi.fn(),
+          retryRepositories: vi.fn(),
         }}
         existingSkillSources={new Map()}
         repositorySources={new Map()}
+        retryingRepositoryIds={[]}
+        actionsDisabled={false}
       />,
     );
 
