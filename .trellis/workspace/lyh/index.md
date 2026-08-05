@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 88
+- **Total Sessions**: 89
 - **Last Active**: 2026-08-05
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1051 | Active |
+| `journal-2.md` | ~1073 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 89 | 2026-08-05 | Dashboard 与 Central Skills 界面打磨 | `685099c5`, `00134d83` | `dev` |
 | 88 | 2026-08-05 | 完成检查更新故障修复与任务归档 | `d41aa441` | `codex/fix-update-check-archive-redirect` |
 | 87 | 2026-08-03 | 完成 src-tauri 优化父任务验收 | `ae75eb84212d8b65fac0ed3c64336cd9b779aaaa` | `dev` |
 | 86 | 2026-08-03 | 完成 SQL Central 分页下推 | `dc7aa090d097f85da6479669f66829bab08ed284` | `dev` |

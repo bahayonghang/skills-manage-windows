@@ -1049,3 +1049,25 @@ Made metadata and Marketplace cache mutations atomic with bounded batching, roll
 ### Status
 
 [OK] **Completed**
+
+
+## Session 89: Dashboard 与 Central Skills 界面打磨
+
+**Date**: 2026-08-05
+**Task**: Dashboard 与 Central Skills 界面打磨
+**Branch**: `dev`
+
+### Summary
+
+完成 Dashboard 与 Central Skills 界面优化（R1–R9），包含零更新引导、批量卸载视觉层次、极简无外边框设计、分类过滤与无结果状态、快速筛选、操作文案及小型图标控件热区/焦点规范等，并更新 UI spec 规范。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `685099c5` | (see git log) |
+| `00134d83` | (see git log) |
+
+### Status
+
+[OK] **Completed**
