@@ -1028,3 +1028,24 @@ Made metadata and Marketplace cache mutations atomic with bounded batching, roll
 ### Status
 
 [OK] **Completed**
+
+
+## Session 88: 完成检查更新故障修复与任务归档
+
+**Date**: 2026-08-05
+**Task**: 完成检查更新故障修复与任务归档
+**Branch**: `codex/fix-update-check-archive-redirect`
+
+### Summary
+
+完成 GitHub archive 规范化重定向、全技能结果持久化、错误可观测性、迁移兼容和扫描保护修复；通过定向 archive redirect 测试与 just ci，随后归档任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d41aa441` | (see git log) |
+
+### Status
+
+[OK] **Completed**
