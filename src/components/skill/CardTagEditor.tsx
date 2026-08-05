@@ -63,7 +63,7 @@ export function CardTagEditor({
                 stop(e);
                 onRemove(tag.id);
               }}
-              className="opacity-0 transition-opacity group-hover/tag:opacity-100"
+              className="opacity-0 transition-opacity group-hover/tag:opacity-100 focus-visible:opacity-100"
             >
               <X className="size-2.5" />
             </button>
@@ -81,13 +81,13 @@ export function CardTagEditor({
             setOpen((v) => !v);
           }}
           className={cn(
-            "grid size-5 place-items-center rounded-full border border-dashed border-border/70 text-muted-foreground",
+            "relative grid size-8 place-items-center rounded-full border border-dashed border-border/70 text-muted-foreground",
+            "after:absolute after:left-1/2 after:top-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']",
             "opacity-60 transition-opacity hover:border-primary/40 hover:text-primary",
             "group-hover/skill-card:opacity-100 group-focus-within/skill-card:opacity-100",
-            tags.length === 0 && "opacity-40",
           )}
         >
-          <Plus className="size-3" />
+          <Plus className="size-4" />
         </button>
         {open && (
           <div

@@ -19,7 +19,7 @@ type ReadinessStatus = "ready" | "review" | "triage";
 
 const FACTOR_TONE_CLASS: Record<FactorProps["tone"], string> = {
   primary: "from-primary to-primary/55",
-  accent: "from-chart-1 to-primary/45",
+  accent: "from-chart-1 to-chart-1/45",
   neutral: "from-muted-foreground/70 to-muted-foreground/35",
   success: "from-success to-success/45",
 };

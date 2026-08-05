@@ -936,7 +936,7 @@
       "sidebarExpandAllGroups": "展开全部分组",
       "sidebarCollapseAllGroupsAria": "收起中央技能库侧栏全部分组",
       "sidebarExpandAllGroupsAria": "展开中央技能库侧栏全部分组",
-      "sidebarBulkExpansionHint": "已保存视图、标签分组、仓库和标签",
+      "sidebarBulkExpansionHint": "视图、标签、仓库",
       "smartViews": "智能视图",
       "repositories": "仓库",
       "tags": "标签",
