@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端层总入口：Pre-Development Checklist 与 Quality Check，动手前必读"}
+{"file": ".trellis/spec/frontend/typography-tokens.md", "reason": "字号/颜色 no-growth 与 AA 对比度契约，本次所有控件尺寸与颜色调整必须遵守"}
+{"file": ".trellis/spec/frontend/font-preferences.md", "reason": "Body 默认 JetBrains Mono 为既定决策，防止把字体当缺陷改"}
+{"file": ".trellis/spec/frontend/skill-card-scenarios.md", "reason": "技能卡片场景与渲染模型契约，UnifiedSkillCard 及其子组件改动的收口约束"}

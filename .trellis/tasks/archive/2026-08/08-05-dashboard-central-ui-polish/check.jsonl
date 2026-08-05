@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端层 Quality Check 入口"}
+{"file": ".trellis/spec/frontend/typography-tokens.md", "reason": "校验改动未引入 arbitrary 字号/颜色，且小字对比度满足 AA"}
+{"file": ".trellis/spec/frontend/skill-card-scenarios.md", "reason": "对照卡片场景契约验收 UnifiedSkillCard 相关改动"}
