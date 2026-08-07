@@ -1071,3 +1071,24 @@ Made metadata and Marketplace cache mutations atomic with bounded batching, roll
 ### Status
 
 [OK] **Completed**
+
+
+## Session 90: 修复 Update Center 失败观测与恢复隔离
+
+**Date**: 2026-08-07
+**Task**: 修复 Update Center 失败观测与恢复隔离
+**Branch**: `dev`
+
+### Summary
+
+修复重复 Central 删除清单和安装恢复竞态；让更新应用日志按逐项结果记录 succeeded/partial/failed；新增 prepared 删除安全预览与显式对账，并通过 just ci。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `53e3db69` | (see git log) |
+
+### Status
+
+[OK] **Completed**
