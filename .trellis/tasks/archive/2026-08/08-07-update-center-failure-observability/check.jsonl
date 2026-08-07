@@ -1,0 +1,10 @@
+{"file":".trellis/spec/backend/fs-db-operation-journal.md","reason":"Check journal uniqueness, fail-closed recovery, explicit reconcile transition, and evidence preservation."}
+{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"Check one top-level guard, no self-deadlock, same-target serialization, and different-target availability."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Check typed stable codes and absence of string-based control flow or raw command rejections."}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Check manifests, paths, credentials, URLs, fingerprints, and raw errors never reach logs or IPC."}
+{"file":".trellis/spec/backend/shared-local-cli.md","reason":"Check desktop and CLI share the guarded installation and recovery service APIs."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Check confirmation, blocker, retry, stale-response, and localized error behavior."}
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Check command registry, typed map, fixtures, generated parity, and store invocation boundaries."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Check focused regression placement and coverage at real service/command/UI seams."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Check locked Rust gates, frontend gates, generated docs/contracts, and final just ci."}
+{"file":".trellis/tasks/08-07-update-center-failure-observability/research/diagnosis.md","reason":"Check implementation against the exact live symptom and confirmed root-cause chain."}

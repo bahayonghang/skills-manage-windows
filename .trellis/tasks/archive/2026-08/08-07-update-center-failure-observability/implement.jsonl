@@ -1,0 +1,12 @@
+{"file":".trellis/spec/backend/fs-db-operation-journal.md","reason":"Owns Central delete/update journal phases, manifest evidence, recovery, and redaction invariants."}
+{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"Defines target lock ownership, under-guard recovery, no fallback, and nested-lock constraints."}
+{"file":".trellis/spec/backend/path-policy.md","reason":"Defines Local and remote path normalization, Windows equivalence, and safe path comparison."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Requires typed domain and IPC errors with reviewed codes instead of string sniffing."}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Controls operation/runtime/IPC handling of paths, credentials, URLs, and raw error text."}
+{"file":".trellis/spec/backend/central-update-batching.md","reason":"Protects Update Center partial-success ordering and result semantics while changing diagnostics."}
+{"file":".trellis/spec/backend/shared-local-cli.md","reason":"Requires desktop and skillport-cli mutations to share service-layer behavior and locking."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Requires localized coded errors through formatBackendError and visible retry-safe feedback."}
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Owns typed command registration, fixtures, generated IPC parity, and store-only invocation."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Routes new Rust and frontend regression tests to the repository's established test seams."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"The defect spans DB, filesystem service, IPC, store, and Operation Logs UI boundaries."}
+{"file":".trellis/tasks/08-07-update-center-failure-observability/research/diagnosis.md","reason":"Contains the live read-only evidence, causal chain, ranked hypotheses, and security boundary."}
