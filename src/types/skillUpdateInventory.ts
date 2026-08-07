@@ -184,6 +184,8 @@ export interface SkillUpdateApplyFailure {
   step: string;
   identifier: string;
   error: string;
+  errorCode?: string | null;
+  errorCategory?: string | null;
 }
 
 export interface SkillUpdateApplyResult {

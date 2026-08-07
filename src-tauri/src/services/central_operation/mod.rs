@@ -1,15 +1,18 @@
 mod error;
 mod fs;
+mod path;
+mod reconcile;
 mod recovery;
 mod types;
 
 pub use error::CentralOperationError;
+pub use reconcile::{preview_prepared_delete_reconciliation, reconcile_prepared_delete};
 pub(crate) use recovery::recover_pending_delete_operations_with_transport;
 pub(crate) use recovery::recover_pending_operations_under_guard;
 pub use recovery::{list_pending_operations, recover_pending_operations, retry_operation};
 pub use types::{
     CopyProjection, DeleteManifest, ManagedPath, OperationKind, OperationManifest, OperationPhase,
-    PendingOperationSummary, UpdateManifest, MANIFEST_VERSION,
+    PendingOperationSummary, PreparedDeleteReconciliationPreview, UpdateManifest, MANIFEST_VERSION,
 };
 
 pub(crate) use fs::{

@@ -23,6 +23,24 @@ pub async fn install_skill(
     agent_id: &str,
     method: &str,
 ) -> Result<InstallOutcome, InstallationError> {
+    let target = transport.active_target();
+    let _guard = crate::services::central_mutation::acquire_target_mutation_guard(
+        &target,
+        "install skill",
+        crate::services::central_mutation::DEFAULT_CENTRAL_MUTATION_TIMEOUT,
+    )
+    .await?;
+    reject_pending_recovery(pool, &target, skill_id).await?;
+    install_skill_under_guard(pool, transport, skill_id, agent_id, method).await
+}
+
+pub(crate) async fn install_skill_under_guard(
+    pool: &DbPool,
+    transport: &InstallTransport,
+    skill_id: &str,
+    agent_id: &str,
+    method: &str,
+) -> Result<InstallOutcome, InstallationError> {
     // Guard: cannot install to the central agent itself.
     if agent_id == "central" {
         return Err(InstallationError::CentralAgentTarget);
@@ -95,6 +113,24 @@ pub async fn uninstall_skill(
     agent_id: &str,
     row_id: Option<&str>,
 ) -> Result<(), InstallationError> {
+    let target = transport.active_target();
+    let _guard = crate::services::central_mutation::acquire_target_mutation_guard(
+        &target,
+        "uninstall skill",
+        crate::services::central_mutation::DEFAULT_CENTRAL_MUTATION_TIMEOUT,
+    )
+    .await?;
+    reject_pending_recovery(pool, &target, skill_id).await?;
+    uninstall_skill_under_guard(pool, transport, skill_id, agent_id, row_id).await
+}
+
+pub(crate) async fn uninstall_skill_under_guard(
+    pool: &DbPool,
+    transport: &InstallTransport,
+    skill_id: &str,
+    agent_id: &str,
+    row_id: Option<&str>,
+) -> Result<(), InstallationError> {
     // Claude observation-row uninstall is a local-only surface; the remote
     // command path has always ignored row_id.
     if let (InstallTransport::Local, Some(row_id)) = (transport, row_id) {
@@ -119,4 +155,19 @@ pub async fn uninstall_skill(
 
     transport.remove_install(pool, &agent, skill_id).await?;
     Ok(db::delete_skill_installation(pool, skill_id, agent_id).await?)
+}
+
+pub(crate) async fn reject_pending_recovery(
+    pool: &DbPool,
+    target: &crate::targets::ActiveTarget,
+    skill_id: &str,
+) -> Result<(), InstallationError> {
+    let pending = db::list_pending_fs_db_operations(pool, target.id()).await?;
+    if pending
+        .iter()
+        .any(|operation| operation.skill_id == skill_id)
+    {
+        return Err(InstallationError::PendingCentralRecovery);
+    }
+    Ok(())
 }

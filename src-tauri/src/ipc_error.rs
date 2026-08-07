@@ -348,6 +348,15 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
         "central_updates.relocation_failed" => {
             Some("The moved skill could not be reattached to its new location.")
         }
+        "installation.pending_central_recovery" => {
+            Some("Central recovery is pending for this skill.")
+        }
+        "recovery.reconcile_guard_unavailable" => {
+            Some("Central recovery is busy. Try again shortly.")
+        }
+        "recovery.reconcile_preflight_blocked" => {
+            Some("The prepared delete operation no longer passes reconciliation checks.")
+        }
         "job.invalid_id" => Some("The job identifier is invalid."),
         "job.id_mismatch" => Some("The cancellation request does not match the active job."),
         "job.registry_unavailable" => Some("The job registry is unavailable."),

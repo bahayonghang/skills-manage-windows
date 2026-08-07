@@ -7,7 +7,9 @@ use std::collections::HashSet;
 
 use crate::db::DbPool;
 
-use super::install::{install_skill, uninstall_skill};
+use super::install::{
+    install_skill_under_guard, reject_pending_recovery, uninstall_skill_under_guard,
+};
 use super::project::install_central_skill_to_project;
 use super::transport::InstallTransport;
 use super::types::{
@@ -60,7 +62,44 @@ pub async fn batch_install_central_skills_impl(
     let mut skipped = Vec::new();
     let mut failed = Vec::new();
 
+    let target = transport.active_target();
+    let _guard = match crate::services::central_mutation::acquire_target_mutation_guard(
+        &target,
+        "batch install skills",
+        crate::services::central_mutation::DEFAULT_CENTRAL_MUTATION_TIMEOUT,
+    )
+    .await
+    {
+        Ok(guard) => guard,
+        Err(error) => {
+            for skill_id in &skill_ids {
+                for agent_id in &agent_ids {
+                    failed.push(CentralBatchInstallFailure {
+                        skill_id: skill_id.clone(),
+                        agent_id: agent_id.clone(),
+                        error: error.to_string(),
+                    });
+                }
+            }
+            return CentralBatchInstallResult {
+                succeeded,
+                skipped,
+                failed,
+            };
+        }
+    };
+
     for skill_id in &skill_ids {
+        if let Err(error) = reject_pending_recovery(pool, &target, skill_id).await {
+            for agent_id in &agent_ids {
+                failed.push(CentralBatchInstallFailure {
+                    skill_id: skill_id.clone(),
+                    agent_id: agent_id.clone(),
+                    error: error.to_string(),
+                });
+            }
+            continue;
+        }
         for agent_id in &agent_ids {
             let install_result = if let Some(project_path) = project_path {
                 install_central_skill_to_project(
@@ -73,7 +112,7 @@ pub async fn batch_install_central_skills_impl(
                 )
                 .await
             } else {
-                install_skill(pool, transport, skill_id, agent_id, method).await
+                install_skill_under_guard(pool, transport, skill_id, agent_id, method).await
             };
 
             match install_result {
@@ -115,6 +154,30 @@ pub async fn batch_uninstall_skills_from_agent_impl(
     let mut succeeded = Vec::new();
     let mut failed = Vec::new();
 
+    let target = transport.active_target();
+    let _guard = match crate::services::central_mutation::acquire_target_mutation_guard(
+        &target,
+        "batch uninstall skills",
+        crate::services::central_mutation::DEFAULT_CENTRAL_MUTATION_TIMEOUT,
+    )
+    .await
+    {
+        Ok(guard) => guard,
+        Err(error) => {
+            return BatchUninstallSkillResult {
+                succeeded,
+                failed: requests
+                    .into_iter()
+                    .map(|request| BatchUninstallSkillFailure {
+                        skill_id: request.skill_id,
+                        row_id: request.row_id,
+                        error: error.to_string(),
+                    })
+                    .collect(),
+            };
+        }
+    };
+
     for request in requests {
         if request.skill_id.is_empty() {
             failed.push(BatchUninstallSkillFailure {
@@ -125,7 +188,16 @@ pub async fn batch_uninstall_skills_from_agent_impl(
             continue;
         }
 
-        match uninstall_skill(
+        if let Err(error) = reject_pending_recovery(pool, &target, &request.skill_id).await {
+            failed.push(BatchUninstallSkillFailure {
+                skill_id: request.skill_id,
+                row_id: request.row_id,
+                error: error.to_string(),
+            });
+            continue;
+        }
+
+        match uninstall_skill_under_guard(
             pool,
             transport,
             &request.skill_id,

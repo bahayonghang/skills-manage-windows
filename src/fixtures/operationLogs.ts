@@ -166,6 +166,15 @@ export function registerOperationLogFixtures(): void {
       fixtureDailyOperationCounts(days),
     list_pending_fs_db_operations: () => fixturePendingOperations,
     retry_fs_db_operation: () => [],
+    preview_fs_db_operation_reconciliation: ({ operationId }) => ({
+      operationId,
+      skillId: "fixture-pending-skill",
+      eligible: true,
+      duplicatePathCount: 1,
+      missingUnownedPathCount: 1,
+      blockerCodes: [],
+    }),
+    reconcile_fs_db_operation: () => [],
     clear_operation_logs: ({ filter }) =>
       fixtureLogEntries.filter((entry) =>
         matchesFixture(entry, normalizeFilter(filter)),

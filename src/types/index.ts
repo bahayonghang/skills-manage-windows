@@ -491,6 +491,7 @@ export type {
   OperationLogStatus,
   OperationLogTargetKind,
   PendingFsDbOperation,
+  PreparedDeleteReconciliationPreview,
 } from "./operationLogs";
 
 export type * from "./runtimeLogs";

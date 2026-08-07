@@ -30,11 +30,11 @@ pub(crate) async fn apply_keep_missing_step(
     }
     match keep_remote_missing_central_skills_impl(pool, keep_missing).await {
         Ok(kept) => result.kept_missing_skill_ids = kept,
-        Err(error) => result.failures.push(SkillUpdateApplyFailure {
-            step: "keep_missing".to_string(),
-            identifier: keep_missing.join(","),
-            error: error.to_string(),
-        }),
+        Err(error) => result.failures.push(SkillUpdateApplyFailure::new(
+            "keep_missing",
+            keep_missing.join(","),
+            error.to_string(),
+        )),
     }
 }
 
@@ -64,18 +64,18 @@ pub(crate) async fn apply_delete_missing_step(
                 result.deleted_skill_ids.push(ok.skill_id);
             }
             for failure in batch.failed {
-                result.failures.push(SkillUpdateApplyFailure {
-                    step: "delete_missing".to_string(),
-                    identifier: failure.skill_id,
-                    error: failure.error,
-                });
+                result.failures.push(SkillUpdateApplyFailure::new(
+                    "delete_missing",
+                    failure.skill_id,
+                    failure.error,
+                ));
             }
         }
-        Err(error) => result.failures.push(SkillUpdateApplyFailure {
-            step: "delete_missing".to_string(),
-            identifier: String::new(),
+        Err(error) => result.failures.push(SkillUpdateApplyFailure::new(
+            "delete_missing",
+            String::new(),
             error,
-        }),
+        )),
     }
 }
 
@@ -89,11 +89,11 @@ pub(crate) async fn apply_skip_addition_step(
         let source_path = match normalize_repo_path(&request.source_path) {
             Ok(p) => p,
             Err(error) => {
-                result.failures.push(SkillUpdateApplyFailure {
-                    step: "skip_addition".to_string(),
-                    identifier: format!("{}::{}", request.repository_id, request.source_path),
-                    error: error.to_string(),
-                });
+                result.failures.push(SkillUpdateApplyFailure::new(
+                    "skip_addition",
+                    format!("{}::{}", request.repository_id, request.source_path),
+                    error.to_string(),
+                ));
                 continue;
             }
         };
@@ -114,11 +114,11 @@ pub(crate) async fn apply_skip_addition_step(
                     .skipped_additions
                     .push(format!("{}::{}", saved.repository_id, saved.source_path));
             }
-            Err(error) => result.failures.push(SkillUpdateApplyFailure {
-                step: "skip_addition".to_string(),
-                identifier: format!("{}::{}", request.repository_id, source_path),
-                error: error.to_string(),
-            }),
+            Err(error) => result.failures.push(SkillUpdateApplyFailure::new(
+                "skip_addition",
+                format!("{}::{}", request.repository_id, source_path),
+                error.to_string(),
+            )),
         }
     }
 }
@@ -133,11 +133,11 @@ pub(crate) async fn apply_unskip_addition_step(
         let source_path = match normalize_repo_path(&request.source_path) {
             Ok(p) => p,
             Err(error) => {
-                result.failures.push(SkillUpdateApplyFailure {
-                    step: "unskip_addition".to_string(),
-                    identifier: format!("{}::{}", request.repository_id, request.source_path),
-                    error: error.to_string(),
-                });
+                result.failures.push(SkillUpdateApplyFailure::new(
+                    "unskip_addition",
+                    format!("{}::{}", request.repository_id, request.source_path),
+                    error.to_string(),
+                ));
                 continue;
             }
         };
@@ -147,11 +147,11 @@ pub(crate) async fn apply_unskip_addition_step(
             Ok(_) => result
                 .unskipped_additions
                 .push(format!("{}::{}", request.repository_id, source_path)),
-            Err(error) => result.failures.push(SkillUpdateApplyFailure {
-                step: "unskip_addition".to_string(),
-                identifier: format!("{}::{}", request.repository_id, source_path),
-                error: error.to_string(),
-            }),
+            Err(error) => result.failures.push(SkillUpdateApplyFailure::new(
+                "unskip_addition",
+                format!("{}::{}", request.repository_id, source_path),
+                error.to_string(),
+            )),
         }
     }
 }
@@ -165,24 +165,24 @@ pub(crate) async fn apply_remove_platform_duplicates_step(
 ) {
     for removal in removals {
         if !is_agent_allowed(&removal.agent_id, allowed_agent_ids) {
-            result.failures.push(SkillUpdateApplyFailure {
-                step: "remove_platform_duplicate".to_string(),
-                identifier: format!("{}::{}", removal.agent_id, removal.skill_id),
-                error: format!(
+            result.failures.push(SkillUpdateApplyFailure::new(
+                "remove_platform_duplicate",
+                format!("{}::{}", removal.agent_id, removal.skill_id),
+                format!(
                     "Agent '{}' is outside the allowed platform scope.",
                     removal.agent_id
                 ),
-            });
+            ));
             continue;
         }
         let observations = match db::get_agent_skill_observations(pool, &removal.agent_id).await {
             Ok(rows) => rows,
             Err(error) => {
-                result.failures.push(SkillUpdateApplyFailure {
-                    step: "remove_platform_duplicate".to_string(),
-                    identifier: format!("{}::{}", removal.agent_id, removal.skill_id),
-                    error: error.to_string(),
-                });
+                result.failures.push(SkillUpdateApplyFailure::new(
+                    "remove_platform_duplicate",
+                    format!("{}::{}", removal.agent_id, removal.skill_id),
+                    error.to_string(),
+                ));
                 continue;
             }
         };
@@ -206,11 +206,11 @@ pub(crate) async fn apply_remove_platform_duplicates_step(
             .await
             {
                 Ok(()) => result.removed_platform_duplicate_paths.push(path),
-                Err(error) => result.failures.push(SkillUpdateApplyFailure {
-                    step: "remove_platform_duplicate".to_string(),
-                    identifier: format!("{}::{}::{}", removal.agent_id, removal.skill_id, path),
-                    error: error.to_string(),
-                }),
+                Err(error) => result.failures.push(SkillUpdateApplyFailure::new(
+                    "remove_platform_duplicate",
+                    format!("{}::{}::{}", removal.agent_id, removal.skill_id, path),
+                    error.to_string(),
+                )),
             }
         }
     }
@@ -226,14 +226,14 @@ pub(crate) async fn apply_remove_deleted_platform_copies_step(
 ) {
     for removal in removals {
         if !is_agent_allowed(&removal.agent_id, allowed_agent_ids) {
-            result.failures.push(SkillUpdateApplyFailure {
-                step: "remove_deleted_platform_copy".to_string(),
-                identifier: format!("{}::{}", removal.agent_id, removal.skill_id),
-                error: format!(
+            result.failures.push(SkillUpdateApplyFailure::new(
+                "remove_deleted_platform_copy",
+                format!("{}::{}", removal.agent_id, removal.skill_id),
+                format!(
                     "Agent '{}' is outside the allowed platform scope.",
                     removal.agent_id
                 ),
-            });
+            ));
             continue;
         }
         for path in &removal.paths {
@@ -241,11 +241,11 @@ pub(crate) async fn apply_remove_deleted_platform_copies_step(
                 Ok(()) => result
                     .removed_deleted_platform_copy_paths
                     .push(path.clone()),
-                Err(error) => result.failures.push(SkillUpdateApplyFailure {
-                    step: "remove_deleted_platform_copy".to_string(),
-                    identifier: format!("{}::{}::{}", removal.agent_id, removal.skill_id, path),
-                    error: error.to_string(),
-                }),
+                Err(error) => result.failures.push(SkillUpdateApplyFailure::new(
+                    "remove_deleted_platform_copy",
+                    format!("{}::{}::{}", removal.agent_id, removal.skill_id, path),
+                    error.to_string(),
+                )),
             }
         }
     }

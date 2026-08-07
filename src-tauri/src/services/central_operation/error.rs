@@ -19,6 +19,9 @@ pub enum CentralOperationError {
     #[error("Remote Central operation failed ({code})")]
     Remote { code: &'static str },
 
+    #[error("Central operation reconciliation is blocked ({code})")]
+    ReconciliationBlocked { code: &'static str },
+
     #[error("Failed to join {label} task: {message}")]
     TaskJoin {
         label: &'static str,
@@ -39,9 +42,10 @@ impl CentralOperationError {
         match self {
             Self::Db(_) => "journal_db",
             Self::InvalidManifest(_) => "invalid_manifest",
-            Self::RecoveryCollision { code } | Self::Io { code, .. } | Self::Remote { code } => {
-                code
-            }
+            Self::RecoveryCollision { code }
+            | Self::Io { code, .. }
+            | Self::Remote { code }
+            | Self::ReconciliationBlocked { code } => code,
             Self::TaskJoin { .. } => "task_join",
         }
     }
@@ -53,6 +57,11 @@ impl CentralOperationError {
             Self::RecoveryCollision { code } => format!("Recovery collision ({code})"),
             Self::Io { code, .. } => format!("Filesystem operation failed ({code})"),
             Self::Remote { code } => format!("Remote operation failed ({code})"),
+            Self::ReconciliationBlocked { code } => {
+                format!(
+                    "recovery.{code}:Operation reconciliation cannot continue with the current evidence."
+                )
+            }
             Self::TaskJoin { .. } => "Filesystem worker failed".to_string(),
         }
     }

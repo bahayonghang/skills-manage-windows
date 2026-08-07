@@ -112,9 +112,36 @@
       "credential_unavailable": "无法读取已保存的 GitHub 令牌。请在设置中重新保存。"
     },
     "central_updates": {
+      "item_failed": "此更新项目无法应用。",
+      "item_failure": "此更新项目无法应用。",
+      "keep_missing_failed": "此更新项目无法应用。",
+      "delete_missing_failed": "此更新项目无法应用。",
+      "skip_addition_failed": "此更新项目无法应用。",
+      "unskip_addition_failed": "此更新项目无法应用。",
+      "remove_platform_duplicate_failed": "此更新项目无法应用。",
+      "remove_deleted_platform_copy_failed": "此更新项目无法应用。",
+      "update_failed": "此更新项目无法应用。",
+      "import_addition_failed": "此更新项目无法应用。",
       "repository_check_failed": "该仓库检查失败。",
       "skill_source_missing": "该技能记录的源路径已不存在，且未能唯一定位到新位置。用增量和删减模式重查后可选择保留或删除。",
       "relocation_failed": "该技能已移动，但重新绑定新位置失败。"
+    },
+    "recovery": {
+      "reconcile_guard_unavailable": "Central 恢复操作正忙，请稍后重试。",
+      "reconcile_preflight_blocked": "prepared 删除操作已不再满足核销条件，请重新预览。",
+      "reconcile_target_mismatch": "此操作属于另一个目标。",
+      "reconcile_unsupported_kind": "只能对 prepared 阶段的 Central 删除操作执行核销。",
+      "reconcile_unsupported_phase": "此操作已不再处于 prepared 阶段。",
+      "reconcile_invalid_manifest": "恢复证据无效，无法安全核销。",
+      "reconcile_inconsistent_duplicate": "重复恢复条目的证据不一致。",
+      "reconcile_skill_missing": "数据库中已不存在该 Central 技能。",
+      "reconcile_owned_path_missing": "该技能仍拥有的路径处于缺失状态。",
+      "reconcile_fingerprint_drift": "当前技能内容与已记录证据不一致。",
+      "reconcile_artifact_remaining": "仍有恢复备份或标记文件存在。",
+      "reconcile_remote_inspection_failed": "无法检查远端恢复证据。"
+    },
+    "installation": {
+      "pending_central_recovery": "此技能存在待恢复的 Central 操作。请先在操作日志中完成恢复，再修改安装。"
     },
     "local_archive": {
       "archive_not_found": "未找到所选 ZIP 压缩包。",
@@ -445,7 +472,16 @@
       "title": "Central 待恢复操作",
       "loading": "正在检查当前目标中断的变更...",
       "summary": "当前有 {{count}} 个操作需要恢复，恢复前该目标不能继续写入。",
-      "error": "操作仍需恢复：{{error}}"
+      "error": "操作仍需恢复：{{error}}",
+      "reconcile": "核销 prepared 删除",
+      "reconcileTitle": "核销 prepared 删除操作",
+      "reconcileLoading": "正在检查当前数据库与文件系统证据...",
+      "reconcileEligible": "无需修改文件或技能记录即可关闭此操作。已检查 {{duplicates}} 条重复记录和 {{missing}} 条已不归属当前技能的缺失路径。",
+      "reconcileBlocked": "当前证据不足以安全核销此操作。",
+      "reconcileBlockedGeneric": "当前恢复证据阻止核销。",
+      "reconcileConfirm": "确认核销",
+      "reconcileSuccess": "prepared 删除操作已核销。",
+      "reconcileError": "核销失败：{{error}}"
     },
     "detailTitle": "日志详情",
     "searchPlaceholder": "搜索摘要、错误、对象或动作...",

@@ -32,6 +32,7 @@ Normal update, force update, and force mirror must route through `update_skills_
 - Skill/repository persistence and `db_committed` share one SQLite transaction. Copy plans are persisted before refresh; incomplete copies remain `copies_pending` and are retried without reapplying canonical contents.
 - Archive construction and Local recursive IO run through `run_blocking_fs_with`.
 - Operation Logs store total action duration and non-sensitive counts only. Phase spans may record target kind, counts, chunk counts, and payload bytes, never host, username, credentials, contents, or full paths.
+- Update Center apply status is derived from item outcomes: no failures is `succeeded`, failures with no successful/skipped item is `failed`, and mixed outcomes are `partial`. Apply logs and runtime events contain counts plus reviewed stable codes/categories only; item Display strings never cross the serialization boundary.
 
 ## 4. Validation & Error Matrix
 

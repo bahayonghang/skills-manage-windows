@@ -61,6 +61,7 @@ Delete may use `fs_staged -> db_committed` because its backup rename is the dest
 
 - Insert `prepared` before any destructive filesystem or business-database write. One nonterminal operation per `(target_id, skill_id)` is enforced by a partial unique index.
 - A version-1 manifest contains only operation-owned paths, marker paths, fingerprints, target identity, and copy projection completion flags. It contains no file contents, credentials, command output, host diagnostics, or secret material.
+- New delete manifests contain one entry per physical Local path or normalized absolute POSIX remote path, preserving first-occurrence order. Legacy duplicate entries remain decodable and may be collapsed only by explicit prepared-delete reconciliation when all evidence fields agree.
 - Staging, backup, marker creation, swap, restore, finalize, phase transition, and copy refresh are idempotent. Before restore/finalize, verify the marker identity and expected fingerprint; collision preserves evidence and fails closed.
 - The business DB mutation and `db_committed` phase transition share one SQLite transaction. A visible `db_committed` row is the commit point; commit-unknown handling reads the row before deciding rollback or roll-forward.
 - Delete renames Central/native installation paths to operation-scoped sibling backups, deletes only the `skills` parent in the DB transaction, and relies on FK cascade for the seven owned relations. Retained copy installations are not moved or deleted.
@@ -72,6 +73,8 @@ Delete may use `fs_staged -> db_committed` because its backup rename is the dest
 - Desktop startup recovers Local rows only. SSH/WSL rows are listed without transport; explicit retry or the next mutation for the same target may establish remote transport.
 - IPC resolves one `TargetContext`. The operation row target ID/kind must match that context; active-target changes never substitute a different DB or transport.
 - Only terminal rows are eligible for retention deletion. Pending rows and their recovery artifacts have no TTL cleanup.
+- Installation mutations check matching nonterminal rows while holding the same target mutation guard. A pending row blocks only the same target and skill.
+- Explicit reconciliation previews `central_delete/prepared` evidence under the target guard and applies only `prepared -> rolled_back` after a fresh preview. Apply never mutates filesystem or business tables; remaining artifacts, owned missing paths, fingerprint drift, target mismatch, or inspection failure block it.
 
 ## 4. Validation & Error Matrix
 

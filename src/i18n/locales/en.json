@@ -112,9 +112,36 @@
       "credential_unavailable": "The stored GitHub token could not be read. Save it again in Settings."
     },
     "central_updates": {
+      "item_failed": "This update item could not be applied.",
+      "item_failure": "This update item could not be applied.",
+      "keep_missing_failed": "This update item could not be applied.",
+      "delete_missing_failed": "This update item could not be applied.",
+      "skip_addition_failed": "This update item could not be applied.",
+      "unskip_addition_failed": "This update item could not be applied.",
+      "remove_platform_duplicate_failed": "This update item could not be applied.",
+      "remove_deleted_platform_copy_failed": "This update item could not be applied.",
+      "update_failed": "This update item could not be applied.",
+      "import_addition_failed": "This update item could not be applied.",
       "repository_check_failed": "This repository could not be checked.",
       "skill_source_missing": "The tracked source path no longer contains this skill, and no unique new location was found. Re-check in incremental mode to keep or delete it.",
       "relocation_failed": "The moved skill could not be reattached to its new location."
+    },
+    "recovery": {
+      "reconcile_guard_unavailable": "Central recovery is busy. Try again shortly.",
+      "reconcile_preflight_blocked": "The prepared delete operation no longer passes reconciliation checks. Preview it again.",
+      "reconcile_target_mismatch": "This operation belongs to a different target.",
+      "reconcile_unsupported_kind": "Only prepared Central delete operations can be reconciled.",
+      "reconcile_unsupported_phase": "This operation is no longer in the prepared phase.",
+      "reconcile_invalid_manifest": "The recovery evidence is invalid and cannot be reconciled.",
+      "reconcile_inconsistent_duplicate": "Duplicate recovery entries contain conflicting evidence.",
+      "reconcile_skill_missing": "The Central skill no longer exists in the database.",
+      "reconcile_owned_path_missing": "A path still owned by this skill is missing.",
+      "reconcile_fingerprint_drift": "Current skill contents differ from the recorded evidence.",
+      "reconcile_artifact_remaining": "A recovery backup or marker still remains.",
+      "reconcile_remote_inspection_failed": "The remote recovery evidence could not be inspected."
+    },
+    "installation": {
+      "pending_central_recovery": "This skill has a pending Central recovery operation. Resolve it in Operation Logs before changing installations."
     },
     "local_archive": {
       "archive_not_found": "The selected ZIP archive was not found.",
@@ -445,7 +472,16 @@
       "title": "Pending Central recovery",
       "loading": "Checking the active target for interrupted changes...",
       "summary": "{{count}} operation(s) must recover before this target can be changed again.",
-      "error": "Recovery is still required: {{error}}"
+      "error": "Recovery is still required: {{error}}",
+      "reconcile": "Reconcile prepared delete",
+      "reconcileTitle": "Reconcile prepared delete",
+      "reconcileLoading": "Checking the current database and filesystem evidence...",
+      "reconcileEligible": "The operation can be closed without changing files or skill records. {{duplicates}} duplicate entries and {{missing}} unowned missing paths were reviewed.",
+      "reconcileBlocked": "This operation cannot be reconciled safely.",
+      "reconcileBlockedGeneric": "Current recovery evidence blocks reconciliation.",
+      "reconcileConfirm": "Confirm reconcile",
+      "reconcileSuccess": "The prepared delete operation was reconciled.",
+      "reconcileError": "Reconciliation failed: {{error}}"
     },
     "detailTitle": "Log details",
     "searchPlaceholder": "Search summary, error, subject, or action...",

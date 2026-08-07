@@ -270,7 +270,43 @@ pub struct SkillUpdateApplyResult {
 pub struct SkillUpdateApplyFailure {
     pub step: String,
     pub identifier: String,
+    #[serde(serialize_with = "serialize_public_apply_error")]
     pub error: String,
+    #[serde(default)]
+    pub error_code: Option<String>,
+    #[serde(default)]
+    pub error_category: Option<String>,
+}
+
+impl SkillUpdateApplyFailure {
+    pub fn new(step: impl Into<String>, identifier: impl Into<String>, error: String) -> Self {
+        let step = step.into();
+        let error_code = match step.as_str() {
+            "keep_missing" => "central_updates.keep_missing_failed",
+            "delete_missing" => "central_updates.delete_missing_failed",
+            "skip_addition" => "central_updates.skip_addition_failed",
+            "unskip_addition" => "central_updates.unskip_addition_failed",
+            "remove_platform_duplicate" => "central_updates.remove_platform_duplicate_failed",
+            "remove_deleted_platform_copy" => "central_updates.remove_deleted_platform_copy_failed",
+            "update" => "central_updates.update_failed",
+            "import_addition" => "central_updates.import_addition_failed",
+            _ => "central_updates.item_failure",
+        };
+        Self {
+            step,
+            identifier: identifier.into(),
+            error,
+            error_code: Some(error_code.to_string()),
+            error_category: Some("central_updates.item_failure".to_string()),
+        }
+    }
+}
+
+fn serialize_public_apply_error<S>(_: &String, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str("This update item could not be applied.")
 }
 
 #[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]

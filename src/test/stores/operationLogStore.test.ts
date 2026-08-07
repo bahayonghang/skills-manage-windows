@@ -51,6 +51,9 @@ function resetStore() {
     pendingOperations: [],
     isPendingOperationsLoading: false,
     retryingOperationId: null,
+    previewingOperationId: null,
+    reconcilingOperationId: null,
+    reconciliationPreview: null,
     pendingOperationsError: null,
   });
 }
@@ -116,6 +119,90 @@ describe("operationLogStore", () => {
       operationId: "op-1",
     });
     expect(useOperationLogStore.getState().pendingOperations).toEqual([]);
+  });
+
+  it("previews and applies an eligible prepared-delete reconciliation", async () => {
+    const pending = [
+      {
+        operationId: "op-reconcile",
+        targetId: "local",
+        targetKind: "local" as const,
+        operationKind: "central_delete" as const,
+        skillId: "skill-a",
+        phase: "prepared" as const,
+        updatedAt: "2026-08-07T00:00:00Z",
+      },
+    ];
+    const preview = {
+      operationId: "op-reconcile",
+      skillId: "skill-a",
+      eligible: true,
+      duplicatePathCount: 9,
+      missingUnownedPathCount: 13,
+      blockerCodes: [],
+    };
+    useOperationLogStore.setState({ pendingOperations: pending });
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(preview)
+      .mockResolvedValueOnce([]);
+
+    await useOperationLogStore
+      .getState()
+      .previewPendingOperationReconciliation("op-reconcile");
+    expect(invoke).toHaveBeenNthCalledWith(
+      1,
+      "preview_fs_db_operation_reconciliation",
+      { operationId: "op-reconcile" },
+    );
+    expect(useOperationLogStore.getState().reconciliationPreview).toEqual(
+      preview,
+    );
+
+    await useOperationLogStore
+      .getState()
+      .reconcilePendingOperation("op-reconcile");
+    expect(invoke).toHaveBeenNthCalledWith(2, "reconcile_fs_db_operation", {
+      operationId: "op-reconcile",
+    });
+    expect(useOperationLogStore.getState().pendingOperations).toEqual([]);
+    expect(useOperationLogStore.getState().reconciliationPreview).toBeNull();
+  });
+
+  it("preserves a blocked prepared-delete row and safe blocker preview", async () => {
+    const pending = [
+      {
+        operationId: "op-blocked",
+        targetId: "local",
+        targetKind: "local" as const,
+        operationKind: "central_delete" as const,
+        skillId: "skill-a",
+        phase: "prepared" as const,
+        updatedAt: "2026-08-07T00:00:00Z",
+      },
+    ];
+    const preview = {
+      operationId: "op-blocked",
+      skillId: "skill-a",
+      eligible: false,
+      duplicatePathCount: 1,
+      missingUnownedPathCount: 0,
+      blockerCodes: ["recovery.reconcile_artifact_remaining"],
+    };
+    useOperationLogStore.setState({ pendingOperations: pending });
+    vi.mocked(invoke).mockResolvedValueOnce(preview);
+
+    await useOperationLogStore
+      .getState()
+      .previewPendingOperationReconciliation("op-blocked");
+
+    expect(useOperationLogStore.getState().pendingOperations).toEqual(pending);
+    expect(useOperationLogStore.getState().reconciliationPreview).toEqual(
+      preview,
+    );
+    expect(invoke).not.toHaveBeenCalledWith(
+      "reconcile_fs_db_operation",
+      expect.anything(),
+    );
   });
 
   it("exposes loading and empty states for pending Central operations", async () => {

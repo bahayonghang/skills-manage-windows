@@ -221,7 +221,17 @@ export function UpdateCenterDialog() {
           }),
         );
         for (const failure of result.failures.slice(0, 3)) {
-          toast.error(`${failure.step}: ${failure.error}`);
+          const message = failure.errorCode
+            ? formatBackendError(
+                {
+                  code: failure.errorCode,
+                  message: t("backendErrors.central_updates.item_failed"),
+                  retryable: false,
+                },
+                t,
+              )
+            : t("backendErrors.central_updates.item_failed");
+          toast.error(`${failure.step}: ${message}`);
         }
       }
     } catch (err) {
@@ -265,13 +275,18 @@ export function UpdateCenterDialog() {
           }),
         );
         for (const failure of result.failures.slice(0, 3)) {
-          toast.error(`${failure.step}: ${failure.error}`);
+          toast.error(
+            `${failure.step}: ${formatBackendError(
+              `${failure.errorCode ?? "central_updates.item_failure"}:${failure.error}`,
+              t,
+            )}`,
+          );
         }
       }
     } catch (err) {
       toast.error(
         t("central.updateCenter.deletedPlatformCopies.cleanupAllError", {
-          error: String(err),
+          error: formatBackendError(err, t),
         }),
       );
     } finally {

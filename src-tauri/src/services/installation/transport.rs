@@ -76,6 +76,13 @@ impl InstallTransport {
         matches!(self, Self::Remote(_))
     }
 
+    pub(crate) fn active_target(&self) -> ActiveTarget {
+        match self {
+            Self::Local => ActiveTarget::Local,
+            Self::Remote(connection) => connection.active_target(),
+        }
+    }
+
     pub(crate) fn shares_central_root(&self, agent: &db::Agent, central: &db::Agent) -> bool {
         match self {
             // Local compares resolved filesystem identity; remote agent rows

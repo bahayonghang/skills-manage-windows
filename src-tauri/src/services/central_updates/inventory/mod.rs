@@ -533,11 +533,11 @@ pub(crate) async fn apply_skill_update_decisions_impl(
         let repo_url = match repository_import_url(&repository) {
             Some(url) => url,
             None => {
-                result.failures.push(SkillUpdateApplyFailure {
-                    step: "import_addition".to_string(),
-                    identifier: repository.id,
-                    error: "GitHub repository URL is unavailable.".to_string(),
-                });
+                result.failures.push(SkillUpdateApplyFailure::new(
+                    "import_addition",
+                    repository.id,
+                    "GitHub repository URL is unavailable.".to_string(),
+                ));
                 continue;
             }
         };
@@ -579,11 +579,11 @@ pub(crate) async fn apply_skill_update_decisions_impl(
                         .push(imported.imported_skill_id.clone());
                 }
             }
-            Err(error) => result.failures.push(SkillUpdateApplyFailure {
-                step: "import_addition".to_string(),
-                identifier: repository.id,
-                error: error.to_string(),
-            }),
+            Err(error) => result.failures.push(SkillUpdateApplyFailure::new(
+                "import_addition",
+                repository.id,
+                error.to_string(),
+            )),
         }
     }
 
@@ -610,18 +610,18 @@ pub(crate) async fn apply_skill_update_decisions_impl(
             Ok(update_result) => {
                 result.updated_skill_ids = update_result.succeeded;
                 for failure in update_result.failed {
-                    result.failures.push(SkillUpdateApplyFailure {
-                        step: "update".to_string(),
-                        identifier: failure.skill_id,
-                        error: failure.error,
-                    });
+                    result.failures.push(SkillUpdateApplyFailure::new(
+                        "update",
+                        failure.skill_id,
+                        failure.error,
+                    ));
                 }
             }
-            Err(error) => result.failures.push(SkillUpdateApplyFailure {
-                step: "update".to_string(),
-                identifier: decisions.updates.join(","),
-                error: error.to_string(),
-            }),
+            Err(error) => result.failures.push(SkillUpdateApplyFailure::new(
+                "update",
+                decisions.updates.join(","),
+                error.to_string(),
+            )),
         }
     }
 

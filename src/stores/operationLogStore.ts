@@ -6,7 +6,9 @@ import {
   OperationLogFilter,
   OperationLogPage,
   PendingFsDbOperation,
+  PreparedDeleteReconciliationPreview,
 } from "@/types";
+import { backendErrorStateValue } from "@/lib/backendError";
 
 const DEFAULT_LIMIT = 100;
 
@@ -32,6 +34,9 @@ interface OperationLogState {
   pendingOperations: PendingFsDbOperation[];
   isPendingOperationsLoading: boolean;
   retryingOperationId: string | null;
+  previewingOperationId: string | null;
+  reconcilingOperationId: string | null;
+  reconciliationPreview: PreparedDeleteReconciliationPreview | null;
   pendingOperationsError: string | null;
 
   loadLogs: (
@@ -41,6 +46,11 @@ interface OperationLogState {
   loadDailyCounts: (days: number) => Promise<void>;
   loadPendingOperations: () => Promise<void>;
   retryPendingOperation: (operationId: string) => Promise<void>;
+  previewPendingOperationReconciliation: (
+    operationId: string,
+  ) => Promise<PreparedDeleteReconciliationPreview>;
+  reconcilePendingOperation: (operationId: string) => Promise<void>;
+  clearReconciliationPreview: () => void;
   loadMore: () => Promise<OperationLogPage | null>;
   loadLogDetail: (logId: string) => Promise<OperationLogEntry | null>;
   setFilter: (partial: Partial<OperationLogFilter>) => void;
@@ -94,6 +104,9 @@ export const useOperationLogStore = create<OperationLogState>((set, get) => ({
   pendingOperations: [],
   isPendingOperationsLoading: false,
   retryingOperationId: null,
+  previewingOperationId: null,
+  reconcilingOperationId: null,
+  reconciliationPreview: null,
   pendingOperationsError: null,
 
   loadLogs: async (filter, reset = true) => {
@@ -153,6 +166,9 @@ export const useOperationLogStore = create<OperationLogState>((set, get) => ({
       pendingOperations: [],
       isPendingOperationsLoading: true,
       retryingOperationId: null,
+      previewingOperationId: null,
+      reconcilingOperationId: null,
+      reconciliationPreview: null,
       pendingOperationsError: null,
     });
     try {
@@ -192,6 +208,67 @@ export const useOperationLogStore = create<OperationLogState>((set, get) => ({
       }
       throw err;
     }
+  },
+
+  previewPendingOperationReconciliation: async (operationId) => {
+    const currentToken = ++pendingOperationsToken;
+    set({
+      previewingOperationId: operationId,
+      reconciliationPreview: null,
+      pendingOperationsError: null,
+    });
+    try {
+      const preview = await invoke(
+        "preview_fs_db_operation_reconciliation",
+        { operationId },
+      );
+      if (currentToken === pendingOperationsToken) {
+        set({ reconciliationPreview: preview, previewingOperationId: null });
+      }
+      return preview;
+    } catch (err) {
+      if (currentToken === pendingOperationsToken) {
+        set({
+          pendingOperationsError: backendErrorStateValue(err),
+          previewingOperationId: null,
+        });
+      }
+      throw err;
+    }
+  },
+
+  reconcilePendingOperation: async (operationId) => {
+    const currentToken = ++pendingOperationsToken;
+    set({ reconcilingOperationId: operationId, pendingOperationsError: null });
+    try {
+      const pendingOperations = await invoke("reconcile_fs_db_operation", {
+        operationId,
+      });
+      if (currentToken === pendingOperationsToken) {
+        set({
+          pendingOperations,
+          reconciliationPreview: null,
+          reconcilingOperationId: null,
+        });
+      }
+    } catch (err) {
+      if (currentToken === pendingOperationsToken) {
+        set({
+          pendingOperationsError: backendErrorStateValue(err),
+          reconcilingOperationId: null,
+        });
+      }
+      throw err;
+    }
+  },
+
+  clearReconciliationPreview: () => {
+    pendingOperationsToken += 1;
+    set({
+      reconciliationPreview: null,
+      previewingOperationId: null,
+      reconcilingOperationId: null,
+    });
   },
 
   loadLogDetail: async (logId) => {    set({ isLoadingDetail: true, error: null });

@@ -36,6 +36,8 @@ macro_rules! __skillport_runtime_commands {
             export_operation_logs => commands::logs::export_operation_logs,
             list_pending_fs_db_operations => commands::logs::list_pending_fs_db_operations,
             retry_fs_db_operation => commands::logs::retry_fs_db_operation,
+            preview_fs_db_operation_reconciliation => commands::logs::preview_fs_db_operation_reconciliation,
+            reconcile_fs_db_operation => commands::logs::reconcile_fs_db_operation,
             get_daily_operation_counts => commands::logs::get_daily_operation_counts,
             list_runtime_log_files => commands::logs::list_runtime_log_files,
             read_runtime_log_file => commands::logs::read_runtime_log_file,

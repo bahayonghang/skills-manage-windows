@@ -26,6 +26,7 @@ Local keeps `paths::central_mutation_lock_path()` as `app_data_dir()/locks/centr
 - Prepare network data, archives, previews, and unique staging directories before locking.
 - After locking, recover pending journal rows for that target, reload DB/filesystem state, then perform final swap/delete, DB persistence, and existing best-effort operation logging.
 - Acquire only at the top-level mutation use case. Internal helpers accept the established boundary and must not acquire the same advisory lock again.
+- Top-level single and batch installation use cases own the target guard from the pending-recovery check through filesystem and installation-row mutation. Centralization invoked by those use cases is an under-guard helper.
 - Lock acquisition runs through `fs_util::run_blocking_fs_with`; async workers must not poll `fs2` directly.
 - Lock failure stops the mutation. There is no unlocked fallback.
 - Legacy Central migration may read its completion marker as an unlocked fast path, but must acquire the Local lock, re-read the marker under that guard, run the copy, and write the marker before releasing the guard. The source is preserved and existing targets are skipped.

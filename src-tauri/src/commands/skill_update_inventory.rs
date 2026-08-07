@@ -30,6 +30,10 @@ use crate::services::central_updates::{
 use crate::services::github_import;
 use crate::AppState;
 
+#[path = "skill_update_inventory_apply_log.rs"]
+mod apply_log;
+use apply_log::apply_operation_spec;
+
 const UPDATE_INVENTORY_PROGRESS_EVENT: &str = "central://skill-update-inventory-progress";
 
 #[derive(Debug, Clone, Serialize)]
@@ -280,14 +284,7 @@ pub async fn apply_skill_update_decisions(
             let request_details = apply_request_details(&decisions);
             with_operation_log(
                 &state,
-                update_operation_spec(
-                    target_context,
-                    "update_center.apply",
-                    "Applied skill update decisions",
-                    "Failed to apply skill update decisions",
-                    request_details,
-                    apply_result_details,
-                ),
+                apply_operation_spec(target_context, request_details),
                 || async {
                     let fs = CentralFs::from_active_target(active_target.clone())
                         .await
@@ -592,16 +589,6 @@ fn apply_request_details(decisions: &SkillUpdateDecisions) -> Value {
         "unskipAdditions": decisions.unskip_additions.len(),
         "removePlatformDuplicates": decisions.remove_platform_duplicates.len(),
         "removeDeletedCopies": decisions.remove_deleted_platform_copies.len(),
-    })
-}
-
-fn apply_result_details(result: &SkillUpdateApplyResult) -> Value {
-    json!({
-        "updated": result.updated_skill_ids.len(),
-        "keptMissing": result.kept_missing_skill_ids.len(),
-        "deleted": result.deleted_skill_ids.len(),
-        "imported": result.imported_skill_ids.len(),
-        "failures": result.failures.len(),
     })
 }
 
