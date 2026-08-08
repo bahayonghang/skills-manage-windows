@@ -120,4 +120,21 @@ describe("backend error helpers", () => {
       }
     }
   });
+
+  it("localizes the inventory invariant without exposing backend details", async () => {
+    const error =
+      "central_updates.inventory_invariant:private-skill-id UNIQUE constraint failed";
+    const expected = {
+      en: "The update inventory could not be finalized.",
+      zh: "无法完成更新清单。",
+    };
+
+    for (const language of ["en", "zh"] as const) {
+      await i18n.changeLanguage(language);
+      const message = formatBackendError(error, i18n.t);
+      expect(message).toBe(expected[language]);
+      expect(message).not.toContain("private-skill-id");
+      expect(message).not.toContain("UNIQUE constraint failed");
+    }
+  });
 });

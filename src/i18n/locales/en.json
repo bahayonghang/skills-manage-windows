@@ -124,7 +124,8 @@
       "import_addition_failed": "This update item could not be applied.",
       "repository_check_failed": "This repository could not be checked.",
       "skill_source_missing": "The tracked source path no longer contains this skill, and no unique new location was found. Re-check in incremental mode to keep or delete it.",
-      "relocation_failed": "The moved skill could not be reattached to its new location."
+      "relocation_failed": "The moved skill could not be reattached to its new location.",
+      "inventory_invariant": "The update inventory could not be finalized."
     },
     "recovery": {
       "reconcile_guard_unavailable": "Central recovery is busy. Try again shortly.",

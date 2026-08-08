@@ -153,6 +153,12 @@ pub enum CentralUpdatesError {
     #[error("{0}")]
     Json(String),
 
+    /// The service produced duplicate logical keys for one inventory run.
+    /// No dynamic key data is retained because this variant crosses the
+    /// operation-log and IPC classification boundaries.
+    #[error("Update inventory contains duplicate entry keys.")]
+    InventoryInvariant,
+
     // ── Update inventory: platform-copy removal safety rails ────────────────
     #[error("Agent '{0}' not found")]
     AgentNotFound(String),
@@ -234,6 +240,10 @@ impl CentralUpdatesError {
                 .ipc_error_code()
                 .map(|code| (code, "repository_snapshot")),
             Self::BatchCancelled => Some(("operation.cancelled", "refresh")),
+            Self::InventoryInvariant => Some((
+                "central_updates.inventory_invariant",
+                "inventory_persistence",
+            )),
             _ => None,
         }
     }
@@ -257,6 +267,7 @@ impl CentralUpdatesError {
             Self::Batch(_) => "central_updates.batch",
             Self::BatchCancelled => "central_updates.cancelled",
             Self::Json(_) => "central_updates.json",
+            Self::InventoryInvariant => "central_updates.inventory_invariant",
             Self::TaskJoin { .. } => "central_updates.task_join",
             Self::SnapshotDownloaderClosed => "central_updates.snapshot_downloader_closed",
             _ => "central_updates.validation",
@@ -266,6 +277,11 @@ impl CentralUpdatesError {
     pub(crate) fn to_ipc_error(&self) -> String {
         match self {
             Self::GithubImport(error) => error.to_ipc_error(),
+            Self::InventoryInvariant => concat!(
+                "central_updates.inventory_invariant: ",
+                "The update inventory could not be finalized."
+            )
+            .to_string(),
             _ => self.to_string(),
         }
     }

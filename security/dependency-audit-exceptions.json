@@ -12,5 +12,12 @@
     "owner": "lyh",
     "reason": "tauri-plugin-sql 2.4.0 unconditionally enables SQLx default features; the app uses SQLite only and the RSA advisory has no patched release.",
     "expires": "2026-08-11"
+  },
+  {
+    "ecosystem": "cargo",
+    "advisory": "RUSTSEC-2026-0235",
+    "owner": "lyh",
+    "reason": "rust_decimal 的 rkyv(0.7) 可选特性未启用，rkyv 不进入编译图（cargo tree -i rkyv 为空）；0.7 线无修复版本（Solution >=0.8.17），rust_decimal 1.42.1 仍声明该可选依赖，升级无法移除。",
+    "expires": "2026-09-08"
   }
 ]

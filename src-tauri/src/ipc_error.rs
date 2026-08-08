@@ -348,6 +348,9 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
         "central_updates.relocation_failed" => {
             Some("The moved skill could not be reattached to its new location.")
         }
+        "central_updates.inventory_invariant" => {
+            Some("The update inventory could not be finalized.")
+        }
         "installation.pending_central_recovery" => {
             Some("Central recovery is pending for this skill.")
         }

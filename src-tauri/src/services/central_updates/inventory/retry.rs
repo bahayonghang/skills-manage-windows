@@ -7,7 +7,7 @@
 
 use std::collections::HashSet;
 
-use crate::db::DbPool;
+use crate::db::{self, DbPool};
 
 use super::super::error::CentralUpdatesError;
 use super::super::fs::CentralFs;
@@ -36,6 +36,16 @@ pub(crate) async fn retry_failed_repositories_impl(
         return Ok(base);
     }
 
+    let mut legacy_member_skill_ids = HashSet::new();
+    for repository_id in &repository_ids {
+        legacy_member_skill_ids
+            .extend(db::get_central_skill_ids_by_repository(pool, repository_id).await?);
+    }
+    let targets = RepositoryRetryTargets {
+        repository_ids: repository_ids.iter().cloned().collect(),
+        legacy_member_skill_ids,
+    };
+
     let base_mode = base_scope.mode.unwrap_or(SkillRefreshMode::Sync);
     let base_cache_policy = base_scope
         .cache_policy
@@ -62,7 +72,7 @@ pub(crate) async fn retry_failed_repositories_impl(
     )
     .await?;
 
-    let merged = merge_inventory_for_repositories(base, slice, &repository_ids);
+    let merged = merge_inventory_for_repositories(base, slice, &targets);
     // The stored run keeps the panel's own scope and mode: a mode override only
     // changes what this slice looked for, not which inventory it belongs to.
     persist_refresh_inventory(pool, &base_scope, base_mode, base_cache_policy, &merged).await?;
@@ -75,41 +85,57 @@ pub(crate) async fn retry_failed_repositories_impl(
 /// scan produces (platform duplicates, deleted platform copies, orphans) are
 /// carried over from the baseline, because a per-repository slice cannot
 /// re-derive them.
-pub(super) fn merge_inventory_for_repositories(
+struct RepositoryRetryTargets {
+    repository_ids: HashSet<String>,
+    legacy_member_skill_ids: HashSet<String>,
+}
+
+impl RepositoryRetryTargets {
+    /// New inventories carry an explicit repository id. The skill-id fallback
+    /// is deliberately restricted to legacy null rows persisted by affected
+    /// releases, so an explicit assignment to another repository always wins.
+    fn owns_actionable(&self, repository_id: Option<&str>, skill_id: &str) -> bool {
+        match repository_id {
+            Some(repository_id) => self.repository_ids.contains(repository_id),
+            None => self.legacy_member_skill_ids.contains(skill_id),
+        }
+    }
+}
+
+fn merge_inventory_for_repositories(
     base: SkillUpdateInventory,
     slice: SkillUpdateInventory,
-    repository_ids: &[String],
+    targets: &RepositoryRetryTargets,
 ) -> SkillUpdateInventory {
-    let targets = repository_ids.iter().cloned().collect::<HashSet<_>>();
-    let is_target = |repository_id: Option<&str>| {
-        repository_id.is_some_and(|repository_id| targets.contains(repository_id))
-    };
-
     let mut updatable = base
         .updatable
         .into_iter()
-        .filter(|item| !is_target(item.repository_id.as_deref()))
+        .filter(|item| {
+            !targets.owns_actionable(item.repository_id.as_deref(), &item.state.skill_id)
+        })
         .collect::<Vec<_>>();
     updatable.extend(slice.updatable);
 
     let mut remote_missing = base
         .remote_missing
         .into_iter()
-        .filter(|item| !is_target(item.repository_id.as_deref()))
+        .filter(|item| {
+            !targets.owns_actionable(item.repository_id.as_deref(), &item.state.skill_id)
+        })
         .collect::<Vec<_>>();
     remote_missing.extend(slice.remote_missing);
 
     let mut remote_added = base
         .remote_added
         .into_iter()
-        .filter(|item| !targets.contains(&item.repository_id))
+        .filter(|item| !targets.repository_ids.contains(&item.repository_id))
         .collect::<Vec<_>>();
     remote_added.extend(slice.remote_added);
 
     let mut failed_repositories = base
         .failed_repositories
         .into_iter()
-        .filter(|item| !targets.contains(&item.repository_id))
+        .filter(|item| !targets.repository_ids.contains(&item.repository_id))
         .collect::<Vec<_>>();
     failed_repositories.extend(slice.failed_repositories);
 

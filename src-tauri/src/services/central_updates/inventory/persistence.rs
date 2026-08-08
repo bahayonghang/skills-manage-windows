@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::db::{self, DbPool, SkillUpdateInventoryEntry};
 use crate::services::central_updates::CentralUpdatesError;
 
@@ -127,7 +129,25 @@ pub(super) async fn persist_refresh_inventory(
         )?);
     }
 
+    validate_inventory_entry_keys(&entries)?;
+
     db::replace_skill_update_inventory(pool, &run, &entries).await?;
+    Ok(())
+}
+
+fn validate_inventory_entry_keys(
+    entries: &[SkillUpdateInventoryEntry],
+) -> Result<(), CentralUpdatesError> {
+    let mut keys = HashSet::new();
+    for entry in entries {
+        if !keys.insert((
+            entry.inventory_id.as_str(),
+            entry.bucket.as_str(),
+            entry.entity_key.as_str(),
+        )) {
+            return Err(CentralUpdatesError::InventoryInvariant);
+        }
+    }
     Ok(())
 }
 

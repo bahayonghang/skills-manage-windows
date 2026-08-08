@@ -61,13 +61,22 @@ mod tests;
 pub(crate) use apply_steps::*;
 pub(crate) use force::*;
 use persistence::*;
-pub(crate) use relocation::*;
+use relocation::*;
 pub(crate) use repositories::*;
 pub(crate) use retry::*;
 pub(crate) use scan::*;
 pub(crate) use scope::*;
 pub use types::*;
 pub(crate) use view::*;
+
+/// An update state paired with the repository assignment that produced it.
+///
+/// Scope controls which skills are checked; it must not erase repository
+/// ownership while the state moves through relocation and inventory building.
+pub(super) struct RepositoryOwnedUpdateState {
+    pub repository_id: String,
+    pub state: crate::db::SkillUpdateState,
+}
 
 /// 内核版本：不依赖 `State<AppState>`，便于单元测试注入 pool / 预填 snapshot 缓存。
 ///
@@ -252,10 +261,6 @@ pub(crate) async fn compute_skill_update_inventory(
      * 安装 baseline，此处不能写入。up_to_date 不是可操作结果，unsupported
      * 则必须保留在 inventory 中供用户查看。
      */
-    let repo_by_id = valid_repositories
-        .iter()
-        .map(|(repository, _)| (repository.id.clone(), repository.clone()))
-        .collect::<HashMap<_, _>>();
     let repo_ref_by_id = valid_repositories
         .iter()
         .map(|(repository, repo)| (repository.id.clone(), repo.clone()))
@@ -272,6 +277,7 @@ pub(crate) async fn compute_skill_update_inventory(
 
     for prepared_skill in prepared {
         let skill_id = prepared_skill.skill.id.clone();
+        let repository_id = prepared_skill.assignment.repository.id.clone();
         let load_result = load_remote_skill_content(&prepared_skill, &snapshots);
 
         if mode == SkillRefreshMode::Regular
@@ -299,16 +305,18 @@ pub(crate) async fn compute_skill_update_inventory(
 
         match state_result.status {
             SkillUpdateStatus::UpdateAvailable => {
-                let repository_id = repository_id_for_state(&repo_by_id, &state_result);
                 let diagnostics = Some(diagnostic_from_state(&state_result, cache_policy, false));
                 updatable.push(UpdatableSkill {
                     state: state_result,
-                    repository_id,
+                    repository_id: Some(repository_id),
                     diagnostics,
                 });
             }
             SkillUpdateStatus::RemoteMissing => {
-                remote_missing_states.push(state_result);
+                remote_missing_states.push(RepositoryOwnedUpdateState {
+                    repository_id,
+                    state: state_result,
+                });
             }
             SkillUpdateStatus::Unsupported => {
                 unsupported.push(UnsupportedSkill {
@@ -361,7 +369,6 @@ pub(crate) async fn compute_skill_update_inventory(
             pool,
             prepared_by_skill_id: &prepared_by_skill_id,
             snapshots: &snapshots,
-            repo_by_id: &repo_by_id,
             repo_ref_by_id: &repo_ref_by_id,
             remote_missing_states: &mut remote_missing_states,
             remote_added_items: &mut remote_added_items,
@@ -413,12 +420,12 @@ pub(crate) async fn compute_skill_update_inventory(
      * ========================================================================
      */
     let remote_missing = if include_sync_buckets {
-        super::repository_sync::build_remote_missing_skills(&repo_by_id, remote_missing_states)
+        remote_missing_states
             .into_iter()
-            .map(|item| RemoteMissingSkill {
-                diagnostics: Some(diagnostic_from_state(&item.state, cache_policy, false)),
-                repository_id: item.repository_id,
-                state: item.state,
+            .map(|owned| RemoteMissingSkill {
+                diagnostics: Some(diagnostic_from_state(&owned.state, cache_policy, false)),
+                repository_id: Some(owned.repository_id),
+                state: owned.state,
             })
             .collect::<Vec<_>>()
     } else {

@@ -124,7 +124,8 @@
       "import_addition_failed": "此更新项目无法应用。",
       "repository_check_failed": "该仓库检查失败。",
       "skill_source_missing": "该技能记录的源路径已不存在，且未能唯一定位到新位置。用增量和删减模式重查后可选择保留或删除。",
-      "relocation_failed": "该技能已移动，但重新绑定新位置失败。"
+      "relocation_failed": "该技能已移动，但重新绑定新位置失败。",
+      "inventory_invariant": "无法完成更新清单。"
     },
     "recovery": {
       "reconcile_guard_unavailable": "Central 恢复操作正忙，请稍后重试。",

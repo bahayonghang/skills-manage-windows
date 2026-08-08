@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::db::{DbPool, SkillRepository, SkillUpdateState};
+use crate::db::{DbPool, SkillUpdateState};
 use crate::services::central_updates::snapshots::SharedGitHubSnapshots;
 use crate::services::central_updates::{
     normalize_repo_path, state_from_relocated_source, CentralRemoteAddedSkill, CentralUpdatesError,
@@ -9,15 +9,14 @@ use crate::services::central_updates::{
 use crate::services::github_import;
 use chrono::Utc;
 
-use super::{repository_id_for_state, FailedRepository, FailedRepositoryRetry, UpdatableSkill};
+use super::{FailedRepository, FailedRepositoryRetry, RepositoryOwnedUpdateState, UpdatableSkill};
 
-pub(crate) struct RelocationContext<'a> {
+pub(super) struct RelocationContext<'a> {
     pub pool: &'a DbPool,
     pub prepared_by_skill_id: &'a HashMap<String, PreparedSkillUpdate>,
     pub snapshots: &'a SharedGitHubSnapshots,
-    pub repo_by_id: &'a HashMap<String, SkillRepository>,
     pub repo_ref_by_id: &'a HashMap<String, github_import::GitHubRepoRef>,
-    pub remote_missing_states: &'a mut Vec<SkillUpdateState>,
+    pub remote_missing_states: &'a mut Vec<RepositoryOwnedUpdateState>,
     pub remote_added_items: &'a mut Vec<CentralRemoteAddedSkill>,
     pub updatable: &'a mut Vec<UpdatableSkill>,
     pub failed_repositories: &'a mut Vec<FailedRepository>,
@@ -245,15 +244,13 @@ fn source_missing_failure(repository_id: &str, source_path: Option<String>) -> F
     }
 }
 
-pub(crate) async fn reconcile_relocated_remote_skills(
+pub(super) async fn reconcile_relocated_remote_skills(
     ctx: &mut RelocationContext<'_>,
 ) -> Result<(), CentralUpdatesError> {
     let mut missing_by_key = HashMap::<(String, String), Vec<usize>>::new();
     let mut missing_old_path_by_index = HashMap::<usize, String>::new();
-    for (index, state) in ctx.remote_missing_states.iter().enumerate() {
-        let Some(repository_id) = repository_id_for_state(ctx.repo_by_id, state) else {
-            continue;
-        };
+    for (index, owned) in ctx.remote_missing_states.iter().enumerate() {
+        let state = &owned.state;
         let Some(old_path) = state
             .source_path
             .as_deref()
@@ -265,7 +262,7 @@ pub(crate) async fn reconcile_relocated_remote_skills(
         };
         missing_old_path_by_index.insert(index, old_path);
         missing_by_key
-            .entry((repository_id, state.skill_id.clone()))
+            .entry((owned.repository_id.clone(), state.skill_id.clone()))
             .or_default()
             .push(index);
     }
@@ -311,7 +308,7 @@ pub(crate) async fn reconcile_relocated_remote_skills(
             continue;
         };
 
-        let state = &ctx.remote_missing_states[missing_index];
+        let state = &ctx.remote_missing_states[missing_index].state;
         let item = &ctx.remote_added_items[added_index];
         if item
             .preview
