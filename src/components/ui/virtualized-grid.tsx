@@ -121,12 +121,15 @@ export function VirtualizedGrid<T>({
               height: itemHeight,
               columnGap,
               gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+              // 隐式行轨道默认按内容 auto 撑高，会让卡片逃出固定行高、
+              // 压到下一行；钉成 100% 使 gridcell 高度恒等于 itemHeight。
+              gridTemplateRows: "100%",
             }}
           >
             {rowItems.map((item, columnIndex) => {
               const index = rowIndex * columns + columnIndex;
               return (
-                <div key={itemKey(item, index)} role="gridcell" className="min-w-0">
+                <div key={itemKey(item, index)} role="gridcell" className="min-h-0 min-w-0">
                   {renderItem(item, index)}
                 </div>
               );

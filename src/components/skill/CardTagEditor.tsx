@@ -81,7 +81,7 @@ export function CardTagEditor({
             setOpen((v) => !v);
           }}
           className={cn(
-            "relative grid size-8 place-items-center rounded-full border border-dashed border-border/70 text-muted-foreground",
+            "relative grid size-6 place-items-center rounded-full border border-dashed border-border/70 text-muted-foreground",
             "after:absolute after:left-1/2 after:top-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']",
             "opacity-60 transition-opacity hover:border-primary/40 hover:text-primary",
             "group-hover/skill-card:opacity-100 group-focus-within/skill-card:opacity-100",

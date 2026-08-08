@@ -508,7 +508,7 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
 
           {/* Row 末: 彩色标签行（central 专用）— 收于 footer 上方，固定单行 */}
           {editableTags && (
-            <div className="flex h-5 items-center overflow-hidden [&>div]:flex-nowrap">
+            <div className="flex h-6 items-center overflow-hidden [&>div]:flex-nowrap">
               <CardTagEditor {...editableTags} />
             </div>
           )}

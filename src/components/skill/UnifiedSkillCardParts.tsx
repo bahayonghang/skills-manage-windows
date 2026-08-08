@@ -52,11 +52,6 @@ export function SkillCardSummary({
   const { ref, isTruncated } = useTextTruncation<HTMLParagraphElement>(text);
   return (
     <div className="relative">
-      {label && (
-        <span className="mr-1.5 inline-flex align-baseline rounded-full border border-primary/15 bg-primary/8 px-1.5 py-0.5 text-xs font-medium leading-none text-primary-text">
-          {label}
-        </span>
-      )}
       <p
         ref={ref}
         data-truncated={isTruncated ? "true" : "false"}
@@ -64,9 +59,13 @@ export function SkillCardSummary({
         className={cn(
           "text-pretty break-words text-xs leading-relaxed text-muted-foreground",
           lineClamp === 3 ? "line-clamp-3" : "line-clamp-2",
-          label && "inline",
         )}
       >
+        {label && (
+          <span className="mr-1.5 inline-flex align-baseline rounded-full border border-primary/15 bg-primary/8 px-1.5 py-0.5 text-xs font-medium leading-none text-primary-text">
+            {label}
+          </span>
+        )}
         {text}
       </p>
       <span
