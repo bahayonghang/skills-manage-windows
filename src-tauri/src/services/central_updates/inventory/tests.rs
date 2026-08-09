@@ -17,11 +17,13 @@ use crate::services::central_skills::BatchDeleteCentralSkillRequest;
 use crate::services::central_updates;
 use crate::services::central_updates::repo_cache_key;
 use crate::services::central_updates::{CentralFs, SnapshotProgressStatus};
-use crate::services::github_import::GitHubRepoRef;
-use crate::services::github_import::GitHubRepoSnapshot;
+use crate::services::github_import::{
+    download_repo_snapshot_with_test_endpoint, GitHubRepoRef, GitHubRepoSnapshot,
+};
 use crate::targets::ActiveTarget;
 use crate::CentralUpdateSnapshotCache;
 use chrono::Utc;
+use flate2::{write::GzEncoder, Compression};
 use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -122,7 +124,9 @@ fn snapshots_cache_with(
 ) -> CentralUpdateSnapshotCache {
     let cache = CentralUpdateSnapshotCache::default();
     for (repo, snapshot) in items {
-        cache.insert(repo_cache_key(&repo), snapshot);
+        cache
+            .insert(repo_cache_key(&repo), snapshot)
+            .expect("seed snapshot cache");
     }
     cache
 }
@@ -138,6 +142,73 @@ fn skill_snapshot(items: Vec<(&str, &[u8])>) -> GitHubRepoSnapshot {
             .map(|(path, content)| (path.to_string(), content.to_vec()))
             .collect(),
     }
+}
+
+fn repository_archive(files: &[(&str, &[u8])]) -> Vec<u8> {
+    let encoder = GzEncoder::new(Vec::new(), Compression::default());
+    let mut builder = tar::Builder::new(encoder);
+    for (path, content) in files {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(content.len() as u64);
+        header.set_mode(0o644);
+        header.set_entry_type(tar::EntryType::Regular);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, format!("repo-snapshot/{path}"), *content)
+            .expect("append archive entry");
+    }
+    builder
+        .into_inner()
+        .expect("finalize tar")
+        .finish()
+        .expect("finalize gzip")
+}
+
+async fn redirected_snapshot(repo: &GitHubRepoRef, files: &[(&str, &[u8])]) -> GitHubRepoSnapshot {
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+    let address = listener.local_addr().expect("addr");
+    let archive = repository_archive(files);
+    let redirect_path = format!(
+        "/{}/{}/legacy.tar.gz/refs/heads/{}",
+        repo.owner, repo.repo, repo.branch
+    );
+    let server = std::thread::spawn(move || {
+        for request_index in 0..2 {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut request = [0_u8; 4096];
+            let _ = stream.read(&mut request).expect("read");
+            if request_index == 0 {
+                let location = format!("http://{address}{redirect_path}");
+                let response = format!(
+                    "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                );
+                stream.write_all(response.as_bytes()).expect("redirect");
+            } else {
+                let headers = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    archive.len()
+                );
+                stream.write_all(headers.as_bytes()).expect("headers");
+                stream.write_all(&archive).expect("archive");
+            }
+        }
+    });
+
+    let base_url = format!("http://{address}");
+    let snapshot = download_repo_snapshot_with_test_endpoint(
+        &crate::services::github_import::github_client().expect("client"),
+        repo,
+        None,
+        base_url.clone(),
+        &base_url,
+    )
+    .await
+    .expect("redirected snapshot");
+    server.join().expect("server join");
+    snapshot
 }
 
 fn copy_installation(skill_id: &str, agent_id: &str, dir: &Path) -> SkillInstallation {
@@ -333,6 +404,377 @@ async fn refresh_returns_empty_inventory_on_empty_db() {
 }
 
 #[tokio::test]
+async fn refresh_regular_skill_scope_persists_unassigned_skills_as_unsupported() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let tracked_dir = temp.path().join("tracked");
+    let local_only_dir = temp.path().join("local-only");
+    std::fs::create_dir_all(&tracked_dir).unwrap();
+    std::fs::create_dir_all(&local_only_dir).unwrap();
+    let tracked_manifest = b"---\nname: Tracked\n---";
+    std::fs::write(tracked_dir.join("SKILL.md"), tracked_manifest).unwrap();
+    std::fs::write(
+        local_only_dir.join("SKILL.md"),
+        b"---\nname: Local Only\n---",
+    )
+    .unwrap();
+    db::upsert_skill(&pool, &make_central_skill("tracked", &tracked_dir))
+        .await
+        .unwrap();
+    db::upsert_skill(&pool, &make_central_skill("local-only", &local_only_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "tracked", "skills/tracked").await;
+
+    let snapshot = skill_snapshot(vec![("skills/tracked/SKILL.md", tracked_manifest)]);
+    let cache = snapshots_cache_with(vec![(test_repo(), snapshot)]);
+    let scope = with_mode(
+        scope_skills(vec!["tracked", "local-only"]),
+        SkillRefreshMode::Regular,
+    );
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let recorded = Arc::clone(&events);
+    let progress: SnapshotProgressReporter = Arc::new(move |event| {
+        recorded.lock().unwrap().push(event);
+    });
+
+    let inventory = super::refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &cache,
+        scope.clone(),
+        Some(progress),
+    )
+    .await
+    .unwrap();
+
+    assert!(
+        inventory.updatable.is_empty(),
+        "tracked skill is already current"
+    );
+    assert_eq!(inventory.unsupported.len(), 1);
+    assert_eq!(inventory.unsupported[0].skill_id, "local-only");
+    assert_eq!(
+        inventory.unsupported[0].reason_code,
+        UnsupportedSkillReasonCode::UnknownSource
+    );
+    {
+        let events = events.lock().unwrap();
+        assert_eq!(events[0].status, SnapshotProgressStatus::Started);
+        assert_eq!(
+            events[0].total, 1,
+            "two skills share one queryable repository"
+        );
+    }
+    assert!(
+        db::get_skill_update_states(&pool).await.unwrap().is_empty(),
+        "refresh inventory must not mutate the installed baseline"
+    );
+
+    let entries =
+        db::list_skill_update_inventory_entries(&pool, &inventory_id_for_scope(Some(&scope)))
+            .await
+            .unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].bucket, "unsupported");
+    assert_eq!(entries[0].skill_id.as_deref(), Some("local-only"));
+
+    let reloaded = get_skill_update_inventory_impl_scoped(&pool, Some(scope))
+        .await
+        .unwrap();
+    assert_eq!(reloaded.unsupported.len(), 1);
+    assert_eq!(reloaded.unsupported[0].skill_id, "local-only");
+    assert_eq!(
+        reloaded.unsupported[0].reason_code,
+        UnsupportedSkillReasonCode::UnknownSource
+    );
+}
+
+#[tokio::test]
+async fn refresh_classifies_an_unparseable_github_source_path_as_unsupported() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join("unsafe-path");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::fs::write(skill_dir.join("SKILL.md"), b"---\nname: Unsafe Path\n---").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("unsafe-path", &skill_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "unsafe-path", "skills/unsafe-path").await;
+    sqlx::query("UPDATE skill_repository_members SET source_path = '../escape' WHERE skill_id = ?")
+        .bind("unsafe-path")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let scope = with_mode(scope_skills(vec!["unsafe-path"]), SkillRefreshMode::Regular);
+
+    let inventory = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &CentralUpdateSnapshotCache::default(),
+        scope.clone(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(inventory.unsupported.len(), 1);
+    assert_eq!(
+        inventory.unsupported[0].reason_code,
+        UnsupportedSkillReasonCode::MissingSourcePath,
+    );
+    let reloaded = get_skill_update_inventory_impl_scoped(&pool, Some(scope))
+        .await
+        .unwrap();
+    assert_eq!(reloaded.unsupported.len(), 1);
+    assert_eq!(
+        reloaded.unsupported[0].reason_code,
+        UnsupportedSkillReasonCode::MissingSourcePath,
+    );
+    assert!(db::get_skill_update_states(&pool).await.unwrap().is_empty());
+}
+
+#[test]
+fn inventory_deserialization_defaults_missing_unsupported_bucket() {
+    let inventory: SkillUpdateInventory = serde_json::from_value(serde_json::json!({
+        "updatable": [],
+        "remoteAdded": [],
+        "remoteMissing": [],
+        "platformDuplicates": [],
+        "deletedPlatformCopies": [],
+        "orphans": [],
+        "failedRepositories": [],
+        "generatedAt": "2026-08-03T00:00:00Z"
+    }))
+    .unwrap();
+
+    assert!(inventory.unsupported.is_empty());
+}
+
+#[tokio::test]
+async fn refresh_inventory_entry_failure_rolls_back_run_and_entries() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let kept_dir = temp.path().join("kept-local");
+    std::fs::create_dir_all(&kept_dir).unwrap();
+    std::fs::write(kept_dir.join("SKILL.md"), b"---\nname: Kept Local\n---").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("kept-local", &kept_dir))
+        .await
+        .unwrap();
+    db::upsert_skill_update_state(
+        &pool,
+        &SkillUpdateState {
+            skill_id: "kept-local".to_string(),
+            source_type: "github".to_string(),
+            source_url: Some("https://github.com/owner/repo".to_string()),
+            ref_name: Some("main".to_string()),
+            source_path: Some("skills/kept-local".to_string()),
+            last_remote_hash: Some("baseline-local".to_string()),
+            latest_remote_hash: Some("baseline-remote".to_string()),
+            last_checked_at: Some("2026-08-03T00:00:00Z".to_string()),
+            last_updated_at: Some("2026-08-02T00:00:00Z".to_string()),
+            status: SkillUpdateStatus::UpdateAvailable,
+            error: Some("preserved-baseline".to_string()),
+        },
+    )
+    .await
+    .unwrap();
+    let baseline_before =
+        serde_json::to_value(db::get_skill_update_states(&pool).await.unwrap()).unwrap();
+
+    let scope = with_mode(scope_all(), SkillRefreshMode::Regular);
+    refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &CentralUpdateSnapshotCache::default(),
+        scope.clone(),
+    )
+    .await
+    .unwrap();
+    let inventory_id = inventory_id_for_scope(Some(&scope));
+    sqlx::query(
+        "UPDATE skill_update_inventory_runs SET generated_at = 'preserved-run' WHERE inventory_id = ?",
+    )
+    .bind(&inventory_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE skill_update_inventory_entries SET generated_at = 'preserved-entry' WHERE inventory_id = ?",
+    )
+    .bind(&inventory_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let blocked_dir = temp.path().join("blocked-local");
+    std::fs::create_dir_all(&blocked_dir).unwrap();
+    std::fs::write(
+        blocked_dir.join("SKILL.md"),
+        b"---\nname: Blocked Local\n---",
+    )
+    .unwrap();
+    db::upsert_skill(&pool, &make_central_skill("blocked-local", &blocked_dir))
+        .await
+        .unwrap();
+    sqlx::query(
+        "CREATE TRIGGER fail_blocked_inventory_entry
+         BEFORE INSERT ON skill_update_inventory_entries
+         WHEN NEW.entity_key = 'blocked-local'
+         BEGIN
+           SELECT RAISE(FAIL, 'blocked inventory entry');
+         END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let error = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &CentralUpdateSnapshotCache::default(),
+        scope,
+    )
+    .await
+    .expect_err("entry trigger must fail refresh persistence");
+    assert!(error.to_string().contains("blocked inventory entry"));
+
+    let run_generated_at: String = sqlx::query_scalar(
+        "SELECT generated_at FROM skill_update_inventory_runs WHERE inventory_id = ?",
+    )
+    .bind(&inventory_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(run_generated_at, "preserved-run");
+    let entries = db::list_skill_update_inventory_entries(&pool, &inventory_id)
+        .await
+        .unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].entity_key, "kept-local");
+    assert_eq!(entries[0].generated_at, "preserved-entry");
+    let baseline_after =
+        serde_json::to_value(db::get_skill_update_states(&pool).await.unwrap()).unwrap();
+    assert_eq!(baseline_after, baseline_before);
+}
+
+#[tokio::test]
+async fn duplicate_inventory_keys_fail_with_typed_invariant_before_persistence() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join("private-skill-id");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::fs::write(
+        skill_dir.join("SKILL.md"),
+        b"---\nname: Private Skill\n---\n\nold",
+    )
+    .unwrap();
+    db::upsert_skill(&pool, &make_central_skill("private-skill-id", &skill_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "private-skill-id", "skills/private-source-path").await;
+    let cache = snapshots_cache_with(vec![(
+        test_repo(),
+        skill_snapshot(vec![(
+            "skills/private-source-path/SKILL.md",
+            b"---\nname: Private Skill\n---\n\nnew",
+        )]),
+    )]);
+    let scope = with_mode(
+        scope_skills(vec!["private-skill-id"]),
+        SkillRefreshMode::Regular,
+    );
+    let valid = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &cache,
+        scope.clone(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(valid.updatable.len(), 1);
+
+    let inventory_id = inventory_id_for_scope(Some(&scope));
+    sqlx::query(
+        "UPDATE skill_update_inventory_runs SET generated_at = 'preserved-run'
+         WHERE inventory_id = ?",
+    )
+    .bind(&inventory_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE skill_update_inventory_entries SET generated_at = 'preserved-entry'
+         WHERE inventory_id = ?",
+    )
+    .bind(&inventory_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let mut duplicate = valid.clone();
+    duplicate.updatable.push(valid.updatable[0].clone());
+    duplicate.generated_at = "attempted-run".to_string();
+    let error = persist_refresh_inventory(
+        &pool,
+        &scope,
+        SkillRefreshMode::Regular,
+        SkillRefreshCachePolicy::UseFresh,
+        &duplicate,
+    )
+    .await
+    .expect_err("duplicate logical keys must fail before the database write");
+
+    assert_eq!(
+        error.diagnostic_category(),
+        "central_updates.inventory_invariant"
+    );
+    assert_eq!(
+        error.reviewed_operation_failure(),
+        Some((
+            "central_updates.inventory_invariant",
+            "inventory_persistence"
+        ))
+    );
+    let coded_error = error.to_ipc_error();
+    for private_fragment in [
+        "UNIQUE constraint failed",
+        "skill_update_inventory_entries",
+        "private-skill-id",
+        "private-source-path",
+    ] {
+        assert!(!coded_error.contains(private_fragment));
+    }
+    let ipc = crate::ipc_error::IpcError::from(coded_error);
+    assert_eq!(ipc.code, "central_updates.inventory_invariant");
+    assert_eq!(ipc.message, "The update inventory could not be finalized.");
+    assert!(!ipc.retryable);
+
+    let run_generated_at: String = sqlx::query_scalar(
+        "SELECT generated_at FROM skill_update_inventory_runs WHERE inventory_id = ?",
+    )
+    .bind(&inventory_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(run_generated_at, "preserved-run");
+    let entries = db::list_skill_update_inventory_entries(&pool, &inventory_id)
+        .await
+        .unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].generated_at, "preserved-entry");
+}
+
+#[tokio::test]
 async fn refresh_progress_finishes_after_the_snapshot_stage() {
     let pool = setup_test_db().await;
     let events = Arc::new(Mutex::new(Vec::new()));
@@ -359,6 +801,93 @@ async fn refresh_progress_finishes_after_the_snapshot_stage() {
     assert_eq!(events[1].status, SnapshotProgressStatus::Finalizing);
     assert_eq!(events[1].total, 0);
     assert_eq!(events[1].completed, 0);
+}
+
+/// A repository whose snapshot cannot be acquired is settled as a failed
+/// repository instead of aborting the run: the check spans every syncable
+/// repository, so one unreachable remote must not discard the whole inventory.
+#[tokio::test]
+async fn refresh_snapshot_failure_settles_the_repository_and_keeps_the_run() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join("existing");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::fs::write(skill_dir.join("SKILL.md"), b"---\nname: Existing\n---").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("existing", &skill_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "existing", "skills/existing").await;
+    let assignment = db::get_skill_repository_assignment(&pool, "existing")
+        .await
+        .unwrap();
+    let repository_id = assignment.repository.id;
+    sqlx::query("UPDATE skill_repositories SET branch = 'unsafe/branch' WHERE id = ?")
+        .bind(&repository_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let recorded = Arc::clone(&events);
+    let progress: SnapshotProgressReporter = Arc::new(move |event| {
+        recorded.lock().unwrap().push(event);
+    });
+
+    let inventory = super::refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &CentralUpdateSnapshotCache::default(),
+        scope_repos(vec![&repository_id]),
+        Some(progress),
+    )
+    .await
+    .expect("snapshot failure must not abort the refresh");
+
+    assert_eq!(inventory.failed_repositories.len(), 1);
+    let failure = &inventory.failed_repositories[0];
+    assert_eq!(failure.repository_id, repository_id);
+    // The reason is a reviewed sentence plus a stable code; the domain error's
+    // Display text (which carries the branch value) never reaches the payload.
+    assert_eq!(
+        failure.error_code.as_deref(),
+        Some("central_updates.repository_check_failed")
+    );
+    assert!(!failure.error.contains("unsafe/branch"));
+
+    {
+        let events = events.lock().unwrap();
+        assert_eq!(
+            events.iter().map(|event| event.status).collect::<Vec<_>>(),
+            vec![
+                SnapshotProgressStatus::Started,
+                SnapshotProgressStatus::RepositoryStarted,
+                SnapshotProgressStatus::RepositoryFailed,
+                SnapshotProgressStatus::Finalizing,
+            ]
+        );
+    }
+
+    let runs: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM skill_update_inventory_runs")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(runs, 1, "the run must be persisted with its failure entry");
+    let failed_entries: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM skill_update_inventory_entries WHERE bucket = 'failed_repository'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(failed_entries, 1);
+
+    // refresh still never writes the install baseline.
+    let states: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM skill_update_states")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(states, 0, "skill_update_states must remain empty");
 }
 
 #[tokio::test]
@@ -663,9 +1192,14 @@ async fn refresh_regular_mode_returns_only_content_update_buckets() {
     assert!(inventory.platform_duplicates.is_empty());
     assert!(inventory.deleted_platform_copies.is_empty());
     assert_eq!(inventory.failed_repositories.len(), 1);
-    assert!(inventory.failed_repositories[0]
-        .error
-        .contains("incremental and removal mode"));
+    assert_eq!(
+        inventory.failed_repositories[0].error_code.as_deref(),
+        Some("central_updates.skill_source_missing")
+    );
+    assert_eq!(
+        inventory.failed_repositories[0].retry,
+        FailedRepositoryRetry::DecisionRequired
+    );
     assert!(db::list_pending_additions(&pool).await.unwrap().is_empty());
 
     let refreshed_repo = db::get_skill_repository_by_id(&pool, &repository_id)
@@ -893,6 +1427,16 @@ async fn refresh_scope_platform_only_checks_observed_current_agent_skills() {
 
     assert_eq!(inventory.updatable.len(), 1);
     assert_eq!(inventory.updatable[0].state.skill_id, "codex-skill");
+    let repository_id = db::get_skill_repository_assignment(&pool, "codex-skill")
+        .await
+        .unwrap()
+        .repository
+        .id;
+    assert_eq!(
+        inventory.updatable[0].repository_id.as_deref(),
+        Some(repository_id.as_str()),
+        "Platform scope must preserve the prepared assignment's repository",
+    );
     assert!(inventory.remote_added.is_empty());
     assert_eq!(inventory.platform_duplicates.len(), 1);
     assert_eq!(inventory.platform_duplicates[0].agent_id, "codex");
@@ -901,6 +1445,46 @@ async fn refresh_scope_platform_only_checks_observed_current_agent_skills() {
         .platform_duplicates
         .iter()
         .all(|group| group.agent_id != "claude-code"));
+}
+
+#[tokio::test]
+async fn refresh_skill_scope_assigns_repository_to_remote_missing_rows() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let gone_dir = temp.path().join("gone");
+    std::fs::create_dir_all(&gone_dir).unwrap();
+    std::fs::write(gone_dir.join("SKILL.md"), b"---\nname: Gone\n---\n\nold").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("gone", &gone_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "gone", "skills/gone").await;
+    let repository_id = db::get_skill_repository_assignment(&pool, "gone")
+        .await
+        .unwrap()
+        .repository
+        .id;
+    let cache = snapshots_cache_with(vec![(
+        test_repo(),
+        skill_snapshot(vec![("skills/other/SKILL.md", b"---\nname: Other\n---")]),
+    )]);
+
+    let inventory = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &cache,
+        with_mode(scope_skills(vec!["gone"]), SkillRefreshMode::Sync),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(inventory.remote_missing.len(), 1);
+    assert_eq!(inventory.remote_missing[0].state.skill_id, "gone");
+    assert_eq!(
+        inventory.remote_missing[0].repository_id.as_deref(),
+        Some(repository_id.as_str())
+    );
 }
 
 #[tokio::test]
@@ -961,7 +1545,7 @@ async fn refresh_failed_repository_appears_in_failed_repositories() {
 }
 
 #[tokio::test]
-async fn refresh_persists_actionable_states_for_get_inventory_reload() {
+async fn refresh_persists_redirect_snapshot_actionable_states_for_reload() {
     let pool = setup_test_db().await;
     let temp = TempDir::new().unwrap();
     let update_dir = temp.path().join("with-update");
@@ -991,27 +1575,40 @@ async fn refresh_persists_actionable_states_for_get_inventory_reload() {
         .unwrap();
     let repository_id = assignment.repository.id.clone();
 
-    let snapshot = GitHubRepoSnapshot {
-        files: HashMap::from([(
-            "skills/with-update/SKILL.md".to_string(),
-            b"---\nname: With Update\n---\n\nnew".to_vec(),
-        )]),
-    };
+    let snapshot = redirected_snapshot(
+        &test_repo(),
+        &[(
+            "skills/with-update/SKILL.md",
+            b"---\nname: With Update\n---\n\nnew",
+        )],
+    )
+    .await;
     let cache = snapshots_cache_with(vec![(test_repo(), snapshot)]);
     let client = http_client();
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let recorded = Arc::clone(&events);
+    let progress: SnapshotProgressReporter = Arc::new(move |event| {
+        recorded.lock().unwrap().push(event);
+    });
 
-    let refreshed = refresh_skill_update_inventory_impl(
+    let refreshed = super::refresh_skill_update_inventory_impl(
         &pool,
         &CentralFs::Local,
         None,
         &client,
         &cache,
         scope_repos(vec![&repository_id]),
+        Some(progress),
     )
     .await
     .unwrap();
     assert_eq!(refreshed.updatable.len(), 1);
     assert_eq!(refreshed.remote_missing.len(), 1);
+    assert!(events
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|event| event.status == SnapshotProgressStatus::RepositoryCompleted));
 
     let reloaded =
         get_skill_update_inventory_impl_scoped(&pool, Some(scope_repos(vec![&repository_id])))
@@ -1099,6 +1696,12 @@ async fn refresh_clears_stale_update_inventory_without_touching_baseline() {
     )
     .await
     .unwrap();
+    let baseline_before = serde_json::to_value(
+        db::get_skill_update_states_for_skills(&pool, &["already-fresh".to_string()])
+            .await
+            .unwrap(),
+    )
+    .unwrap();
 
     let snapshot = GitHubRepoSnapshot {
         files: HashMap::from([(
@@ -1129,6 +1732,7 @@ async fn refresh_clears_stale_update_inventory_without_touching_baseline() {
         .unwrap();
     assert_eq!(states.len(), 1);
     assert_eq!(states[0].status, SkillUpdateStatus::UpdateAvailable);
+    assert_eq!(serde_json::to_value(states).unwrap(), baseline_before);
 }
 
 #[tokio::test]
@@ -1823,6 +2427,87 @@ async fn apply_delete_missing_removes_skill() {
 }
 
 #[tokio::test]
+async fn apply_delete_missing_preserves_selected_recovery_diagnostics() {
+    let temp = TempDir::new().unwrap();
+    let home = temp.path().to_path_buf();
+    let pool = setup_test_db_with_home(&home).await;
+    let skill_id = "recovery-blocked";
+    let central_dir = home.join(".skillsmanage/skills").join(skill_id);
+    std::fs::create_dir_all(&central_dir).unwrap();
+    std::fs::write(central_dir.join("SKILL.md"), b"---\nname: Blocked\n---").unwrap();
+    db::upsert_skill(&pool, &make_central_skill(skill_id, &central_dir))
+        .await
+        .unwrap();
+
+    let operation_id = "pending-delete-recovery-blocked";
+    let manifest = crate::services::central_operation::OperationManifest::Delete(
+        crate::services::central_operation::DeleteManifest {
+            version: crate::services::central_operation::MANIFEST_VERSION,
+            operation_id: operation_id.to_string(),
+            paths: vec![crate::services::central_operation::ManagedPath {
+                original: home
+                    .join("collision-original")
+                    .to_string_lossy()
+                    .into_owned(),
+                backup: home.join("collision-backup").to_string_lossy().into_owned(),
+                marker: home.join("collision-marker").to_string_lossy().into_owned(),
+                expected_present: true,
+                fingerprint: None,
+            }],
+        },
+    );
+    let manifest_json = serde_json::to_string(&manifest).unwrap();
+    db::insert_fs_db_operation(
+        &pool,
+        db::NewFsDbOperation {
+            id: operation_id,
+            batch_id: None,
+            target_id: "local",
+            target_kind: "local",
+            operation_kind: "central_delete",
+            skill_id,
+            manifest_version: crate::services::central_operation::MANIFEST_VERSION,
+            manifest_json: &manifest_json,
+            old_fingerprint: None,
+            new_fingerprint: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let mut result = SkillUpdateApplyResult::default();
+    apply_delete_missing_step(
+        &pool,
+        &ActiveTarget::Local,
+        &[BatchDeleteCentralSkillRequest {
+            skill_id: skill_id.to_string(),
+            remove_agent_ids: Vec::new(),
+        }],
+        &mut result,
+    )
+    .await;
+
+    assert!(result.deleted_skill_ids.is_empty());
+    assert_eq!(result.failures.len(), 1);
+    let failure = &result.failures[0];
+    assert_eq!(failure.step, "delete_missing");
+    assert_eq!(failure.identifier, skill_id);
+    assert_eq!(failure.phase.as_deref(), Some("recovery"));
+    assert_eq!(
+        failure.error_code.as_deref(),
+        Some("central_operation.delete_restore_collision")
+    );
+    assert_eq!(
+        failure.error_category.as_deref(),
+        Some("central_skills.central_operation")
+    );
+    assert_eq!(failure.error, "This Central skill could not be deleted.");
+    let serialized = serde_json::to_string(failure).unwrap();
+    assert!(!serialized.contains(home.to_string_lossy().as_ref()));
+    assert!(!serialized.contains("manifest"));
+}
+
+#[tokio::test]
 #[ignore = "import 路径需要本地 preview workspace 或 GitHub 网络；core 步骤在其他测试中覆盖"]
 async fn apply_imports_remote_added_and_clears_pending_row() {
     // 占位骨架：apply 的 import 分支无法在不触网的情况下完整测试。
@@ -2255,9 +2940,16 @@ async fn apply_rejects_platform_cleanup_outside_allowed_agents() {
 
     assert_eq!(result.failures.len(), 1);
     assert_eq!(result.failures[0].step, "remove_platform_duplicate");
-    assert!(result.failures[0]
-        .error
-        .contains("outside the allowed platform scope"));
+    assert_eq!(result.failures[0].identifier, "cursor::dup");
+    assert_eq!(result.failures[0].phase.as_deref(), Some("decision_apply"));
+    assert_eq!(
+        result.failures[0].error_code.as_deref(),
+        Some("central_updates.remove_platform_duplicate_failed")
+    );
+    assert_eq!(
+        result.failures[0].error,
+        "This update item could not be applied."
+    );
     assert!(cursor_skill_dir.exists());
     assert!(result.removed_platform_duplicate_paths.is_empty());
 }
@@ -2303,9 +2995,16 @@ async fn apply_rejects_deleted_platform_copy_outside_allowed_agents() {
 
     assert_eq!(result.failures.len(), 1);
     assert_eq!(result.failures[0].step, "remove_deleted_platform_copy");
-    assert!(result.failures[0]
-        .error
-        .contains("outside the allowed platform scope"));
+    assert_eq!(result.failures[0].identifier, "cursor::removed-skill");
+    assert_eq!(result.failures[0].phase.as_deref(), Some("decision_apply"));
+    assert_eq!(
+        result.failures[0].error_code.as_deref(),
+        Some("central_updates.remove_deleted_platform_copy_failed")
+    );
+    assert_eq!(
+        result.failures[0].error,
+        "This update item could not be applied."
+    );
     assert!(cursor_skill_dir.exists());
     assert!(result.removed_deleted_platform_copy_paths.is_empty());
 }
@@ -2932,4 +3631,1023 @@ async fn scan_deleted_platform_copies_excludes_file_paths() {
         .unwrap();
 
     assert!(groups.is_empty());
+}
+
+/*
+ * ========================================================================
+ * 常规模式自动归位 + 失败项重试
+ * ========================================================================
+ */
+
+async fn retry_failed_repositories_impl(
+    pool: &DbPool,
+    cache: &CentralUpdateSnapshotCache,
+    base_scope: SkillRefreshScope,
+    repository_ids: Vec<&str>,
+    mode_override: Option<SkillRefreshMode>,
+) -> Result<SkillUpdateInventory, CentralUpdatesError> {
+    super::retry_failed_repositories_impl(
+        pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        cache,
+        base_scope,
+        repository_ids.into_iter().map(String::from).collect(),
+        mode_override,
+        None,
+    )
+    .await
+}
+
+async fn set_persisted_actionable_repository_id_to_null(
+    pool: &DbPool,
+    inventory_id: &str,
+    bucket: &str,
+    entity_key: &str,
+) {
+    let entry = db::list_skill_update_inventory_entries(pool, inventory_id)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|entry| entry.bucket == bucket && entry.entity_key == entity_key)
+        .expect("persisted actionable entry");
+    let mut payload: serde_json::Value = serde_json::from_str(&entry.payload_json).unwrap();
+    payload["repositoryId"] = serde_json::Value::Null;
+
+    sqlx::query(
+        "UPDATE skill_update_inventory_entries
+         SET repository_id = NULL, payload_json = ?
+         WHERE inventory_id = ? AND bucket = ? AND entity_key = ?",
+    )
+    .bind(serde_json::to_string(&payload).unwrap())
+    .bind(inventory_id)
+    .bind(bucket)
+    .bind(entity_key)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+struct MissingRetryFixture {
+    pool: DbPool,
+    _temp: TempDir,
+    cache: CentralUpdateSnapshotCache,
+    repository_id: String,
+}
+
+async fn setup_missing_retry_fixture(agent_id: Option<&str>) -> MissingRetryFixture {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let stable_dir = temp.path().join("stable");
+    let gone_dir = temp.path().join("gone");
+    std::fs::create_dir_all(&stable_dir).unwrap();
+    std::fs::create_dir_all(&gone_dir).unwrap();
+    std::fs::write(
+        stable_dir.join("SKILL.md"),
+        b"---\nname: Stable\n---\n\nold",
+    )
+    .unwrap();
+    std::fs::write(gone_dir.join("SKILL.md"), b"---\nname: Gone\n---\n\nold").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("stable", &stable_dir))
+        .await
+        .unwrap();
+    db::upsert_skill(&pool, &make_central_skill("gone", &gone_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "stable", "skills/stable").await;
+    assign_test_repo(&pool, "gone", "skills/gone").await;
+
+    if let Some(agent_id) = agent_id {
+        for skill_id in ["stable", "gone"] {
+            let install_dir = temp.path().join(agent_id).join(skill_id);
+            std::fs::create_dir_all(&install_dir).unwrap();
+            std::fs::write(
+                install_dir.join("SKILL.md"),
+                b"---\nname: Installed\n---\n\nold",
+            )
+            .unwrap();
+            db::upsert_agent_skill_observation(
+                &pool,
+                &make_observation(
+                    agent_id,
+                    skill_id,
+                    &install_dir.to_string_lossy(),
+                    "writable",
+                    false,
+                ),
+            )
+            .await
+            .unwrap();
+        }
+    }
+
+    let repository_id = db::get_skill_repository_assignment(&pool, "stable")
+        .await
+        .unwrap()
+        .repository
+        .id;
+    let cache = snapshots_cache_with(vec![(
+        test_repo(),
+        skill_snapshot(vec![(
+            "skills/stable/SKILL.md",
+            b"---\nname: Stable\n---\n\nnew",
+        )]),
+    )]);
+
+    MissingRetryFixture {
+        pool,
+        _temp: temp,
+        cache,
+        repository_id,
+    }
+}
+
+/// Regular mode has no remote-addition listing, so the new location is looked
+/// up in the snapshot that was already downloaded for the hash comparison.
+#[tokio::test]
+async fn refresh_regular_mode_relocates_moved_skill_from_the_snapshot() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join("teach");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::fs::write(skill_dir.join("SKILL.md"), b"---\nname: Teach\n---\n\nold").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("teach", &skill_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "teach", "skills/in-progress/teach").await;
+    let repository_id = db::get_skill_repository_assignment(&pool, "teach")
+        .await
+        .unwrap()
+        .repository
+        .id;
+
+    let cache = snapshots_cache_with(vec![(
+        test_repo(),
+        skill_snapshot(vec![(
+            "skills/productivity/teach/SKILL.md",
+            b"---\nname: Teach\n---\n\nnew",
+        )]),
+    )]);
+
+    let inventory = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &cache,
+        with_mode(scope_repos(vec![&repository_id]), SkillRefreshMode::Regular),
+    )
+    .await
+    .unwrap();
+
+    assert!(inventory.failed_repositories.is_empty());
+    assert_eq!(inventory.updatable.len(), 1);
+    assert_eq!(
+        inventory.updatable[0].state.source_path.as_deref(),
+        Some("skills/productivity/teach")
+    );
+    assert!(inventory.remote_missing.is_empty());
+
+    let assignment = db::get_skill_repository_assignment(&pool, "teach")
+        .await
+        .unwrap();
+    assert_eq!(
+        assignment.source_path.as_deref(),
+        Some("skills/productivity/teach")
+    );
+}
+
+#[tokio::test]
+async fn refresh_regular_mode_relocation_keeps_unchanged_skill_out_of_every_bucket() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join("teach");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::fs::write(skill_dir.join("SKILL.md"), b"---\nname: Teach\n---").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("teach", &skill_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "teach", "skills/in-progress/teach").await;
+    let repository_id = db::get_skill_repository_assignment(&pool, "teach")
+        .await
+        .unwrap()
+        .repository
+        .id;
+
+    let cache = snapshots_cache_with(vec![(
+        test_repo(),
+        skill_snapshot(vec![(
+            "skills/productivity/teach/SKILL.md",
+            b"---\nname: Teach\n---",
+        )]),
+    )]);
+
+    let inventory = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &cache,
+        with_mode(scope_repos(vec![&repository_id]), SkillRefreshMode::Regular),
+    )
+    .await
+    .unwrap();
+
+    assert!(inventory.failed_repositories.is_empty());
+    assert!(inventory.updatable.is_empty());
+    assert!(inventory.remote_missing.is_empty());
+
+    let assignment = db::get_skill_repository_assignment(&pool, "teach")
+        .await
+        .unwrap();
+    assert_eq!(
+        assignment.source_path.as_deref(),
+        Some("skills/productivity/teach")
+    );
+}
+
+#[tokio::test]
+async fn refresh_regular_mode_leaves_ambiguous_relocation_to_the_user() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join("teach");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::fs::write(skill_dir.join("SKILL.md"), b"---\nname: Teach\n---").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("teach", &skill_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "teach", "skills/in-progress/teach").await;
+    let repository_id = db::get_skill_repository_assignment(&pool, "teach")
+        .await
+        .unwrap()
+        .repository
+        .id;
+
+    let cache = snapshots_cache_with(vec![(
+        test_repo(),
+        skill_snapshot(vec![
+            ("skills/a/teach/SKILL.md", b"---\nname: Teach A\n---"),
+            ("skills/b/teach/SKILL.md", b"---\nname: Teach B\n---"),
+        ]),
+    )]);
+
+    let inventory = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &cache,
+        with_mode(scope_repos(vec![&repository_id]), SkillRefreshMode::Regular),
+    )
+    .await
+    .unwrap();
+
+    assert!(inventory.updatable.is_empty());
+    assert_eq!(inventory.failed_repositories.len(), 1);
+    assert_eq!(
+        inventory.failed_repositories[0].retry,
+        FailedRepositoryRetry::DecisionRequired
+    );
+
+    let assignment = db::get_skill_repository_assignment(&pool, "teach")
+        .await
+        .unwrap();
+    assert_eq!(
+        assignment.source_path.as_deref(),
+        Some("skills/in-progress/teach"),
+        "an ambiguous move must not rewrite the tracked source path"
+    );
+}
+
+#[tokio::test]
+async fn refresh_regular_mode_does_not_take_a_path_another_skill_tracks() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let moved_dir = temp.path().join("teach");
+    let owner_dir = temp.path().join("teach-copy");
+    std::fs::create_dir_all(&moved_dir).unwrap();
+    std::fs::create_dir_all(&owner_dir).unwrap();
+    std::fs::write(moved_dir.join("SKILL.md"), b"---\nname: Teach\n---").unwrap();
+    std::fs::write(owner_dir.join("SKILL.md"), b"---\nname: Teach\n---").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("teach", &moved_dir))
+        .await
+        .unwrap();
+    db::upsert_skill(&pool, &make_central_skill("teach-copy", &owner_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "teach", "skills/a/teach").await;
+    assign_test_repo(&pool, "teach-copy", "skills/b/teach").await;
+    let repository_id = db::get_skill_repository_assignment(&pool, "teach")
+        .await
+        .unwrap()
+        .repository
+        .id;
+
+    let cache = snapshots_cache_with(vec![(
+        test_repo(),
+        skill_snapshot(vec![("skills/b/teach/SKILL.md", b"---\nname: Teach\n---")]),
+    )]);
+
+    let inventory = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &cache,
+        with_mode(scope_repos(vec![&repository_id]), SkillRefreshMode::Regular),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(inventory.failed_repositories.len(), 1);
+    assert_eq!(
+        inventory.failed_repositories[0].retry,
+        FailedRepositoryRetry::DecisionRequired
+    );
+    assert_eq!(
+        db::get_skill_repository_assignment(&pool, "teach")
+            .await
+            .unwrap()
+            .source_path
+            .as_deref(),
+        Some("skills/a/teach")
+    );
+    assert_eq!(
+        db::get_skill_repository_assignment(&pool, "teach-copy")
+            .await
+            .unwrap()
+            .source_path
+            .as_deref(),
+        Some("skills/b/teach")
+    );
+}
+
+/// Retrying one repository must not discard what the other repositories
+/// contributed to the inventory the user is looking at.
+#[tokio::test]
+async fn retry_refreshes_only_the_requested_repository_and_keeps_the_rest() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let stable_dir = temp.path().join("stable");
+    let broken_dir = temp.path().join("broken");
+    std::fs::create_dir_all(&stable_dir).unwrap();
+    std::fs::create_dir_all(&broken_dir).unwrap();
+    std::fs::write(
+        stable_dir.join("SKILL.md"),
+        b"---\nname: Stable\n---\n\nold",
+    )
+    .unwrap();
+    std::fs::write(
+        broken_dir.join("SKILL.md"),
+        b"---\nname: Broken\n---\n\nold",
+    )
+    .unwrap();
+    db::upsert_skill(&pool, &make_central_skill("stable", &stable_dir))
+        .await
+        .unwrap();
+    db::upsert_skill(&pool, &make_central_skill("broken", &broken_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "stable", "skills/stable").await;
+    assign_alt_repo(&pool, "broken", "skills/broken").await;
+    let stable_repo_id = db::get_skill_repository_assignment(&pool, "stable")
+        .await
+        .unwrap()
+        .repository
+        .id;
+    let broken_repo_id = db::get_skill_repository_assignment(&pool, "broken")
+        .await
+        .unwrap()
+        .repository
+        .id;
+    sqlx::query("UPDATE skill_repositories SET branch = 'unsafe/branch' WHERE id = ?")
+        .bind(&broken_repo_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let cache = snapshots_cache_with(vec![(
+        test_repo(),
+        skill_snapshot(vec![(
+            "skills/stable/SKILL.md",
+            b"---\nname: Stable\n---\n\nnew",
+        )]),
+    )]);
+    let base_scope = with_mode(scope_all(), SkillRefreshMode::Sync);
+
+    let first = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &cache,
+        base_scope.clone(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(first.updatable.len(), 1);
+    assert_eq!(first.updatable[0].state.skill_id, "stable");
+    assert_eq!(first.failed_repositories.len(), 1);
+    assert_eq!(first.failed_repositories[0].repository_id, broken_repo_id);
+
+    sqlx::query("UPDATE skill_repositories SET branch = 'main' WHERE id = ?")
+        .bind(&broken_repo_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    cache
+        .insert(
+            repo_cache_key(&alt_repo()),
+            skill_snapshot(vec![(
+                "skills/broken/SKILL.md",
+                b"---\nname: Broken\n---\n\nnew",
+            )]),
+        )
+        .expect("seed alt snapshot");
+
+    let merged = retry_failed_repositories_impl(
+        &pool,
+        &cache,
+        base_scope.clone(),
+        vec![&broken_repo_id],
+        None,
+    )
+    .await
+    .unwrap();
+
+    assert!(merged.failed_repositories.is_empty());
+    let mut updatable_ids = merged
+        .updatable
+        .iter()
+        .map(|item| item.state.skill_id.clone())
+        .collect::<Vec<_>>();
+    updatable_ids.sort();
+    assert_eq!(
+        updatable_ids,
+        vec!["broken".to_string(), "stable".to_string()]
+    );
+    assert!(
+        merged
+            .updatable
+            .iter()
+            .any(|item| item.repository_id.as_deref() == Some(stable_repo_id.as_str())),
+        "the untouched repository keeps its own entry"
+    );
+
+    let runs: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM skill_update_inventory_runs")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(runs, 1, "retry merges into the panel's own inventory run");
+}
+
+/// A Skills-scoped regular inventory and its repository-scoped retry describe
+/// the same skills with different scope metadata. Retrying must replace those
+/// rows instead of appending duplicate entity keys to the stored panel run.
+#[tokio::test]
+async fn retry_skills_regular_inventory_replaces_repository_slice_without_duplicates() {
+    let MissingRetryFixture {
+        pool,
+        _temp,
+        cache,
+        repository_id,
+    } = setup_missing_retry_fixture(None).await;
+    let base_scope = with_mode(
+        scope_skills(vec!["stable", "gone"]),
+        SkillRefreshMode::Regular,
+    );
+
+    let regular = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &cache,
+        base_scope.clone(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(regular.updatable.len(), 1);
+    assert_eq!(regular.updatable[0].state.skill_id, "stable");
+    assert_eq!(
+        regular.updatable[0].repository_id.as_deref(),
+        Some(repository_id.as_str()),
+        "Skills scope must preserve the prepared assignment's repository",
+    );
+    assert_eq!(regular.failed_repositories.len(), 1);
+    assert_eq!(
+        regular.failed_repositories[0].retry,
+        FailedRepositoryRetry::DecisionRequired
+    );
+
+    let merged = retry_failed_repositories_impl(
+        &pool,
+        &cache,
+        base_scope.clone(),
+        vec![&repository_id],
+        Some(SkillRefreshMode::Sync),
+    )
+    .await
+    .expect("repository retry must replace the Skills-scoped baseline");
+
+    assert_eq!(merged.updatable.len(), 1);
+    assert_eq!(merged.updatable[0].state.skill_id, "stable");
+    assert_eq!(
+        merged.updatable[0].repository_id.as_deref(),
+        Some(repository_id.as_str())
+    );
+    assert_eq!(merged.remote_missing.len(), 1);
+    assert_eq!(merged.remote_missing[0].state.skill_id, "gone");
+    assert_eq!(
+        merged.remote_missing[0].repository_id.as_deref(),
+        Some(repository_id.as_str())
+    );
+    assert!(merged.failed_repositories.is_empty());
+
+    let stored = get_skill_update_inventory_impl_scoped(&pool, Some(base_scope.clone()))
+        .await
+        .unwrap();
+    assert_eq!(stored.updatable.len(), 1);
+    assert_eq!(stored.remote_missing.len(), 1);
+    assert!(stored.failed_repositories.is_empty());
+
+    let inventory_id = inventory_id_for_scope(Some(&base_scope));
+    let run_mode: String =
+        sqlx::query_scalar("SELECT mode FROM skill_update_inventory_runs WHERE inventory_id = ?")
+            .bind(&inventory_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(run_mode, "regular");
+
+    let entries = db::list_skill_update_inventory_entries(&pool, &inventory_id)
+        .await
+        .unwrap();
+    let unique_keys = entries
+        .iter()
+        .map(|entry| (entry.bucket.as_str(), entry.entity_key.as_str()))
+        .collect::<HashSet<_>>();
+    assert_eq!(unique_keys.len(), entries.len());
+}
+
+#[tokio::test]
+async fn retry_platform_regular_inventory_replaces_repository_slice_without_duplicates() {
+    let MissingRetryFixture {
+        pool,
+        _temp,
+        cache,
+        repository_id,
+    } = setup_missing_retry_fixture(Some("codex")).await;
+    let base_scope = with_mode(scope_platform(vec!["codex"]), SkillRefreshMode::Regular);
+
+    let regular = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &cache,
+        base_scope.clone(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(regular.updatable.len(), 1);
+    assert_eq!(regular.updatable[0].state.skill_id, "stable");
+    assert_eq!(
+        regular.updatable[0].repository_id.as_deref(),
+        Some(repository_id.as_str())
+    );
+    assert_eq!(regular.failed_repositories.len(), 1);
+
+    let merged = retry_failed_repositories_impl(
+        &pool,
+        &cache,
+        base_scope.clone(),
+        vec![&repository_id],
+        Some(SkillRefreshMode::Sync),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(merged.updatable.len(), 1);
+    assert_eq!(merged.updatable[0].state.skill_id, "stable");
+    assert_eq!(merged.remote_missing.len(), 1);
+    assert_eq!(merged.remote_missing[0].state.skill_id, "gone");
+    assert!(merged.failed_repositories.is_empty());
+
+    let stored = get_skill_update_inventory_impl_scoped(&pool, Some(base_scope))
+        .await
+        .unwrap();
+    assert_eq!(stored.updatable.len(), 1);
+    assert_eq!(stored.remote_missing.len(), 1);
+}
+
+#[tokio::test]
+async fn refresh_platform_scope_assigns_repository_to_all_actionable_rows() {
+    let MissingRetryFixture {
+        pool,
+        _temp,
+        cache,
+        repository_id,
+    } = setup_missing_retry_fixture(Some("codex")).await;
+
+    let inventory = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &cache,
+        with_mode(scope_platform(vec!["codex"]), SkillRefreshMode::Sync),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(inventory.updatable.len(), 1);
+    assert_eq!(inventory.updatable[0].state.skill_id, "stable");
+    assert_eq!(
+        inventory.updatable[0].repository_id.as_deref(),
+        Some(repository_id.as_str())
+    );
+    assert_eq!(inventory.remote_missing.len(), 1);
+    assert_eq!(inventory.remote_missing[0].state.skill_id, "gone");
+    assert_eq!(
+        inventory.remote_missing[0].repository_id.as_deref(),
+        Some(repository_id.as_str())
+    );
+}
+
+/// Inventories persisted by the affected release contain null repository ids.
+/// The first retry after upgrading must recognize those rows from the current
+/// repository membership and replace them without asking the user to clear the
+/// panel or edit SQLite.
+#[tokio::test]
+async fn retry_replaces_legacy_null_repository_membership_rows() {
+    let MissingRetryFixture {
+        pool,
+        _temp,
+        cache,
+        repository_id,
+    } = setup_missing_retry_fixture(None).await;
+    let base_scope = with_mode(
+        scope_skills(vec!["stable", "gone"]),
+        SkillRefreshMode::Regular,
+    );
+
+    refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &cache,
+        base_scope.clone(),
+    )
+    .await
+    .unwrap();
+
+    let inventory_id = inventory_id_for_scope(Some(&base_scope));
+    set_persisted_actionable_repository_id_to_null(&pool, &inventory_id, "updatable", "stable")
+        .await;
+
+    let legacy = get_skill_update_inventory_impl_scoped(&pool, Some(base_scope.clone()))
+        .await
+        .unwrap();
+    assert_eq!(legacy.updatable.len(), 1);
+    assert!(legacy.updatable[0].repository_id.is_none());
+
+    let merged = retry_failed_repositories_impl(
+        &pool,
+        &cache,
+        base_scope.clone(),
+        vec![&repository_id],
+        Some(SkillRefreshMode::Sync),
+    )
+    .await
+    .expect("retry must upgrade legacy null repository ownership in place");
+
+    assert_eq!(merged.updatable.len(), 1);
+    assert_eq!(merged.updatable[0].state.skill_id, "stable");
+    assert_eq!(
+        merged.updatable[0].repository_id.as_deref(),
+        Some(repository_id.as_str())
+    );
+    assert_eq!(merged.remote_missing.len(), 1);
+    assert_eq!(merged.remote_missing[0].state.skill_id, "gone");
+
+    let stored = get_skill_update_inventory_impl_scoped(&pool, Some(base_scope))
+        .await
+        .unwrap();
+    assert_eq!(stored.updatable.len(), 1);
+    assert_eq!(stored.remote_missing.len(), 1);
+}
+
+#[tokio::test]
+async fn retry_replaces_legacy_null_remote_missing_row() {
+    let MissingRetryFixture {
+        pool,
+        _temp,
+        cache,
+        repository_id,
+    } = setup_missing_retry_fixture(None).await;
+    let base_scope = with_mode(scope_skills(vec!["stable", "gone"]), SkillRefreshMode::Sync);
+
+    let initial = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &cache,
+        base_scope.clone(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(initial.remote_missing.len(), 1);
+    assert_eq!(
+        initial.remote_missing[0].repository_id.as_deref(),
+        Some(repository_id.as_str())
+    );
+
+    let inventory_id = inventory_id_for_scope(Some(&base_scope));
+    set_persisted_actionable_repository_id_to_null(&pool, &inventory_id, "remote_missing", "gone")
+        .await;
+
+    let merged = retry_failed_repositories_impl(
+        &pool,
+        &cache,
+        base_scope.clone(),
+        vec![&repository_id],
+        None,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(merged.remote_missing.len(), 1);
+    assert_eq!(merged.remote_missing[0].state.skill_id, "gone");
+    assert_eq!(
+        merged.remote_missing[0].repository_id.as_deref(),
+        Some(repository_id.as_str())
+    );
+    let stored = get_skill_update_inventory_impl_scoped(&pool, Some(base_scope))
+        .await
+        .unwrap();
+    assert_eq!(stored.remote_missing.len(), 1);
+}
+
+#[tokio::test]
+async fn retry_removes_legacy_null_row_when_target_is_now_up_to_date() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let stable_dir = temp.path().join("stable");
+    std::fs::create_dir_all(&stable_dir).unwrap();
+    std::fs::write(
+        stable_dir.join("SKILL.md"),
+        b"---\nname: Stable\n---\n\nold",
+    )
+    .unwrap();
+    db::upsert_skill(&pool, &make_central_skill("stable", &stable_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "stable", "skills/stable").await;
+    let repository_id = db::get_skill_repository_assignment(&pool, "stable")
+        .await
+        .unwrap()
+        .repository
+        .id;
+    let remote_manifest = b"---\nname: Stable\n---\n\nnew";
+    let cache = snapshots_cache_with(vec![(
+        test_repo(),
+        skill_snapshot(vec![("skills/stable/SKILL.md", remote_manifest)]),
+    )]);
+    let base_scope = with_mode(scope_skills(vec!["stable"]), SkillRefreshMode::Regular);
+
+    refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &cache,
+        base_scope.clone(),
+    )
+    .await
+    .unwrap();
+    let inventory_id = inventory_id_for_scope(Some(&base_scope));
+    set_persisted_actionable_repository_id_to_null(&pool, &inventory_id, "updatable", "stable")
+        .await;
+    std::fs::write(stable_dir.join("SKILL.md"), remote_manifest).unwrap();
+
+    let merged = retry_failed_repositories_impl(
+        &pool,
+        &cache,
+        base_scope.clone(),
+        vec![&repository_id],
+        None,
+    )
+    .await
+    .unwrap();
+
+    assert!(merged.updatable.is_empty());
+    let stored = get_skill_update_inventory_impl_scoped(&pool, Some(base_scope))
+        .await
+        .unwrap();
+    assert!(stored.updatable.is_empty());
+}
+
+#[tokio::test]
+async fn retry_preserves_unrelated_legacy_null_repository_row() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let target_dir = temp.path().join("target");
+    let unrelated_dir = temp.path().join("unrelated");
+    std::fs::create_dir_all(&target_dir).unwrap();
+    std::fs::create_dir_all(&unrelated_dir).unwrap();
+    std::fs::write(
+        target_dir.join("SKILL.md"),
+        b"---\nname: Target\n---\n\nold",
+    )
+    .unwrap();
+    std::fs::write(
+        unrelated_dir.join("SKILL.md"),
+        b"---\nname: Unrelated\n---\n\nold",
+    )
+    .unwrap();
+    db::upsert_skill(&pool, &make_central_skill("target", &target_dir))
+        .await
+        .unwrap();
+    db::upsert_skill(&pool, &make_central_skill("unrelated", &unrelated_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "target", "skills/target").await;
+    assign_alt_repo(&pool, "unrelated", "skills/unrelated").await;
+    let target_repository_id = db::get_skill_repository_assignment(&pool, "target")
+        .await
+        .unwrap()
+        .repository
+        .id;
+    let cache = snapshots_cache_with(vec![
+        (
+            test_repo(),
+            skill_snapshot(vec![(
+                "skills/target/SKILL.md",
+                b"---\nname: Target\n---\n\nnew",
+            )]),
+        ),
+        (
+            alt_repo(),
+            skill_snapshot(vec![(
+                "skills/unrelated/SKILL.md",
+                b"---\nname: Unrelated\n---\n\nnew",
+            )]),
+        ),
+    ]);
+    let base_scope = with_mode(
+        scope_skills(vec!["target", "unrelated"]),
+        SkillRefreshMode::Regular,
+    );
+
+    refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &cache,
+        base_scope.clone(),
+    )
+    .await
+    .unwrap();
+    let inventory_id = inventory_id_for_scope(Some(&base_scope));
+    set_persisted_actionable_repository_id_to_null(&pool, &inventory_id, "updatable", "target")
+        .await;
+    set_persisted_actionable_repository_id_to_null(&pool, &inventory_id, "updatable", "unrelated")
+        .await;
+
+    let merged = retry_failed_repositories_impl(
+        &pool,
+        &cache,
+        base_scope,
+        vec![&target_repository_id],
+        None,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(merged.updatable.len(), 2);
+    let target = merged
+        .updatable
+        .iter()
+        .find(|item| item.state.skill_id == "target")
+        .unwrap();
+    assert_eq!(
+        target.repository_id.as_deref(),
+        Some(target_repository_id.as_str())
+    );
+    let unrelated = merged
+        .updatable
+        .iter()
+        .find(|item| item.state.skill_id == "unrelated")
+        .unwrap();
+    assert!(unrelated.repository_id.is_none());
+}
+
+#[tokio::test]
+async fn retry_without_repositories_returns_the_stored_inventory() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join("stable");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::fs::write(skill_dir.join("SKILL.md"), b"---\nname: Stable\n---\n\nold").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("stable", &skill_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "stable", "skills/stable").await;
+
+    let cache = snapshots_cache_with(vec![(
+        test_repo(),
+        skill_snapshot(vec![(
+            "skills/stable/SKILL.md",
+            b"---\nname: Stable\n---\n\nnew",
+        )]),
+    )]);
+    let base_scope = with_mode(scope_all(), SkillRefreshMode::Sync);
+    refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &cache,
+        base_scope.clone(),
+    )
+    .await
+    .unwrap();
+
+    let retried = retry_failed_repositories_impl(&pool, &cache, base_scope, vec![], None)
+        .await
+        .unwrap();
+
+    assert_eq!(retried.updatable.len(), 1);
+    assert_eq!(retried.updatable[0].state.skill_id, "stable");
+}
+
+/// A row that needs a keep-or-delete decision is re-checked in incremental mode
+/// without moving the panel out of its own mode.
+#[tokio::test]
+async fn retry_with_sync_override_produces_removal_decisions_for_a_regular_inventory() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let skill_dir = temp.path().join("gone");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::fs::write(skill_dir.join("SKILL.md"), b"---\nname: Gone\n---").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("gone", &skill_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "gone", "skills/gone").await;
+    let repository_id = db::get_skill_repository_assignment(&pool, "gone")
+        .await
+        .unwrap()
+        .repository
+        .id;
+
+    let cache = snapshots_cache_with(vec![(
+        test_repo(),
+        skill_snapshot(vec![("skills/other/SKILL.md", b"---\nname: Other\n---")]),
+    )]);
+    let base_scope = with_mode(scope_repos(vec![&repository_id]), SkillRefreshMode::Regular);
+
+    let regular = refresh_skill_update_inventory_impl(
+        &pool,
+        &CentralFs::Local,
+        None,
+        &http_client(),
+        &cache,
+        base_scope.clone(),
+    )
+    .await
+    .unwrap();
+    assert!(regular.remote_missing.is_empty());
+    assert_eq!(
+        regular.failed_repositories[0].retry,
+        FailedRepositoryRetry::DecisionRequired
+    );
+
+    let merged = retry_failed_repositories_impl(
+        &pool,
+        &cache,
+        base_scope,
+        vec![&repository_id],
+        Some(SkillRefreshMode::Sync),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(merged.remote_missing.len(), 1);
+    assert_eq!(merged.remote_missing[0].state.skill_id, "gone");
+    assert!(merged.failed_repositories.is_empty());
+
+    let stored_mode: String =
+        sqlx::query_scalar("SELECT mode FROM skill_update_inventory_runs LIMIT 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        stored_mode, "regular",
+        "the override only changes what this slice looked for"
+    );
 }

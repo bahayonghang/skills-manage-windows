@@ -44,8 +44,8 @@ pnpm tauri build
 
 - 工具链固定为 Node 22 LTS（`.node-version`/`package.json`）、pnpm 10.12.3（`package.json`）和 Rust 1.97.0（`rust-toolchain.toml`）。
 - `just doctor` 是跨平台只读诊断，会报告缺失或漂移，不安装依赖、不切换 Rust、不修改 PATH，也不输出 token 或 secret。
-- `just check` 只运行 `run-ci` 的 quick lane，适合开发中反馈；不能替代提交前完整的 `just ci` 和 `just audit`。
-- `just ci`：并行跑平台无关的 common lane（只读版本/生成物检查、前端验证与构建、文档、Rust entrypoint/格式/IPC 合同）和当前平台的全 targets Clippy、锁文件 Rust 测试；漂移时失败但不修改 tracked 文件。
+- `just check` 只运行 `run-ci` 的 quick lane，适合开发中反馈；不能替代提交前完整的 `just ci` 和 `just audit`。`just check`/`just ci`/`just build` 都会先自动同步版本元数据（等价于 `just sync-version`），避免本地因版本漂移中断。
+- `just ci`：并行跑平台无关的 common lane（生成物检查、前端验证与构建、文档、Rust entrypoint/格式/IPC 合同）和当前平台的全 targets Clippy、锁文件 Rust 测试；本地入口先自动同步版本元数据。GitHub Actions 直接调用 `run-ci.mjs` 与 `sync-version.mjs --check`，不经过 just，因此 CI 侧版本与生成物检查保持只读，漂移时失败但不修改 tracked 文件。
 - `just version-check`：只读检查 `package.json`、Tauri 与 Cargo 版本元数据；显式更新仍使用 `just sync-version`。
 - `just dev`：直接启动 Tauri 开发模式。
 - `just build`：跑 `pnpm tauri build`，然后把 `src-tauri/target/release/bundle/nsis/` 里最新的 Windows 安装包复制到根目录 `outputs/`。

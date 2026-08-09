@@ -29,6 +29,12 @@ pub enum CentralSkillsError {
     #[error(transparent)]
     CentralOperation(#[from] crate::services::central_operation::CentralOperationError),
 
+    #[error("A pending Central update could not be recovered before deletion.")]
+    UpdateRecovery {
+        error_code: String,
+        error_category: &'static str,
+    },
+
     /// Remote-target transport failures (connect / inspect / read / list /
     /// remove over the SSH or WSL channel; targets module returns String).
     #[error("{0}")]
@@ -51,6 +57,9 @@ pub enum CentralSkillsError {
 
     #[error("Multiple skills are named '{0}'; use uid or slug")]
     AmbiguousSkillReference(String),
+
+    #[error("Central skills {field} filter accepts at most {limit} unique values")]
+    PageFilterValuesExceeded { field: &'static str, limit: usize },
 
     // ── Central skill deletion ───────────────────────────────────────────────
     #[error("Skill '{0}' is not a Central skill")]
@@ -122,6 +131,9 @@ pub enum CentralSkillsError {
         #[source]
         source: std::string::FromUtf8Error,
     },
+
+    #[error("{target} skill file is not valid UTF-8.")]
+    SkillFileNotUtf8 { target: &'static str },
 
     #[error("Path is not a file: {0}")]
     NotAFile(String),
@@ -208,5 +220,42 @@ impl CentralSkillsError {
 
     pub(crate) fn task_join(label: &'static str, message: String) -> Self {
         Self::TaskJoin { label, message }
+    }
+
+    pub(crate) fn stable_delete_error_code(&self) -> String {
+        match self {
+            Self::CentralOperation(error) => format!("central_operation.{}", error.code()),
+            Self::UpdateRecovery { error_code, .. } => error_code.clone(),
+            Self::CentralMutation(_) => "central_skills.mutation_lock_failed".to_string(),
+            Self::Db(_) => "central_skills.database_failed".to_string(),
+            Self::Remote(_) => "central_skills.remote_failed".to_string(),
+            Self::Budget(_) => "central_skills.budget_exceeded".to_string(),
+            _ => "central_skills.delete_failed".to_string(),
+        }
+    }
+
+    pub(crate) const fn diagnostic_category(&self) -> &'static str {
+        match self {
+            Self::Io { .. } => "central_skills.io",
+            Self::Db(_) => "central_skills.db",
+            Self::CentralMutation(_) => "central_skills.central_mutation",
+            Self::CentralOperation(_) => "central_skills.central_operation",
+            Self::UpdateRecovery { error_category, .. } => error_category,
+            Self::Remote(_) => "central_skills.remote",
+            Self::Budget(_) => "central_skills.budget",
+            _ => "central_skills.validation",
+        }
+    }
+
+    pub(crate) const fn public_delete_message(&self) -> &'static str {
+        "This Central skill could not be deleted."
+    }
+
+    pub(crate) const fn delete_failure_phase(&self) -> &'static str {
+        match self {
+            Self::CentralMutation(_) => "mutation_lock",
+            Self::Db(_) | Self::CentralOperation(_) | Self::UpdateRecovery { .. } => "recovery",
+            _ => "prepare",
+        }
     }
 }

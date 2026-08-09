@@ -95,9 +95,57 @@
       "preview_mismatch": "仓库预览与当前目标或仓库不一致，请重新预览。",
       "preview_integrity": "预览的仓库内容已变化，请重新预览并确认更新。",
       "preview_busy": "该预览正在导入中，请等待完成后重试。",
+      "preview_capacity": "打开的仓库预览过多，请关闭较早的预览后重试。",
+      "preview_cleanup_pending": "较早的仓库预览仍在清理中，请重新预览仓库。",
       "preview_commit_unresolved": "无法解析仓库提交，请重新预览。",
       "branch_invalid": "请输入不含斜杠的安全单段分支名。",
-      "branch_conflict": "仓库 URL 中的分支与分支输入框不一致，请调整一致后重新预览。"
+      "branch_conflict": "仓库 URL 中的分支与分支输入框不一致，请调整一致后重新预览。",
+      "archive_redirect_rejected": "GitHub 返回了不安全或异常的仓库压缩包跳转，已停止检查更新。请重试。",
+      "transport_failed": "无法连接 GitHub。请检查网络后重试。",
+      "rate_limited": "GitHub 限流了本次请求。请等待配额重置后重试。",
+      "access_denied": "GitHub 拒绝访问该仓库。请确认令牌具备读取权限。",
+      "repo_not_found": "该 GitHub 仓库不存在，或当前令牌不可见。",
+      "archive_unavailable": "GitHub 当前无法提供该仓库的压缩包。请稍后重试。",
+      "response_invalid": "GitHub 返回了无法解析的响应。",
+      "invalid_url": "该仓库的请求地址不被允许。",
+      "budget_exceeded": "该仓库超出了安全下载上限。",
+      "credential_unavailable": "无法读取已保存的 GitHub 令牌。请在设置中重新保存。"
+    },
+    "central_updates": {
+      "item_failed": "此更新项目无法应用。",
+      "item_failure": "此更新项目无法应用。",
+      "keep_missing_failed": "此更新项目无法应用。",
+      "delete_missing_failed": "此更新项目无法应用。",
+      "skip_addition_failed": "此更新项目无法应用。",
+      "unskip_addition_failed": "此更新项目无法应用。",
+      "remove_platform_duplicate_failed": "此更新项目无法应用。",
+      "remove_deleted_platform_copy_failed": "此更新项目无法应用。",
+      "update_failed": "此更新项目无法应用。",
+      "import_addition_failed": "此更新项目无法应用。",
+      "repository_check_failed": "该仓库检查失败。",
+      "skill_source_missing": "该技能记录的源路径已不存在，且未能唯一定位到新位置。用增量和删减模式重查后可选择保留或删除。",
+      "relocation_failed": "该技能已移动，但重新绑定新位置失败。",
+      "inventory_invariant": "无法完成更新清单。"
+    },
+    "central_operation": {
+      "delete_restore_collision": "Central 恢复证据发生冲突。请在操作日志中检查并处理待恢复操作。"
+    },
+    "recovery": {
+      "reconcile_guard_unavailable": "Central 恢复操作正忙，请稍后重试。",
+      "reconcile_preflight_blocked": "prepared 删除操作已不再满足核销条件，请重新预览。",
+      "reconcile_target_mismatch": "此操作属于另一个目标。",
+      "reconcile_unsupported_kind": "只能对 prepared 阶段的 Central 删除操作执行核销。",
+      "reconcile_unsupported_phase": "此操作已不再处于 prepared 阶段。",
+      "reconcile_invalid_manifest": "恢复证据无效，无法安全核销。",
+      "reconcile_inconsistent_duplicate": "重复恢复条目的证据不一致。",
+      "reconcile_skill_missing": "数据库中已不存在该 Central 技能。",
+      "reconcile_owned_path_missing": "该技能仍拥有的路径处于缺失状态。",
+      "reconcile_fingerprint_drift": "当前技能内容与已记录证据不一致。",
+      "reconcile_artifact_remaining": "仍有恢复备份或标记文件存在。",
+      "reconcile_remote_inspection_failed": "无法检查远端恢复证据。"
+    },
+    "installation": {
+      "pending_central_recovery": "此技能存在待恢复的 Central 操作。请先在操作日志中完成恢复，再修改安装。"
     },
     "local_archive": {
       "archive_not_found": "未找到所选 ZIP 压缩包。",
@@ -428,7 +476,16 @@
       "title": "Central 待恢复操作",
       "loading": "正在检查当前目标中断的变更...",
       "summary": "当前有 {{count}} 个操作需要恢复，恢复前该目标不能继续写入。",
-      "error": "操作仍需恢复：{{error}}"
+      "error": "操作仍需恢复：{{error}}",
+      "reconcile": "核销 prepared 删除",
+      "reconcileTitle": "核销 prepared 删除操作",
+      "reconcileLoading": "正在检查当前数据库与文件系统证据...",
+      "reconcileEligible": "无需修改文件或技能记录即可关闭此操作。已检查 {{duplicates}} 条重复记录和 {{missing}} 条已不归属当前技能的缺失路径。",
+      "reconcileBlocked": "当前证据不足以安全核销此操作。",
+      "reconcileBlockedGeneric": "当前恢复证据阻止核销。",
+      "reconcileConfirm": "确认核销",
+      "reconcileSuccess": "prepared 删除操作已核销。",
+      "reconcileError": "核销失败：{{error}}"
     },
     "detailTitle": "日志详情",
     "searchPlaceholder": "搜索摘要、错误、对象或动作...",
@@ -919,7 +976,7 @@
       "sidebarExpandAllGroups": "展开全部分组",
       "sidebarCollapseAllGroupsAria": "收起中央技能库侧栏全部分组",
       "sidebarExpandAllGroupsAria": "展开中央技能库侧栏全部分组",
-      "sidebarBulkExpansionHint": "已保存视图、标签分组、仓库和标签",
+      "sidebarBulkExpansionHint": "视图、标签、仓库",
       "smartViews": "智能视图",
       "repositories": "仓库",
       "tags": "标签",
@@ -1333,7 +1390,8 @@
         "duplicates": "平台冗余 ({{count}})",
         "orphans": "失链 ({{count}})",
         "deletedPlatformCopies": "平台残留 ({{count}})",
-        "failed": "失败 ({{count}})"
+        "failed": "失败 ({{count}})",
+        "unsupported": "无法检查 ({{count}})"
       },
       "applyAll": "应用全部 ({{count}})",
       "applySelected": "应用已选项 ({{count}})",
@@ -1341,6 +1399,13 @@
       "clearInventory": "清空检查结果",
       "emptyAllClean": "所有内容都是最新的",
       "tabEmpty": "该分类暂无条目",
+      "unsupportedDescription": "以下技能缺少受支持的远端来源，因此无法检查更新。",
+      "unsupportedReasons": {
+        "unknown_source": "没有可用于自动检查的远端来源。",
+        "unsupported_source_type": "此远端来源类型不支持自动检查。",
+        "missing_source_path": "GitHub 来源缺少仓库内路径。",
+        "unsupported_source": "此来源不支持自动检查。"
+      },
       "lastRefreshedAt": "上次刷新：{{time}}",
       "actions": {
         "apply": "应用",
@@ -1361,6 +1426,7 @@
       "forcingChanges": "正在强制更新…",
       "applySuccess": "已应用 {{count}} 项",
       "applyPartialFailure": "已应用 {{succeeded}} 项，失败 {{failed}} 项",
+      "failureToast": "{{identifier}}：{{error}}",
       "applyError": "应用失败：{{error}}",
       "forceUpdateSelected": "强制更新（{{count}}）",
       "forceUpdateConfirm": "将从远端仓库强制覆盖 {{count}} 个已选 Central skill。Central skill 文件和关联的 copy 安装可能会被替换。",
@@ -1401,6 +1467,14 @@
         "cleanupAllSuccess": "已清理 {{count}} 条平台残留路径",
         "cleanupAllPartial": "已清理 {{succeeded}} 条平台残留路径，失败 {{failed}} 条",
         "cleanupAllError": "清理平台残留失败：{{error}}"
+      },
+      "failed": {
+        "retry": "重试",
+        "retryAll": "重试全部失败项（{{count}}）",
+        "recheckWithSync": "用增量和删减模式重查",
+        "retrySuccess": "已重新检查 {{count}} 个仓库",
+        "retryPartial": "已重新检查 {{succeeded}} 个仓库，{{failed}} 个仍然失败",
+        "retryError": "重试失败：{{error}}"
       }
     },
     "sortByInstalledPlatformCount": "安装平台数",
@@ -1477,10 +1551,10 @@
       "progress": {
         "scope": "当前范围：{{scope}}。",
         "preparing": "正在准备仓库检查…",
-        "checking": "已检查 {{completed}} / {{total}} 个仓库",
+        "checking": "已检查 {{completed}} / {{total}} 个可查询的去重远端仓库",
         "finalizing": "正在整理检查结果…",
-        "activeRepositories": "正在检查的仓库",
-        "aria": "更新检查进度：已完成 {{completed}} / {{total}} 个仓库",
+        "activeRepositories": "正在检查的可查询远端仓库",
+        "aria": "更新检查进度：已完成 {{completed}} / {{total}} 个可查询的去重远端仓库",
         "ariaPreparing": "正在准备更新检查"
       },
       "inlineLabel": "更新模式",
@@ -2304,9 +2378,16 @@
       "result": "结果"
     },
     "githubRepoUrl": "GitHub 仓库 URL",
-    "githubBranchLabel": "分支（可选）",
-    "githubBranchPlaceholder": "dev",
-    "githubBranchDefaultHint": "留空时使用仓库默认分支。",
+    "githubBranchLabel": "分支",
+    "githubBranchOption": {
+      "main": "main",
+      "dev": "dev",
+      "custom": "自定义"
+    },
+    "githubCustomBranchLabel": "自定义分支",
+    "githubCustomBranchPlaceholder": "feature/my-branch",
+    "githubBranchDefaultHint": "默认选择 main，也可以切换到 dev 或输入自定义分支。",
+    "githubCustomBranchHint": "请输入要预览的完整分支名称。",
     "previewImport": "预览导入",
     "githubImportNoWriteHint": "预览为只读操作，在你确认导入前不会执行任何写入。",
     "githubImportDesktopOnlyHint": "当前版本仅桌面应用支持 GitHub 仓库预览与导入。",

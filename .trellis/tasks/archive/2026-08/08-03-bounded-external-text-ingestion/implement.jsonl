@@ -1,0 +1,6 @@
+{"file":".trellis/tasks/08-02-src-tauri-architecture-quality-performance/research/src-tauri-deep-audit.md","reason":"F3 external allocation和UTF-8 panic证据清单"}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"bounded/timeout/parse errors在domain与IPC的映射"}
+{"file":".trellis/spec/backend/process-supervision.md","reason":"remote bounded read与AI/transport timeout/cancel/output上限"}
+{"file":".trellis/spec/backend/path-policy.md","reason":"file read budget不得绕过Local/remote containment"}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"response/path/credential不进入错误、日志或导出"}
+{"file":".trellis/spec/backend/spawn-blocking-io.md","reason":"Local文件读取不能阻塞async executor"}

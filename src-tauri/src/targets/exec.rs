@@ -7,6 +7,47 @@ pub(super) struct SshProbe {
 pub(super) const SSH_CONNECT_TIMEOUT_SECS: u64 = 10;
 pub(super) const SSH_SERVER_ALIVE_INTERVAL_SECS: u64 = 15;
 pub(super) const SSH_SERVER_ALIVE_COUNT_MAX: u64 = 3;
+pub(super) const REMOTE_FILE_TOO_LARGE_EXIT: i32 = 44;
+const REMOTE_FILE_SIZE_PROTOCOL_EXIT: i32 = 45;
+
+fn bounded_read_command(path: &str, max_bytes: u64) -> String {
+    let read_bytes = max_bytes.saturating_add(1);
+    format!(
+        "p={path}; size=$(LC_ALL=C wc -c < \"$p\") || exit 1; case \"$size\" in ''|*[!0-9]*) exit {protocol_exit};; esac; [ \"$size\" -le {max_bytes} ] || exit {too_large_exit}; dd if=\"$p\" bs={read_bytes} count=1 2>/dev/null",
+        path = shell_quote(path),
+        protocol_exit = REMOTE_FILE_SIZE_PROTOCOL_EXIT,
+        too_large_exit = REMOTE_FILE_TOO_LARGE_EXIT,
+    )
+}
+
+fn bounded_read_stdout_limit(max_bytes: u64) -> Result<usize, TargetsError> {
+    usize::try_from(max_bytes)
+        .ok()
+        .and_then(|limit| limit.checked_add(1))
+        .ok_or(TargetsError::RemoteFileReadLimitUnsupported)
+}
+
+fn finish_bounded_read(
+    output: std::process::Output,
+    max_bytes: u64,
+    transport: &'static str,
+) -> Result<Vec<u8>, TargetsError> {
+    match output.status.code() {
+        Some(0) => {
+            let actual = u64::try_from(output.stdout.len()).unwrap_or(u64::MAX);
+            if actual > max_bytes {
+                Err(TargetsError::RemoteFileTooLarge { limit: max_bytes })
+            } else {
+                Ok(output.stdout)
+            }
+        }
+        Some(REMOTE_FILE_TOO_LARGE_EXIT) => {
+            Err(TargetsError::RemoteFileTooLarge { limit: max_bytes })
+        }
+        Some(REMOTE_FILE_SIZE_PROTOCOL_EXIT) => Err(TargetsError::RemoteFileSizeProtocol),
+        _ => Err(TargetsError::RemoteFileReadFailed { transport }),
+    }
+}
 
 pub(super) fn askpass_password_from_env(
     marker: Option<OsString>,
@@ -365,6 +406,26 @@ impl ConnectedSshTarget {
             .await
     }
 
+    pub async fn read_file_bounded(
+        &self,
+        path: &str,
+        max_bytes: u64,
+    ) -> Result<Vec<u8>, TargetsError> {
+        let stdout_limit = bounded_read_stdout_limit(max_bytes)?;
+        let mut process = self.base_command();
+        process.arg(bounded_read_command(path, max_bytes));
+        let output = run_process(
+            self.runner.as_ref(),
+            process,
+            None,
+            ProcessPolicy::bounded_read(stdout_limit),
+            ProcessCancellation::Never,
+            ssh_runner_error,
+        )
+        .await?;
+        finish_bounded_read(output, max_bytes, "ssh")
+    }
+
     pub async fn copy_dir(&self, source: &str, target: &str) -> Result<(), TargetsError> {
         let command = format!(
             "mkdir -p {target} && cp -R {source}/. {target}/",
@@ -540,6 +601,29 @@ impl ConnectedWslTarget {
     pub async fn read_file(&self, path: &str) -> Result<Vec<u8>, TargetsError> {
         self.run_command_bytes(&format!("cat {}", shell_quote(path)))
             .await
+    }
+
+    pub async fn read_file_bounded(
+        &self,
+        path: &str,
+        max_bytes: u64,
+    ) -> Result<Vec<u8>, TargetsError> {
+        let stdout_limit = bounded_read_stdout_limit(max_bytes)?;
+        let mut process = self.base_command();
+        process
+            .arg("sh")
+            .arg("-lc")
+            .arg(bounded_read_command(path, max_bytes));
+        let output = run_process(
+            self.runner.as_ref(),
+            process,
+            None,
+            ProcessPolicy::bounded_read(stdout_limit),
+            ProcessCancellation::Never,
+            wsl_runner_error,
+        )
+        .await?;
+        finish_bounded_read(output, max_bytes, "wsl")
     }
 
     pub async fn copy_dir(&self, source: &str, target: &str) -> Result<(), TargetsError> {

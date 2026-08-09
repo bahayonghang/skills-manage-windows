@@ -6,6 +6,7 @@
 
 pub mod ai_provider;
 pub mod ai_tagging;
+pub mod bounded_ingestion;
 pub mod central_mutation;
 pub mod central_operation;
 pub mod central_skills;

@@ -135,6 +135,31 @@ pub(super) fn candidate_content_digest(
     Ok(aggregate_digest(SKILL_CONTENT_DIGEST_DOMAIN, &entries))
 }
 
+pub(crate) fn candidate_content_digest_from_snapshot(
+    snapshot: &GitHubRepoSnapshot,
+    source_path: &str,
+) -> Result<String, GithubImportError> {
+    let mut files = snapshot_files_from_local(snapshot)
+        .into_iter()
+        .filter_map(|file| {
+            repo_file_relative_to_source(&file.repo_path, source_path).map(|path| {
+                GitHubSkillPreviewFile {
+                    path,
+                    byte_len: file.byte_len,
+                    sha256: encode_file_digest(&file.sha256),
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    files.sort_by(|left, right| left.path.as_bytes().cmp(right.path.as_bytes()));
+    if !files.iter().any(|file| file.path == "SKILL.md") {
+        return Err(GithubImportError::PreviewFileManifestIncomplete(
+            source_path.to_string(),
+        ));
+    }
+    candidate_content_digest(&files)
+}
+
 pub(super) fn encode_file_digest(sha256: &[u8; 32]) -> String {
     format!("sha256-v1:{}", hex_encode(sha256))
 }
@@ -201,9 +226,17 @@ pub(super) async fn read_snapshot_repo_file(
                 .await
                 .map_err(|e| GithubImportError::Remote(e.to_string()))?;
             connection
-                .read_file(&remote_join(&workspace.remote_repo_dir, repo_path))
+                .read_file_bounded(
+                    &remote_join(&workspace.remote_repo_dir, repo_path),
+                    expected.byte_len,
+                )
                 .await
-                .map_err(|e| GithubImportError::Remote(e.to_string()))?
+                .map_err(|error| match error {
+                    crate::targets::TargetsError::RemoteFileTooLarge { .. } => {
+                        GithubImportError::PreviewSnapshotIntegrity
+                    }
+                    error => GithubImportError::Remote(error.to_string()),
+                })?
         }
     };
     crate::services::resource_budget::ResourceBudget::default_skill()
@@ -336,22 +369,4 @@ pub(crate) async fn fetch_github_skill_markdown_from_snapshot(
     String::from_utf8(bytes).map_err(|e| {
         GithubImportError::Parse(format!("Preview SKILL.md is not valid UTF-8: {}", e))
     })
-}
-
-/// Release the storage owned by a snapshot that left the registry.
-pub(super) async fn release_snapshot_storage(
-    active_target: &ActiveTarget,
-    snapshot: &PreviewSnapshot,
-) {
-    let Some(workspace) = snapshot.remote_workspace() else {
-        return;
-    };
-    if !active_target.is_remote_like() || active_target.id() != snapshot.target_id {
-        return;
-    }
-    if let Ok(connection) = connect_remote_target(active_target).await {
-        let _ = connection
-            .remove_tree(&workspace.remote_workspace_dir)
-            .await;
-    }
 }

@@ -19,17 +19,19 @@ describe("Central skill card grid sizing", () => {
   });
 
   it("keeps fixed virtual rows tall enough at every supported font scale", () => {
-    expect(centralVirtualItemHeight("list", "comfortable", 0.875)).toBe(196);
+    // 契约值 = 基准高度 × fontScale（全站 rem 随 --font-scale 线性缩放），
+    // 基准值见 centralSkillGrid.ts 中 CENTRAL_GRID_CARD_HEIGHT / CENTRAL_LIST_CARD_HEIGHT。
+    expect(centralVirtualItemHeight("list", "comfortable", 0.875)).toBe(172);
     expect(centralVirtualItemHeight("list", "comfortable", 1)).toBe(196);
-    expect(centralVirtualItemHeight("list", "comfortable", 1.125)).toBe(196);
-    expect(centralVirtualItemHeight("list", "compact", 0.875)).toBe(168);
+    expect(centralVirtualItemHeight("list", "comfortable", 1.125)).toBe(221);
+    expect(centralVirtualItemHeight("list", "compact", 0.875)).toBe(147);
     expect(centralVirtualItemHeight("list", "compact", 1)).toBe(168);
-    expect(centralVirtualItemHeight("list", "compact", 1.125)).toBe(184);
-    expect(centralVirtualItemHeight("grid", "comfortable", 0.875)).toBe(192);
-    expect(centralVirtualItemHeight("grid", "comfortable", 1)).toBe(192);
-    expect(centralVirtualItemHeight("grid", "comfortable", 1.125)).toBe(232);
-    expect(centralVirtualItemHeight("grid", "compact", 0.875)).toBe(172);
-    expect(centralVirtualItemHeight("grid", "compact", 1)).toBe(184);
-    expect(centralVirtualItemHeight("grid", "compact", 1.125)).toBe(208);
+    expect(centralVirtualItemHeight("list", "compact", 1.125)).toBe(189);
+    expect(centralVirtualItemHeight("grid", "comfortable", 0.875)).toBe(210);
+    expect(centralVirtualItemHeight("grid", "comfortable", 1)).toBe(240);
+    expect(centralVirtualItemHeight("grid", "comfortable", 1.125)).toBe(270);
+    expect(centralVirtualItemHeight("grid", "compact", 0.875)).toBe(189);
+    expect(centralVirtualItemHeight("grid", "compact", 1)).toBe(216);
+    expect(centralVirtualItemHeight("grid", "compact", 1.125)).toBe(243);
   });
 });

@@ -13,6 +13,10 @@ mod remote_path;
 mod types;
 
 #[cfg(test)]
+mod pagination_performance_tests;
+#[cfg(test)]
+mod pagination_tests;
+#[cfg(test)]
 mod tests;
 
 pub use error::CentralSkillsError;

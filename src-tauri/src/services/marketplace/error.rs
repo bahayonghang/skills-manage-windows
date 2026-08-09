@@ -10,6 +10,7 @@
 //! (`Http` / `Parse` carry preformatted messages); GitHub-flow failures
 //! propagate transparently from the github_import domain.
 
+use crate::services::central_updates::CentralUpdatesError;
 use crate::services::github_import::GithubImportError;
 
 /// Failure categories for marketplace operations.
@@ -32,6 +33,9 @@ pub enum MarketplaceError {
     /// snapshot download, candidate classification, PAT access).
     #[error(transparent)]
     GithubImport(#[from] GithubImportError),
+
+    #[error(transparent)]
+    CentralUpdates(#[from] CentralUpdatesError),
 
     /// HTTP transport/protocol failure (skills.sh search, skill download).
     /// Message preformatted at the call site.
@@ -58,6 +62,17 @@ pub enum MarketplaceError {
 
     #[error("Skill not found")]
     SkillNotFound,
+
+    #[error("Marketplace registry is disabled.")]
+    RegistryDisabled,
+
+    #[error("Marketplace skill cache is stale. Sync the registry and try again.")]
+    CandidateStale,
+
+    #[error(
+        "Marketplace registry contains an ambiguous skill identity. Sync or fix the registry before installing."
+    )]
+    CandidateAmbiguous,
 
     #[error("Central agent not found in database")]
     CentralAgentMissing,

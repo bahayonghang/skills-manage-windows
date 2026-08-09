@@ -1,10 +1,12 @@
+use std::collections::HashSet;
+
 use crate::db::{self, DbPool, SkillUpdateInventoryEntry};
 use crate::services::central_updates::CentralUpdatesError;
 
 use super::{
     normalize_ids, FailedRepository, RemoteMissingSkill, SkillRefreshCachePolicy, SkillRefreshMode,
     SkillRefreshScope, SkillRefreshScopeKind, SkillUpdateApplyResult, SkillUpdateDiagnostic,
-    SkillUpdateInventory, UpdatableSkill,
+    SkillUpdateInventory, UnsupportedSkill, UpdatableSkill,
 };
 
 pub(super) fn inventory_id_for_scope(scope: Option<&SkillRefreshScope>) -> String {
@@ -84,6 +86,27 @@ pub(super) async fn persist_refresh_inventory(
             &item.state,
         )?);
     }
+    for item in &inventory.unsupported {
+        entries.push(entry_from_payload(
+            &run.inventory_id,
+            "unsupported",
+            &item.skill_id,
+            Some(&item.skill_id),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            cache_policy,
+            false,
+            &generated_at,
+            item,
+            None,
+        )?);
+    }
     for item in &inventory.failed_repositories {
         entries.push(entry_from_payload(
             &run.inventory_id,
@@ -106,7 +129,25 @@ pub(super) async fn persist_refresh_inventory(
         )?);
     }
 
+    validate_inventory_entry_keys(&entries)?;
+
     db::replace_skill_update_inventory(pool, &run, &entries).await?;
+    Ok(())
+}
+
+fn validate_inventory_entry_keys(
+    entries: &[SkillUpdateInventoryEntry],
+) -> Result<(), CentralUpdatesError> {
+    let mut keys = HashSet::new();
+    for entry in entries {
+        if !keys.insert((
+            entry.inventory_id.as_str(),
+            entry.bucket.as_str(),
+            entry.entity_key.as_str(),
+        )) {
+            return Err(CentralUpdatesError::InventoryInvariant);
+        }
+    }
     Ok(())
 }
 
@@ -193,6 +234,7 @@ fn entry_from_payload<T: serde::Serialize>(
 type EntryInventory = (
     Vec<UpdatableSkill>,
     Vec<RemoteMissingSkill>,
+    Vec<UnsupportedSkill>,
     Vec<FailedRepository>,
     Option<String>,
 );
@@ -203,6 +245,7 @@ pub(super) fn inventory_from_entries(
     let generated_at = entries.first().map(|entry| entry.generated_at.clone());
     let mut updatable = Vec::new();
     let mut remote_missing = Vec::new();
+    let mut unsupported = Vec::new();
     let mut failed_repositories = Vec::new();
     for entry in entries {
         match entry.bucket.as_str() {
@@ -214,6 +257,10 @@ pub(super) fn inventory_from_entries(
                 serde_json::from_str::<RemoteMissingSkill>(&entry.payload_json)
                     .map_err(|e| CentralUpdatesError::Json(e.to_string()))?,
             ),
+            "unsupported" => unsupported.push(
+                serde_json::from_str::<UnsupportedSkill>(&entry.payload_json)
+                    .map_err(|e| CentralUpdatesError::Json(e.to_string()))?,
+            ),
             "failed_repository" => failed_repositories.push(
                 serde_json::from_str::<FailedRepository>(&entry.payload_json)
                     .map_err(|e| CentralUpdatesError::Json(e.to_string()))?,
@@ -221,7 +268,13 @@ pub(super) fn inventory_from_entries(
             _ => {}
         }
     }
-    Ok((updatable, remote_missing, failed_repositories, generated_at))
+    Ok((
+        updatable,
+        remote_missing,
+        unsupported,
+        failed_repositories,
+        generated_at,
+    ))
 }
 
 pub(super) fn diagnostic_from_state(

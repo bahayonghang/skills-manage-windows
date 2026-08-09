@@ -74,9 +74,14 @@ describe("MarketplaceView catalog and entry flows", () => {
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(screen.getByLabelText(/GitHub repository URL|GitHub 仓库 URL/i)).toBeInTheDocument();
-    const branchInput = screen.getByLabelText(/Branch \(optional\)|分支（可选）/i);
-    fireEvent.change(branchInput, { target: { value: "dev" } });
-    expect(branchInput).toHaveValue("dev");
+    expect(screen.getByRole("radio", { name: "main" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    const devOption = screen.getByRole("radio", { name: "dev" });
+    fireEvent.click(devOption);
+    expect(devOption).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Custom" })).toBeInTheDocument();
   });
 
   it("searches and installs skills.sh results through marketplace store actions", async () => {

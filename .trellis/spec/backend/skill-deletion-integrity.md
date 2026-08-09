@@ -80,6 +80,20 @@ pub struct OrphanRepairReport {
 - Scanner reconciliation first performs agent-scoped installation and
   observation cleanup in its scan transaction, then deletes stale parents and
   prunes repos. It never repeats the seven-table list.
+- Scanner stale reconciliation requires positive coverage evidence. A Central
+  parent may be considered stale only when the configured authoritative Central
+  root exists, is readable/searchable, and its directory scan completed
+  successfully in the current batch. A missing, unreadable, or unscanned root
+  is unknown coverage, not an authoritative empty snapshot.
+- `ScanPersistenceBatch::central_root_scanned` is the transaction input for
+  that decision. When false, stale parent deletion excludes `is_central = 1`
+  rows and the Central agent's installation/observation keep scopes are not
+  touched. When true, an existing successfully scanned empty root remains an
+  authoritative empty snapshot and deletes genuinely stale Central parents.
+- Local Central enumeration errors abort before persistence with
+  `ScannerError::CentralRootRead`. Remote probes emit `ROOT_OK` only for a
+  readable and searchable directory; `ROOT_UNREADABLE` and missing roots never
+  set authoritative Central coverage.
 - Database initialization order is `backup -> migration 1 -> orphan repair ->
   migration 2 FK rebuild -> foreign_key_check -> seed`.
 - Repair inventory uses explicit `LEFT JOIN skills` predicates. Its stable JSON
@@ -104,6 +118,9 @@ pub struct OrphanRepairReport {
 | Inventory count is negative or overflows `u64` | Return `sqlx::Error::InvalidArgument`; do not mutate data |
 | Keep set is empty | Delete all owned rows and all parent skills in one transaction |
 | Keep set is non-empty | Delete only owned rows and parents absent from the keep set |
+| Central root is missing or was not scanned | Preserve Central parents, fixed UIDs, repository memberships, baselines, and owned relations; do not prune their repository |
+| Central root exists but enumeration fails | Abort before persistence; return a typed scanner error |
+| Central root exists and a successful scan is empty | Reconcile and delete genuinely stale Central parents with normal FK cascade |
 | Repair finds zero rows | Return an empty report and write no audit log |
 | Startup repair fails | Fail database initialization before seed; never continue with partial cleanup |
 | Central FS staging succeeds but DB delete/marker fails | Roll back DB, restore every staged path, retain a recoverable row if restore cannot finish |
@@ -130,6 +147,10 @@ string errors or best-effort logging.
 - Single delete and empty/non-empty keep sets cascade all seven owned relations.
 - Scanner stale cleanup removes all seven while preserving observations outside
   the touched-agent keep set.
+- Scanner Central coverage tests first persist a stable UID plus all seven owned
+  relations, then prove a missing/unreadable root preserves them and an existing
+  successfully scanned empty root removes the stale parent. SSH probe tests
+  separately lock `ROOT_UNREADABLE` parsing and readable/searchable guards.
 - Trigger-injected intermediate relation and audit failures prove full rollback,
   including the audit row after a mid-repair delete failure.
 - Startup repair asserts exact stable JSON, persisted audit fields, cleanup, and
@@ -159,6 +180,9 @@ sqlx::query("DELETE FROM skills WHERE id = ?")
 
 This duplicates an incomplete cascade that the database already owns and can
 commit parent/relation changes separately.
+
+Also wrong: treating an empty keep set as proof that an unavailable Central
+root is empty. Destructive reconciliation needs explicit successful coverage.
 
 ### Correct
 

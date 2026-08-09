@@ -709,7 +709,7 @@ export function PlatformView() {
           ) : filteredSkills.length > 40 ? (
             <VirtualizedGrid
               items={filteredSkills}
-              itemHeight={196}
+              itemHeight={204} // 行高契约：覆盖卡片内容上限 ≈200（virtualized-grid 行轨道已钉死）
               rowGap={16}
               columnGap={16}
               overscanRows={3}

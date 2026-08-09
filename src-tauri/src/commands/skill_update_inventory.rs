@@ -4,10 +4,8 @@
 //! This module keeps the existing command names and payload shapes stable
 //! while translating `State<AppState>` into service inputs.
 
-use serde::Serialize;
 use serde_json::{json, Value};
-use std::sync::Arc;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 
 use crate::operation_log::{
     target_context_from_active_target, with_operation_log, OperationLogEvent,
@@ -17,43 +15,84 @@ use crate::services::central_updates::inventory::{
     apply_skill_update_decisions_impl, clear_skill_update_inventory_impl,
     force_mirror_central_repositories_impl, force_update_central_skills_impl,
     get_skill_update_inventory_impl_scoped, refresh_skill_update_inventory_impl,
-    scan_deleted_platform_copies_with_pool, scan_platform_duplicate_skills_with_pool,
-    DeletedPlatformCopyGroup, ForceRepositoryMirrorRequest, ForceRepositoryMirrorResult,
-    ForceSkillUpdateRequest, ForceSkillUpdateResult, PlatformDuplicateGroup, SkillRefreshScope,
-    SkillRefreshScopeKind, SkillUpdateApplyResult, SkillUpdateDecisions, SkillUpdateInventory,
+    retry_failed_repositories_impl, scan_deleted_platform_copies_with_pool,
+    scan_platform_duplicate_skills_with_pool, DeletedPlatformCopyGroup,
+    ForceRepositoryMirrorRequest, ForceRepositoryMirrorResult, ForceSkillUpdateRequest,
+    ForceSkillUpdateResult, PlatformDuplicateGroup, SkillRefreshMode, SkillRefreshScope,
+    SkillUpdateApplyResult, SkillUpdateDecisions, SkillUpdateInventory,
 };
-use crate::services::central_updates::{
-    CentralFs, SnapshotCachePolicy, SnapshotProgressEvent, SnapshotProgressReporter,
-    SnapshotProgressStatus,
-};
+use crate::services::central_updates::{CentralFs, CentralUpdatesError, SnapshotCachePolicy};
 use crate::services::github_import;
 use crate::AppState;
 
-const UPDATE_INVENTORY_PROGRESS_EVENT: &str = "central://skill-update-inventory-progress";
+#[path = "skill_update_inventory_apply_log.rs"]
+mod apply_log;
+use apply_log::apply_operation_spec;
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct SkillUpdateInventoryProgressPayload {
-    operation_id: String,
-    status: &'static str,
-    total: usize,
-    completed: usize,
-    repository_key: Option<String>,
-    repository_name: Option<String>,
-}
+#[path = "skill_update_inventory_refresh_log.rs"]
+mod refresh_log;
+use refresh_log::{
+    inventory_progress_reporter, refresh_request_details, refresh_result_details,
+    retry_refresh_result_details, retry_request_details,
+};
+#[cfg(test)]
+use refresh_log::{
+    refresh_failure_diagnostics, REFRESH_FAILURE_CATEGORY_FALLBACK, REFRESH_FAILURE_CODE_FALLBACK,
+    REFRESH_RUNTIME_ACTION, RETRY_RUNTIME_ACTION,
+};
+
+/// Legacy string-error call sites (apply / force update / force mirror) have no
+/// typed domain error to classify, so they report this fixed family instead of
+/// leaking the stringified cause.
+const UNCLASSIFIED_CATEGORY: &str = "central_updates.unclassified";
 
 #[derive(Debug)]
-struct UpdateCommandError(String);
+struct UpdateCommandError {
+    ipc_error: String,
+    error_code: Option<&'static str>,
+    phase: Option<&'static str>,
+    category: &'static str,
+}
 
 impl UpdateCommandError {
     fn into_inner(self) -> String {
-        self.0
+        self.ipc_error
+    }
+
+    fn from_central_updates(error: CentralUpdatesError) -> Self {
+        let (error_code, phase) = error
+            .reviewed_operation_failure()
+            .map_or((None, None), |(code, phase)| (Some(code), Some(phase)));
+        Self {
+            ipc_error: error.to_ipc_error(),
+            error_code,
+            phase,
+            category: error.diagnostic_category(),
+        }
+    }
+
+    /// Operation Log payload. `errorCategory` is always present so a failure
+    /// without a reviewed IPC code is still attributable; `errorCode`/`phase`
+    /// are added when the domain classified the failure. Every value is a
+    /// `&'static str` literal.
+    fn operation_details(&self) -> Value {
+        let mut details = json!({ "errorCategory": self.category });
+        if let (Some(error_code), Some(phase)) = (self.error_code, self.phase) {
+            details["errorCode"] = json!(error_code);
+            details["phase"] = json!(phase);
+        }
+        details
     }
 }
 
 impl From<String> for UpdateCommandError {
     fn from(error: String) -> Self {
-        Self(error)
+        Self {
+            ipc_error: error,
+            error_code: None,
+            phase: None,
+            category: UNCLASSIFIED_CATEGORY,
+        }
     }
 }
 
@@ -78,25 +117,7 @@ pub async fn refresh_skill_update_inventory(
             let pool = request_context.db().clone();
             let target_context = target_context_from_active_target(&active_target);
             let request_details = refresh_request_details(&scope);
-            let progress_app = Arc::new(app);
-            let progress: SnapshotProgressReporter =
-                Arc::new(move |event: SnapshotProgressEvent| {
-                    let payload = SkillUpdateInventoryProgressPayload {
-                        operation_id: operation_id.clone(),
-                        status: match event.status {
-                            SnapshotProgressStatus::Started => "started",
-                            SnapshotProgressStatus::RepositoryStarted => "repository_started",
-                            SnapshotProgressStatus::RepositoryCompleted => "repository_completed",
-                            SnapshotProgressStatus::RepositoryFailed => "repository_failed",
-                            SnapshotProgressStatus::Finalizing => "finalizing",
-                        },
-                        total: event.total,
-                        completed: event.completed,
-                        repository_key: event.repository_key,
-                        repository_name: event.repository_name,
-                    };
-                    let _ = progress_app.emit(UPDATE_INVENTORY_PROGRESS_EVENT, payload);
-                });
+            let progress = inventory_progress_reporter(app, operation_id);
             with_operation_log(
                 &state,
                 update_operation_spec(
@@ -128,7 +149,72 @@ pub async fn refresh_skill_update_inventory(
                         Some(progress),
                     )
                     .await
-                    .map_err(|e| UpdateCommandError(e.to_string()))
+                    .map_err(UpdateCommandError::from_central_updates)
+                },
+            )
+            .await
+            .map_err(UpdateCommandError::into_inner)
+        }
+        .await
+    )
+}
+
+/// Re-check only the given repositories and merge the result into the
+/// inventory stored for `scope`. `mode_override` lets a failed row that needs a
+/// keep-or-delete decision be re-checked in incremental mode without changing
+/// the panel's own mode.
+#[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn retry_failed_update_repositories(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    scope: SkillRefreshScope,
+    repository_ids: Vec<String>,
+    mode_override: Option<SkillRefreshMode>,
+    operation_id: String,
+) -> crate::ipc_error::IpcResult<SkillUpdateInventory> {
+    crate::ipc_boundary!(
+        async move {
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let pool = request_context.db().clone();
+            let target_context = target_context_from_active_target(&active_target);
+            let request_details = retry_request_details(&scope, &repository_ids, mode_override);
+            let progress = inventory_progress_reporter(app, operation_id);
+            with_operation_log(
+                &state,
+                update_operation_spec(
+                    target_context,
+                    "update_center.retry_repositories",
+                    "Retried failed update repositories",
+                    "Failed to retry update repositories",
+                    request_details,
+                    retry_refresh_result_details,
+                ),
+                || async {
+                    let fs = CentralFs::from_active_target(active_target)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    let auth = github_import::github_direct_auth_from_secret_store(
+                        &state.db,
+                        state.secrets.as_ref(),
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+                    let client = github_import::github_client().map_err(|e| e.to_string())?;
+                    retry_failed_repositories_impl(
+                        &pool,
+                        &fs,
+                        auth.as_deref(),
+                        &client,
+                        &state.central_update_snapshots,
+                        scope,
+                        repository_ids,
+                        mode_override,
+                        Some(progress),
+                    )
+                    .await
+                    .map_err(UpdateCommandError::from_central_updates)
                 },
             )
             .await
@@ -192,14 +278,7 @@ pub async fn apply_skill_update_decisions(
             let request_details = apply_request_details(&decisions);
             with_operation_log(
                 &state,
-                update_operation_spec(
-                    target_context,
-                    "update_center.apply",
-                    "Applied skill update decisions",
-                    "Failed to apply skill update decisions",
-                    request_details,
-                    apply_result_details,
-                ),
+                apply_operation_spec(target_context, request_details),
                 || async {
                     let fs = CentralFs::from_active_target(active_target.clone())
                         .await
@@ -224,7 +303,7 @@ pub async fn apply_skill_update_decisions(
                         decisions,
                     )
                     .await
-                    .map_err(|e| UpdateCommandError(e.to_string()))
+                    .map_err(|e| UpdateCommandError::from(e.to_string()))
                 },
             )
             .await
@@ -287,7 +366,7 @@ pub async fn force_update_central_skills(
                         request,
                     )
                     .await
-                    .map_err(|e| UpdateCommandError(e.to_string()))
+                    .map_err(|e| UpdateCommandError::from(e.to_string()))
                 },
             )
             .await
@@ -359,7 +438,7 @@ pub async fn force_mirror_central_repositories(
                         request,
                     )
                     .await
-                    .map_err(|e| UpdateCommandError(e.to_string()))
+                    .map_err(|e| UpdateCommandError::from(e.to_string()))
                 },
             )
             .await
@@ -404,12 +483,24 @@ where
                 duration_ms,
             )
         },
-        move |_: &UpdateCommandError, duration_ms| {
+        move |error: &UpdateCommandError, duration_ms| {
+            // Runtime Log counterpart of the Operation Log row. Without this the
+            // "See runtime logs for details" fallback message points at a file
+            // that only ever contained the frontend's own generic re-log.
+            tracing::error!(
+                target: "skillport::update_center",
+                action,
+                error_code = error.error_code.unwrap_or("none"),
+                error_category = error.category,
+                phase = error.phase.unwrap_or("none"),
+                duration_ms,
+                "Update Center action failed"
+            );
             update_operation_event(
                 action,
                 "failed",
                 failure_summary,
-                failure_details,
+                merge_details(failure_details, error.operation_details()),
                 duration_ms,
             )
         },
@@ -423,30 +514,6 @@ fn merge_details(mut base: Value, extra: Value) -> Value {
     base
 }
 
-fn refresh_request_details(scope: &SkillRefreshScope) -> Value {
-    let kind = match scope.kind {
-        SkillRefreshScopeKind::All => "all",
-        SkillRefreshScopeKind::Skills => "skills",
-        SkillRefreshScopeKind::Repositories => "repositories",
-        SkillRefreshScopeKind::Platform => "platform",
-    };
-    json!({
-        "scopeKind": kind,
-        "requestedSkills": scope.skill_ids.as_ref().map_or(0, Vec::len),
-        "requestedRepositories": scope.repository_ids.as_ref().map_or(0, Vec::len),
-        "requestedAgents": scope.agent_ids.as_ref().map_or(0, Vec::len),
-    })
-}
-
-fn refresh_result_details(result: &SkillUpdateInventory) -> Value {
-    json!({
-        "updatable": result.updatable.len(),
-        "remoteAdded": result.remote_added.len(),
-        "remoteMissing": result.remote_missing.len(),
-        "failedRepositories": result.failed_repositories.len(),
-    })
-}
-
 fn apply_request_details(decisions: &SkillUpdateDecisions) -> Value {
     json!({
         "updates": decisions.updates.len(),
@@ -457,16 +524,6 @@ fn apply_request_details(decisions: &SkillUpdateDecisions) -> Value {
         "unskipAdditions": decisions.unskip_additions.len(),
         "removePlatformDuplicates": decisions.remove_platform_duplicates.len(),
         "removeDeletedCopies": decisions.remove_deleted_platform_copies.len(),
-    })
-}
-
-fn apply_result_details(result: &SkillUpdateApplyResult) -> Value {
-    json!({
-        "updated": result.updated_skill_ids.len(),
-        "keptMissing": result.kept_missing_skill_ids.len(),
-        "deleted": result.deleted_skill_ids.len(),
-        "imported": result.imported_skill_ids.len(),
-        "failures": result.failures.len(),
     })
 }
 
@@ -493,10 +550,174 @@ mod tests {
     #[test]
     fn update_command_error_hides_sensitive_details_from_operation_log_display() {
         let original = "ssh host secret.example failed at /home/alice/private".to_string();
-        let error = UpdateCommandError(original.clone());
+        let error = UpdateCommandError::from(original.clone());
 
         assert_eq!(error.to_string(), "Update Center action failed");
         assert_eq!(error.into_inner(), original);
+    }
+
+    #[test]
+    fn archive_redirect_error_keeps_only_static_ipc_and_operation_details() {
+        let error = UpdateCommandError::from_central_updates(CentralUpdatesError::GithubImport(
+            crate::services::github_import::GithubImportError::ArchiveRedirectRejected,
+        ));
+
+        assert_eq!(error.to_string(), "Update Center action failed");
+        assert_eq!(
+            error.operation_details(),
+            json!({
+                "errorCode": "github_import.archive_redirect_rejected",
+                "errorCategory": "github_import.archive_redirect_rejected",
+                "phase": "repository_snapshot",
+            })
+        );
+        assert_eq!(
+            error.into_inner(),
+            "github_import.archive_redirect_rejected:GitHub repository archive redirect was rejected."
+        );
+    }
+
+    #[test]
+    fn github_transport_failure_reaches_the_operation_log_with_a_stable_code() {
+        let error = UpdateCommandError::from_central_updates(CentralUpdatesError::GithubImport(
+            crate::services::github_import::GithubImportError::Http(
+                "Failed to download GitHub repository archive: HTTP 301 https://secret/path"
+                    .to_string(),
+            ),
+        ));
+
+        assert_eq!(
+            error.operation_details(),
+            json!({
+                "errorCode": "github_import.transport_failed",
+                "errorCategory": "github_import.transport_failed",
+                "phase": "repository_snapshot",
+            })
+        );
+        let details = serde_json::to_string(&error.operation_details()).expect("serialize");
+        assert!(!details.contains("secret"));
+        assert!(!details.contains("301"));
+    }
+
+    #[test]
+    fn refresh_result_details_bounds_static_failure_items_and_retry_diagnostics() {
+        assert_eq!(REFRESH_RUNTIME_ACTION, "update_center.refresh");
+        assert_eq!(RETRY_RUNTIME_ACTION, "update_center.retry_repositories");
+        assert_ne!(REFRESH_RUNTIME_ACTION, RETRY_RUNTIME_ACTION);
+        let failed_repositories = (0..51)
+            .map(|index| {
+                json!({
+                    "repositoryId": format!("safe-repository-{index:02}"),
+                    "error": "token=secret https://example.invalid owner/private ref=secret C:\\Users\\private response body HTTP 503 reqwest",
+                    "errorCode": if index % 2 == 0 {
+                        "github_import.transport_failed"
+                    } else {
+                        "github_import.response_invalid"
+                    },
+                    "diagnosticCategory": if index % 2 == 0 {
+                        "github_import.archive_timeout"
+                    } else {
+                        "github_import.archive_integrity"
+                    },
+                    "retry": "retryable"
+                })
+            })
+            .collect::<Vec<_>>();
+        let inventory: SkillUpdateInventory = serde_json::from_value(json!({
+            "updatable": [],
+            "remoteAdded": [],
+            "remoteMissing": [],
+            "unsupported": [],
+            "platformDuplicates": [],
+            "deletedPlatformCopies": [],
+            "orphans": [],
+            "failedRepositories": failed_repositories,
+            "generatedAt": "2026-08-09T00:00:00Z",
+            "snapshotRetryAttempted": 3,
+            "snapshotRetryRecovered": 2
+        }))
+        .unwrap();
+
+        let diagnostics = refresh_failure_diagnostics(&inventory);
+        assert_eq!(
+            diagnostics.failure_codes,
+            vec![
+                "github_import.response_invalid".to_string(),
+                "github_import.transport_failed".to_string()
+            ]
+        );
+        assert_eq!(
+            diagnostics.failure_categories,
+            vec![
+                "github_import.archive_integrity".to_string(),
+                "github_import.archive_timeout".to_string()
+            ]
+        );
+        assert_eq!(diagnostics.failure_items.len(), 50);
+        assert_eq!(diagnostics.failure_items_truncated, 1);
+        assert_eq!(diagnostics.retry_attempted, 3);
+        assert_eq!(diagnostics.retry_recovered, 2);
+        assert_eq!(
+            diagnostics.failure_items[0],
+            json!({
+                "repositoryId": "safe-repository-00",
+                "errorCode": "github_import.transport_failed",
+                "errorCategory": "github_import.archive_timeout"
+            })
+        );
+        let details = serde_json::to_string(&refresh_result_details(&inventory)).unwrap();
+        for secret in [
+            "token=secret",
+            "example.invalid",
+            "owner/private",
+            "ref=secret",
+            "Users\\private",
+            "response body",
+            "503",
+            "reqwest",
+        ] {
+            assert!(!details.contains(secret), "leaked {secret}");
+        }
+
+        let hostile: SkillUpdateInventory = serde_json::from_value(json!({
+            "updatable": [],
+            "remoteAdded": [],
+            "remoteMissing": [],
+            "platformDuplicates": [],
+            "orphans": [],
+            "failedRepositories": [{
+                "repositoryId": "https://example.invalid/owner/private?token=secret",
+                "error": "raw response body",
+                "errorCode": "github_import.transport_failed/HTTP503",
+                "diagnosticCategory": "github_import.archive_timeout token=secret",
+                "retry": "retryable"
+            }],
+            "generatedAt": "2026-08-09T00:00:00Z"
+        }))
+        .unwrap();
+        assert_eq!(
+            refresh_failure_diagnostics(&hostile).failure_items[0],
+            json!({
+                "repositoryId": "batch",
+                "errorCode": REFRESH_FAILURE_CODE_FALLBACK,
+                "errorCategory": REFRESH_FAILURE_CATEGORY_FALLBACK,
+            })
+        );
+    }
+
+    #[test]
+    fn unclassified_failures_still_record_a_category_instead_of_nothing() {
+        let error = UpdateCommandError::from_central_updates(CentralUpdatesError::Remote(
+            "ssh host secret.example failed at /home/alice/private".to_string(),
+        ));
+
+        assert_eq!(
+            error.operation_details(),
+            json!({ "errorCategory": "central_updates.remote" })
+        );
+        let details = serde_json::to_string(&error.operation_details()).expect("serialize");
+        assert!(!details.contains("secret.example"));
+        assert!(!details.contains("alice"));
     }
 
     #[test]

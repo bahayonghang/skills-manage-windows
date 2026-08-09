@@ -15,21 +15,69 @@ mod config;
 mod error;
 mod prompt;
 mod secret;
+mod sse;
 mod stream;
 
 #[cfg(test)]
 mod tests;
 
 use std::collections::HashMap;
+use std::time::Duration;
+
+use crate::services::bounded_ingestion::{read_response_text_bounded, BoundedReadError, ReadLimit};
+
+pub(crate) const AI_SUCCESS_BODY_BYTES: u64 = 1024 * 1024;
+pub(crate) const AI_ERROR_BODY_BYTES: u64 = 64 * 1024;
+pub(crate) const AI_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+pub(crate) const AI_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
+pub(crate) const AI_HEADER_TIMEOUT: Duration = Duration::from_secs(30);
+pub(crate) const AI_BODY_TIMEOUT: Duration = Duration::from_secs(30);
+
+pub(crate) async fn read_ai_response_body(
+    response: reqwest::Response,
+    max_bytes: u64,
+    phase: &'static str,
+) -> Result<String, AiProviderError> {
+    read_ai_response_body_with_timeout(response, max_bytes, phase, AI_BODY_TIMEOUT).await
+}
+
+pub(crate) async fn read_ai_response_body_with_timeout(
+    response: reqwest::Response,
+    max_bytes: u64,
+    phase: &'static str,
+    body_timeout: Duration,
+) -> Result<String, AiProviderError> {
+    let read =
+        read_response_text_bounded(response, ReadLimit::new("AI provider response", max_bytes));
+    let result = tokio::time::timeout(body_timeout, read)
+        .await
+        .map_err(|_| AiProviderError::ResponseTimeout {
+            phase,
+            timeout_ms: body_timeout.as_millis(),
+        })?;
+    result.map_err(|error| match error {
+        BoundedReadError::LimitExceeded { limit, .. } => {
+            AiProviderError::ResponseTooLarge { phase, limit }
+        }
+        BoundedReadError::InvalidUtf8 { .. } => AiProviderError::Parse(coded_error(
+            AI_RESPONSE_PARSE_FAILED,
+            "The AI provider response is not valid UTF-8.",
+        )),
+        _ => AiProviderError::Http(coded_error(
+            AI_RESPONSE_READ_FAILED,
+            "Failed to read the AI provider response.",
+        )),
+    })
+}
 
 pub use claude::AiConnectionTestResult;
 pub(crate) use config::resolve_ai_provider_config;
 #[cfg(test)]
 pub(crate) use error::AI_CONNECT;
 pub(crate) use error::{
-    coded_error, coded_error_with_details, AI_CLIENT_BUILD_FAILED, AI_EMPTY_RESPONSE,
-    AI_INVALID_API_KEY, AI_MISSING_API_KEY, AI_RATE_LIMIT, AI_REQUEST_FAILED, AI_RESPONSE_ERROR,
-    AI_RESPONSE_PARSE_FAILED, AI_RESPONSE_READ_FAILED,
+    coded_error, coded_error_with_details, format_reqwest_error, AI_CLIENT_BUILD_FAILED,
+    AI_EMPTY_RESPONSE, AI_INVALID_API_KEY, AI_MISSING_API_KEY, AI_RATE_LIMIT, AI_REQUEST_FAILED,
+    AI_RESPONSE_ERROR, AI_RESPONSE_PARSE_FAILED, AI_RESPONSE_READ_FAILED,
 };
 pub use error::{AiProviderError, ExplanationErrorInfo, ExplanationErrorKind};
 pub use prompt::ExplanationApiProtocol;

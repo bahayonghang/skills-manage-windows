@@ -25,6 +25,7 @@ import type {
   OperationLogFilter,
   OperationLogPage,
   PendingFsDbOperation,
+  PreparedDeleteReconciliationPreview,
   LocalArchiveImportResolution,
   LocalArchiveImportResult,
   LocalArchivePreview,
@@ -287,6 +288,14 @@ export const HANDWRITTEN_IPC_COMMANDS = {
   get_daily_operation_counts: command<{ days: number }, DailyOperationCount[]>(),
   list_pending_fs_db_operations: command<undefined, PendingFsDbOperation[]>(),
   retry_fs_db_operation: command<
+    { operationId: string },
+    PendingFsDbOperation[]
+  >(),
+  preview_fs_db_operation_reconciliation: command<
+    { operationId: string },
+    PreparedDeleteReconciliationPreview
+  >(),
+  reconcile_fs_db_operation: command<
     { operationId: string },
     PendingFsDbOperation[]
   >(),

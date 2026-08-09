@@ -63,5 +63,6 @@ export function preferredUpdateCenterTab(
   if (inventory.platformDuplicates.length > 0) return "duplicates";
   if ((inventory.deletedPlatformCopies ?? []).length > 0) return "deletedPlatformCopies";
   if (inventory.orphans.length > 0) return "orphans";
+  if ((inventory.unsupported ?? []).length > 0) return "unsupported";
   return "updatable";
 }

@@ -3,7 +3,9 @@
 //! Variants cover the real failure categories of local/remote scan
 //! orchestration and scan persistence. Per-file parse/IO problems are *not*
 //! errors here: `parse_skill_md` / `scan_directory` skip unreadable or
-//! malformed entries by design (they return `Option` / empty lists).
+//! malformed entries by design. Opening the authoritative Central root is
+//! different because an incomplete root scan must never authorize stale-row
+//! deletion.
 
 /// Failure categories for skill scanning.
 #[derive(Debug, thiserror::Error)]
@@ -19,6 +21,10 @@ pub enum ScannerError {
     /// Remote-target transport failures (connect / probe / batch read).
     #[error("{0}")]
     Remote(String),
+
+    /// The configured Central root exists but could not be enumerated.
+    #[error("Failed to enumerate the Central skill directory: {0}")]
+    CentralRootRead(std::io::Error),
 
     /// The remote scan exceeded its time budget (seconds).
     #[error("Remote skill scan timed out after {0}s.")]

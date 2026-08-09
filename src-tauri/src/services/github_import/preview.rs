@@ -326,6 +326,29 @@ async fn acquire_pinned_preview_snapshot(
     }
 }
 
+pub(crate) async fn acquire_pinned_repo_snapshot(
+    resolved: ResolvedGitHubRepoSource,
+    auth: Option<&str>,
+) -> Result<PinnedGitHubRepoSnapshot, GithubImportError> {
+    let client = github_client()?;
+    let resolved_commit_sha = resolve_commit_sha(&client, &resolved.repo, auth).await?;
+    let pinned_repo = pinned_repo_ref(&resolved.repo, &resolved_commit_sha);
+    let (snapshot, candidates) = acquire_pinned_preview_snapshot(
+        &client,
+        &pinned_repo,
+        &resolved.repo,
+        resolved.source_path.as_deref(),
+        auth,
+    )
+    .await?;
+    Ok(PinnedGitHubRepoSnapshot {
+        resolved,
+        resolved_commit_sha,
+        snapshot,
+        candidates,
+    })
+}
+
 pub(crate) async fn preview_github_repo_import_with_auth(
     pool: &DbPool,
     repo_url: &str,
@@ -377,7 +400,7 @@ pub(crate) async fn preview_github_repo_import_with_branch_and_auth(
         storage: PreviewSnapshotStorage::Local(Arc::new(snapshot)),
     };
     let preview = preview_dto_from_snapshot(&snapshot, skills);
-    register_preview_snapshot(snapshot);
+    register_preview_snapshot(snapshot)?;
     Ok(preview)
 }
 
@@ -397,8 +420,21 @@ pub(crate) async fn preview_github_repo_import_remote_with_auth(
         .await
         .map_err(|e| GithubImportError::Remote(e.to_string()))?;
     cleanup_expired_preview_snapshots_for_connection(&connection).await;
+    let mut reservation = loop {
+        match reserve_remote_preview_snapshot(active_target.id(), active_target.kind(), Utc::now())?
+        {
+            RemoteReservationAttempt::Reserved(reservation) => break reservation,
+            RemoteReservationAttempt::CleanupRequired(tickets) => {
+                if !cleanup_preview_tickets_for_connection(&connection, tickets).await {
+                    return Err(GithubImportError::PreviewCleanupPending);
+                }
+            }
+            RemoteReservationAttempt::Capacity => return Err(GithubImportError::PreviewCapacity),
+        }
+    };
 
     let workspace = create_remote_preview_workspace(&connection, &pinned_repo, auth).await?;
+    reservation.claim_workspace(&workspace)?;
     let preview_result = async {
         let candidates = build_remote_repo_skill_candidates_from_workspace(
             &connection,
@@ -422,7 +458,7 @@ pub(crate) async fn preview_github_repo_import_remote_with_auth(
         Ok((skills, repository_files, snapshot_candidates)) => {
             let now = Utc::now();
             let snapshot = PreviewSnapshot {
-                id: new_preview_id(),
+                id: reservation.preview_id().to_string(),
                 target_id: active_target.id().to_string(),
                 target_kind: active_target.kind(),
                 repo: resolved.repo.clone(),
@@ -433,16 +469,33 @@ pub(crate) async fn preview_github_repo_import_remote_with_auth(
                 candidates: snapshot_candidates,
                 created_at: now,
                 expires_at: now + Duration::minutes(REMOTE_PREVIEW_WORKSPACE_TTL_MINUTES),
-                storage: PreviewSnapshotStorage::Remote(workspace),
+                storage: PreviewSnapshotStorage::Remote(workspace.clone()),
             };
             let preview = preview_dto_from_snapshot(&snapshot, skills);
-            register_preview_snapshot(snapshot);
+            if let Err(error) = reservation.fill(snapshot) {
+                if connection
+                    .remove_tree(&workspace.remote_workspace_dir)
+                    .await
+                    .is_err()
+                {
+                    let _ = reservation.retain_cleanup_pending(workspace);
+                    return Err(GithubImportError::PreviewCleanupPending);
+                }
+                reservation.release_after_cleanup();
+                return Err(error);
+            }
             Ok(preview)
         }
         Err(error) => {
-            let _ = connection
+            if connection
                 .remove_tree(&workspace.remote_workspace_dir)
-                .await;
+                .await
+                .is_err()
+            {
+                let _ = reservation.retain_cleanup_pending(workspace);
+                return Err(GithubImportError::PreviewCleanupPending);
+            }
+            reservation.release_after_cleanup();
             Err(error)
         }
     }

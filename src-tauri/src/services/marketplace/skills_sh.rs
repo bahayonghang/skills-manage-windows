@@ -326,11 +326,9 @@ async fn skills_sh_snapshot_with_auth(
     MarketplaceError,
 > {
     let (resolved, auth_used) = resolved_skills_sh_source_with_auth(source, auth).await?;
-    let client = github_import::github_client()?;
-    let snapshot =
-        github_import::download_repo_snapshot(&client, &resolved.repo, auth_used.as_deref())
-            .await?;
-    Ok((resolved, snapshot, auth_used))
+    let pinned =
+        github_import::acquire_pinned_repo_snapshot(resolved, auth_used.as_deref()).await?;
+    Ok((pinned.resolved, pinned.snapshot, auth_used))
 }
 
 async fn resolved_skills_sh_source_with_auth(

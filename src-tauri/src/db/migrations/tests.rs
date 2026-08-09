@@ -338,12 +338,70 @@ async fn assert_preflight_rejection(mutation_sql: &str, expected: &str) {
 }
 
 #[tokio::test]
+async fn preflight_accepts_the_published_windows_v1_checksum_without_rewriting_it() {
+    let directory = TempDir::new().unwrap();
+    let database_path = directory.path().join("db.sqlite");
+    let pool = db::open_database(&database_path).await.unwrap();
+    sqlx::query(
+        "INSERT INTO skills
+         (id, uid, name, description, file_path, canonical_path, is_central, source,
+          content, scanned_at, fs_created_at, fs_updated_at)
+         VALUES ('legacy-checksum-sentinel', 'legacy-checksum-uid', 'Legacy checksum sentinel',
+                 '', '/fixture/SKILL.md', '/fixture/SKILL.md', 1, 'native', '',
+                 '2026-01-01T00:00:00Z', NULL, NULL)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE schema_migrations SET checksum = ? WHERE version = 1")
+        .bind(versions::PUBLISHED_WINDOWS_V1_CHECKSUM)
+        .execute(&pool)
+        .await
+        .unwrap();
+    pool.close().await;
+
+    let reopened = db::open_database(&database_path).await.unwrap();
+    let stored_checksum = sqlx::query("SELECT checksum FROM schema_migrations WHERE version = 1")
+        .fetch_one(&reopened)
+        .await
+        .unwrap()
+        .try_get::<String, _>("checksum")
+        .unwrap();
+    assert_eq!(stored_checksum, versions::PUBLISHED_WINDOWS_V1_CHECKSUM);
+    assert_eq!(
+        sqlx::query("SELECT COUNT(*) AS count FROM skills WHERE id = 'legacy-checksum-sentinel'")
+            .fetch_one(&reopened)
+            .await
+            .unwrap()
+            .try_get::<i64, _>("count")
+            .unwrap(),
+        1
+    );
+    assert!(sibling_files(&database_path, ".pre-migration-").is_empty());
+    reopened.close().await;
+}
+
+#[tokio::test]
 async fn preflight_rejects_checksum_gap_and_future_versions_without_backup() {
     assert_preflight_rejection(
         "UPDATE schema_migrations SET checksum = 'tampered' WHERE version = 1",
         "checksum mismatch",
     )
     .await;
+    let uppercase_alias = versions::PUBLISHED_WINDOWS_V1_CHECKSUM.to_ascii_uppercase();
+    let uppercase_mutation =
+        format!("UPDATE schema_migrations SET checksum = '{uppercase_alias}' WHERE version = 1");
+    assert_preflight_rejection(&uppercase_mutation, "checksum mismatch").await;
+    let prefixed_mutation = format!(
+        "UPDATE schema_migrations SET checksum = 'legacy-{}' WHERE version = 1",
+        versions::PUBLISHED_WINDOWS_V1_CHECKSUM
+    );
+    assert_preflight_rejection(&prefixed_mutation, "checksum mismatch").await;
+    let cross_version_mutation = format!(
+        "UPDATE schema_migrations SET checksum = '{}' WHERE version = 2",
+        versions::PUBLISHED_WINDOWS_V1_CHECKSUM
+    );
+    assert_preflight_rejection(&cross_version_mutation, "checksum mismatch").await;
     assert_preflight_rejection(
         "DELETE FROM schema_migrations WHERE version = 1",
         "not contiguous",

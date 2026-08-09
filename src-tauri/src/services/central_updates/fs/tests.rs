@@ -30,7 +30,7 @@ fn fake_remote_fs() -> (Arc<FakeRunner>, CentralFs) {
     let connection = ConnectedSshTarget::for_tests_with_runner(target, runner.clone());
     (
         runner,
-        CentralFs::Remote(Box::new(ConnectedRemoteTarget::Ssh(connection))),
+        CentralFs::Remote(Arc::new(ConnectedRemoteTarget::Ssh(connection))),
     )
 }
 
@@ -52,7 +52,7 @@ fn fake_remote_update_filesystems() -> Vec<(Arc<FakeRunner>, CentralFs)> {
         (ssh_runner, ssh),
         (
             wsl_runner,
-            CentralFs::Remote(Box::new(ConnectedRemoteTarget::Wsl(wsl))),
+            CentralFs::Remote(Arc::new(ConnectedRemoteTarget::Wsl(wsl))),
         ),
     ]
 }
@@ -281,6 +281,27 @@ fn batch_row_parser_preserves_partial_success() {
 
     assert!(parsed[0].1.is_ok());
     assert!(parsed[1].1.is_err());
+}
+
+#[tokio::test]
+async fn remote_hash_fallback_bounds_entries_at_thirty_two_mib_plus_one() {
+    let (runner, fs) = fake_remote_fs();
+    let root = PathBuf::from("/home/tester/.skillsmanage/skills/demo");
+    runner.push_output(86, "", "");
+    runner.push_success("");
+    runner.push_success("SKILL.md\tfile\t\n");
+    runner.push_success("content");
+
+    let hashes = fs
+        .hash_directories(std::slice::from_ref(&root))
+        .await
+        .unwrap();
+    assert!(hashes.contains_key(&root));
+
+    let calls = runner.calls();
+    let read = &calls[3];
+    assert!(read.args.last().unwrap().contains("bs=33554433 count=1"));
+    assert_eq!(read.policy.stdout_limit, 33_554_433);
 }
 
 #[tokio::test]
@@ -523,7 +544,7 @@ async fn remote_batch_write_checks_cancellation_between_chunks() {
         symlink_enabled: true,
     };
     let connection = ConnectedSshTarget::for_tests_with_runner(target, runner.clone());
-    let fs = CentralFs::Remote(Box::new(ConnectedRemoteTarget::Ssh(connection)));
+    let fs = CentralFs::Remote(Arc::new(ConnectedRemoteTarget::Ssh(connection)));
 
     let outcomes = fs
         .write_skill_dirs_atomic_cancellable(
@@ -633,7 +654,7 @@ async fn live_wsl_ten_skill_batch_benchmark() {
         symlink_enabled: true,
     };
     let connection = open_wsl_target(&target).unwrap();
-    let fs = CentralFs::Remote(Box::new(ConnectedRemoteTarget::Wsl(connection)));
+    let fs = CentralFs::Remote(Arc::new(ConnectedRemoteTarget::Wsl(connection)));
     let root = format!("/tmp/skillport-batch-bench-{}", Uuid::new_v4());
     let writes = (0..10)
         .map(|index| {

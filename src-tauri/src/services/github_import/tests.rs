@@ -9,7 +9,9 @@ pub(super) mod suite {
     use flate2::{write::GzEncoder, Compression};
     use serde_json::Value;
     use std::collections::HashMap;
-    use std::sync::Arc;
+    use std::io::{Read, Write};
+    use std::net::{SocketAddr, TcpListener};
+    use std::sync::{Arc, Mutex};
     use tempfile::tempdir;
 
     async fn setup_test_db() -> DbPool {
@@ -35,6 +37,64 @@ pub(super) mod suite {
             remote_os: "Linux".to_string(),
             symlink_enabled: true,
         }))
+    }
+
+    fn fake_ssh_connection(
+        id: &str,
+        runner: Arc<crate::test_support::FakeRunner>,
+    ) -> ConnectedRemoteTarget {
+        ConnectedRemoteTarget::Ssh(crate::targets::ConnectedSshTarget::for_tests_with_runner(
+            crate::targets::RemoteTargetConfig {
+                id: id.to_string(),
+                label: format!("SSH {id}"),
+                host: "example.com".to_string(),
+                username: "alice".to_string(),
+                port: 22,
+                auth_method: crate::targets::SshAuthMethod::Key,
+                key_path: "~/.ssh/id_ed25519".to_string(),
+                credential_key: None,
+                protected_password: None,
+                password: None,
+                remote_home: "/home/alice".to_string(),
+                remote_os: "Linux".to_string(),
+                symlink_enabled: true,
+            },
+            runner,
+        ))
+    }
+
+    fn register_expired_remote_snapshot(target_id: &str) -> String {
+        register_expired_remote_snapshot_with_kind(target_id, TargetKind::Ssh)
+    }
+
+    fn register_expired_remote_snapshot_with_kind(
+        target_id: &str,
+        target_kind: TargetKind,
+    ) -> String {
+        let now = Utc::now();
+        let mut reservation = match reserve_remote_preview_snapshot(
+            target_id,
+            target_kind,
+            now - Duration::minutes(2),
+        )
+        .expect("reserve remote preview")
+        {
+            RemoteReservationAttempt::Reserved(reservation) => reservation,
+            other => panic!("expected remote reservation, got {other:?}"),
+        };
+        let id = reservation.preview_id().to_string();
+        let mut snapshot = remote_test_snapshot(None);
+        snapshot.id = id.clone();
+        snapshot.target_id = target_id.to_string();
+        snapshot.target_kind = target_kind;
+        snapshot.created_at = now - Duration::minutes(2);
+        snapshot.expires_at = now - Duration::minutes(1);
+        if let PreviewSnapshotStorage::Remote(workspace) = &mut snapshot.storage {
+            workspace.remote_workspace_dir = format!("/tmp/{target_id}");
+            workspace.remote_repo_dir = format!("/tmp/{target_id}/repo");
+        }
+        reservation.fill(snapshot).expect("fill remote preview");
+        id
     }
 
     /// A registered remote snapshot bound to `ssh-demo` / `openai/skills@main`.
@@ -109,6 +169,47 @@ pub(super) mod suite {
                 raw_base: mirror_url,
             },
         ]
+    }
+
+    fn spawn_http_sequence<F>(
+        build_responses: F,
+    ) -> (String, Arc<Mutex<Vec<String>>>, std::thread::JoinHandle<()>)
+    where
+        F: FnOnce(SocketAddr) -> Vec<Vec<u8>>,
+    {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let address = listener.local_addr().expect("addr");
+        let responses = build_responses(address);
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let captured_requests = Arc::clone(&requests);
+        let server = std::thread::spawn(move || {
+            for response in responses {
+                let (mut stream, _) = listener.accept().expect("accept");
+                let mut buffer = [0_u8; 4096];
+                let bytes_read = stream.read(&mut buffer).expect("read");
+                captured_requests
+                    .lock()
+                    .expect("lock")
+                    .push(String::from_utf8_lossy(&buffer[..bytes_read]).to_string());
+                stream.write_all(&response).expect("write response");
+            }
+        });
+
+        (format!("http://{address}"), requests, server)
+    }
+
+    fn http_response(status: &str, locations: &[String], body: &[u8]) -> Vec<u8> {
+        let locations = locations
+            .iter()
+            .map(|location| format!("Location: {location}\r\n"))
+            .collect::<String>();
+        let headers = format!(
+            "HTTP/1.1 {status}\r\n{locations}Content-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        let mut response = headers.into_bytes();
+        response.extend_from_slice(body);
+        response
     }
 
     fn sample_frontmatter(name: &str, description: &str) -> String {
@@ -880,7 +981,6 @@ metadata:
             },
             operation: "inspecting the repository",
             status: reqwest::StatusCode::FORBIDDEN,
-            github_message: Some("API rate limit exceeded for 1.2.3.4.".to_string()),
             used_auth: false,
         };
 
@@ -889,7 +989,8 @@ metadata:
         assert!(message.contains("rate limit was exceeded"));
         assert!(message.contains("Retry later after 2026-04-17 12:34:56 UTC"));
         assert!(message.contains("authenticated GitHub requests"));
-        assert!(message.contains("API rate limit exceeded"));
+        assert!(!message.contains("API rate limit exceeded"));
+        assert!(!message.contains("1.2.3.4"));
     }
 
     #[test]
@@ -898,7 +999,6 @@ metadata:
             kind: GitHubAccessDenialKind::AuthenticationOrPermission,
             operation: "reading repository contents",
             status: reqwest::StatusCode::UNAUTHORIZED,
-            github_message: Some("Requires authentication".to_string()),
             used_auth: false,
         };
 
@@ -907,7 +1007,7 @@ metadata:
         assert!(message.contains("denied access"));
         assert!(message.contains("require authentication"));
         assert!(message.contains("token/permissions are insufficient"));
-        assert!(message.contains("Requires authentication"));
+        assert!(!message.contains("Requires authentication"));
     }
 
     #[test]
@@ -953,6 +1053,80 @@ metadata:
                 "dangerous URL should be rejected: {url}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn owning_target_cleanup_failure_remains_pending_until_retry_ack() {
+        let target_id = "ssh-cleanup-retry";
+        let preview_id = register_expired_remote_snapshot(target_id);
+        let runner = Arc::new(crate::test_support::FakeRunner::new());
+        runner.push_output(1, "", "remove failed");
+        let connection = fake_ssh_connection(target_id, Arc::clone(&runner));
+
+        let tickets = sweep_preview_snapshots_for_target(target_id, Utc::now());
+        assert_eq!(tickets.len(), 1);
+        assert!(!cleanup_preview_tickets_for_connection(&connection, tickets).await);
+        assert!(matches!(
+            lookup_preview_snapshot(&preview_id, Utc::now()),
+            Err(GithubImportError::PreviewCleanupPending)
+        ));
+        assert!(matches!(
+            acquire_import_lease(&preview_id, Utc::now()),
+            Err(GithubImportError::PreviewCleanupPending)
+        ));
+
+        runner.push_success("");
+        let retry = sweep_preview_snapshots_for_target(target_id, Utc::now());
+        assert_eq!(retry.len(), 1);
+        assert!(cleanup_preview_tickets_for_connection(&connection, retry).await);
+        assert!(!preview_snapshot_is_registered(&preview_id));
+        assert_eq!(runner.calls().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn target_a_connection_never_removes_target_b_workspace() {
+        let target_a = "ssh-cleanup-a";
+        let target_b = "ssh-cleanup-b";
+        let preview_a = register_expired_remote_snapshot(target_a);
+        let preview_b = register_expired_remote_snapshot(target_b);
+        let runner_a = Arc::new(crate::test_support::FakeRunner::new());
+        let runner_b = Arc::new(crate::test_support::FakeRunner::new());
+        runner_a.push_success("");
+        runner_b.push_success("");
+        let connection_a = fake_ssh_connection(target_a, Arc::clone(&runner_a));
+        let connection_b = fake_ssh_connection(target_b, Arc::clone(&runner_b));
+
+        let tickets_a = sweep_preview_snapshots_for_target(target_a, Utc::now());
+        assert!(cleanup_preview_tickets_for_connection(&connection_a, tickets_a).await);
+        assert!(!preview_snapshot_is_registered(&preview_a));
+        assert!(preview_snapshot_is_registered(&preview_b));
+        assert_eq!(runner_a.calls().len(), 1);
+        assert!(runner_b.calls().is_empty());
+
+        let tickets_b = sweep_preview_snapshots_for_target(target_b, Utc::now());
+        assert!(cleanup_preview_tickets_for_connection(&connection_b, tickets_b).await);
+        assert!(!preview_snapshot_is_registered(&preview_b));
+        assert_eq!(runner_b.calls().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn connection_kind_mismatch_never_removes_or_acknowledges_workspace() {
+        let target_id = "same-id-different-kind";
+        let preview_id = register_expired_remote_snapshot_with_kind(target_id, TargetKind::Wsl);
+        let runner = Arc::new(crate::test_support::FakeRunner::new());
+        runner.push_success("");
+        let connection = fake_ssh_connection(target_id, Arc::clone(&runner));
+
+        let tickets = sweep_preview_snapshots_for_target(target_id, Utc::now());
+        assert_eq!(tickets.len(), 1);
+        assert!(!cleanup_preview_tickets_for_connection(&connection, tickets.clone()).await);
+        assert!(runner.calls().is_empty());
+        assert!(matches!(
+            lookup_preview_snapshot(&preview_id, Utc::now()),
+            Err(GithubImportError::PreviewCleanupPending)
+        ));
+
+        assert!(ack_preview_snapshot_cleanup(&tickets[0]));
     }
 
     #[test]
@@ -1102,6 +1276,32 @@ metadata:
         assert!(message.contains("HTTP 502"));
     }
 
+    #[tokio::test]
+    async fn github_transport_error_summary_omits_request_url() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind closed port");
+        let address = listener.local_addr().expect("closed port address");
+        let server = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept request");
+            drop(stream);
+        });
+        let secret = "transport-secret";
+        let request_url = format!("http://{address}/private?token={secret}");
+        let error = reqwest::Client::builder()
+            .no_proxy()
+            .build()
+            .expect("client")
+            .get(&request_url)
+            .send()
+            .await
+            .expect_err("closed port should fail");
+
+        let summary = sanitized_github_transport_error(&error);
+        assert!(!summary.contains(secret));
+        assert!(!summary.contains(&request_url));
+        assert!(!summary.contains(&address.to_string()));
+        server.join().expect("server join");
+    }
+
     #[test]
     fn snapshot_from_repository_archive_strips_archive_root_directory() {
         let archive = repository_archive(&[
@@ -1116,6 +1316,514 @@ metadata:
 
         assert!(snapshot.files.contains_key("skills/demo/SKILL.md"));
         assert!(snapshot.files.contains_key("README.md"));
+    }
+
+    #[test]
+    fn archive_redirect_validator_accepts_only_exact_codeload_location() {
+        let repo = GitHubRepoRef {
+            owner: "openai".to_string(),
+            repo: "skills".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/openai/skills".to_string(),
+        };
+        let expected = "https://codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/main";
+
+        assert_eq!(
+            validate_archive_redirect_url(expected, &repo)
+                .expect("valid codeload redirect")
+                .as_str(),
+            expected
+        );
+        assert!(validate_archive_redirect_url(
+            "https://codeload.github.com:443/openai/skills/legacy.tar.gz/refs/heads/main",
+            &repo,
+        )
+        .is_ok());
+        assert!(validate_archive_redirect_url(
+            "https://codeload.github.com/OpenAI/SKILLS/legacy.tar.gz/refs/heads/main",
+            &repo,
+        )
+        .is_ok());
+
+        let commit_sha = "A1234567890ABCDEF1234567890ABCDEF1234567";
+        let pinned_repo = GitHubRepoRef {
+            branch: commit_sha.to_string(),
+            ..repo.clone()
+        };
+        assert!(validate_archive_redirect_url(
+            &format!("https://codeload.github.com/openai/skills/legacy.tar.gz/{commit_sha}"),
+            &pinned_repo,
+        )
+        .is_ok());
+        for rejected in [
+            format!(
+                "https://codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/{commit_sha}"
+            ),
+            "https://codeload.github.com/openai/skills/legacy.tar.gz/a1234567890abcdef1234567890abcdef1234567"
+                .to_string(),
+        ] {
+            assert!(matches!(
+                validate_archive_redirect_url(&rejected, &pinned_repo),
+                Err(GithubImportError::ArchiveRedirectRejected)
+            ));
+        }
+
+        for rejected in [
+            "http://codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/main",
+            "https://user@codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/main",
+            "https://codeload.github.com:444/openai/skills/legacy.tar.gz/refs/heads/main",
+            "https://codeload.github.com.evil.example/openai/skills/legacy.tar.gz/refs/heads/main",
+            "https://127.0.0.1/openai/skills/legacy.tar.gz/refs/heads/main",
+            "https://169.254.169.254/openai/skills/legacy.tar.gz/refs/heads/main",
+            "https://codeload.github.com/other/skills/legacy.tar.gz/refs/heads/main",
+            "https://codeload.github.com/openai/other/legacy.tar.gz/refs/heads/main",
+            "https://codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/dev",
+            "https://codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/main/extra",
+            "https://codeload.github.com/openai/other/../skills/legacy.tar.gz/refs/heads/main",
+            "https://codeload.github.com/openai/other/%2e%2e/skills/legacy.tar.gz/refs/heads/main",
+            r"https://codeload.github.com/openai/other\..\skills/legacy.tar.gz/refs/heads/main",
+            "https://codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/main?token=secret",
+            "https://codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/main#fragment",
+            "https://codeload.github.com/openai%2fother/skills/legacy.tar.gz/refs/heads/main",
+            "https://codeload.github.com/openai%5cother/skills/legacy.tar.gz/refs/heads/main",
+            "https://@codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/main",
+            "https://codeload.github.com/openai/skills/legacy.tar.gz/main",
+            "/openai/skills/legacy.tar.gz/refs/heads/main",
+            "not a url",
+        ] {
+            assert!(
+                matches!(
+                    validate_archive_redirect_url(rejected, &repo),
+                    Err(GithubImportError::ArchiveRedirectRejected)
+                ),
+                "unexpectedly accepted {rejected}",
+            );
+        }
+    }
+
+    #[test]
+    fn archive_numeric_redirect_validator_accepts_only_exact_same_ref_api_location() {
+        let repo = GitHubRepoRef {
+            owner: "legacy-owner".to_string(),
+            repo: "legacy-repo".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/legacy-owner/legacy-repo".to_string(),
+        };
+        let expected = "https://api.github.com/repositories/123456789/tarball/main";
+
+        assert_eq!(
+            validate_archive_api_redirect_url(expected, &repo)
+                .expect("valid numeric API redirect")
+                .as_str(),
+            expected
+        );
+        assert!(validate_archive_api_redirect_url(
+            "https://api.github.com:443/repositories/123456789/tarball/main",
+            &repo,
+        )
+        .is_ok());
+
+        for rejected in [
+            "https://api.github.com/repositories/not-a-number/tarball/main",
+            "https://api.github.com/repositories/0/tarball/main",
+            "https://api.github.com/repositories/18446744073709551616/tarball/main",
+            "https://api.github.com/repositories/+1/tarball/main",
+            "https://api.github.com/repositories/1/tarball/dev",
+            "https://api.github.com/repositories/1/tarball/main/extra",
+            "https://api.github.com/repositories/1/../1/tarball/main",
+            "https://api.github.com/repositories/1/%2e%2e/1/tarball/main",
+            r"https://api.github.com/repositories\999\..\1\tarball\main",
+            "https://api.github.com/repositories%2f1/tarball/main",
+            "https://api.github.com/repositories%5c1/tarball/main",
+            "https://user@api.github.com/repositories/1/tarball/main",
+            "https://@api.github.com/repositories/1/tarball/main",
+            "https://api.github.com/repositories/1/tarball/main?token=secret",
+            "https://api.github.com/repositories/1/tarball/main#fragment",
+            "http://api.github.com/repositories/1/tarball/main",
+            "https://api.github.com:444/repositories/1/tarball/main",
+            "https://api.github.com.evil.example/repositories/1/tarball/main",
+            "/repositories/1/tarball/main",
+        ] {
+            assert!(
+                matches!(
+                    validate_archive_api_redirect_url(rejected, &repo),
+                    Err(GithubImportError::ArchiveRedirectRejected)
+                ),
+                "unexpectedly accepted {rejected}",
+            );
+        }
+    }
+
+    #[test]
+    fn archive_redirect_headers_require_exactly_one_location() {
+        use reqwest::header::{HeaderMap, HeaderValue, LOCATION};
+
+        let repo = GitHubRepoRef {
+            owner: "openai".to_string(),
+            repo: "skills".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/openai/skills".to_string(),
+        };
+        let location = HeaderValue::from_static(
+            "https://codeload.github.com/openai/skills/legacy.tar.gz/refs/heads/main",
+        );
+
+        assert!(matches!(
+            validate_archive_redirect_headers(&HeaderMap::new(), &repo),
+            Err(GithubImportError::ArchiveRedirectRejected)
+        ));
+
+        let mut duplicate = HeaderMap::new();
+        duplicate.append(LOCATION, location.clone());
+        duplicate.append(LOCATION, location);
+        assert!(matches!(
+            validate_archive_redirect_headers(&duplicate, &repo),
+            Err(GithubImportError::ArchiveRedirectRejected)
+        ));
+    }
+
+    #[tokio::test]
+    async fn archive_redirect_request_rejects_invalid_structured_repo_before_transport() {
+        let repo = GitHubRepoRef {
+            owner: "openai".to_string(),
+            repo: "skills".to_string(),
+            branch: "feature/unsafe".to_string(),
+            normalized_url: "https://github.com/openai/skills".to_string(),
+        };
+        let endpoints = test_mirror_endpoints(
+            "http://127.0.0.1:9".to_string(),
+            "http://127.0.0.1:10".to_string(),
+        );
+
+        let error = download_repository_archive_with_test_endpoints(
+            &github_client().expect("client"),
+            &repo,
+            None,
+            ResourceBudget::default_skill(),
+            &endpoints,
+            "http://127.0.0.1:11",
+        )
+        .await
+        .expect_err("invalid structured ref must fail before transport");
+
+        assert!(matches!(
+            error,
+            GithubImportError::InvalidRepoComponent {
+                field: "branch",
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn archive_redirect_follows_one_hop_without_forwarding_bearer() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        use std::sync::{Arc, Mutex};
+
+        let commit_sha = "a1234567890abcdef1234567890abcdef1234567";
+        for (branch, redirect_path) in [
+            (
+                "main",
+                "/openai/skills/legacy.tar.gz/refs/heads/main".to_string(),
+            ),
+            (
+                commit_sha,
+                format!("/openai/skills/legacy.tar.gz/{commit_sha}"),
+            ),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+            let address = listener.local_addr().expect("addr");
+            let archive = repository_archive(&[(
+                "skills/demo/SKILL.md",
+                b"---\nname: demo\ndescription: demo\n---\n",
+            )]);
+            let requests = Arc::new(Mutex::new(Vec::<String>::new()));
+            let requests_clone = Arc::clone(&requests);
+
+            let server = std::thread::spawn(move || {
+                for request_index in 0..2 {
+                    let (mut stream, _) = listener.accept().expect("accept");
+                    let mut buffer = [0_u8; 4096];
+                    let bytes_read = stream.read(&mut buffer).expect("read");
+                    requests_clone
+                        .lock()
+                        .expect("lock")
+                        .push(String::from_utf8_lossy(&buffer[..bytes_read]).to_string());
+
+                    if request_index == 0 {
+                        let location = format!("http://{address}{redirect_path}");
+                        let response = format!(
+                            "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        );
+                        stream
+                            .write_all(response.as_bytes())
+                            .expect("write redirect");
+                    } else {
+                        let headers = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                            archive.len()
+                        );
+                        stream.write_all(headers.as_bytes()).expect("write headers");
+                        stream.write_all(&archive).expect("write archive");
+                    }
+                }
+            });
+
+            let repo = GitHubRepoRef {
+                owner: "openai".to_string(),
+                repo: "skills".to_string(),
+                branch: branch.to_string(),
+                normalized_url: "https://github.com/openai/skills".to_string(),
+            };
+            let base_url = format!("http://{address}");
+            let endpoints = test_mirror_endpoints(base_url.clone(), format!("{base_url}/mirror"));
+            let client = github_client().expect("client");
+            let bytes = download_repository_archive_with_test_endpoints(
+                &client,
+                &repo,
+                Some("direct-token"),
+                ResourceBudget::default_skill(),
+                &endpoints,
+                &base_url,
+            )
+            .await
+            .expect("download redirected archive");
+            let snapshot = snapshot_from_repository_archive(&bytes).expect("snapshot");
+            assert!(snapshot.files.contains_key("skills/demo/SKILL.md"));
+
+            server.join().expect("server join");
+            let captured = requests.lock().expect("captured");
+            assert_eq!(captured.len(), 2);
+            assert!(captured[0]
+                .to_ascii_lowercase()
+                .contains("authorization: bearer direct-token"));
+            assert!(!captured[1].to_ascii_lowercase().contains("authorization:"));
+        }
+    }
+
+    #[tokio::test]
+    async fn archive_redirect_follows_trusted_numeric_canonicalization_with_scoped_bearer() {
+        let archive = repository_archive(&[(
+            "skills/demo/SKILL.md",
+            b"---\nname: demo\ndescription: demo\n---\n",
+        )]);
+        let (base_url, requests, server) = spawn_http_sequence(move |address| {
+            let base_url = format!("http://{address}");
+            vec![
+                http_response(
+                    "301 Moved Permanently",
+                    &[format!("{base_url}/repositories/123/tarball/main")],
+                    &[],
+                ),
+                http_response(
+                    "302 Found",
+                    &[format!(
+                        "{base_url}/CanonicalOwner/renamed-repo/legacy.tar.gz/refs/heads/main"
+                    )],
+                    &[],
+                ),
+                http_response("200 OK", &[], &archive),
+            ]
+        });
+        let repo = GitHubRepoRef {
+            owner: "legacy-owner".to_string(),
+            repo: "legacy-repo".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/legacy-owner/legacy-repo".to_string(),
+        };
+        let endpoints = test_mirror_endpoints(base_url.clone(), format!("{base_url}/mirror"));
+
+        let bytes = download_repository_archive_with_test_endpoints(
+            &github_client().expect("client"),
+            &repo,
+            Some("direct-token"),
+            ResourceBudget::default_skill(),
+            &endpoints,
+            &base_url,
+        )
+        .await
+        .expect("download renamed repository archive");
+        let snapshot = snapshot_from_repository_archive(&bytes).expect("snapshot");
+        assert!(snapshot.files.contains_key("skills/demo/SKILL.md"));
+
+        server.join().expect("server join");
+        let captured = requests.lock().expect("captured");
+        assert_eq!(captured.len(), 3);
+        assert!(captured[0].starts_with("GET /repos/legacy-owner/legacy-repo/tarball/main "));
+        assert!(captured[1].starts_with("GET /repositories/123/tarball/main "));
+        assert!(captured[2]
+            .starts_with("GET /CanonicalOwner/renamed-repo/legacy.tar.gz/refs/heads/main "));
+        assert!(captured[0]
+            .to_ascii_lowercase()
+            .contains("authorization: bearer direct-token"));
+        assert!(captured[1]
+            .to_ascii_lowercase()
+            .contains("authorization: bearer direct-token"));
+        assert!(!captured[2].to_ascii_lowercase().contains("authorization:"));
+    }
+
+    #[tokio::test]
+    async fn archive_redirect_rejects_numeric_canonicalization_from_a_mirror() {
+        let (direct_url, _, direct_server) =
+            spawn_http_sequence(|_| vec![http_response("502 Bad Gateway", &[], &[])]);
+        let (mirror_url, mirror_requests, mirror_server) = spawn_http_sequence(|address| {
+            vec![http_response(
+                "301 Moved Permanently",
+                &[format!("http://{address}/repositories/123/tarball/main")],
+                &[],
+            )]
+        });
+        let repo = GitHubRepoRef {
+            owner: "legacy-owner".to_string(),
+            repo: "legacy-repo".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/legacy-owner/legacy-repo".to_string(),
+        };
+        let endpoints = test_mirror_endpoints(direct_url, mirror_url.clone());
+
+        let error = download_repository_archive_with_test_endpoints(
+            &github_client().expect("client"),
+            &repo,
+            Some("direct-token"),
+            ResourceBudget::default_skill(),
+            &endpoints,
+            &mirror_url,
+        )
+        .await
+        .expect_err("mirror 301 must not authorize canonicalization");
+
+        direct_server.join().expect("direct server join");
+        mirror_server.join().expect("mirror server join");
+        assert_eq!(mirror_requests.lock().expect("captured").len(), 1);
+        assert!(matches!(error, GithubImportError::ArchiveRedirectRejected));
+    }
+
+    #[tokio::test]
+    async fn archive_redirect_rejects_non_302_numeric_hop() {
+        let (base_url, requests, server) = spawn_http_sequence(|address| {
+            vec![
+                http_response(
+                    "301 Moved Permanently",
+                    &[format!("http://{address}/repositories/123/tarball/main")],
+                    &[],
+                ),
+                http_response("200 OK", &[], &[]),
+            ]
+        });
+        let repo = GitHubRepoRef {
+            owner: "legacy-owner".to_string(),
+            repo: "legacy-repo".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/legacy-owner/legacy-repo".to_string(),
+        };
+        let endpoints = test_mirror_endpoints(base_url.clone(), format!("{base_url}/mirror"));
+
+        let error = download_repository_archive_with_test_endpoints(
+            &github_client().expect("client"),
+            &repo,
+            None,
+            ResourceBudget::default_skill(),
+            &endpoints,
+            &base_url,
+        )
+        .await
+        .expect_err("numeric API hop must return 302");
+
+        server.join().expect("server join");
+        assert_eq!(requests.lock().expect("captured").len(), 2);
+        assert!(matches!(error, GithubImportError::ArchiveRedirectRejected));
+    }
+
+    #[tokio::test]
+    async fn archive_redirect_rejects_a_redirect_after_numeric_codeload() {
+        let (base_url, requests, server) = spawn_http_sequence(|address| {
+            let base_url = format!("http://{address}");
+            vec![
+                http_response(
+                    "301 Moved Permanently",
+                    &[format!("{base_url}/repositories/123/tarball/main")],
+                    &[],
+                ),
+                http_response(
+                    "302 Found",
+                    &[format!(
+                        "{base_url}/CanonicalOwner/renamed-repo/legacy.tar.gz/refs/heads/main"
+                    )],
+                    &[],
+                ),
+                http_response("302 Found", &[format!("{base_url}/another-redirect")], &[]),
+            ]
+        });
+        let repo = GitHubRepoRef {
+            owner: "legacy-owner".to_string(),
+            repo: "legacy-repo".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/legacy-owner/legacy-repo".to_string(),
+        };
+        let endpoints = test_mirror_endpoints(base_url.clone(), format!("{base_url}/mirror"));
+
+        let error = download_repository_archive_with_test_endpoints(
+            &github_client().expect("client"),
+            &repo,
+            None,
+            ResourceBudget::default_skill(),
+            &endpoints,
+            &base_url,
+        )
+        .await
+        .expect_err("codeload redirect must terminate the chain");
+
+        server.join().expect("server join");
+        assert_eq!(requests.lock().expect("captured").len(), 3);
+        assert!(matches!(error, GithubImportError::ArchiveRedirectRejected));
+    }
+
+    #[tokio::test]
+    async fn archive_redirect_rejects_a_second_redirect() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let address = listener.local_addr().expect("addr");
+        let server = std::thread::spawn(move || {
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().expect("accept");
+                let mut buffer = [0_u8; 4096];
+                let _ = stream.read(&mut buffer).expect("read");
+                let location =
+                    format!("http://{address}/openai/skills/legacy.tar.gz/refs/heads/main");
+                let response = format!(
+                    "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .expect("write redirect");
+            }
+        });
+
+        let repo = GitHubRepoRef {
+            owner: "openai".to_string(),
+            repo: "skills".to_string(),
+            branch: "main".to_string(),
+            normalized_url: "https://github.com/openai/skills".to_string(),
+        };
+        let base_url = format!("http://{address}");
+        let endpoints = test_mirror_endpoints(base_url.clone(), format!("{base_url}/mirror"));
+        let client = github_client().expect("client");
+        let error = download_repository_archive_with_test_endpoints(
+            &client,
+            &repo,
+            None,
+            ResourceBudget::default_skill(),
+            &endpoints,
+            &base_url,
+        )
+        .await
+        .expect_err("second redirect must fail closed");
+
+        server.join().expect("server join");
+        assert!(matches!(error, GithubImportError::ArchiveRedirectRejected));
     }
 
     #[test]
@@ -3045,7 +3753,8 @@ metadata:
     // fully specified before it is wired into preview/import.
     mod tree_manifest_parser {
         use super::super::tree_manifest::{
-            classify_tree_entry, parse_tree_response, RepositoryFileKind,
+            classify_tree_entry, parse_tree_response, read_tree_response_with_budget,
+            RepositoryFileKind,
         };
         use super::*;
         use crate::services::resource_budget::{ResourceBudget, DEFAULT_TREE_ENTRIES};
@@ -3075,6 +3784,46 @@ metadata:
                 "{{\"sha\":\"abc\",\"url\":\"https://api.github.com/\",\"tree\":[{joined}],\"truncated\":{truncated}}}",
                 truncated = truncated
             )
+        }
+
+        #[tokio::test]
+        async fn chunked_tree_body_stops_at_limit_before_eof() {
+            use std::io::{Read, Write};
+            use std::net::TcpListener;
+            use std::sync::mpsc;
+
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+            let address = listener.local_addr().expect("address");
+            let (release_tx, release_rx) = mpsc::channel();
+            let server = std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().expect("accept");
+                let mut request = [0_u8; 1024];
+                let _ = stream.read(&mut request).expect("read request");
+                stream
+                    .write_all(
+                        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n11\r\n{\"tree\":[]}xxxxxx\r\n",
+                    )
+                    .expect("write over-limit chunk");
+                release_rx.recv().expect("reader returned before EOF");
+            });
+
+            let response = github_client()
+                .expect("client")
+                .get(format!("http://{address}/tree"))
+                .send()
+                .await
+                .expect("chunked response");
+            let budget = ResourceBudget {
+                tree_response_bytes: 16,
+                ..ResourceBudget::default_skill()
+            };
+
+            let error = read_tree_response_with_budget(response, &sample_repo(), budget)
+                .await
+                .expect_err("cap+1 chunk should fail before EOF");
+            assert!(matches!(error, GithubImportError::Budget(_)));
+            release_tx.send(()).unwrap();
+            server.join().expect("server join");
         }
 
         #[test]
@@ -4048,7 +4797,7 @@ metadata:
         fn register_local_snapshot(id: &str, snapshot: GitHubRepoSnapshot) -> PreviewSnapshot {
             let mut registered = local_test_snapshot(&demo_repo(), None, snapshot, Vec::new());
             registered.id = id.to_string();
-            register_preview_snapshot(registered.clone());
+            register_preview_snapshot(registered.clone()).expect("register local snapshot");
             registered
         }
 
@@ -4088,7 +4837,7 @@ metadata:
             assert!(acquire_import_lease(id, Utc::now()).is_ok());
 
             // Success consumes the token; every later read or import fails.
-            assert!(consume_preview_snapshot(id).is_some());
+            assert!(consume_preview_snapshot(id).is_none());
             assert!(!preview_snapshot_is_registered(id));
             assert!(matches!(
                 lookup_preview_snapshot(id, Utc::now()),
@@ -4112,21 +4861,22 @@ metadata:
 
             // Releasing the lease applies the pending discard and hands the
             // snapshot back so the caller can release remote storage.
-            assert!(release_import_lease(id).is_some());
+            assert!(release_import_lease(id).is_none());
             assert!(!preview_snapshot_is_registered(id));
         }
 
         /// Register an already-expired snapshot.
         ///
-        /// Expiry is encoded on the entry (not on the prune clock) so this test
-        /// cannot prune snapshots registered by other tests running in parallel.
-        fn register_expired_local_snapshot(id: &str) -> PreviewSnapshot {
+        /// The target is unique to this test so target-scoped pruning cannot
+        /// observe snapshots registered by parallel lifecycle tests.
+        fn register_expired_local_snapshot(id: &str, target_id: &str) -> PreviewSnapshot {
             let mut registered =
                 local_test_snapshot(&demo_repo(), None, root_repo_snapshot(), Vec::new());
             registered.id = id.to_string();
+            registered.target_id = target_id.to_string();
             registered.created_at = Utc::now() - Duration::minutes(60);
             registered.expires_at = Utc::now() - Duration::minutes(30);
-            register_preview_snapshot(registered.clone());
+            register_preview_snapshot(registered.clone()).expect("register expired snapshot");
             registered
         }
 
@@ -4134,17 +4884,18 @@ metadata:
         fn expiry_pruning_removes_only_unleased_snapshots() {
             let leased = "github-preview-prune-leased";
             let expired = "github-preview-prune-expired";
-            register_expired_local_snapshot(leased);
-            register_expired_local_snapshot(expired);
+            let target_id = "github-preview-prune-expired-target";
+            register_expired_local_snapshot(leased, target_id);
+            register_expired_local_snapshot(expired, target_id);
             // An expired snapshot can never start a new import.
             assert!(matches!(
                 acquire_import_lease(leased, Utc::now()),
-                Err(GithubImportError::PreviewWorkspaceExpired)
+                Err(GithubImportError::PreviewSnapshotMissing)
             ));
 
-            let pruned = prune_expired_preview_snapshots(Utc::now());
+            let pruned = prune_expired_preview_snapshots_for_target(target_id, Utc::now());
             assert!(pruned.iter().any(|snapshot| snapshot.id == expired));
-            assert!(pruned.iter().any(|snapshot| snapshot.id == leased));
+            assert!(pruned.iter().all(|snapshot| snapshot.id != leased));
             assert!(!preview_snapshot_is_registered(expired));
             assert!(!preview_snapshot_is_registered(leased));
         }
@@ -4152,17 +4903,19 @@ metadata:
         #[tokio::test]
         async fn pruning_never_removes_a_snapshot_with_an_active_import_lease() {
             let id = "github-preview-prune-active-lease";
+            let target_id = "github-preview-prune-active-target";
             // A short TTL keeps the prune clock at "now", so snapshots
             // registered by tests running in parallel are never pruned.
             let mut registered =
                 local_test_snapshot(&demo_repo(), None, root_repo_snapshot(), Vec::new());
             registered.id = id.to_string();
+            registered.target_id = target_id.to_string();
             registered.expires_at = Utc::now() + Duration::milliseconds(50);
-            register_preview_snapshot(registered);
+            register_preview_snapshot(registered).expect("register leased snapshot");
             assert!(acquire_import_lease(id, Utc::now()).is_ok());
 
             tokio::time::sleep(std::time::Duration::from_millis(120)).await;
-            let pruned = prune_expired_preview_snapshots(Utc::now());
+            let pruned = prune_expired_preview_snapshots_for_target(target_id, Utc::now());
             assert!(pruned.iter().all(|snapshot| snapshot.id != id));
             assert!(preview_snapshot_is_registered(id));
 
@@ -4181,7 +4934,7 @@ metadata:
                 source_path: ".".to_string(),
                 content_digest: "sha256-v1:candidate".to_string(),
             }];
-            register_preview_snapshot(registered);
+            register_preview_snapshot(registered).expect("register markdown snapshot");
 
             for _ in 0..2 {
                 let markdown = fetch_github_skill_markdown_from_snapshot(
@@ -4255,7 +5008,7 @@ metadata:
                     file.sha256 = [0_u8; 32];
                 }
             }
-            register_preview_snapshot(registered);
+            register_preview_snapshot(registered).expect("register integrity snapshot");
 
             assert!(matches!(
                 fetch_github_skill_markdown_from_snapshot(
@@ -4314,7 +5067,7 @@ metadata:
                 local_test_snapshot(&repo, None, snapshot_files, snapshot_candidates.clone());
             registered.id = id.to_string();
             let expected_commit = registered.resolved_commit_sha.clone();
-            register_preview_snapshot(registered);
+            register_preview_snapshot(registered).expect("register import snapshot");
 
             let result = import_github_repo_skills_from_preview(
                 &pool,
@@ -4406,7 +5159,7 @@ metadata:
                 local_test_snapshot(&repo, None, snapshot_files, snapshot_candidates.clone());
             registered.id = id.to_string();
             let expected_commit = registered.resolved_commit_sha.clone();
-            register_preview_snapshot(registered);
+            register_preview_snapshot(registered).expect("register renamed import snapshot");
 
             let result = import_github_repo_skills_from_preview(
                 &pool,
@@ -4486,7 +5239,7 @@ metadata:
             let mut registered =
                 local_test_snapshot(&repo, None, snapshot_files, snapshot_candidates);
             registered.id = id.to_string();
-            register_preview_snapshot(registered);
+            register_preview_snapshot(registered).expect("register binding snapshot");
 
             let selections = vec![GitHubSkillImportSelection {
                 source_path: "skills/demo".to_string(),
@@ -4598,7 +5351,7 @@ metadata:
                 local_test_snapshot(&repo, None, snapshot_files, snapshot_candidates);
             registered.id = id.to_string();
             registered.snapshot_digest = "sha256-v1:stale".to_string();
-            register_preview_snapshot(registered);
+            register_preview_snapshot(registered).expect("register digest snapshot");
 
             assert!(matches!(
                 import_github_repo_skills_from_preview(
@@ -4696,6 +5449,11 @@ metadata:
                     "preview_integrity",
                 ),
                 (GithubImportError::PreviewSnapshotBusy, "preview_busy"),
+                (GithubImportError::PreviewCapacity, "preview_capacity"),
+                (
+                    GithubImportError::PreviewCleanupPending,
+                    "preview_cleanup_pending",
+                ),
                 (
                     GithubImportError::PreviewCommitUnresolved,
                     "preview_commit_unresolved",

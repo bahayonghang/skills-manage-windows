@@ -38,19 +38,37 @@ upsert 到 marketplace_skills（带 cache_updated_at）
 ## 从 Marketplace 安装
 
 ```text
-install_marketplace_skill
+Marketplace 技能 id + 已启用 registry source
        │
        ▼
-下载 SKILL.md（与同目录文件）到 ~/.skillsmanage/skills
+解析 GitHub source 并固定一个 commit/snapshot
        │
        ▼
-upsert skills 行（canonical_path / is_central=true）
+重新构建候选并要求唯一精确匹配 Marketplace id
        │
        ▼
-标记 marketplace_skills.is_installed=true
+把候选完整目录投影为 CentralSkillWrite
+       │
+       ▼
+target lock → pending recovery → durable stage/swap
+       │
+       ▼
+同一事务提交 skill + repository provenance + db_committed
+       │
+       ▼
+finalize journal → best-effort installed-cache repair
 ```
 
-安装路径复用 `installation::centralize::ensure_centralized`：技能落入 Central 目录后，后续流水线与普通技能完全一致。
+缓存的 `download_url` 与 frontmatter 展示名称都不是请求或路径 authority。
+候选 `skill_id` 决定 Local/SSH/WSL 目标目录，三种 target 都从同一个 pinned
+snapshot 接收 `SKILL.md`、references、scripts、assets 与其他同目录文件。首次安装使用
+既有 `central_update` journal 且 `hadTarget=false`；覆盖安装通过同一可恢复 swap，
+此时 `hadTarget=true`。
+
+`marketplace_skills.is_installed` 是派生缓存。只有 Central 文件系统、skill row、
+repository assignment、commit/digest provenance 与 journal commit 全部成功后才写入。
+缓存 marker 写入失败不会把已提交安装伪装成失败；Marketplace 查询会从 Central
+实时状态派生结果并重试缓存修复。
 
 ## GitHub 导入
 
@@ -89,4 +107,4 @@ github_import/
 
 `commands::central_metadata::*` 驱动标签抽屉。AI 建议写入 `skill_ai_tag_reviews`（`status='pending'`），UI 一条条接受或跳过；接受的行落到 `skill_tag_links`，`source='ai'`。
 
-Last reviewed: 2026-05-04
+Last reviewed: 2026-08-03

@@ -646,6 +646,27 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
     });
   });
 
+  it("localizes coded archive redirect failures without exposing backend details", async () => {
+    const seed = "ghp_secret https://example.invalid/private C:\\private\\SKILL.md";
+    mockRefreshUpdateInventory.mockRejectedValueOnce(
+      `github_import.archive_redirect_rejected:${seed}`,
+    );
+    renderCentralSkillsView();
+
+    fireEvent.click(screen.getByTestId("central-check-updates"));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByTestId("confirm-update-check-mode"));
+
+    const expected =
+      "检查更新失败: GitHub 返回了不安全或异常的仓库压缩包跳转，已停止检查更新。请重试。";
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(expected);
+    });
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(expected);
+    expect(within(dialog).getByRole("alert")).not.toHaveTextContent(seed);
+    expect(mockOpenUpdateCenterDialog).not.toHaveBeenCalled();
+  });
+
   it("检查成功后先自动重取列表再打开 Update Center，更新状态可见生效", async () => {
     const { centralState } = renderCentralSkillsView();
     // 模拟重取把检查后的更新状态写回 store（真实 store 的行为）；

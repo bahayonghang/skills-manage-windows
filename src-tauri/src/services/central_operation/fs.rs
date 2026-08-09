@@ -8,7 +8,12 @@ use walkdir::WalkDir;
 use crate::fs_util::run_blocking_fs_with;
 use crate::targets::ConnectedRemoteTarget;
 
+use super::path::{normalize_remote_delete_path, remote_fingerprint};
 use super::{CentralOperationError, DeleteManifest, ManagedPath, MANIFEST_VERSION};
+
+#[cfg(test)]
+#[path = "fs_dedupe_tests.rs"]
+mod dedupe_tests;
 
 const REMOTE_STAGE_DELETE: &str = r#"
 set -eu
@@ -71,7 +76,7 @@ fi
 printf 'FINALIZED\n'
 "#;
 
-const REMOTE_FINGERPRINT: &str = r#"
+pub(super) const REMOTE_FINGERPRINT: &str = r#"
 set -eu
 path=$1
 if [ ! -e "$path" ] && [ ! -L "$path" ]; then
@@ -118,6 +123,11 @@ pub(crate) async fn build_local_delete_manifest(
 ) -> Result<DeleteManifest, CentralOperationError> {
     let mut managed = Vec::with_capacity(paths.len());
     for path in paths {
+        if managed.iter().any(|entry: &ManagedPath| {
+            crate::paths::paths_equivalent(Path::new(&entry.original), &path)
+        }) {
+            continue;
+        }
         let parent = path.parent().ok_or_else(|| {
             CentralOperationError::InvalidManifest("delete path has no parent".to_string())
         })?;
@@ -149,6 +159,13 @@ pub(crate) async fn build_remote_delete_manifest(
 ) -> Result<DeleteManifest, CentralOperationError> {
     let mut managed = Vec::with_capacity(paths.len());
     for original in paths {
+        let original = normalize_remote_delete_path(&original)?;
+        if managed
+            .iter()
+            .any(|entry: &ManagedPath| entry.original == original)
+        {
+            continue;
+        }
         let (parent, _) = original.rsplit_once('/').ok_or_else(|| {
             CentralOperationError::InvalidManifest("remote delete path has no parent".to_string())
         })?;
@@ -572,28 +589,6 @@ fn hash_file(path: &Path, hasher: &mut Sha256) -> Result<(), CentralOperationErr
 fn path_token(path: &str) -> String {
     let digest = format!("{:x}", Sha256::digest(path.as_bytes()));
     digest[..16].to_string()
-}
-
-async fn remote_fingerprint(
-    connection: &ConnectedRemoteTarget,
-    path: &str,
-) -> Result<Option<String>, CentralOperationError> {
-    let output = connection
-        .run_script(REMOTE_FINGERPRINT, &[path])
-        .await
-        .map_err(|_| CentralOperationError::Remote {
-            code: "remote_fingerprint",
-        })?;
-    let value = output.trim();
-    if value == "MISSING" {
-        return Ok(None);
-    }
-    if value.len() != 64 || !value.chars().all(|character| character.is_ascii_hexdigit()) {
-        return Err(CentralOperationError::Remote {
-            code: "remote_fingerprint_protocol",
-        });
-    }
-    Ok(Some(value.to_ascii_lowercase()))
 }
 
 #[cfg(test)]

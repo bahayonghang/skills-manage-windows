@@ -178,6 +178,17 @@ pub struct PendingOperationSummary {
     pub updated_at: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreparedDeleteReconciliationPreview {
+    pub operation_id: String,
+    pub skill_id: String,
+    pub eligible: bool,
+    pub duplicate_path_count: usize,
+    pub missing_unowned_path_count: usize,
+    pub blocker_codes: Vec<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

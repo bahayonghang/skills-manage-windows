@@ -7,14 +7,141 @@ use super::cache::{
 };
 use super::error::{classify_reqwest_error, format_reqwest_error, ExplanationErrorKind};
 use super::prompt::{
-    detect_explanation_api_protocol, resolve_api_protocol, resolve_custom_url,
+    detect_explanation_api_protocol, resolve_api_protocol, resolve_custom_url, truncate_content,
     ExplanationApiProtocol,
 };
 use super::stream::get_fallback_endpoint;
+use super::{read_ai_response_body, read_ai_response_body_with_timeout, AiProviderError};
 use tempfile::TempDir;
 
 async fn setup_test_db() -> (crate::db::DbPool, TempDir) {
     crate::test_support::file_pool().await
+}
+
+async fn chunked_response_that_waits_for_reader(
+    status: &'static str,
+    body: &'static [u8],
+) -> (reqwest::Response, tokio::sync::oneshot::Sender<()>) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let address = listener.local_addr().expect("address");
+    let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+    tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.expect("accept");
+        let mut request = [0_u8; 1024];
+        let _ = socket.read(&mut request).await.expect("request");
+        let headers = format!(
+            "HTTP/1.1 {status}\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n{:X}\r\n",
+            body.len()
+        );
+        socket.write_all(headers.as_bytes()).await.expect("headers");
+        socket.write_all(body).await.expect("body");
+        socket.write_all(b"\r\n").await.expect("chunk end");
+        let _ = release_rx.await;
+    });
+
+    let response = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .unwrap()
+        .get(format!("http://{address}/response"))
+        .send()
+        .await
+        .expect("response headers");
+    (response, release_tx)
+}
+
+#[tokio::test]
+async fn chunked_ai_success_body_stops_at_limit_before_eof() {
+    let (response, release) = chunked_response_that_waits_for_reader("200 OK", b"abcdef").await;
+    let error = read_ai_response_body(response, 5, "success response body")
+        .await
+        .expect_err("cap+1 body must fail before EOF");
+    assert!(matches!(
+        error,
+        AiProviderError::ResponseTooLarge {
+            phase: "success response body",
+            limit: 5
+        }
+    ));
+    let _ = release.send(());
+}
+
+#[tokio::test]
+async fn chunked_ai_error_body_stops_at_limit_before_eof() {
+    let (response, release) =
+        chunked_response_that_waits_for_reader("500 Internal Server Error", b"secret").await;
+    let error = read_ai_response_body(response, 5, "error response body")
+        .await
+        .expect_err("cap+1 diagnostic must fail before EOF");
+    assert!(matches!(error, AiProviderError::ResponseTooLarge { .. }));
+    assert!(!error.to_string().contains("secret"));
+    let _ = release.send(());
+}
+
+#[tokio::test(start_paused = true)]
+async fn finite_ai_body_has_an_explicit_typed_deadline() {
+    let (response, release) = chunked_response_that_waits_for_reader("200 OK", b"ok").await;
+    let error = read_ai_response_body_with_timeout(
+        response,
+        5,
+        "success response body",
+        std::time::Duration::from_secs(5),
+    )
+    .await
+    .expect_err("unterminated response body must time out");
+    assert!(matches!(
+        error,
+        AiProviderError::ResponseTimeout {
+            phase: "success response body",
+            timeout_ms: 5_000
+        }
+    ));
+    let _ = release.send(());
+}
+
+#[test]
+fn status_classification_preserves_auth_and_rate_limit_variants() {
+    assert!(matches!(
+        AiProviderError::from_status(401, "auth".to_string()),
+        AiProviderError::AccessDenied(_)
+    ));
+    assert!(matches!(
+        AiProviderError::from_status(403, "auth".to_string()),
+        AiProviderError::AccessDenied(_)
+    ));
+    assert!(matches!(
+        AiProviderError::from_status(429, "rate".to_string()),
+        AiProviderError::RateLimited(_)
+    ));
+}
+
+#[test]
+fn truncate_content_counts_unicode_scalars_without_panicking() {
+    for content in [
+        String::new(),
+        "a".repeat(8_001),
+        "中".repeat(8_001),
+        "🙂".repeat(8_001),
+        "e\u{301}".repeat(4_001),
+    ] {
+        let truncated = truncate_content(&content);
+        assert!(truncated.is_char_boundary(truncated.len()));
+        if content.chars().count() > 8_000 {
+            assert!(truncated.ends_with("...\n\n(内容已截断)"));
+            assert_eq!(
+                truncated
+                    .trim_end_matches("...\n\n(内容已截断)")
+                    .chars()
+                    .count(),
+                8_000
+            );
+        } else {
+            assert_eq!(truncated, content);
+        }
+    }
 }
 #[test]
 fn explicit_protocol_overrides_url_detection() {
@@ -100,6 +227,8 @@ async fn format_reqwest_error_surfaces_actionable_hint() {
         msg.contains("region endpoint") || msg.contains("Unable to connect"),
         "expected actionable English hint in formatted error, got: {msg}"
     );
+    assert!(!msg.contains("127.0.0.1"));
+    assert!(!msg.contains("http://"));
 }
 
 #[tokio::test]
@@ -120,6 +249,8 @@ async fn classify_connect_error_as_connect_kind() {
     assert!(info.retryable);
     assert!(!info.message.is_empty());
     assert!(!info.details.is_empty());
+    assert!(!info.details.contains("127.0.0.1"));
+    assert!(!info.details.contains("http://"));
 }
 
 // ── Fallback endpoint tests ──────────────────────────────────────────

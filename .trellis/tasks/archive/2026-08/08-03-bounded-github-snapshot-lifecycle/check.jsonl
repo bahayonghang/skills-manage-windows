@@ -1,0 +1,5 @@
+{"file":".trellis/tasks/08-02-src-tauri-architecture-quality-performance/research/src-tauri-deep-audit.md","reason":"逐项复核 F2 与 task acceptance"}
+{"file":".trellis/tasks/08-02-src-tauri-architecture-quality-performance/research/github-import-lifecycle-contract.md","reason":"检查原 snapshot binding、import retry 与 cleanup ownership 行为未回归"}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"检查 cache/cleanup diagnostics 不泄漏 token/path/repo/digest"}
+{"file":".trellis/spec/backend/target-context.md","reason":"检查跨 target cleanup ownership 和切换语义"}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"执行完整 Rust/IPC/repo gate"}

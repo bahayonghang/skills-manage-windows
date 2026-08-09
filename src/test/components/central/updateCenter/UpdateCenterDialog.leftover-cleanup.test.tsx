@@ -44,6 +44,25 @@ function inventoryWithLeftovers(): SkillUpdateInventory {
   };
 }
 
+function inventoryWithUpdate(): SkillUpdateInventory {
+  return {
+    ...inventoryWithLeftovers(),
+    updatable: [
+      {
+        state: {
+          skill_id: "skill-a",
+          source_type: "github",
+          source_url: "https://github.com/owner/repo",
+          source_path: "skills/skill-a",
+          status: "update_available",
+        },
+        repositoryId: "owner/repo",
+      },
+    ],
+    deletedPlatformCopies: [],
+  };
+}
+
 function applyResult(
   overrides: Partial<SkillUpdateApplyResult> = {},
 ): SkillUpdateApplyResult {
@@ -61,13 +80,17 @@ function applyResult(
   };
 }
 
-function renderOpenDialog(apply: ReturnType<typeof vi.fn>) {
+function renderOpenDialog(
+  apply: ReturnType<typeof vi.fn>,
+  inventory: SkillUpdateInventory = inventoryWithLeftovers(),
+  activeTab: "updatable" | "deletedPlatformCopies" = "deletedPlatformCopies",
+) {
   useCentralSkillsStore.setState({ skills: [], repositories: [] });
   useUpdateCenterStore.setState({
     ...initialUpdateCenterState,
-    inventory: inventoryWithLeftovers(),
+    inventory,
     isDialogOpen: true,
-    activeTab: "deletedPlatformCopies",
+    activeTab,
     refreshContext: { repositoryIds: [], skillIds: [], agentIds: [] },
     refreshMode: "sync",
     apply: apply as unknown as typeof initialUpdateCenterState.apply,
@@ -141,5 +164,71 @@ describe("UpdateCenterDialog platform leftover cleanup", () => {
       { kind: "all", mode: "sync" },
     );
     expect(toast.success).toHaveBeenCalledWith("已清理 2 条平台残留路径");
+  });
+
+  it("shows the safe identifier and reviewed recovery error for cleanup failures", async () => {
+    const apply = vi.fn().mockResolvedValue(
+      applyResult({
+        failures: [
+          {
+            step: "remove_deleted_platform_copy",
+            identifier: "codex::removed-skill",
+            error: "token=secret https://example.invalid C:\\Users\\private",
+            errorCode: "central_operation.delete_restore_collision",
+            errorCategory: "central_updates.central_operation",
+          },
+        ],
+      }),
+    );
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderOpenDialog(apply);
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "清理残留（2）" }),
+    );
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "codex::removed-skill：Central 恢复证据发生冲突。请在操作日志中检查并处理待恢复操作。",
+      ),
+    );
+    const messages = vi.mocked(toast.error).mock.calls.flat().join("\n");
+    expect(messages).not.toContain("secret");
+    expect(messages).not.toContain("example.invalid");
+    expect(messages).not.toContain("Users\\private");
+  });
+
+  it("uses the same reviewed identifier feedback for selected updates", async () => {
+    const apply = vi.fn().mockResolvedValue(
+      applyResult({
+        failures: [
+          {
+            step: "update",
+            identifier: "skill-a",
+            phase: "recovery",
+            error: "token=secret https://example.invalid C:\\Users\\private",
+            errorCode: "central_operation.delete_restore_collision",
+            errorCategory: "central_updates.central_operation",
+          },
+        ],
+      }),
+    );
+    renderOpenDialog(apply, inventoryWithUpdate(), "updatable");
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "应用已选项 (1)" }),
+    );
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "skill-a：Central 恢复证据发生冲突。请在操作日志中检查并处理待恢复操作。",
+      ),
+    );
+    const messages = vi.mocked(toast.error).mock.calls.flat().join("\n");
+    expect(messages).not.toContain("secret");
+    expect(messages).not.toContain("example.invalid");
+    expect(messages).not.toContain("Users\\private");
   });
 });

@@ -1,0 +1,5 @@
+{"file":".trellis/tasks/08-02-src-tauri-architecture-quality-performance/research/src-tauri-deep-audit.md","reason":"F2 cache clone、capacity 与跨 target ownership 证据"}
+{"file":".trellis/tasks/08-02-src-tauri-architecture-quality-performance/research/github-import-lifecycle-contract.md","reason":"在注入上限内完整加载 immutable snapshot、TTL、lease、discard 与 remote ownership 约束"}
+{"file":".trellis/spec/backend/target-context.md","reason":"cleanup 必须绑定 owning target 的请求级 identity"}
+{"file":".trellis/spec/backend/process-supervision.md","reason":"remote cleanup 的 timeout/cancel/output 与失败语义"}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"新增 capacity/cleanup typed errors 与 IPC mapping"}

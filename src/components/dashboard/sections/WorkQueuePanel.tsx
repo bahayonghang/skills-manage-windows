@@ -50,6 +50,7 @@ export function WorkQueuePanel({
             <li key={item.key}>
               <button
                 type="button"
+                title={`${item.label} — ${item.description}`}
                 onClick={() => onNavigate(queueDestination(item.key))}
                 className={cn(
                   "focus-ring flex h-full w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-muted/25",

@@ -20,7 +20,9 @@ use crate::logging::{
 use crate::operation_log::{
     record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
 };
-use crate::services::central_operation::PendingOperationSummary;
+use crate::services::central_operation::{
+    PendingOperationSummary, PreparedDeleteReconciliationPreview,
+};
 use crate::AppState;
 
 #[tauri::command]
@@ -137,6 +139,113 @@ pub async fn retry_fs_db_operation(
             .subject("operation", &operation_id, "Central operation recovery")
             .details(json!({
                 "operationId": operation_id,
+                "pendingCount": result.as_ref().ok().map(Vec::len),
+            }))
+            .duration_ms(started.elapsed().as_millis() as i64);
+            if let Err(error) = &result {
+                event = event.error(error);
+            }
+            record_operation_log_best_effort(
+                &state.db,
+                target_context_from_active_target(&target),
+                event,
+            )
+            .await;
+            result
+        }
+        .await
+    )
+}
+
+#[tauri::command]
+pub async fn preview_fs_db_operation_reconciliation(
+    state: State<'_, AppState>,
+    operation_id: String,
+) -> crate::ipc_error::IpcResult<PreparedDeleteReconciliationPreview> {
+    crate::ipc_boundary!(
+        async move {
+            let operation_id = parse_operation_id(&operation_id)?;
+            let context = state.resolve_target_context().await?;
+            crate::services::central_operation::preview_prepared_delete_reconciliation(
+                context.db(),
+                context.target(),
+                &operation_id,
+            )
+            .await
+            .map_err(|error| error.redacted_message())
+        }
+        .await
+    )
+}
+
+#[tauri::command]
+pub async fn reconcile_fs_db_operation(
+    state: State<'_, AppState>,
+    operation_id: String,
+) -> crate::ipc_error::IpcResult<Vec<PendingOperationSummary>> {
+    crate::ipc_boundary!(
+        async move {
+            let operation_id = parse_operation_id(&operation_id)?;
+            let context = state.resolve_target_context().await?;
+            let target = context.target().clone();
+            let started = Instant::now();
+            let initial_preview = crate::services::central_operation::preview_prepared_delete_reconciliation(
+                context.db(),
+                &target,
+                &operation_id,
+            )
+            .await
+            .ok();
+            let service_result = crate::services::central_operation::reconcile_prepared_delete(
+                context.db(),
+                &target,
+                &operation_id,
+            )
+            .await;
+            let audit_preview = if matches!(
+                &service_result,
+                Err(crate::services::central_operation::CentralOperationError::ReconciliationBlocked {
+                    code: "reconcile_preflight_blocked"
+                })
+            ) {
+                crate::services::central_operation::preview_prepared_delete_reconciliation(
+                    context.db(),
+                    &target,
+                    &operation_id,
+                )
+                .await
+                .ok()
+                .or(initial_preview)
+            } else {
+                initial_preview
+            };
+            let result = service_result.map_err(|error| error.redacted_message());
+            let mut event = OperationLogEvent::new(
+                "recovery",
+                "central.operation_reconcile",
+                if result.is_ok() {
+                    "succeeded"
+                } else {
+                    "failed"
+                },
+                if result.is_ok() {
+                    "Reconciled a prepared Central delete operation"
+                } else {
+                    "Failed to reconcile a prepared Central delete operation"
+                },
+            )
+            .subject(
+                "operation",
+                &operation_id,
+                "Central operation reconciliation",
+            )
+            .details(json!({
+                "operationId": operation_id,
+                "skillId": audit_preview.as_ref().map(|preview| preview.skill_id.as_str()),
+                "eligible": audit_preview.as_ref().map(|preview| preview.eligible),
+                "blockerCodes": audit_preview.as_ref().map(|preview| &preview.blocker_codes),
+                "duplicatePathCount": audit_preview.as_ref().map(|preview| preview.duplicate_path_count),
+                "missingUnownedPathCount": audit_preview.as_ref().map(|preview| preview.missing_unowned_path_count),
                 "pendingCount": result.as_ref().ok().map(Vec::len),
             }))
             .duration_ms(started.elapsed().as_millis() as i64);

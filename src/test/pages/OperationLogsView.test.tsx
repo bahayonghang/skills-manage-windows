@@ -168,6 +168,54 @@ describe("OperationLogsView", () => {
     );
   });
 
+  it("previews and confirms an eligible prepared-delete reconciliation", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "list_operation_logs") return mockPage;
+      if (command === "list_pending_fs_db_operations") {
+        return [
+          {
+            operationId: "op-reconcile",
+            targetId: "local",
+            targetKind: "local",
+            operationKind: "central_delete",
+            skillId: "skill-a",
+            phase: "prepared",
+            updatedAt: "2026-08-07T00:00:00Z",
+          },
+        ];
+      }
+      if (command === "preview_fs_db_operation_reconciliation") {
+        return {
+          operationId: "op-reconcile",
+          skillId: "skill-a",
+          eligible: true,
+          duplicatePathCount: 9,
+          missingUnownedPathCount: 13,
+          blockerCodes: [],
+        };
+      }
+      if (command === "reconcile_fs_db_operation") return [];
+      return null;
+    });
+
+    render(<OperationLogsView />);
+    fireEvent.click(await screen.findByTitle("核销 prepared 删除"));
+    expect(
+      await screen.findByText("核销 prepared 删除操作"),
+    ).toBeInTheDocument();
+    expect(await screen.findByText(/13 条已不归属/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "确认核销" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("reconcile_fs_db_operation", {
+        operationId: "op-reconcile",
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("核销 prepared 删除操作")).not.toBeInTheDocument(),
+    );
+  });
+
   it("shows recovery loading without hiding cached logs, then hides the empty band", async () => {
     let resolvePending!: (value: []) => void;
     vi.mocked(invoke).mockImplementation((command) => {

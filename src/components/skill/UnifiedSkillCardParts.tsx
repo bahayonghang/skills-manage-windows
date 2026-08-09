@@ -28,7 +28,8 @@ export function CardActionButton({
       aria-label={ariaLabel}
       data-testid={testId}
       className={cn(
-        "focus-ring inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-[scale,background-color,color] active:not-disabled:scale-[0.96] disabled:cursor-default disabled:opacity-50",
+        "focus-ring relative inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-[scale,background-color,color] active:not-disabled:scale-[0.96] disabled:cursor-default disabled:opacity-50",
+        "after:absolute after:left-1/2 after:top-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']",
         danger
           ? "hover:bg-destructive/10 hover:text-destructive-text"
           : "hover:bg-accent/40 hover:text-primary",
@@ -51,11 +52,6 @@ export function SkillCardSummary({
   const { ref, isTruncated } = useTextTruncation<HTMLParagraphElement>(text);
   return (
     <div className="relative">
-      {label && (
-        <span className="mr-1.5 inline-flex align-baseline rounded-full border border-primary/15 bg-primary/8 px-1.5 py-0.5 text-xs font-medium leading-none text-primary-text">
-          {label}
-        </span>
-      )}
       <p
         ref={ref}
         data-truncated={isTruncated ? "true" : "false"}
@@ -63,9 +59,13 @@ export function SkillCardSummary({
         className={cn(
           "text-pretty break-words text-xs leading-relaxed text-muted-foreground",
           lineClamp === 3 ? "line-clamp-3" : "line-clamp-2",
-          label && "inline",
         )}
       >
+        {label && (
+          <span className="mr-1.5 inline-flex align-baseline rounded-full border border-primary/15 bg-primary/8 px-1.5 py-0.5 text-xs font-medium leading-none text-primary-text">
+            {label}
+          </span>
+        )}
         {text}
       </p>
       <span

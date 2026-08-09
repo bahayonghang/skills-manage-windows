@@ -23,11 +23,16 @@ use super::types::{
 const UPDATE_PROGRESS_EVENT: &str = "central://skill-update-progress";
 
 mod batch;
+mod content_upsert;
 mod state;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use batch::{recover_pending_update_operations, update_skills_batch, SkillUpdatePlan};
+pub(crate) use batch::{
+    recover_pending_update_operation, recover_pending_update_operations, update_skills_batch,
+    SkillUpdatePlan,
+};
+pub(crate) use content_upsert::{journaled_central_content_upsert, JournaledCentralContentUpsert};
 #[allow(unused_imports)]
 pub(crate) use state::repository_url;
 pub(crate) use state::{
@@ -264,16 +269,16 @@ pub(crate) async fn update_central_skills_impl(
                 );
                 states.push(state_result);
             }
-            Err(RemoteSkillLoadError::Other(error)) => {
+            Err(RemoteSkillLoadError::Other(_error)) => {
+                let public_error = "This update item could not be applied.";
                 let state_result =
-                    error_state_from_assignment(skill, &prepared_skill.assignment, &error);
+                    error_state_from_assignment(skill, &prepared_skill.assignment, public_error);
                 db::upsert_skill_update_state(pool, &state_result).await?;
                 counters.completed += 1;
                 counters.failed += 1;
-                failed.push(CentralSkillUpdateFailure {
-                    skill_id: skill.id.clone(),
-                    error: error.clone(),
-                });
+                failed.push(CentralSkillUpdateFailure::decision_apply_fallback(
+                    skill.id.clone(),
+                ));
                 emit_update_progress(
                     app,
                     job_id,
@@ -282,7 +287,7 @@ pub(crate) async fn update_central_skills_impl(
                     total,
                     &counters,
                     Some(skill),
-                    Some(&error),
+                    Some(public_error),
                 );
                 states.push(state_result);
             }
@@ -318,7 +323,7 @@ pub(crate) async fn update_central_skills_impl(
                 );
                 states.push(state_result);
             }
-            Err(CentralUpdatesError::BatchCancelled) => {
+            Err(error) if matches!(error.error(), CentralUpdatesError::BatchCancelled) => {
                 emit_update_progress(
                     app,
                     job_id,
@@ -337,16 +342,16 @@ pub(crate) async fn update_central_skills_impl(
                 });
             }
             Err(error) => {
-                let error = error.to_string();
+                let public_error = error.error().public_update_message();
                 let state_result =
-                    error_state_from_assignment(skill, &prepared_skill.assignment, &error);
+                    error_state_from_assignment(skill, &prepared_skill.assignment, public_error);
                 db::upsert_skill_update_state(pool, &state_result).await?;
                 counters.completed += 1;
                 counters.failed += 1;
-                failed.push(CentralSkillUpdateFailure {
-                    skill_id: skill.id.clone(),
-                    error: error.clone(),
-                });
+                failed.push(CentralSkillUpdateFailure::from_item_error(
+                    skill.id.clone(),
+                    &error,
+                ));
                 emit_update_progress(
                     app,
                     job_id,
@@ -355,7 +360,7 @@ pub(crate) async fn update_central_skills_impl(
                     total,
                     &counters,
                     Some(skill),
-                    Some(&error),
+                    Some(public_error),
                 );
                 states.push(state_result);
             }

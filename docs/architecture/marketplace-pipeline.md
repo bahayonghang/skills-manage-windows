@@ -17,11 +17,19 @@ services::marketplace::sync — GitHub API: list repo tree
 parse SKILL.md frontmatter (name, description, downloadUrl)
        │
        ▼
-upsert into marketplace_skills with cache_updated_at
+derive installed hints, then begin a short DB transaction
        │
        ▼
-update skill_registries.last_synced / etag / last_modified
+delete old cache → insert the complete fresh snapshot
+       │
+       ▼
+publish skill_registries success metadata and commit
 ```
+
+Fetch and parse never hold the cache transaction. A fetch failure keeps the
+last good cache and records the attempt/error. After a successful fetch, cache
+rows and success metadata commit together; an empty snapshot clears stale rows,
+while any insert/status failure rolls back to the complete previous snapshot.
 
 Conditional fetch: the registry stores `etag` and `last_modified` from the previous response; subsequent syncs send them as conditional headers and skip parsing on `304 Not Modified`.
 
@@ -38,19 +46,39 @@ See [Data Model](./data-model.md) for full column lists.
 ## Install From Marketplace
 
 ```text
-install_marketplace_skill
+marketplace skill id + enabled registry source
        │
        ▼
-download SKILL.md (and folder peers) into ~/.skillsmanage/skills
+resolve GitHub source and pin one commit/snapshot
        │
        ▼
-upsert skills row with canonical_path / is_central=true
+rebuild candidates and require one exact marketplace id match
        │
        ▼
-mark marketplace_skills.is_installed=true
+project the complete candidate directory into CentralSkillWrite
+       │
+       ▼
+target lock → pending recovery → durable stage/swap
+       │
+       ▼
+skill + repository provenance + db_committed in one transaction
+       │
+       ▼
+finalize journal → best-effort installed-cache repair
 ```
 
-The install path reuses `installation::centralize::ensure_centralized` so once the file lands in the Central directory the rest of the pipeline behaves like any other skill.
+The cached `download_url` and frontmatter display name are never request or path
+authorities. Candidate `skill_id` determines the Local/SSH/WSL target directory,
+and every target receives `SKILL.md` plus its references, scripts, assets, and
+other peers from the same pinned snapshot. A first install uses the existing
+`central_update` journal with `hadTarget=false`; overwrite uses the same recoverable
+swap with `hadTarget=true`.
+
+`marketplace_skills.is_installed` is derived cache state. It is written only after
+the Central filesystem, skill row, repository assignment, commit/digest provenance,
+and journal commit succeed. A cache-marker write failure does not turn a committed
+install into an error; Marketplace queries derive the live value from Central and
+retry the cache repair.
 
 ## GitHub Import
 
@@ -89,4 +117,4 @@ The `explain_skill_stream` command emits `ai-explain://{job_id}` events; the UI 
 
 `commands::central_metadata::*` powers the tag drawer. AI suggestions are written to `skill_ai_tag_reviews` with `status='pending'`; the UI accepts or skips each one and the row moves to `accepted` or `skipped`. Accepted tags then materialize into `skill_tag_links` with `source='ai'`.
 
-Last reviewed: 2026-05-04
+Last reviewed: 2026-08-03

@@ -85,6 +85,71 @@ async fn uninstall_local_with_row(
     uninstall_skill(pool, &InstallTransport::Local, skill_id, agent_id, row_id).await
 }
 
+#[tokio::test]
+async fn pending_central_recovery_blocks_same_skill_uninstall_before_mutation() {
+    let temp = tempfile::tempdir().unwrap();
+    let central_dir = temp.path().join("central");
+    let agent_dir = temp.path().join("agent");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&agent_dir).unwrap();
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&pool, &central_dir, "blocked-skill").await;
+    install_copy_local(&pool, "blocked-skill", "claude-code")
+        .await
+        .unwrap();
+    let installed_path = agent_dir.join("blocked-skill");
+    assert!(installed_path.exists());
+
+    let operation_id = "pending-install-isolation";
+    let manifest = crate::services::central_operation::OperationManifest::Delete(
+        crate::services::central_operation::DeleteManifest {
+            version: crate::services::central_operation::MANIFEST_VERSION,
+            operation_id: operation_id.to_string(),
+            paths: vec![crate::services::central_operation::ManagedPath {
+                original: central_dir
+                    .join("blocked-skill")
+                    .to_string_lossy()
+                    .into_owned(),
+                backup: temp.path().join("backup").to_string_lossy().into_owned(),
+                marker: temp.path().join("marker").to_string_lossy().into_owned(),
+                expected_present: true,
+                fingerprint: Some("recorded".to_string()),
+            }],
+        },
+    );
+    let manifest_json = serde_json::to_string(&manifest).unwrap();
+    db::insert_fs_db_operation(
+        &pool,
+        db::NewFsDbOperation {
+            id: operation_id,
+            batch_id: None,
+            target_id: "local",
+            target_kind: "local",
+            operation_kind: "central_delete",
+            skill_id: "blocked-skill",
+            manifest_version: crate::services::central_operation::MANIFEST_VERSION,
+            manifest_json: &manifest_json,
+            old_fingerprint: None,
+            new_fingerprint: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let error = uninstall_local(&pool, "blocked-skill", "claude-code")
+        .await
+        .unwrap_err();
+    assert!(matches!(error, InstallationError::PendingCentralRecovery));
+    assert!(installed_path.exists());
+    assert_eq!(
+        db::get_skill_installations(&pool, "blocked-skill")
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
 // ── Test helpers ──────────────────────────────────────────────────────────
 
 /// Create an in-memory SQLite pool with the full schema initialised and

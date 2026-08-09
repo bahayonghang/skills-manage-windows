@@ -61,3 +61,12 @@ export interface PendingFsDbOperation {
   errorMessage?: string | null;
   updatedAt: string;
 }
+
+export interface PreparedDeleteReconciliationPreview {
+  operationId: string;
+  skillId: string;
+  eligible: boolean;
+  duplicatePathCount: number;
+  missingUnownedPathCount: number;
+  blockerCodes: string[];
+}

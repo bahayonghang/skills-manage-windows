@@ -29,6 +29,9 @@ pub enum InstallationError {
     #[error(transparent)]
     CentralMutation(#[from] crate::services::central_mutation::CentralMutationError),
 
+    #[error("installation.pending_central_recovery:Central recovery is pending for this skill.")]
+    PendingCentralRecovery,
+
     /// Platform without symlink support.
     #[error("Symlink creation is only supported on Unix systems")]
     SymlinkUnsupported,

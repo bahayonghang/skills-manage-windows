@@ -1,0 +1,5 @@
+{"file":".trellis/tasks/08-02-src-tauri-architecture-quality-performance/research/src-tauri-deep-audit.md","reason":"复核F4执行顺序和测试缺口"}
+{"file":".trellis/spec/backend/database-migrations.md","reason":"检查index migration、old/new DB与generated docs"}
+{"file":".trellis/spec/backend/central-skill-tags.md","reason":"检查tag/uncategorized query等价"}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"执行Rust/schema/docs完整gate"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"检查没有复制relation enrichment或另建query layer"}

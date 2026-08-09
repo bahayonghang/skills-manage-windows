@@ -14,6 +14,7 @@ use crate::test_support::mem_pool as setup_test_db;
 use chrono::{Duration as ChronoDuration, Utc};
 use sqlx::SqlitePool;
 use std::path::Path;
+use std::sync::Arc;
 use tempfile::TempDir;
 
 async fn setup_remote_test_db(remote_home: &Path) -> SqlitePool {
@@ -145,7 +146,7 @@ async fn collect_remote_added_skills_detects_repo_candidates_not_in_local_member
     let repo = test_repo();
     let snapshots = HashMap::from([(
         repo_cache_key(&repo),
-        GitHubRepoSnapshot {
+        Arc::new(GitHubRepoSnapshot {
             files: HashMap::from([
                 (
                     "skills/existing/SKILL.md".to_string(),
@@ -156,7 +157,7 @@ async fn collect_remote_added_skills_detects_repo_candidates_not_in_local_member
                     b"---\nname: New Skill\n---".to_vec(),
                 ),
             ]),
-        },
+        }),
     )]);
     let mut failures = Vec::new();
 
@@ -207,7 +208,7 @@ async fn collect_remote_added_skills_splits_persisted_skips() {
     let repo = test_repo();
     let snapshots = HashMap::from([(
         repo_cache_key(&repo),
-        GitHubRepoSnapshot {
+        Arc::new(GitHubRepoSnapshot {
             files: HashMap::from([
                 (
                     "skills/existing/SKILL.md".to_string(),
@@ -222,7 +223,7 @@ async fn collect_remote_added_skills_splits_persisted_skips() {
                     b"---\nname: Skipped Skill\n---".to_vec(),
                 ),
             ]),
-        },
+        }),
     )]);
     let mut failures = Vec::new();
 

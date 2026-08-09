@@ -89,6 +89,7 @@ export function countsFromInventory(
       added: 0,
       missing: 0,
       failed: 0,
+      unsupported: 0,
       duplicates: 0,
       deletedPlatformCopies: 0,
       orphans: 0,
@@ -99,6 +100,7 @@ export function countsFromInventory(
     added: inventory.remoteAdded.length,
     missing: inventory.remoteMissing.length,
     failed: inventory.failedRepositories.length,
+    unsupported: inventory.unsupported?.length ?? 0,
     duplicates: inventory.platformDuplicates.length,
     deletedPlatformCopies: inventory.deletedPlatformCopies?.length ?? 0,
     orphans: inventory.orphans.length,
@@ -326,6 +328,9 @@ export function inventorySignature(
       (item) => `a:${item.repositoryId}:${item.sourcePath}`,
     ),
     ...inventory.remoteMissing.map((item) => `m:${item.state.skill_id}`),
+    ...(inventory.unsupported ?? []).map(
+      (item) => `n:${item.skillId}:${item.reasonCode}`,
+    ),
     ...inventory.platformDuplicates.map(
       (group) => `d:${group.agentId}:${group.skillId}`,
     ),

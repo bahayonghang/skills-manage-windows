@@ -5,10 +5,11 @@
 
 use std::collections::HashMap;
 
-use sqlx::{Row, Sqlite, Transaction};
+use sqlx::{QueryBuilder, Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::db::repos::skills_repo::upsert_skill_in_transaction;
+use crate::db::sqlite_batch::{sqlite_rows_per_batch, validate_text_ids_exist, TextIdTable};
 use crate::db::types::{
     DbPool, Skill, SkillRepository, SkillRepositoryAssignment, SkillRepositoryMember,
     SkillRepositorySyncSkip, SkillRepositoryWithStats, LOCAL_UNKNOWN_REPOSITORY_ID,
@@ -238,16 +239,17 @@ pub async fn delete_skill_repository_sync_skip(
 }
 
 pub async fn detach_skill_remote_source(pool: &DbPool, skill_id: &str) -> Result<(), sqlx::Error> {
+    let mut transaction = pool.begin().await?;
     sqlx::query("DELETE FROM skill_update_states WHERE skill_id = ?")
         .bind(skill_id)
-        .execute(pool)
+        .execute(&mut *transaction)
         .await?;
     sqlx::query("DELETE FROM skill_repository_members WHERE skill_id = ?")
         .bind(skill_id)
-        .execute(pool)
+        .execute(&mut *transaction)
         .await?;
-    prune_empty_skill_repositories(pool).await?;
-    Ok(())
+    prune_empty_skill_repositories_in_transaction(&mut transaction).await?;
+    transaction.commit().await
 }
 
 pub async fn delete_empty_skill_repository(
@@ -574,35 +576,44 @@ pub async fn assign_skills_to_repository(
     skill_ids: &[String],
     source_path: Option<&str>,
 ) -> Result<(), sqlx::Error> {
-    let existing = get_skill_repository_by_id(pool, repository_id).await?;
-    if existing.is_none() {
+    let mut transaction = pool.begin().await?;
+    let repository_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM skill_repositories WHERE id = ?)")
+            .bind(repository_id)
+            .fetch_one(&mut *transaction)
+            .await?;
+    if !repository_exists {
         return Err(sqlx::Error::InvalidArgument(format!(
             "Repository '{}' not found",
             repository_id
         )));
     }
+    validate_text_ids_exist(&mut transaction, TextIdTable::Skills, "Skill", skill_ids).await?;
 
     let now = now_rfc3339();
-    for skill_id in skill_ids {
-        sqlx::query(
+    let rows_per_batch = sqlite_rows_per_batch(5)?;
+    for chunk in skill_ids.chunks(rows_per_batch) {
+        let mut builder = QueryBuilder::<Sqlite>::new(
             "INSERT INTO skill_repository_members
-             (skill_id, repository_id, source_path, added_at, updated_at)
-             VALUES (?, ?, ?, ?, ?)
-             ON CONFLICT(skill_id) DO UPDATE SET
+             (skill_id, repository_id, source_path, added_at, updated_at) ",
+        );
+        builder.push_values(chunk, |mut row, skill_id| {
+            row.push_bind(skill_id)
+                .push_bind(repository_id)
+                .push_bind(source_path)
+                .push_bind(&now)
+                .push_bind(&now);
+        });
+        builder.push(
+            " ON CONFLICT(skill_id) DO UPDATE SET
                repository_id = excluded.repository_id,
                source_path = COALESCE(excluded.source_path, skill_repository_members.source_path),
                updated_at = excluded.updated_at",
-        )
-        .bind(skill_id)
-        .bind(repository_id)
-        .bind(source_path)
-        .bind(&now)
-        .bind(&now)
-        .execute(pool)
-        .await?;
+        );
+        builder.build().execute(&mut *transaction).await?;
     }
 
-    Ok(())
+    transaction.commit().await
 }
 
 pub async fn get_skill_repository_assignment(
@@ -648,59 +659,60 @@ pub async fn get_skill_repository_assignments_for_skills(
         return Ok(HashMap::new());
     }
 
-    let placeholders = skill_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-    let sql = format!(
-        "SELECT
-            m.skill_id AS skill_id,
-            m.source_path AS source_path,
-            r.id AS repository_id,
-            r.name AS repository_name,
-            r.source_type AS repository_source_type,
-            r.owner AS repository_owner,
-            r.repo AS repository_repo,
-            r.branch AS repository_branch,
-            r.url AS repository_url,
-            r.pinned AS repository_pinned,
-            r.is_unknown AS repository_is_unknown,
-            r.created_at AS repository_created_at,
-            r.updated_at AS repository_updated_at,
-            r.last_synced_at AS repository_last_synced_at
-         FROM skill_repository_members m
-         JOIN skill_repositories r ON r.id = m.repository_id
-         WHERE m.skill_id IN ({})",
-        placeholders
-    );
-    let mut query = sqlx::query(&sql);
-    for skill_id in skill_ids {
-        query = query.bind(skill_id);
-    }
-
-    let rows = query.fetch_all(pool).await?;
-    let mut assignments = HashMap::with_capacity(rows.len());
-    for row in rows {
-        let skill_id: String = row.try_get("skill_id")?;
-        let repository = SkillRepository {
-            id: row.try_get("repository_id")?,
-            name: row.try_get("repository_name")?,
-            source_type: row.try_get("repository_source_type")?,
-            owner: row.try_get("repository_owner")?,
-            repo: row.try_get("repository_repo")?,
-            branch: row.try_get("repository_branch")?,
-            url: row.try_get("repository_url")?,
-            pinned: row.try_get("repository_pinned")?,
-            is_unknown: row.try_get("repository_is_unknown")?,
-            created_at: row.try_get("repository_created_at")?,
-            updated_at: row.try_get("repository_updated_at")?,
-            last_synced_at: row.try_get("repository_last_synced_at")?,
-        };
-        assignments.insert(
-            skill_id,
-            SkillRepositoryAssignment {
-                is_source_unknown: repository.is_unknown,
-                repository,
-                source_path: row.try_get("source_path")?,
-            },
+    let mut assignments = HashMap::with_capacity(skill_ids.len());
+    for chunk in skill_ids.chunks(crate::db::sqlite_batch::SQLITE_IN_QUERY_BATCH_SIZE) {
+        let placeholders = chunk.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT
+                m.skill_id AS skill_id,
+                m.source_path AS source_path,
+                r.id AS repository_id,
+                r.name AS repository_name,
+                r.source_type AS repository_source_type,
+                r.owner AS repository_owner,
+                r.repo AS repository_repo,
+                r.branch AS repository_branch,
+                r.url AS repository_url,
+                r.pinned AS repository_pinned,
+                r.is_unknown AS repository_is_unknown,
+                r.created_at AS repository_created_at,
+                r.updated_at AS repository_updated_at,
+                r.last_synced_at AS repository_last_synced_at
+             FROM skill_repository_members m
+             JOIN skill_repositories r ON r.id = m.repository_id
+             WHERE m.skill_id IN ({})",
+            placeholders
         );
+        let mut query = sqlx::query(&sql);
+        for skill_id in chunk {
+            query = query.bind(skill_id);
+        }
+
+        for row in query.fetch_all(pool).await? {
+            let skill_id: String = row.try_get("skill_id")?;
+            let repository = SkillRepository {
+                id: row.try_get("repository_id")?,
+                name: row.try_get("repository_name")?,
+                source_type: row.try_get("repository_source_type")?,
+                owner: row.try_get("repository_owner")?,
+                repo: row.try_get("repository_repo")?,
+                branch: row.try_get("repository_branch")?,
+                url: row.try_get("repository_url")?,
+                pinned: row.try_get("repository_pinned")?,
+                is_unknown: row.try_get("repository_is_unknown")?,
+                created_at: row.try_get("repository_created_at")?,
+                updated_at: row.try_get("repository_updated_at")?,
+                last_synced_at: row.try_get("repository_last_synced_at")?,
+            };
+            assignments.insert(
+                skill_id,
+                SkillRepositoryAssignment {
+                    is_source_unknown: repository.is_unknown,
+                    repository,
+                    source_path: row.try_get("source_path")?,
+                },
+            );
+        }
     }
 
     Ok(assignments)

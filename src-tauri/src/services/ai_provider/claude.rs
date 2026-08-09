@@ -3,11 +3,9 @@
 //! OpenAI-compatible `/chat/completions` endpoints based on resolved provider
 //! configuration.
 
-use serde::{Deserialize, Serialize};
-use std::time::Duration;
-
 use super::error::{format_reqwest_error, AiProviderError};
 use super::prompt::{build_explanation_prompt, truncate_content, ExplanationApiProtocol};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize)]
 struct ClaudeRequest {
@@ -131,8 +129,8 @@ pub(crate) async fn explain_skill(
     let client = {
         let builder = reqwest::Client::builder()
             .user_agent(crate::commands::APP_USER_AGENT)
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(60));
+            .connect_timeout(super::AI_CONNECT_TIMEOUT)
+            .timeout(super::AI_REQUEST_TIMEOUT);
         #[cfg(test)]
         let builder = builder.no_proxy();
         builder.build().map_err(|e| {
@@ -155,39 +153,52 @@ pub(crate) async fn explain_skill(
         }],
     };
 
-    let resp = request_builder(&client, &config.api_url, &api_key, config.protocol)
+    let send = request_builder(&client, &config.api_url, &api_key, config.protocol)
         .json(&request)
-        .send()
+        .send();
+    let resp = tokio::time::timeout(super::AI_HEADER_TIMEOUT, send)
         .await
+        .map_err(|_| AiProviderError::ResponseTimeout {
+            phase: "response header deadline",
+            timeout_ms: super::AI_HEADER_TIMEOUT.as_millis(),
+        })?
         .map_err(|e| {
-            AiProviderError::Http(super::coded_error_with_details(
-                super::AI_REQUEST_FAILED,
-                "AI request failed.",
-                format_reqwest_error(&e),
-            ))
+            if e.is_timeout() {
+                AiProviderError::ResponseTimeout {
+                    phase: "connection deadline",
+                    timeout_ms: super::AI_CONNECT_TIMEOUT.as_millis(),
+                }
+            } else {
+                AiProviderError::Http(super::coded_error_with_details(
+                    super::AI_REQUEST_FAILED,
+                    "AI request failed.",
+                    format_reqwest_error(&e),
+                ))
+            }
         })?;
 
     if !resp.status().is_success() {
         let status = resp.status();
         let status_code = status.as_u16();
-        let body = resp.text().await.unwrap_or_default();
+        let body_result =
+            super::read_ai_response_body(resp, super::AI_ERROR_BODY_BYTES, "error response body")
+                .await;
+        if !matches!(status_code, 401 | 403 | 429) {
+            body_result?;
+        }
         return Err(AiProviderError::from_status(
             status_code,
             super::coded_error_with_details(
                 error_code_for_status(status_code),
                 message_for_status(status),
-                format!("HTTP {status}: {body}"),
+                format!("HTTP {status}"),
             ),
         ));
     }
 
-    let body = resp.text().await.map_err(|e| {
-        AiProviderError::Http(super::coded_error_with_details(
-            super::AI_RESPONSE_READ_FAILED,
-            "Failed to read the AI response.",
-            e.to_string(),
-        ))
-    })?;
+    let body =
+        super::read_ai_response_body(resp, super::AI_SUCCESS_BODY_BYTES, "success response body")
+            .await?;
 
     if let Some(text) = parse_response_text(&body) {
         return Ok(text);
@@ -196,7 +207,7 @@ pub(crate) async fn explain_skill(
     Err(AiProviderError::Parse(super::coded_error_with_details(
         super::AI_RESPONSE_PARSE_FAILED,
         "Unable to parse the AI response.",
-        &body[..body.len().min(500)],
+        "The response did not match a supported provider schema.",
     )))
 }
 
@@ -238,8 +249,8 @@ pub(crate) async fn test_ai_connection(
     let client = {
         let builder = reqwest::Client::builder()
             .user_agent(crate::commands::APP_USER_AGENT)
-            .connect_timeout(Duration::from_secs(5))
-            .timeout(Duration::from_secs(15));
+            .connect_timeout(super::AI_CONNECT_TIMEOUT.min(std::time::Duration::from_secs(5)))
+            .timeout(super::AI_REQUEST_TIMEOUT);
         #[cfg(test)]
         let builder = builder.no_proxy();
         builder.build().map_err(|e| {
@@ -260,13 +271,20 @@ pub(crate) async fn test_ai_connection(
         }],
     };
 
-    let resp = match request_builder(&client, &config.api_url, &api_key, config.protocol)
+    let send = request_builder(&client, &config.api_url, &api_key, config.protocol)
         .json(&request)
-        .send()
-        .await
-    {
-        Ok(resp) => resp,
-        Err(error) => {
+        .send();
+    let resp = match tokio::time::timeout(super::AI_HEADER_TIMEOUT, send).await {
+        Ok(Ok(resp)) => resp,
+        Ok(Err(error)) if error.is_timeout() => {
+            return Ok(AiConnectionTestResult {
+                ok: false,
+                msg: "AI connection test timed out.".to_string(),
+                code: Some(super::error::AI_TIMEOUT.to_string()),
+                details: Some("The provider connection exceeded its deadline.".to_string()),
+            });
+        }
+        Ok(Err(error)) => {
             return Ok(AiConnectionTestResult {
                 ok: false,
                 msg: "AI connection test failed.".to_string(),
@@ -274,18 +292,38 @@ pub(crate) async fn test_ai_connection(
                 details: Some(format_reqwest_error(&error)),
             });
         }
+        Err(_) => {
+            return Ok(AiConnectionTestResult {
+                ok: false,
+                msg: "AI connection test timed out.".to_string(),
+                code: Some(super::error::AI_TIMEOUT.to_string()),
+                details: Some(
+                    "The provider did not return response headers before the deadline.".to_string(),
+                ),
+            });
+        }
     };
 
     let status = resp.status();
-    let body = resp.text().await.unwrap_or_default();
+    let body_limit = if status.is_success() {
+        super::AI_SUCCESS_BODY_BYTES
+    } else {
+        super::AI_ERROR_BODY_BYTES
+    };
+    let body_result =
+        super::read_ai_response_body(resp, body_limit, "connection response body").await;
     if !status.is_success() {
+        if !matches!(status.as_u16(), 401 | 403 | 429) {
+            body_result?;
+        }
         return Ok(AiConnectionTestResult {
             ok: false,
             msg: message_for_status(status),
             code: Some(error_code_for_status(status.as_u16()).to_string()),
-            details: Some(format!("HTTP {status}: {body}")),
+            details: Some(format!("HTTP {status}")),
         });
     }
+    let body = body_result?;
 
     if parse_response_text(&body).is_some()
         || serde_json::from_str::<serde_json::Value>(&body).is_ok()
@@ -301,7 +339,7 @@ pub(crate) async fn test_ai_connection(
             ok: false,
             msg: "The AI provider returned an unreadable response.".to_string(),
             code: Some(super::AI_RESPONSE_PARSE_FAILED.to_string()),
-            details: Some(body[..body.len().min(500)].to_string()),
+            details: Some("The response did not match a supported provider schema.".to_string()),
         })
     }
 }

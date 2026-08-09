@@ -51,7 +51,11 @@ function collectSourceFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-function collectProductionFiles(dir: string, extensions: RegExp, out: string[] = []): string[] {
+function collectProductionFiles(
+  dir: string,
+  extensions: RegExp,
+  out: string[] = [],
+): string[] {
   for (const name of readdirSync(dir)) {
     const full = join(dir, name);
     if (statSync(full).isDirectory()) {
@@ -91,11 +95,14 @@ function collectRegistryCommands(macroName: string): string[] {
   if (bodyStart < 0 || bodyEnd < 0) {
     throw new Error(`malformed registry macro ${macroName}`);
   }
-  return [...source.slice(bodyStart, bodyEnd).matchAll(/^\s*([a-z0-9_]+)\s*=>/gm)]
-    .map((match) => match[1]);
+  return [
+    ...source.slice(bodyStart, bodyEnd).matchAll(/^\s*([a-z0-9_]+)\s*=>/gm),
+  ].map((match) => match[1]);
 }
 
-function collectTauriCommandSignatures(root = TAURI_SOURCE_ROOT): Map<string, string | null> {
+function collectTauriCommandSignatures(
+  root = TAURI_SOURCE_ROOT,
+): Map<string, string | null> {
   const signatures = new Map<string, string | null>();
   const commandPattern =
     /#\[tauri::command\][\s\S]*?\bpub\s+(?:async\s+)?fn\s+([a-z0-9_]+)\s*\([\s\S]*?\)\s*(?:->\s*([^\{]+))?\s*\{/g;
@@ -138,21 +145,27 @@ describe("ipc command coverage ratchet", () => {
     expect(TYPED_IPC_COMMAND_NAMES.length).toBeGreaterThanOrEqual(40);
   });
 
-  it("freezes the 130 typed / 47 untyped / 177 frontend migration counts", () => {
-    expect(HANDWRITTEN_IPC_COMMAND_NAMES).toHaveLength(88);
-    expect(GENERATED_IPC_COMMAND_NAMES).toHaveLength(42);
-    expect(TYPED_IPC_COMMAND_NAMES).toHaveLength(130);
+  it("freezes the 133 typed / 47 untyped / 180 frontend migration counts", () => {
+    expect(HANDWRITTEN_IPC_COMMAND_NAMES).toHaveLength(90);
+    expect(GENERATED_IPC_COMMAND_NAMES).toHaveLength(43);
+    expect(TYPED_IPC_COMMAND_NAMES).toHaveLength(133);
     expect(UNTYPED_IPC_COMMANDS).toHaveLength(47);
-    expect(new Set([...TYPED_IPC_COMMAND_NAMES, ...UNTYPED_IPC_COMMANDS]).size).toBe(177);
+    expect(
+      new Set([...TYPED_IPC_COMMAND_NAMES, ...UNTYPED_IPC_COMMANDS]).size,
+    ).toBe(180);
   });
 
   it("keeps generated and handwritten command maps disjoint", () => {
     const handwritten = new Set(HANDWRITTEN_IPC_COMMAND_NAMES);
-    expect(GENERATED_IPC_COMMAND_NAMES.filter((name) => handwritten.has(name))).toEqual([]);
+    expect(
+      GENERATED_IPC_COMMAND_NAMES.filter((name) => handwritten.has(name)),
+    ).toEqual([]);
   });
 
   it("keeps the generated artifact equal to the frozen Rust generated registry", () => {
-    const registered = collectRegistryCommands("__skillport_generated_commands");
+    const registered = collectRegistryCommands(
+      "__skillport_generated_commands",
+    );
     expect([...GENERATED_IPC_COMMAND_NAMES].sort()).toEqual(registered.sort());
     expect(registered.every((command) => invoked.has(command))).toBe(true);
   });
@@ -166,7 +179,9 @@ describe("ipc command coverage ratchet", () => {
     expect(artifact).not.toContain("@tauri-apps/api/core");
     expect(artifact).not.toMatch(/\binvoke\s*\(/);
     expect(artifact).not.toMatch(/:\s*unknown\b/);
-    expect(commandMap).toContain("get_github_pat: command<undefined, GitHubPatState_Serialize>()");
+    expect(commandMap).toContain(
+      "get_github_pat: command<undefined, GitHubPatState_Serialize>()",
+    );
     expect(commandMap).toContain(
       "refresh_skill_update_inventory: command<{ scope: SkillRefreshScope; operationId: string }, SkillUpdateInventory_Serialize>()",
     );
@@ -178,7 +193,10 @@ describe("ipc command coverage ratchet", () => {
 
   it("detects a Rust-derived argument or Serde field rename as byte drift", () => {
     const artifact = readFileSync(GENERATED_ARTIFACT_PATH, "utf8");
-    const mutated = artifact.replace("repositoryIds: string[]", "renamedRepositoryIds: string[]");
+    const mutated = artifact.replace(
+      "repositoryIds: string[]",
+      "renamedRepositoryIds: string[]",
+    );
     expect(mutated).not.toBe(artifact);
     expect(Buffer.from(mutated).equals(Buffer.from(artifact))).toBe(false);
   });
@@ -186,28 +204,38 @@ describe("ipc command coverage ratchet", () => {
   it("keeps runtime, frontend, and backend-only command sets in parity", () => {
     const runtime = collectRegistryCommands("__skillport_runtime_commands");
     const runtimeSet = new Set(runtime);
-    const frontend = new Set([...TYPED_IPC_COMMAND_NAMES, ...UNTYPED_IPC_COMMANDS]);
-    expect(runtime).toHaveLength(184);
-    expect([...frontend].filter((command) => !runtimeSet.has(command))).toEqual([]);
+    const frontend = new Set([
+      ...TYPED_IPC_COMMAND_NAMES,
+      ...UNTYPED_IPC_COMMANDS,
+    ]);
+    expect(runtime).toHaveLength(187);
+    expect([...frontend].filter((command) => !runtimeSet.has(command))).toEqual(
+      [],
+    );
     expect(runtime.filter((command) => !frontend.has(command)).sort()).toEqual(
       [...BACKEND_ONLY_COMMANDS].sort(),
     );
   });
 
-  it("keeps one runtime handler registry and the 180 / 4 fallibility boundary", () => {
-    const handlerOwners = collectProductionFiles(TAURI_SOURCE_ROOT, /\.rs$/)
-      .filter((file) => readFileSync(file, "utf8").includes("tauri::generate_handler!"));
+  it("keeps one runtime handler registry and the 183 / 4 fallibility boundary", () => {
+    const handlerOwners = collectProductionFiles(
+      TAURI_SOURCE_ROOT,
+      /\.rs$/,
+    ).filter((file) =>
+      readFileSync(file, "utf8").includes("tauri::generate_handler!"),
+    );
     expect(handlerOwners).toEqual([IPC_REGISTRY_PATH]);
 
     const signatures = collectTauriCommandSignatures(TAURI_COMMAND_ROOT);
-    const fallible = [...signatures.entries()]
-      .filter(([, result]) => result?.includes("IpcResult<"));
+    const fallible = [...signatures.entries()].filter(([, result]) =>
+      result?.includes("IpcResult<"),
+    );
     const infallible = [...signatures.entries()]
       .filter(([, result]) => !result?.includes("IpcResult<"))
       .map(([name]) => name)
       .sort();
-    expect(signatures.size).toBe(184);
-    expect(fallible).toHaveLength(180);
+    expect(signatures.size).toBe(187);
+    expect(fallible).toHaveLength(183);
     expect(infallible).toEqual([
       "exit_startup",
       "get_app_runtime_info",

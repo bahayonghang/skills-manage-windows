@@ -96,12 +96,15 @@ describe("UpdateCheckModeDialog", () => {
     expect(within(dialog).queryByTestId("update-check-mode-sync")).not.toBeInTheDocument();
     expect(within(dialog).queryByTestId("confirm-update-check-mode")).not.toBeInTheDocument();
     const progressbar = within(dialog).getByRole("progressbar", {
-      name: "更新检查进度：已完成 1 / 5 个仓库",
+      name: "更新检查进度：已完成 1 / 5 个可查询的去重远端仓库",
     });
     expect(progressbar).toHaveAttribute("aria-valuemin", "0");
     expect(progressbar).toHaveAttribute("aria-valuemax", "5");
     expect(progressbar).toHaveAttribute("aria-valuenow", "1");
-    expect(within(dialog).getByText("已检查 1 / 5 个仓库")).toBeInTheDocument();
+    expect(within(dialog).getByText("当前范围：检查所选（2）。")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("已检查 1 / 5 个可查询的去重远端仓库"),
+    ).toBeInTheDocument();
     for (const name of [
       "openai/skills",
       "anthropics/skills",

@@ -158,11 +158,28 @@ pub async fn attempt_startup(db_path: &Path) -> Result<DbPool, StartupAttemptFai
             Err(StartupAttemptFailure {
                 issue,
                 diagnostic,
-                can_rebuild: db_path.is_file(),
+                can_rebuild: can_rebuild_database(diagnostic),
                 error,
             })
         }
     }
+}
+
+fn can_rebuild_database(diagnostic: StartupDiagnostic) -> bool {
+    diagnostic == StartupDiagnostic::Corrupt
+}
+
+fn sqlite_error_indicates_corruption(error: &sqlx::Error) -> bool {
+    const SQLITE_CORRUPT: i32 = 11;
+    const SQLITE_NOTADB: i32 = 26;
+
+    let sqlx::Error::Database(database_error) = error else {
+        return false;
+    };
+    database_error
+        .code()
+        .and_then(|code| code.parse::<i32>().ok())
+        .is_some_and(|extended_code| matches!(extended_code & 0xff, SQLITE_CORRUPT | SQLITE_NOTADB))
 }
 
 async fn diagnose_database(db_path: &Path) -> StartupDiagnostic {
@@ -172,6 +189,7 @@ async fn diagnose_database(db_path: &Path) -> StartupDiagnostic {
     match db::inspect_database_integrity(db_path).await {
         Ok(true) => StartupDiagnostic::Healthy,
         Ok(false) => StartupDiagnostic::Corrupt,
+        Err(error) if sqlite_error_indicates_corruption(&error) => StartupDiagnostic::Corrupt,
         Err(_error) => {
             tracing::warn!(
                 code = "startup.integrity_check_unavailable",
@@ -348,12 +366,21 @@ mod tests {
         let failure = attempt_startup(&db_path).await.unwrap_err();
 
         assert_eq!(failure.issue, StartupIssue::DatabaseOpenFailed);
-        assert!(matches!(
-            failure.diagnostic,
-            StartupDiagnostic::Corrupt | StartupDiagnostic::Unavailable
-        ));
+        assert_eq!(failure.diagnostic, StartupDiagnostic::Corrupt);
         assert!(failure.can_rebuild);
         assert_eq!(std::fs::read(&db_path).unwrap(), original);
+    }
+
+    #[test]
+    fn rebuild_requires_a_confirmed_corruption_diagnostic() {
+        assert!(can_rebuild_database(StartupDiagnostic::Corrupt));
+        for diagnostic in [
+            StartupDiagnostic::NotRun,
+            StartupDiagnostic::Healthy,
+            StartupDiagnostic::Unavailable,
+        ] {
+            assert!(!can_rebuild_database(diagnostic));
+        }
     }
 
     #[tokio::test]
@@ -380,6 +407,7 @@ mod tests {
 
         assert_eq!(failure.issue, StartupIssue::SchemaInitializationFailed);
         assert_eq!(failure.diagnostic, StartupDiagnostic::Healthy);
+        assert!(!failure.can_rebuild);
     }
 
     #[test]

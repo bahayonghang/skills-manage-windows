@@ -310,11 +310,12 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
                 className="min-h-7 min-w-0 flex-1 truncate rounded-md text-left text-sm font-semibold tracking-[-0.01em] text-foreground underline-offset-4 transition-[color,box-shadow] hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={onDetail}
                 aria-label={t("central.viewDetailsLabel", { name })}
+                title={name}
               >
                 {name}
               </button>
             ) : (
-              <h3 className="min-w-0 flex-1 truncate text-sm font-semibold tracking-[-0.01em] text-foreground">
+              <h3 title={name} className="min-w-0 flex-1 truncate text-sm font-semibold tracking-[-0.01em] text-foreground">
                 {name}
               </h3>
             )}
@@ -335,7 +336,7 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
             {hasActions && (
               <div
                 className={cn(
-                  "flex shrink-0 items-center gap-0.5",
+                  "flex shrink-0 items-center gap-2",
                   isCompact &&
                     "opacity-0 transition-opacity duration-150 group-hover/skill-card:opacity-100 group-focus-within/skill-card:opacity-100",
                 )}
@@ -507,7 +508,7 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
 
           {/* Row 末: 彩色标签行（central 专用）— 收于 footer 上方，固定单行 */}
           {editableTags && (
-            <div className="flex h-5 items-center overflow-hidden [&>div]:flex-nowrap">
+            <div className="flex h-6 items-center overflow-hidden [&>div]:flex-nowrap">
               <CardTagEditor {...editableTags} />
             </div>
           )}

@@ -37,9 +37,10 @@ export const PlatformToggleIcon = memo(function PlatformToggleIcon({
   return (
     <button
       className={cn(
-        "focus-ring grid size-8 place-items-center rounded-lg transition-[scale,background-color,color] active:not-disabled:scale-[0.96]",
+        "focus-ring relative grid size-8 place-items-center rounded-lg transition-[scale,background-color,color] active:not-disabled:scale-[0.96]",
+        "after:absolute after:left-1/2 after:top-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']",
         isLocked
-          ? "text-primary cursor-default ring-1 ring-primary/30"
+          ? "text-primary/70 cursor-default border border-dashed border-primary/40"
           : isLinked
             ? "text-primary ring-1 ring-primary/30 hover:bg-primary/15"
             : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
@@ -126,7 +127,7 @@ export const UnifiedSkillCardFooter = memo(function UnifiedSkillCardFooter({
         )}
       </div>
       {targetAgents.length > 0 && skillId && onToggle && (
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-2">
           {targetAgents.map((agent) => (
             <PlatformToggleIcon
               key={agent.id}

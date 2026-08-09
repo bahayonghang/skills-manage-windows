@@ -27,13 +27,7 @@ pub(crate) async fn ensure_centralized(
         return Ok(());
     }
 
-    let _mutation_guard = crate::services::central_mutation::acquire_central_mutation_guard(
-        "centralize skill",
-        crate::services::central_mutation::DEFAULT_CENTRAL_MUTATION_TIMEOUT,
-    )
-    .await?;
-
-    // Revalidate after acquiring the cross-process mutation lock.
+    // The top-level installation use case owns the target mutation guard.
     if path_exists_blocking(&canonical_dir.join("SKILL.md")).await? {
         return Ok(());
     }

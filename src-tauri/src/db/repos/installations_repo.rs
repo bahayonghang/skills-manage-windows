@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use sqlx::Row;
 
+use crate::db::sqlite_batch::SQLITE_IN_QUERY_BATCH_SIZE;
 use crate::db::types::{DbPool, LinkType, SkillInstallation};
 
 /// Insert or update a skill installation record.
@@ -107,20 +108,21 @@ pub async fn get_skill_installations_for_skills(
         return Ok(HashMap::new());
     }
 
-    let placeholders = skill_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-    let sql = format!(
-        "SELECT * FROM skill_installations WHERE skill_id IN ({})",
-        placeholders
-    );
-    let mut query = sqlx::query_as::<_, SkillInstallation>(&sql);
-    for id in skill_ids {
-        query = query.bind(id);
-    }
-
-    let rows = query.fetch_all(pool).await?;
     let mut grouped: HashMap<String, Vec<SkillInstallation>> = HashMap::new();
-    for row in rows {
-        grouped.entry(row.skill_id.clone()).or_default().push(row);
+    for chunk in skill_ids.chunks(SQLITE_IN_QUERY_BATCH_SIZE) {
+        let placeholders = chunk.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT * FROM skill_installations WHERE skill_id IN ({})",
+            placeholders
+        );
+        let mut query = sqlx::query_as::<_, SkillInstallation>(&sql);
+        for id in chunk {
+            query = query.bind(id);
+        }
+
+        for row in query.fetch_all(pool).await? {
+            grouped.entry(row.skill_id.clone()).or_default().push(row);
+        }
     }
     Ok(grouped)
 }

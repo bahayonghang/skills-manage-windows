@@ -30,7 +30,8 @@ export interface SkillCardMetaProps {
 
 /**
  * Skill 卡片的 meta 行：徽章、publisher、tags 等次级信息，
- * 统一用 flex-wrap 排成一行，根据传入字段自动收敛展示。
+ * 固定单行 nowrap 展示（溢出裁切），保证卡片整体高度是可预测的契约值——
+ * 虚拟化网格按固定行高绝对定位，meta 折行会把卡片撑出行边界。
  */
 export function SkillCardMeta({
   originKind,
@@ -49,7 +50,7 @@ export function SkillCardMeta({
 }: SkillCardMetaProps) {
   const { t } = useTranslation();
   return (
-    <div className="flex flex-wrap items-center gap-1.5 empty:hidden">
+    <div className="flex flex-nowrap items-center gap-1.5 overflow-hidden empty:hidden">
       {originKind && <SourceOriginBadge originKind={originKind} />}
       {isReadOnly && <ReadOnlyBadge />}
       {sourceType && <SourceIndicator sourceType={sourceType} />}

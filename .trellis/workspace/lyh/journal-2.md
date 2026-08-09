@@ -861,3 +861,255 @@ Fixed the macOS stdin fixture and LF checkout contracts for generated IPC and fr
 ### Next Steps
 
 - Azure Artifact Signing、desktop-release environment、updater staging、公开 Release 和 tag movement 仍需独立授权。
+
+
+## Session 82: Marketplace Central 安装一致性
+
+**Date**: 2026-08-03
+**Task**: Marketplace Central 安装一致性
+**Branch**: `dev`
+
+### Summary
+
+删除 registry-backed Marketplace 的缓存 URL 与展示名写入旁路，复用 pinned snapshot 和 central_update Saga 完成 Local/SSH/WSL 可恢复安装。
+
+### Main Changes
+
+- 以 candidate skill_id 和 GitHub repository provenance 作为安装身份。
+- 首次导入使用 central_update + hadTarget=false，同事务提交 skill、repository membership、commit/digest 与 journal phase。
+- installed marker 改为 durable Central state 的派生缓存并支持故障后修复。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a52591c9` | (see git log) |
+
+### Testing
+
+- [OK] Node 22.23.2 下 just ci 通过；Marketplace 22/22；GitHub import 137/137；Rust 1056 passed/6 ignored。
+- [OK] Fake SSH 与 Fake WSL 完整 Saga、恶意路径、DB rollback、marker 故障与 UID 保留回归通过。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 实施 08-03-bounded-github-snapshot-lifecycle。
+
+
+## Session 83: 完成 GitHub 快照生命周期边界
+
+**Date**: 2026-08-03
+**Task**: 完成 GitHub 快照生命周期边界
+**Branch**: `dev`
+
+### Summary
+
+以 Arc 和 entry/byte/TTL/LRU policy 约束 Central snapshot cache；以严格 reservation、lease、CleanupPending 与 owning-target generation ack 约束 GitHub preview workspace，补齐 cancellation、cleanup failure、跨 target/kind 和并行测试隔离证据，并在 Node 22 下通过完整 CI。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c2aaea06774bc77eed7865255ed6509214ec2491` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 84: Complete bounded external text ingestion
+
+**Date**: 2026-08-03
+**Task**: Complete bounded external text ingestion
+**Branch**: `dev`
+
+### Summary
+
+Bounded external HTTP, SSE, Local, SSH, and WSL text ingestion before allocation while preserving typed errors and redaction.
+
+### Main Changes
+
+- Added shared bounded HTTP/local readers, UTF-8-safe truncation, and a deadline-aware SSE state machine.
+- Migrated AI, GitHub, Central Skills, scanner, AI tagging, Central Updates, and targets call sites with Local/SSH/WSL parity.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c126b3cf` | (see git log) |
+
+### Testing
+
+- [OK] Node 22.23.2 just ci passed; Rust 1103 passed and 6 ignored; frontend 1609 passed and 1 skipped; GitHub import 154 passed.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Implement and verify 08-03-transactional-metadata-mutations.
+
+
+## Session 85: Complete transactional metadata mutations
+
+**Date**: 2026-08-03
+**Task**: Complete transactional metadata mutations
+**Branch**: `dev`
+
+### Summary
+
+Made metadata and Marketplace cache mutations atomic with bounded batching, rollback injection, and full-snapshot replacement semantics.
+
+### Main Changes
+
+- Added a shared 900-bind SQLite batching contract and transaction-scoped validation helpers.
+- Transactionalized repository, tag, AI review, collection, project, and Marketplace sync/remove mutations without schema or IPC changes.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1dfb7068` | (see git log) |
+
+### Testing
+
+- [OK] Node 22.23.2 just ci passed; Rust 1115 passed and 6 ignored; frontend 1609 passed and 1 skipped; Marketplace 22 passed.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Implement and verify 08-03-sql-central-pagination.
+
+
+## Session 86: 完成 SQL Central 分页下推
+
+**Date**: 2026-08-03
+**Task**: 完成 SQL Central 分页下推
+**Branch**: `dev`
+
+### Summary
+
+将 Central filter/count/order/limit/offset 下推 SQLite，仅富化当前页；完成 5k 等价性、EXPLAIN、release p50/p95、Node 22 just ci 验证并归档子任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dc7aa090d097f85da6479669f66829bab08ed284` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 87: 完成 src-tauri 优化父任务验收
+
+**Date**: 2026-08-03
+**Task**: 完成 src-tauri 优化父任务验收
+**Branch**: `dev`
+
+### Summary
+
+完成五个优化子任务的跨域验收，确认旧旁路消失、锁与事务顺序一致、资源与文档无漂移；Node 22 just ci 和 just audit 通过后归档父任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ae75eb84212d8b65fac0ed3c64336cd9b779aaaa` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 88: 完成检查更新故障修复与任务归档
+
+**Date**: 2026-08-05
+**Task**: 完成检查更新故障修复与任务归档
+**Branch**: `codex/fix-update-check-archive-redirect`
+
+### Summary
+
+完成 GitHub archive 规范化重定向、全技能结果持久化、错误可观测性、迁移兼容和扫描保护修复；通过定向 archive redirect 测试与 just ci，随后归档任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d41aa441` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 89: Dashboard 与 Central Skills 界面打磨
+
+**Date**: 2026-08-05
+**Task**: Dashboard 与 Central Skills 界面打磨
+**Branch**: `dev`
+
+### Summary
+
+完成 Dashboard 与 Central Skills 界面优化（R1–R9），包含零更新引导、批量卸载视觉层次、极简无外边框设计、分类过滤与无结果状态、快速筛选、操作文案及小型图标控件热区/焦点规范等，并更新 UI spec 规范。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `685099c5` | (see git log) |
+| `00134d83` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 90: 修复 Update Center 失败观测与恢复隔离
+
+**Date**: 2026-08-07
+**Task**: 修复 Update Center 失败观测与恢复隔离
+**Branch**: `dev`
+
+### Summary
+
+修复重复 Central 删除清单和安装恢复竞态；让更新应用日志按逐项结果记录 succeeded/partial/failed；新增 prepared 删除安全预览与显式对账，并通过 just ci。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `53e3db69` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 91: 完成 Central 更新失败修复与任务归档
+
+**Date**: 2026-08-09
+**Task**: 完成 Central 更新失败修复与任务归档
+**Branch**: `dev`
+
+### Summary
+
+按所选技能隔离 Central 更新和删除恢复，增加 GitHub 快照瞬时失败一次串行补偿，并补齐脱敏的 Apply/Refresh 诊断；完整 just ci 与实际验证通过，任务已归档并 squash 合并到 dev。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c8b4d0a` | (see git log) |
+
+### Status
+
+[OK] **Completed**

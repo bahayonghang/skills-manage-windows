@@ -347,14 +347,23 @@ vi.mock("@/components/marketplace/GitHubRepoImportWizard", async () => {
                   onChange={(event) => onRepoUrlChange(event.target.value)}
                 />
               </label>
-              <label>
-                Branch (optional)
-                <input
-                  aria-label="Branch (optional)"
-                  value={branch}
-                  onChange={(event) => onBranchChange(event.target.value)}
-                />
-              </label>
+              <div role="radiogroup" aria-label="Branch">
+                {["main", "dev", "custom"].map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    role="radio"
+                    aria-checked={
+                      option === "main"
+                        ? branch === "" || branch === "main"
+                        : branch === option
+                    }
+                    onClick={() => onBranchChange(option)}
+                  >
+                    {option === "custom" ? "Custom" : option}
+                  </button>
+                ))}
+              </div>
               {previewError && looksLikeGitHubAuthGuidance(previewError) ? (
                 <div>GitHub Personal Access Token</div>
               ) : null}

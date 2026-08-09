@@ -173,7 +173,7 @@ function wizardElement({
   previewError?: string | null;
   branch?: string;
   onBranchChange?: (value: string) => void;
-  onPreview?: () =>
+  onPreview?: (branch: string) =>
     | Promise<GitHubRepoPreview | null>
     | GitHubRepoPreview
     | null;
@@ -217,23 +217,46 @@ async function reviewImport() {
 }
 
 describe("GitHubRepoImportWizard", () => {
-  it("renders the optional branch input and submits the controlled value", async () => {
+  it("defaults to main and submits main, dev, or a custom branch", async () => {
     const onBranchChange = vi.fn();
     const onPreview = vi.fn().mockResolvedValue(null);
     renderWizard({ preview: null, onBranchChange, onPreview });
 
-    const branchInput = screen.getByRole("textbox", {
-      name: /分支（可选）|Branch \(optional\)/i,
-    });
-    expect(screen.getByText(/留空时使用仓库默认分支|Leave branch blank/i)).toBeInTheDocument();
-
-    fireEvent.change(branchInput, { target: { value: "dev" } });
-    expect(onBranchChange).toHaveBeenCalledWith("dev");
+    const mainOption = screen.getByRole("radio", { name: "main" });
+    expect(mainOption).toHaveAttribute("aria-checked", "true");
 
     fireEvent.click(
       screen.getByRole("button", { name: /预览导入|Preview import/i }),
     );
-    await waitFor(() => expect(onPreview).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onPreview).toHaveBeenLastCalledWith("main"));
+    expect(onBranchChange).toHaveBeenCalledWith("main");
+
+    fireEvent.click(screen.getByRole("radio", { name: "dev" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /预览导入|Preview import/i }),
+    );
+    await waitFor(() => expect(onPreview).toHaveBeenLastCalledWith("dev"));
+    expect(onBranchChange).toHaveBeenCalledWith("dev");
+
+    fireEvent.click(
+      screen.getByRole("radio", { name: /自定义|Custom/i }),
+    );
+    const customBranchInput = screen.getByRole("textbox", {
+      name: /自定义分支|Custom branch/i,
+    });
+    expect(
+      screen.getByRole("button", { name: /预览导入|Preview import/i }),
+    ).toBeDisabled();
+    fireEvent.change(customBranchInput, {
+      target: { value: "feature/branch-picker" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /预览导入|Preview import/i }),
+    );
+    await waitFor(() =>
+      expect(onPreview).toHaveBeenLastCalledWith("feature/branch-picker"),
+    );
+    expect(onBranchChange).toHaveBeenCalledWith("feature/branch-picker");
   });
 
   it("shows the resolved commit short sha and preview expiry without leaking the token", async () => {

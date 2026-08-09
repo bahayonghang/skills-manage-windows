@@ -1,3 +1,6 @@
+use std::collections::HashSet;
+
+#[cfg(test)]
 use std::cmp::Ordering;
 
 use crate::db::{self, DbPool, SkillForAgent};
@@ -192,15 +195,27 @@ pub async fn get_central_skills_impl(
     pool: &DbPool,
 ) -> Result<Vec<SkillWithLinks>, CentralSkillsError> {
     let skills = db::get_central_skills(pool).await?;
-    skills_with_links_from_rows(pool, skills).await
+    let agents = db::get_all_agents(pool).await?;
+    skills_with_links_from_rows(pool, skills, &agents, TimestampAuthority::Filesystem).await
+}
+
+#[derive(Clone, Copy)]
+enum TimestampAuthority {
+    Filesystem,
+    Persisted,
 }
 
 async fn skills_with_links_from_rows(
     pool: &DbPool,
     skills: Vec<db::Skill>,
+    agents: &[db::Agent],
+    timestamp_authority: TimestampAuthority,
 ) -> Result<Vec<SkillWithLinks>, CentralSkillsError> {
-    let agents = db::get_all_agents(pool).await?;
-    let shared_root_agents = shared_root_agent_ids(&agents);
+    if skills.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let shared_root_agents = shared_root_agent_ids(agents);
     let skill_ids = skills
         .iter()
         .map(|skill| skill.id.clone())
@@ -217,7 +232,10 @@ async fn skills_with_links_from_rows(
         let mut linked_agents: Vec<String> =
             installations.into_iter().map(|i| i.agent_id).collect();
         append_missing_agents(&mut linked_agents, &shared_root_agents);
-        let (created_at, updated_at) = skill_filesystem_timestamps(&skill);
+        let (created_at, updated_at) = match timestamp_authority {
+            TimestampAuthority::Filesystem => skill_filesystem_timestamps(&skill),
+            TimestampAuthority::Persisted => crate::skill_time::skill_persisted_timestamps(&skill),
+        };
         let repository_assignment = repository_assignments.remove(&skill.id).unwrap_or_else(|| {
             db::SkillRepositoryAssignment {
                 repository: unknown_repository.clone(),
@@ -282,47 +300,121 @@ pub async fn get_central_skills_page_impl(
     pool: &DbPool,
     request: CentralSkillsPageRequest,
 ) -> Result<CentralSkillsPage, CentralSkillsError> {
-    let mut items = get_central_skills_impl(pool).await?;
-    filter_central_skill_page_items(&mut items, &request);
-    sort_central_skill_page_items(&mut items, request.sort.as_deref());
+    get_central_skills_page_with_observer_inner(pool, request, |_| {}).await
+}
 
-    let total = items.len();
-    let offset = request.offset.unwrap_or(0).max(0) as usize;
-    let limit = request.limit.unwrap_or(100).clamp(1, 500) as usize;
-    let items = items.into_iter().skip(offset).take(limit).collect();
+#[cfg(test)]
+pub(super) async fn get_central_skills_page_with_observer<F>(
+    pool: &DbPool,
+    request: CentralSkillsPageRequest,
+    observer: F,
+) -> Result<CentralSkillsPage, CentralSkillsError>
+where
+    F: FnOnce(&[db::Skill]),
+{
+    get_central_skills_page_with_observer_inner(pool, request, observer).await
+}
+
+async fn get_central_skills_page_with_observer_inner<F>(
+    pool: &DbPool,
+    request: CentralSkillsPageRequest,
+    observer: F,
+) -> Result<CentralSkillsPage, CentralSkillsError>
+where
+    F: FnOnce(&[db::Skill]),
+{
+    let mut filter = normalize_central_skills_page_request(request)?;
+    let agents = db::get_all_agents(pool).await?;
+    filter.has_shared_root_agent = !shared_root_agent_ids(&agents).is_empty();
+    let (rows, total) = db::get_central_skills_page(pool, &filter).await?;
+    observer(&rows);
+    let items =
+        skills_with_links_from_rows(pool, rows, &agents, TimestampAuthority::Persisted).await?;
     Ok(CentralSkillsPage { items, total })
 }
 
-fn filter_central_skill_page_items(
-    items: &mut Vec<SkillWithLinks>,
-    request: &CentralSkillsPageRequest,
-) {
+const MAX_PAGE_FILTER_VALUES: usize = 100;
+
+fn normalize_central_skills_page_request(
+    request: CentralSkillsPageRequest,
+) -> Result<db::CentralSkillPageQuery, CentralSkillsError> {
     let query = request
         .query
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(|value| value.to_ascii_lowercase());
-    let source_values = normalized_filter_values(&request.source);
-    let tag_values = normalized_filter_values(&request.tags);
-    let install_state = request.install_state.as_deref().unwrap_or("all");
+    let mut sources = normalized_filter_values("source", request.source)?;
+    let include_unassigned = sources.iter().any(|value| value == "unassigned");
+    sources.retain(|value| value != "unassigned");
+    let mut tags = normalized_filter_values("tags", request.tags)?;
+    let include_uncategorized = tags.iter().any(|value| value == db::UNCATEGORIZED_TAG_ID);
+    tags.retain(|value| value != db::UNCATEGORIZED_TAG_ID);
+    let install = match request.install_state.as_deref() {
+        Some("linked" | "installed") => db::CentralSkillInstallFilter::Linked,
+        Some("unlinked" | "not_installed" | "notInstalled") => {
+            db::CentralSkillInstallFilter::Unlinked
+        }
+        _ => db::CentralSkillInstallFilter::All,
+    };
+    let (sort, descending) = parse_page_sort(request.sort.as_deref());
 
-    items.retain(|skill| {
-        matches_page_query(skill, query.as_deref())
-            && matches_page_source(skill, &source_values)
-            && matches_page_tags(skill, &tag_values)
-            && matches_page_install_state(skill, install_state)
-    });
+    Ok(db::CentralSkillPageQuery {
+        query,
+        sources,
+        include_unassigned,
+        tags,
+        include_uncategorized,
+        install,
+        has_shared_root_agent: false,
+        sort,
+        descending,
+        limit: request.limit.unwrap_or(100).clamp(1, 500),
+        offset: request.offset.unwrap_or(0).max(0),
+    })
 }
 
-fn normalized_filter_values(values: &[String]) -> Vec<&str> {
-    values
-        .iter()
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty() && *value != "all")
-        .collect()
+fn normalized_filter_values(
+    field: &'static str,
+    values: Vec<String>,
+) -> Result<Vec<String>, CentralSkillsError> {
+    let mut seen = HashSet::new();
+    let mut normalized = Vec::new();
+    for value in values {
+        let value = value.trim();
+        if value.is_empty() || value == "all" || !seen.insert(value.to_string()) {
+            continue;
+        }
+        normalized.push(value.to_string());
+        if normalized.len() > MAX_PAGE_FILTER_VALUES {
+            return Err(CentralSkillsError::PageFilterValuesExceeded {
+                field,
+                limit: MAX_PAGE_FILTER_VALUES,
+            });
+        }
+    }
+    Ok(normalized)
 }
 
+fn parse_page_sort(sort: Option<&str>) -> (db::CentralSkillPageSort, bool) {
+    let Some((field, direction)) = sort.and_then(|value| value.split_once(':')) else {
+        return (db::CentralSkillPageSort::Name, false);
+    };
+    let field = match field {
+        "name" => db::CentralSkillPageSort::Name,
+        "createdAt" | "created_at" => db::CentralSkillPageSort::CreatedAt,
+        "updatedAt" | "updated_at" => db::CentralSkillPageSort::UpdatedAt,
+        _ => return (db::CentralSkillPageSort::Name, false),
+    };
+    let descending = match direction {
+        "asc" => false,
+        "desc" => true,
+        _ => return (db::CentralSkillPageSort::Name, false),
+    };
+    (field, descending)
+}
+
+#[cfg(test)]
 fn matches_page_query(skill: &SkillWithLinks, query: Option<&str>) -> bool {
     let Some(query) = query else {
         return true;
@@ -337,8 +429,9 @@ fn matches_page_query(skill: &SkillWithLinks, query: Option<&str>) -> bool {
         || skill.id.to_ascii_lowercase().contains(query)
 }
 
-fn matches_page_source(skill: &SkillWithLinks, values: &[&str]) -> bool {
-    if values.is_empty() {
+#[cfg(test)]
+fn matches_page_source(skill: &SkillWithLinks, filter: &db::CentralSkillPageQuery) -> bool {
+    if filter.sources.is_empty() && !filter.include_unassigned {
         return true;
     }
 
@@ -353,54 +446,74 @@ fn matches_page_source(skill: &SkillWithLinks, values: &[&str]) -> bool {
             .map(|repository| repository.is_unknown)
             .unwrap_or(false);
 
-    values.iter().any(|value| {
-        (*value == "unassigned" && is_unassigned)
-            || repo_id.is_some_and(|repo_id| repo_id == *value)
-    })
+    (filter.include_unassigned && is_unassigned)
+        || repo_id.is_some_and(|repo_id| filter.sources.iter().any(|value| value == repo_id))
 }
 
-fn matches_page_tags(skill: &SkillWithLinks, values: &[&str]) -> bool {
-    if values.is_empty() {
+#[cfg(test)]
+fn matches_page_tags(skill: &SkillWithLinks, filter: &db::CentralSkillPageQuery) -> bool {
+    if filter.tags.is_empty() && !filter.include_uncategorized {
         return true;
     }
 
-    values.iter().any(|value| {
-        if *value == "uncategorized" {
-            return skill.tags.is_empty()
-                || skill
-                    .tags
-                    .iter()
-                    .all(|tag| tag.id == db::UNCATEGORIZED_TAG_ID);
-        }
-        skill.tags.iter().any(|tag| tag.id == *value)
-    })
+    (filter.include_uncategorized
+        && (skill.tags.is_empty()
+            || skill
+                .tags
+                .iter()
+                .all(|tag| tag.id == db::UNCATEGORIZED_TAG_ID)))
+        || skill
+            .tags
+            .iter()
+            .any(|tag| filter.tags.iter().any(|value| value == &tag.id))
 }
 
-fn matches_page_install_state(skill: &SkillWithLinks, state: &str) -> bool {
+#[cfg(test)]
+fn matches_page_install_state(
+    skill: &SkillWithLinks,
+    state: db::CentralSkillInstallFilter,
+) -> bool {
     match state {
-        "linked" | "installed" => !skill.linked_agents.is_empty(),
-        "unlinked" | "not_installed" | "notInstalled" => skill.linked_agents.is_empty(),
-        _ => true,
+        db::CentralSkillInstallFilter::Linked => !skill.linked_agents.is_empty(),
+        db::CentralSkillInstallFilter::Unlinked => skill.linked_agents.is_empty(),
+        db::CentralSkillInstallFilter::All => true,
     }
 }
 
-fn sort_central_skill_page_items(items: &mut [SkillWithLinks], sort: Option<&str>) {
-    let (field, direction) = sort
-        .and_then(|value| value.split_once(':'))
-        .unwrap_or(("name", "asc"));
-    let descending = direction == "desc";
-
+#[cfg(test)]
+fn sort_central_skill_page_items(
+    items: &mut [SkillWithLinks],
+    sort: db::CentralSkillPageSort,
+    descending: bool,
+) {
     items.sort_by(|left, right| {
-        let ordering = match field {
-            "createdAt" | "created_at" => left
+        let ordering = match sort {
+            db::CentralSkillPageSort::CreatedAt => left
                 .created_at
                 .cmp(&right.created_at)
-                .then_with(|| left.name.cmp(&right.name)),
-            "updatedAt" | "updated_at" => left
+                .then_with(|| {
+                    left.name
+                        .to_ascii_lowercase()
+                        .cmp(&right.name.to_ascii_lowercase())
+                })
+                .then_with(|| left.name.cmp(&right.name))
+                .then_with(|| left.id.cmp(&right.id)),
+            db::CentralSkillPageSort::UpdatedAt => left
                 .updated_at
                 .cmp(&right.updated_at)
-                .then_with(|| left.name.cmp(&right.name)),
-            _ => left.name.to_lowercase().cmp(&right.name.to_lowercase()),
+                .then_with(|| {
+                    left.name
+                        .to_ascii_lowercase()
+                        .cmp(&right.name.to_ascii_lowercase())
+                })
+                .then_with(|| left.name.cmp(&right.name))
+                .then_with(|| left.id.cmp(&right.id)),
+            db::CentralSkillPageSort::Name => left
+                .name
+                .to_ascii_lowercase()
+                .cmp(&right.name.to_ascii_lowercase())
+                .then_with(|| left.name.cmp(&right.name))
+                .then_with(|| left.id.cmp(&right.id)),
         };
         match (descending, ordering) {
             (true, Ordering::Less) => Ordering::Greater,
@@ -408,4 +521,30 @@ fn sort_central_skill_page_items(items: &mut [SkillWithLinks], sort: Option<&str
             _ => ordering,
         }
     });
+}
+
+#[cfg(test)]
+pub(super) async fn get_central_skills_page_reference_impl(
+    pool: &DbPool,
+    request: CentralSkillsPageRequest,
+) -> Result<CentralSkillsPage, CentralSkillsError> {
+    let mut filter = normalize_central_skills_page_request(request)?;
+    let agents = db::get_all_agents(pool).await?;
+    filter.has_shared_root_agent = !shared_root_agent_ids(&agents).is_empty();
+    let skills = db::get_central_skills(pool).await?;
+    let mut items =
+        skills_with_links_from_rows(pool, skills, &agents, TimestampAuthority::Persisted).await?;
+    items.retain(|skill| {
+        matches_page_query(skill, filter.query.as_deref())
+            && matches_page_source(skill, &filter)
+            && matches_page_tags(skill, &filter)
+            && matches_page_install_state(skill, filter.install)
+    });
+    sort_central_skill_page_items(&mut items, filter.sort, filter.descending);
+
+    let total = items.len();
+    let offset = usize::try_from(filter.offset).unwrap_or(usize::MAX);
+    let limit = usize::try_from(filter.limit).unwrap_or(0);
+    let items = items.into_iter().skip(offset).take(limit).collect();
+    Ok(CentralSkillsPage { items, total })
 }

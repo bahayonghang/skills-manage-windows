@@ -1,3 +1,4 @@
+use super::prompt::load_skill_content;
 use super::{
     build_tagging_prompt, bulk_suggest_skill_tags_impl, map_ai_suggestions,
     parse_ai_tag_suggestions, resolve_ai_suggestions, AiTagProgressPayload, AiTagProgressStatus,
@@ -228,6 +229,23 @@ fn build_prompt_includes_all_classifiable_tags_and_excludes_uncategorized() {
     assert!(prompt.contains("{\"tags\":[]}"));
     assert!(!prompt.contains("uncategorized"));
     assert!(!prompt.contains("未分类"));
+}
+
+#[test]
+fn skill_content_loader_prefers_inline_content_and_bounds_file_fallback() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let path = tmp.path().join("SKILL.md");
+    std::fs::write(
+        &path,
+        vec![b'a'; crate::services::resource_budget::DEFAULT_FILE_BYTES as usize + 1],
+    )
+    .unwrap();
+    let mut skill = crate::test_support::central_skill_row("demo", tmp.path());
+    skill.file_path = path.to_string_lossy().into_owned();
+    assert!(load_skill_content(&skill).is_empty());
+
+    skill.content = Some("inline".to_string());
+    assert_eq!(load_skill_content(&skill), "inline");
 }
 
 #[test]

@@ -1,0 +1,10 @@
+{"file":".trellis/spec/backend/central-update-batching.md","reason":"Verify per-skill partial semantics, ordered outcomes, remote batching, and all mutation phases."}
+{"file":".trellis/spec/backend/fs-db-operation-journal.md","reason":"Check recovery isolation without weakening journal integrity, collision protection, or explicit recovery semantics."}
+{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"Audit lock ownership, contention behavior, and absence of nested or unlocked fallbacks."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Check that stable codes/categories/phases remain typed across every boundary."}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Review adversarial leakage coverage across IPC, both log layers, exports, and UI feedback."}
+{"file":".trellis/spec/backend/test-support.md","reason":"Verify new Rust tests use supported fixtures and FakeRunner patterns."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Check localized reviewed errors, safe fallbacks, retry behavior, and no raw String error rendering."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Run the repository's required focused checks and final just ci gate without skipping lanes."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Place focused Rust and Vitest regressions where the default test runners discover them."}
+{"file":".trellis/tasks/08-09-central-update-apply-diagnostics/research/diagnosis.md","reason":"Confirm the implementation addresses the observed 6-of-6 failure and missing-diagnostics evidence rather than a nearby issue."}

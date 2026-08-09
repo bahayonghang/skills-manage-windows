@@ -196,22 +196,27 @@ pub(super) async fn build_remote_repo_skill_candidates_from_workspace(
     let mut seen_names = HashSet::new();
     for manifest in manifests {
         let skill_md_remote_path = remote_join(remote_repo_dir, &manifest.skill_md_path);
-        let raw = match connection.read_file(&skill_md_remote_path).await {
+        let file_limit = ResourceBudget::default_skill().file_bytes;
+        let raw = match connection
+            .read_file_bounded(&skill_md_remote_path, file_limit)
+            .await
+        {
             Ok(raw) => raw,
             Err(error) if manifest.from_manifest_hint => {
                 let _ = error;
                 continue;
             }
+            Err(crate::targets::TargetsError::RemoteFileTooLarge { .. }) => {
+                return Err(GithubImportError::Budget(
+                    crate::services::resource_budget::BudgetExceeded::new(
+                        "Remote SKILL.md",
+                        file_limit.saturating_add(1),
+                        file_limit,
+                    ),
+                ));
+            }
             Err(error) => return Err(GithubImportError::Remote(error.to_string())),
         };
-        if let Err(error) = ResourceBudget::default_skill()
-            .reject_file_read_size(&skill_md_remote_path, raw.len() as u64)
-        {
-            if manifest.from_manifest_hint {
-                continue;
-            }
-            return Err(GithubImportError::Budget(error));
-        }
         let candidate = match build_remote_skill_candidate(repo, &manifest, raw, direct_endpoint) {
             Ok(candidate) => candidate,
             Err(invalid) if manifest.from_manifest_hint => {

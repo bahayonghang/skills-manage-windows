@@ -4,10 +4,13 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use sqlx::Row;
+use sqlx::{QueryBuilder, Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::db::repos::repositories_repo::normalize_repository_component;
+use crate::db::sqlite_batch::{
+    sqlite_rows_per_batch, validate_text_ids_exist, TextIdTable, SQLITE_IN_QUERY_BATCH_SIZE,
+};
 use crate::db::types::{DbPool, PendingAiTagReviewInput, SkillAiTagReview, SkillTag};
 use crate::db::util::now_rfc3339;
 
@@ -132,38 +135,64 @@ pub async fn assign_skill_tags(
     confidence: Option<f64>,
     reason: Option<&str>,
 ) -> Result<(), sqlx::Error> {
+    let mut transaction = pool.begin().await?;
+    validate_text_ids_exist(&mut transaction, TextIdTable::SkillTags, "Tag", tag_ids).await?;
+    validate_text_ids_exist(&mut transaction, TextIdTable::Skills, "Skill", skill_ids).await?;
+    assign_skill_tags_in_transaction(
+        &mut transaction,
+        skill_ids,
+        tag_ids,
+        source,
+        confidence,
+        reason,
+    )
+    .await?;
+    transaction.commit().await
+}
+
+async fn assign_skill_tags_in_transaction(
+    transaction: &mut Transaction<'_, Sqlite>,
+    skill_ids: &[String],
+    tag_ids: &[String],
+    source: &str,
+    confidence: Option<f64>,
+    reason: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    let total_rows = skill_ids.len().checked_mul(tag_ids.len()).ok_or_else(|| {
+        sqlx::Error::InvalidArgument("Too many skill tag assignments".to_string())
+    })?;
+    if total_rows == 0 {
+        return Ok(());
+    }
+
     let now = now_rfc3339();
-    for tag_id in tag_ids {
-        if get_skill_tag_by_id(pool, tag_id).await?.is_none() {
-            return Err(sqlx::Error::InvalidArgument(format!(
-                "Tag '{}' not found",
-                tag_id
-            )));
-        }
+    let rows_per_batch = sqlite_rows_per_batch(6)?;
+    let mut start = 0;
+    while start < total_rows {
+        let end = start.saturating_add(rows_per_batch).min(total_rows);
+        let mut builder = QueryBuilder::<Sqlite>::new(
+            "INSERT INTO skill_tag_links
+             (skill_id, tag_id, confidence, reason, source, added_at) ",
+        );
+        builder.push_values(start..end, |mut row, index| {
+            let skill_id = &skill_ids[index / tag_ids.len()];
+            let tag_id = &tag_ids[index % tag_ids.len()];
+            row.push_bind(skill_id)
+                .push_bind(tag_id)
+                .push_bind(confidence)
+                .push_bind(reason)
+                .push_bind(source)
+                .push_bind(&now);
+        });
+        builder.push(
+            " ON CONFLICT(skill_id, tag_id) DO UPDATE SET
+               confidence = excluded.confidence,
+               reason = excluded.reason,
+               source = excluded.source",
+        );
+        builder.build().execute(&mut **transaction).await?;
+        start = end;
     }
-
-    for skill_id in skill_ids {
-        for tag_id in tag_ids {
-            sqlx::query(
-                "INSERT INTO skill_tag_links
-                 (skill_id, tag_id, confidence, reason, source, added_at)
-                 VALUES (?, ?, ?, ?, ?, ?)
-                 ON CONFLICT(skill_id, tag_id) DO UPDATE SET
-                   confidence = excluded.confidence,
-                   reason = excluded.reason,
-                   source = excluded.source",
-            )
-            .bind(skill_id)
-            .bind(tag_id)
-            .bind(confidence)
-            .bind(reason)
-            .bind(source)
-            .bind(&now)
-            .execute(pool)
-            .await?;
-        }
-    }
-
     Ok(())
 }
 
@@ -195,24 +224,46 @@ pub async fn replace_skill_ai_tags(
     skill_id: &str,
     suggestions: &[(String, f64, String)],
 ) -> Result<(), sqlx::Error> {
+    let mut transaction = pool.begin().await?;
+    let tag_ids = suggestions
+        .iter()
+        .map(|(tag_id, _, _)| tag_id.clone())
+        .collect::<Vec<_>>();
+    validate_text_ids_exist(&mut transaction, TextIdTable::SkillTags, "Tag", &tag_ids).await?;
+    validate_text_ids_exist(
+        &mut transaction,
+        TextIdTable::Skills,
+        "Skill",
+        &[skill_id.to_string()],
+    )
+    .await?;
+
     sqlx::query("DELETE FROM skill_tag_links WHERE skill_id = ? AND source = 'ai'")
         .bind(skill_id)
-        .execute(pool)
+        .execute(&mut *transaction)
         .await?;
 
-    for (tag_id, confidence, reason) in suggestions {
-        assign_skill_tags(
-            pool,
-            &[skill_id.to_string()],
-            std::slice::from_ref(tag_id),
-            "ai",
-            Some(*confidence),
-            Some(reason),
-        )
-        .await?;
+    let rows_per_batch = sqlite_rows_per_batch(6)?;
+    for chunk in suggestions.chunks(rows_per_batch) {
+        let mut builder = QueryBuilder::<Sqlite>::new(
+            "INSERT INTO skill_tag_links
+             (skill_id, tag_id, confidence, reason, source, added_at) ",
+        );
+        let now = now_rfc3339();
+        builder.push_values(chunk, |mut row, (tag_id, confidence, reason)| {
+            row.push_bind(skill_id)
+                .push_bind(tag_id)
+                .push_bind(confidence)
+                .push_bind(reason)
+                .push_bind("ai")
+                .push_bind(&now);
+        });
+        // Any remaining conflict is a manual link because AI links were removed above.
+        builder.push(" ON CONFLICT(skill_id, tag_id) DO NOTHING");
+        builder.build().execute(&mut *transaction).await?;
     }
 
-    Ok(())
+    transaction.commit().await
 }
 
 pub async fn replace_pending_ai_tag_reviews(
@@ -220,53 +271,69 @@ pub async fn replace_pending_ai_tag_reviews(
     skill_id: &str,
     suggestions: &[PendingAiTagReviewInput],
 ) -> Result<(), sqlx::Error> {
+    let mut transaction = pool.begin().await?;
+    let existing_tag_ids = suggestions
+        .iter()
+        .filter(|suggestion| {
+            suggestion
+                .proposed_name
+                .as_deref()
+                .is_none_or(|name| name.trim().is_empty())
+        })
+        .map(|suggestion| suggestion.tag_id.clone())
+        .collect::<Vec<_>>();
+    validate_text_ids_exist(
+        &mut transaction,
+        TextIdTable::SkillTags,
+        "Tag",
+        &existing_tag_ids,
+    )
+    .await?;
+    validate_text_ids_exist(
+        &mut transaction,
+        TextIdTable::Skills,
+        "Skill",
+        &[skill_id.to_string()],
+    )
+    .await?;
+
     let now = now_rfc3339();
     sqlx::query("DELETE FROM skill_ai_tag_reviews WHERE skill_id = ? AND status = 'pending'")
         .bind(skill_id)
-        .execute(pool)
+        .execute(&mut *transaction)
         .await?;
 
-    for suggestion in suggestions {
-        if suggestion
-            .proposed_name
-            .as_deref()
-            .is_none_or(|name| name.trim().is_empty())
-            && get_skill_tag_by_id(pool, &suggestion.tag_id)
-                .await?
-                .is_none()
-        {
-            return Err(sqlx::Error::InvalidArgument(format!(
-                "Tag '{}' not found",
-                suggestion.tag_id
-            )));
-        }
-
-        sqlx::query(
+    let rows_per_batch = sqlite_rows_per_batch(8)?;
+    for chunk in suggestions.chunks(rows_per_batch) {
+        let mut builder = QueryBuilder::<Sqlite>::new(
             "INSERT INTO skill_ai_tag_reviews
              (skill_id, tag_id, confidence, reason, proposed_name, proposed_description,
-              status, suggested_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-             ON CONFLICT(skill_id, tag_id) DO UPDATE SET
+              status, suggested_at, updated_at) ",
+        );
+        builder.push_values(chunk, |mut row, suggestion| {
+            row.push_bind(skill_id)
+                .push_bind(&suggestion.tag_id)
+                .push_bind(suggestion.confidence)
+                .push_bind(&suggestion.reason)
+                .push_bind(&suggestion.proposed_name)
+                .push_bind(&suggestion.proposed_description)
+                .push("'pending'")
+                .push_bind(&now)
+                .push_bind(&now);
+        });
+        builder.push(
+            " ON CONFLICT(skill_id, tag_id) DO UPDATE SET
                confidence = excluded.confidence,
                reason = excluded.reason,
                proposed_name = excluded.proposed_name,
                proposed_description = excluded.proposed_description,
                status = 'pending',
                updated_at = excluded.updated_at",
-        )
-        .bind(skill_id)
-        .bind(&suggestion.tag_id)
-        .bind(suggestion.confidence)
-        .bind(&suggestion.reason)
-        .bind(&suggestion.proposed_name)
-        .bind(&suggestion.proposed_description)
-        .bind(&now)
-        .bind(&now)
-        .execute(pool)
-        .await?;
+        );
+        builder.build().execute(&mut *transaction).await?;
     }
 
-    Ok(())
+    transaction.commit().await
 }
 
 pub async fn get_pending_ai_tag_reviews(
@@ -473,43 +540,44 @@ pub async fn get_skill_tags_for_skills(
         return Ok(HashMap::new());
     }
 
-    let placeholders = skill_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-    let sql = format!(
-        "SELECT
-            l.skill_id AS skill_id,
-            t.id AS tag_id,
-            t.name AS tag_name,
-            t.description AS tag_description,
-            t.color AS tag_color,
-            t.is_builtin AS tag_is_builtin,
-            t.created_at AS tag_created_at,
-            t.updated_at AS tag_updated_at,
-            t.group_id AS tag_group_id
-         FROM skill_tag_links l
-         JOIN skill_tags t ON t.id = l.tag_id
-         WHERE l.skill_id IN ({})
-         ORDER BY l.skill_id, t.is_builtin DESC, t.name",
-        placeholders
-    );
-    let mut query = sqlx::query(&sql);
-    for skill_id in skill_ids {
-        query = query.bind(skill_id);
-    }
-
-    let rows = query.fetch_all(pool).await?;
     let mut grouped: HashMap<String, Vec<SkillTag>> = HashMap::new();
-    for row in rows {
-        let skill_id: String = row.try_get("skill_id")?;
-        grouped.entry(skill_id).or_default().push(SkillTag {
-            id: row.try_get("tag_id")?,
-            name: row.try_get("tag_name")?,
-            description: row.try_get("tag_description")?,
-            color: row.try_get("tag_color")?,
-            is_builtin: row.try_get("tag_is_builtin")?,
-            created_at: row.try_get("tag_created_at")?,
-            updated_at: row.try_get("tag_updated_at")?,
-            group_id: row.try_get("tag_group_id")?,
-        });
+    for chunk in skill_ids.chunks(SQLITE_IN_QUERY_BATCH_SIZE) {
+        let placeholders = chunk.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT
+                l.skill_id AS skill_id,
+                t.id AS tag_id,
+                t.name AS tag_name,
+                t.description AS tag_description,
+                t.color AS tag_color,
+                t.is_builtin AS tag_is_builtin,
+                t.created_at AS tag_created_at,
+                t.updated_at AS tag_updated_at,
+                t.group_id AS tag_group_id
+             FROM skill_tag_links l
+             JOIN skill_tags t ON t.id = l.tag_id
+             WHERE l.skill_id IN ({})
+             ORDER BY l.skill_id, t.is_builtin DESC, t.name",
+            placeholders
+        );
+        let mut query = sqlx::query(&sql);
+        for skill_id in chunk {
+            query = query.bind(skill_id);
+        }
+
+        for row in query.fetch_all(pool).await? {
+            let skill_id: String = row.try_get("skill_id")?;
+            grouped.entry(skill_id).or_default().push(SkillTag {
+                id: row.try_get("tag_id")?,
+                name: row.try_get("tag_name")?,
+                description: row.try_get("tag_description")?,
+                color: row.try_get("tag_color")?,
+                is_builtin: row.try_get("tag_is_builtin")?,
+                created_at: row.try_get("tag_created_at")?,
+                updated_at: row.try_get("tag_updated_at")?,
+                group_id: row.try_get("tag_group_id")?,
+            });
+        }
     }
 
     Ok(grouped)
@@ -602,7 +670,16 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
-        link_tag(&pool, "ghost-skill", &alpha.id).await;
+        sqlx::query(
+            "INSERT INTO skill_tag_links
+             (skill_id, tag_id, confidence, reason, source, added_at)
+             VALUES ('ghost-skill', ?, NULL, NULL, 'manual', ?)",
+        )
+        .bind(&alpha.id)
+        .bind(now_rfc3339())
+        .execute(&pool)
+        .await
+        .unwrap();
 
         let top = list_central_top_tags(&pool, 10).await.unwrap();
 

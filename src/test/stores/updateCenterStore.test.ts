@@ -61,15 +61,14 @@ describe("updateCenterStore", () => {
   it("bypasses the snapshot cache for manual refresh by default", async () => {
     mockInvoke.mockResolvedValueOnce(emptyInventory());
 
-    await useUpdateCenterStore.getState().refresh({ kind: "all", mode: "sync" });
+    await useUpdateCenterStore
+      .getState()
+      .refresh({ kind: "all", mode: "sync" });
 
-    expect(mockInvoke).toHaveBeenCalledWith(
-      "refresh_skill_update_inventory",
-      {
-        scope: { kind: "all", mode: "sync", cachePolicy: "bypass" },
-        operationId: expect.any(String),
-      },
-    );
+    expect(mockInvoke).toHaveBeenCalledWith("refresh_skill_update_inventory", {
+      scope: { kind: "all", mode: "sync", cachePolicy: "bypass" },
+      operationId: expect.any(String),
+    });
   });
 
   it("subscribes before invoke and tracks every active repository", async () => {
@@ -164,7 +163,8 @@ describe("updateCenterStore", () => {
   });
 
   it("ignores stale events and clears progress after failure", async () => {
-    let progressHandler: ((event: { payload: Record<string, unknown> }) => void) | undefined;
+    let progressHandler:
+      ((event: { payload: Record<string, unknown> }) => void) | undefined;
     const unlisten = vi.fn();
     mockListen.mockImplementation(async (_event, handler) => {
       progressHandler = handler;
@@ -193,8 +193,26 @@ describe("updateCenterStore", () => {
     expect(useUpdateCenterStore.getState()).toMatchObject({
       isRefreshing: false,
       refreshProgress: null,
-      error: "network unavailable",
+      error: "storage.unavailable:network unavailable",
     });
+  });
+
+  it("preserves the archive redirect code and drops legacy dynamic details", async () => {
+    const seed =
+      "ghp_secret https://example.invalid/private C:\\private\\SKILL.md";
+    mockInvoke.mockRejectedValueOnce(
+      `github_import.archive_redirect_rejected:${seed}`,
+    );
+
+    await expect(
+      useUpdateCenterStore.getState().refresh({ kind: "all", mode: "sync" }),
+    ).rejects.toThrow("GitHub repository archive redirect was rejected.");
+
+    const error = useUpdateCenterStore.getState().error;
+    expect(error).toBe(
+      "github_import.archive_redirect_rejected:GitHub repository archive redirect was rejected.",
+    );
+    expect(error).not.toContain(seed);
   });
 
   it("passes a renderer-owned job ID when applying decisions", async () => {
@@ -219,15 +237,132 @@ describe("updateCenterStore", () => {
       removedDeletedPlatformCopyPaths: [],
       failures: [],
     };
-    mockInvoke.mockResolvedValueOnce(result).mockResolvedValueOnce(emptyInventory());
+    mockInvoke
+      .mockResolvedValueOnce(result)
+      .mockResolvedValueOnce(emptyInventory());
 
     await expect(
       useUpdateCenterStore.getState().apply(decisions, { kind: "all" }),
     ).resolves.toEqual(result);
 
-    expect(mockInvoke).toHaveBeenNthCalledWith(1, "apply_skill_update_decisions", {
-      jobId: expect.any(String),
-      decisions,
+    expect(mockInvoke).toHaveBeenNthCalledWith(
+      1,
+      "apply_skill_update_decisions",
+      {
+        jobId: expect.any(String),
+        decisions,
+      },
+    );
+  });
+  describe("retryRepositories", () => {
+    function inventoryWithFailure(repositoryId: string): SkillUpdateInventory {
+      return {
+        ...emptyInventory(),
+        failedRepositories: [
+          {
+            repositoryId,
+            error: "This repository could not be checked.",
+            errorCode: "central_updates.repository_check_failed",
+            retry: "retryable",
+          },
+        ],
+      };
+    }
+
+    it("sends the panel scope, the targets, and no mode override by default", async () => {
+      mockInvoke.mockResolvedValueOnce(emptyInventory());
+
+      const result = await useUpdateCenterStore
+        .getState()
+        .retryRepositories(["repo-a", "repo-a"], { kind: "all", mode: "sync" });
+
+      expect(mockInvoke).toHaveBeenCalledWith(
+        "retry_failed_update_repositories",
+        {
+          scope: { kind: "all", mode: "sync", cachePolicy: "bypass" },
+          repositoryIds: ["repo-a"],
+          modeOverride: null,
+          operationId: expect.any(String),
+        },
+      );
+      expect(result).toEqual({ succeeded: ["repo-a"], failed: [] });
+    });
+
+    it("passes the incremental mode override for decision-required rows", async () => {
+      mockInvoke.mockResolvedValueOnce(emptyInventory());
+
+      await useUpdateCenterStore.getState().retryRepositories(
+        ["repo-a"],
+        { kind: "all", mode: "regular" },
+        {
+          mode: "sync",
+        },
+      );
+
+      expect(mockInvoke.mock.calls[0][1]).toMatchObject({
+        modeOverride: "sync",
+      });
+    });
+
+    it("reports a repository that is still failing after the retry", async () => {
+      mockInvoke.mockResolvedValueOnce(inventoryWithFailure("repo-a"));
+
+      const result = await useUpdateCenterStore
+        .getState()
+        .retryRepositories(["repo-a", "repo-b"], { kind: "all", mode: "sync" });
+
+      expect(result).toEqual({ succeeded: ["repo-b"], failed: ["repo-a"] });
+      expect(
+        useUpdateCenterStore.getState().inventory?.failedRepositories,
+      ).toHaveLength(1);
+    });
+
+    it("marks the targets in flight and clears them when the call settles", async () => {
+      let resolveInvoke:
+        ((inventory: SkillUpdateInventory) => void) | undefined;
+      mockInvoke.mockImplementation(
+        () =>
+          new Promise<SkillUpdateInventory>((resolve) => {
+            resolveInvoke = resolve;
+          }),
+      );
+
+      const pending = useUpdateCenterStore
+        .getState()
+        .retryRepositories(["repo-a"], { kind: "all", mode: "sync" });
+
+      await vi.waitFor(() =>
+        expect(useUpdateCenterStore.getState().retryingRepositoryIds).toEqual([
+          "repo-a",
+        ]),
+      );
+      resolveInvoke?.(emptyInventory());
+      await pending;
+      expect(useUpdateCenterStore.getState().retryingRepositoryIds).toEqual([]);
+    });
+
+    it("clears the in-flight marker and records the error when the call rejects", async () => {
+      mockInvoke.mockRejectedValueOnce(
+        ipcFixtureError("central_updates.repository_check_failed", "boom"),
+      );
+
+      await expect(
+        useUpdateCenterStore
+          .getState()
+          .retryRepositories(["repo-a"], { kind: "all", mode: "sync" }),
+      ).rejects.toBeTruthy();
+
+      expect(useUpdateCenterStore.getState().retryingRepositoryIds).toEqual([]);
+      expect(useUpdateCenterStore.getState().error).toBeTruthy();
+    });
+
+    it("skips the round trip when no repository is targeted", async () => {
+      const result = await useUpdateCenterStore
+        .getState()
+        .retryRepositories([], { kind: "all", mode: "sync" });
+
+      expect(result).toEqual({ succeeded: [], failed: [] });
+      expect(mockInvoke).not.toHaveBeenCalled();
     });
   });
 });

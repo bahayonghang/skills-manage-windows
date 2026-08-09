@@ -1,6 +1,6 @@
 [package]
 name = "skillport"
-version = "0.10.14"
+version = "1.0.1"
 default-run = "skillport"
 description = "AI Agent Skills Manager"
 authors = ["iamzhihuix"]
@@ -74,7 +74,7 @@ windows-sys = { version = "0.61", features = [
 ] }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["full", "test-util"] }
 
 [profile.dev]
 debug = 0

@@ -14,6 +14,7 @@ mod pool;
 mod repos;
 mod schema;
 mod seed;
+pub(crate) mod sqlite_batch;
 mod types;
 mod util;
 
@@ -27,6 +28,7 @@ pub use migrations::{open_database, open_database_for_remote_home};
 #[cfg(test)]
 pub(crate) use pool::{create_memory_pool, create_memory_pool_single_conn, create_pool};
 pub use repos::agents_repo::*;
+pub use repos::central_skills_page_repo::*;
 pub use repos::collections_repo::*;
 pub use repos::fs_db_operations_repo::*;
 pub use repos::installations_repo::*;
@@ -35,6 +37,7 @@ pub use repos::operation_logs_repo::*;
 pub use repos::pending_additions_repo::*;
 pub use repos::projects_repo::*;
 pub use repos::repositories_repo::*;
+pub use repos::repository_members_repo::*;
 pub use repos::saved_views_repo::*;
 pub use repos::scan_dirs_repo::*;
 pub use repos::settings_repo::*;

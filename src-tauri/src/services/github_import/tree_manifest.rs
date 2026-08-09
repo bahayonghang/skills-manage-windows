@@ -22,7 +22,10 @@
 //! are simply absent from the tar regular-file set), keeping the candidate/
 //! preview/file-manifest output equivalent.
 
-use crate::services::resource_budget::ResourceBudget;
+use crate::services::{
+    bounded_ingestion::{read_response_text_bounded, BoundedReadError, ReadLimit},
+    resource_budget::{BudgetExceeded, ResourceBudget},
+};
 
 use super::*;
 
@@ -317,17 +320,31 @@ pub(super) async fn try_fetch_tree_manifest(
         );
     }
 
-    let budget = ResourceBudget::default_skill();
-    if let Some(content_length) = response.content_length() {
-        budget
-            .reject_tree_response_size(content_length)
-            .map_err(GithubImportError::Budget)?;
-    }
+    read_tree_response_with_budget(response, repo, ResourceBudget::default_skill()).await
+}
 
-    let body = response
-        .text()
-        .await
-        .map_err(|e| GithubImportError::Http(format!("Failed to read repository tree: {}", e)))?;
+pub(super) async fn read_tree_response_with_budget(
+    response: reqwest::Response,
+    repo: &GitHubRepoRef,
+    budget: ResourceBudget,
+) -> Result<RepositoryManifest, GithubImportError> {
+    let body = read_response_text_bounded(
+        response,
+        ReadLimit::new(
+            "GitHub repository tree API response",
+            budget.tree_response_bytes,
+        ),
+    )
+    .await
+    .map_err(|error| match error {
+        BoundedReadError::LimitExceeded { actual, limit, .. } => GithubImportError::Budget(
+            BudgetExceeded::new("GitHub repository tree API response", actual, limit),
+        ),
+        BoundedReadError::InvalidUtf8 { .. } => GithubImportError::Parse(
+            "Failed to parse repository tree response: response is not valid UTF-8".to_string(),
+        ),
+        _ => GithubImportError::Http("Failed to read repository tree.".to_string()),
+    })?;
     parse_tree_response(&body, repo, budget)
 }
 

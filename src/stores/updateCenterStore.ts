@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import { invoke, isTauriRuntime, listen } from "@/lib/ipc";
+import { backendErrorStateValue } from "@/lib/backendError";
 import type {
   ActiveRefreshRepository,
   ForceRepositoryMirrorRequest,
@@ -45,11 +46,13 @@ export type UpdateCenterTab =
   | "added"
   | "missing"
   | "failed"
+  | "unsupported"
   | "duplicates"
   | "deletedPlatformCopies"
   | "orphans";
 
-const UPDATE_INVENTORY_PROGRESS_EVENT = "central://skill-update-inventory-progress";
+const UPDATE_INVENTORY_PROGRESS_EVENT =
+  "central://skill-update-inventory-progress";
 let refreshOperationSequence = 0;
 
 function createRefreshOperationId(): string {
@@ -69,9 +72,13 @@ function addActiveRepository(
   repositories: ActiveRefreshRepository[],
   repository: ActiveRefreshRepository,
 ): ActiveRefreshRepository[] {
-  const existingIndex = repositories.findIndex((item) => item.key === repository.key);
+  const existingIndex = repositories.findIndex(
+    (item) => item.key === repository.key,
+  );
   if (existingIndex < 0) return [...repositories, repository];
-  return repositories.map((item, index) => (index === existingIndex ? repository : item));
+  return repositories.map((item, index) =>
+    index === existingIndex ? repository : item,
+  );
 }
 
 function removeActiveRepository(
@@ -135,9 +142,16 @@ export function mergeInventoryRefreshProgress(
   };
 }
 
+export interface RetryRepositoriesResult {
+  succeeded: string[];
+  failed: string[];
+}
+
 interface UpdateCenterState {
   inventory: SkillUpdateInventory | null;
   isRefreshing: boolean;
+  /** Repository ids with a retry in flight, so their row can show progress. */
+  retryingRepositoryIds: string[];
   refreshProgress: SkillUpdateInventoryRefreshProgress | null;
   isApplying: boolean;
   isForcing: boolean;
@@ -148,6 +162,11 @@ interface UpdateCenterState {
   refreshMode: SkillRefreshMode;
   error: string | null;
   refresh(scope: SkillRefreshScope): Promise<SkillUpdateInventory | null>;
+  retryRepositories(
+    repositoryIds: string[],
+    scope: SkillRefreshScope,
+    options?: { mode?: SkillRefreshMode },
+  ): Promise<RetryRepositoriesResult>;
   apply(
     decisions: SkillUpdateDecisions,
     scope?: SkillRefreshScope,
@@ -178,6 +197,7 @@ function emptyInventory(): SkillUpdateInventory {
     updatable: [],
     remoteAdded: [],
     remoteMissing: [],
+    unsupported: [],
     platformDuplicates: [],
     deletedPlatformCopies: [],
     orphans: [],
@@ -203,6 +223,7 @@ function emptyApplyResult(): SkillUpdateApplyResult {
 export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
   inventory: null,
   isRefreshing: false,
+  retryingRepositoryIds: [],
   refreshProgress: null,
   isApplying: false,
   isForcing: false,
@@ -246,7 +267,10 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
             const current = state.refreshProgress;
             if (!current || current.operationId !== operationId) return state;
             return {
-              refreshProgress: mergeInventoryRefreshProgress(current, event.payload),
+              refreshProgress: mergeInventoryRefreshProgress(
+                current,
+                event.payload,
+              ),
             };
           });
         },
@@ -262,7 +286,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
       });
       return inventory;
     } catch (err) {
-      set({ error: String(err), isRefreshing: false });
+      set({ error: backendErrorStateValue(err), isRefreshing: false });
       throw err;
     } finally {
       try {
@@ -278,12 +302,61 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
     }
   },
 
+  /**
+   * Re-check only `repositoryIds`. The backend merges the slice into the
+   * inventory stored for `scope` and returns the whole thing, so the panel
+   * keeps every other repository's rows.
+   */
+  async retryRepositories(repositoryIds, scope, options) {
+    const targets = [...new Set(repositoryIds)].filter(Boolean);
+    if (targets.length === 0) return { succeeded: [], failed: [] };
+    if (!isTauriRuntime()) {
+      return { succeeded: targets, failed: [] };
+    }
+
+    const operationId = createRefreshOperationId();
+    set((state) => ({
+      error: null,
+      retryingRepositoryIds: [
+        ...new Set([...state.retryingRepositoryIds, ...targets]),
+      ],
+    }));
+    try {
+      const inventory = await invoke("retry_failed_update_repositories", {
+        scope: { ...scope, cachePolicy: scope.cachePolicy ?? "bypass" },
+        repositoryIds: targets,
+        modeOverride: options?.mode ?? null,
+        operationId,
+      });
+      set({ inventory, lastRefreshedAt: new Date().toISOString() });
+      const stillFailing = new Set(
+        inventory.failedRepositories.map((item) => item.repositoryId),
+      );
+      return {
+        succeeded: targets.filter((id) => !stillFailing.has(id)),
+        failed: targets.filter((id) => stillFailing.has(id)),
+      };
+    } catch (err) {
+      set({ error: backendErrorStateValue(err) });
+      throw err;
+    } finally {
+      set((state) => ({
+        retryingRepositoryIds: state.retryingRepositoryIds.filter(
+          (id) => !targets.includes(id),
+        ),
+      }));
+    }
+  },
+
   async apply(decisions, scope) {
     if (get().isApplying) {
-      throw new Error("job.central_update_busy:A Central update job is already running.");
+      throw new Error(
+        "job.central_update_busy:A Central update job is already running.",
+      );
     }
-    const jobId = globalThis.crypto?.randomUUID?.()
-      ?? `job-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const jobId =
+      globalThis.crypto?.randomUUID?.() ??
+      `job-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     set({ isApplying: true, error: null });
     try {
       const result = isTauriRuntime()
@@ -313,16 +386,17 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
       set({ inventory: emptyInventory() });
       return;
     }
-    const inventory = await invoke("get_skill_update_inventory", { scope: scope ?? null });
+    const inventory = await invoke("get_skill_update_inventory", {
+      scope: scope ?? null,
+    });
     set({ inventory });
   },
 
   async scanDuplicates(agentIds) {
     if (!isTauriRuntime()) return;
-    const platformDuplicates = await invoke(
-      "scan_platform_duplicate_skills",
-      { agentIds: agentIds ?? null },
-    );
+    const platformDuplicates = await invoke("scan_platform_duplicate_skills", {
+      agentIds: agentIds ?? null,
+    });
     set((state) => ({
       inventory: state.inventory
         ? { ...state.inventory, platformDuplicates }
@@ -332,10 +406,9 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
 
   async scanDeletedPlatformCopies(agentIds) {
     if (!isTauriRuntime()) return;
-    const deletedPlatformCopies = await invoke(
-      "scan_deleted_platform_copies",
-      { agentIds: agentIds ?? null },
-    );
+    const deletedPlatformCopies = await invoke("scan_deleted_platform_copies", {
+      agentIds: agentIds ?? null,
+    });
     set((state) => ({
       inventory: state.inventory
         ? { ...state.inventory, deletedPlatformCopies }
@@ -364,10 +437,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
     set({ isForcing: true, error: null });
     try {
       const result = isTauriRuntime()
-        ? await invoke(
-            "force_mirror_central_repositories",
-            { request },
-          )
+        ? await invoke("force_mirror_central_repositories", { request })
         : {
             overwritten: [],
             imported: [],
@@ -422,12 +492,20 @@ export function selectSkillInventoryFlagsFromInventory(
 ): SkillInventoryFlags {
   if (!inventory) return EMPTY_FLAGS;
   return {
-    hasUpdate: inventory.updatable.some((entry) => entry.state.skill_id === skillId),
-    isMissing: inventory.remoteMissing.some((entry) => entry.state.skill_id === skillId),
+    hasUpdate: inventory.updatable.some(
+      (entry) => entry.state.skill_id === skillId,
+    ),
+    isMissing: inventory.remoteMissing.some(
+      (entry) => entry.state.skill_id === skillId,
+    ),
     isAdded: inventory.remoteAdded.some((entry) => entry.skillId === skillId),
-    hasDuplicate: inventory.platformDuplicates.some((entry) => entry.skillId === skillId),
+    hasDuplicate: inventory.platformDuplicates.some(
+      (entry) => entry.skillId === skillId,
+    ),
     isOrphan:
-      inventory.orphans.some((entry) => entry.skillId === skillId)
-      || (inventory.deletedPlatformCopies ?? []).some((entry) => entry.skillId === skillId),
+      inventory.orphans.some((entry) => entry.skillId === skillId) ||
+      (inventory.deletedPlatformCopies ?? []).some(
+        (entry) => entry.skillId === skillId,
+      ),
   };
 }

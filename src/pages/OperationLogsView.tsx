@@ -9,6 +9,7 @@ import {
   RotateCcw,
   Rows3,
   Search,
+  ShieldCheck,
   Terminal,
   Trash2,
 } from "lucide-react";
@@ -31,12 +32,21 @@ import {
 } from "@/components/logs/logsUtils";
 import { useLogsKeyboard } from "@/components/logs/useLogsKeyboard";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
 import { Input } from "@/components/ui/input";
 import { RuntimeLogsPanel } from "@/components/logs/RuntimeLogsPanel";
 import { useOperationLogStore } from "@/stores/operationLogStore";
 import { useTargetStore } from "@/stores/targetStore";
 import { OperationLogEntry, OperationLogFilter } from "@/types";
+import { formatBackendError } from "@/lib/backendError";
 
 function downloadText(payload: string, fileName: string, type: string) {
   const blob = new Blob([payload], { type });
@@ -93,9 +103,62 @@ function PendingRecoveryBand() {
   const retryingId = useOperationLogStore(
     (state) => state.retryingOperationId,
   );
+  const previewingId = useOperationLogStore(
+    (state) => state.previewingOperationId,
+  );
+  const reconcilingId = useOperationLogStore(
+    (state) => state.reconcilingOperationId,
+  );
+  const preview = useOperationLogStore(
+    (state) => state.reconciliationPreview,
+  );
   const error = useOperationLogStore((state) => state.pendingOperationsError);
   const load = useOperationLogStore((state) => state.loadPendingOperations);
   const retry = useOperationLogStore((state) => state.retryPendingOperation);
+  const previewReconciliation = useOperationLogStore(
+    (state) => state.previewPendingOperationReconciliation,
+  );
+  const reconcile = useOperationLogStore(
+    (state) => state.reconcilePendingOperation,
+  );
+  const clearPreview = useOperationLogStore(
+    (state) => state.clearReconciliationPreview,
+  );
+  const [selectedOperationId, setSelectedOperationId] = useState<string | null>(
+    null,
+  );
+
+  function closeReconciliation() {
+    clearPreview();
+    setSelectedOperationId(null);
+  }
+
+  function openReconciliation(operationId: string) {
+    setSelectedOperationId(operationId);
+    void previewReconciliation(operationId).catch((err) => {
+      toast.error(
+        t("logs.recovery.reconcileError", {
+          error: formatBackendError(err, t),
+        }),
+      );
+    });
+  }
+
+  function confirmReconciliation() {
+    if (!selectedOperationId || !preview?.eligible) return;
+    void reconcile(selectedOperationId)
+      .then(() => {
+        toast.success(t("logs.recovery.reconcileSuccess"));
+        closeReconciliation();
+      })
+      .catch((err) => {
+        toast.error(
+          t("logs.recovery.reconcileError", {
+            error: formatBackendError(err, t),
+          }),
+        );
+      });
+  }
 
   useEffect(() => {
     load();
@@ -128,25 +191,54 @@ function PendingRecoveryBand() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {pending.map((operation) => (
-            <Button
-              key={operation.operationId}
-              variant="outline"
-              size="sm"
-              disabled={retryingId !== null}
-              onClick={() =>
-                retry(operation.operationId).catch((err) =>
-                  toast.error(t("logs.recovery.error", { error: String(err) })),
-                )
-              }
-              title={operation.errorMessage ?? operation.phase}
-            >
-              {retryingId === operation.operationId ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <RotateCcw className="size-4" />
-              )}
-              <span className="max-w-40 truncate">{operation.skillId}</span>
-            </Button>
+            <div key={operation.operationId} className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={
+                  retryingId !== null ||
+                  previewingId !== null ||
+                  reconcilingId !== null
+                }
+                onClick={() =>
+                  retry(operation.operationId).catch((err) =>
+                    toast.error(
+                      t("logs.recovery.error", {
+                        error: formatBackendError(err, t),
+                      }),
+                    ),
+                  )
+                }
+                title={operation.errorMessage ?? operation.phase}
+              >
+                {retryingId === operation.operationId ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="size-4" />
+                )}
+                <span className="max-w-40 truncate">{operation.skillId}</span>
+              </Button>
+              {operation.operationKind === "central_delete" &&
+                operation.phase === "prepared" && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={
+                      retryingId !== null ||
+                      previewingId !== null ||
+                      reconcilingId !== null
+                    }
+                    onClick={() => openReconciliation(operation.operationId)}
+                    title={t("logs.recovery.reconcile")}
+                  >
+                    {previewingId === operation.operationId ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <ShieldCheck className="size-4" />
+                    )}
+                  </Button>
+                )}
+            </div>
           ))}
           <Button
             variant="ghost"
@@ -159,6 +251,55 @@ function PendingRecoveryBand() {
           </Button>
         </div>
       </div>
+      <Dialog
+        open={selectedOperationId !== null}
+        onOpenChange={(open) => !open && closeReconciliation()}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("logs.recovery.reconcileTitle")}</DialogTitle>
+            <DialogDescription>
+              {previewingId
+                ? t("logs.recovery.reconcileLoading")
+                : preview?.eligible
+                  ? t("logs.recovery.reconcileEligible", {
+                      duplicates: preview.duplicatePathCount,
+                      missing: preview.missingUnownedPathCount,
+                    })
+                  : t("logs.recovery.reconcileBlocked")}
+            </DialogDescription>
+          </DialogHeader>
+          {preview && preview.blockerCodes.length > 0 && (
+            <ul className="space-y-1 text-sm text-destructive">
+              {preview.blockerCodes.map((code) => (
+                <li key={code}>
+                  {t(`backendErrors.${code}`, {
+                    defaultValue: t("logs.recovery.reconcileBlockedGeneric"),
+                  })}
+                </li>
+              ))}
+            </ul>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={closeReconciliation}>
+              {t("common.cancel")}
+            </Button>
+            {preview?.eligible && (
+              <Button
+                onClick={confirmReconciliation}
+                disabled={reconcilingId !== null}
+              >
+                {reconcilingId ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <ShieldCheck className="size-4" />
+                )}
+                {t("logs.recovery.reconcileConfirm")}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

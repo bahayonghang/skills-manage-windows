@@ -67,6 +67,15 @@ impl ProcessPolicy {
         }
     }
 
+    pub(crate) const fn bounded_read(stdout_limit: usize) -> Self {
+        Self {
+            class: ProcessClass::Standard,
+            deadline: Duration::from_secs(120),
+            stdout_limit,
+            stderr_limit: Self::MIB,
+        }
+    }
+
     #[cfg(test)]
     pub(crate) const fn for_tests(
         deadline: Duration,

@@ -9,7 +9,7 @@ use crate::services::github_import::{self, GitHubRepoRef};
 use super::RemoteAddedSkill;
 
 pub(crate) fn prepared_repo_ref(prepared: &PreparedSkillUpdate) -> Option<GitHubRepoRef> {
-    repo_ref_for_repository(&prepared.assignment.repository)
+    prepared.source.as_ref().map(|source| source.repo.clone())
 }
 
 pub(crate) fn remote_added_from_item(item: CentralRemoteAddedSkill) -> RemoteAddedSkill {
@@ -110,26 +110,4 @@ pub(crate) async fn load_syncable_github_repositories(
         repositories.push((repository, repo_ref));
     }
     Ok(repositories)
-}
-
-fn repo_ref_for_repository(repository: &SkillRepository) -> Option<GitHubRepoRef> {
-    if repository.source_type != "github" || repository.is_unknown {
-        return None;
-    }
-    let (Some(owner), Some(repo), Some(branch)) = (
-        repository.owner.as_ref(),
-        repository.repo.as_ref(),
-        repository.branch.as_ref(),
-    ) else {
-        return None;
-    };
-    Some(GitHubRepoRef {
-        owner: owner.clone(),
-        repo: repo.clone(),
-        branch: branch.clone(),
-        normalized_url: repository
-            .url
-            .clone()
-            .unwrap_or_else(|| format!("https://github.com/{owner}/{repo}")),
-    })
 }

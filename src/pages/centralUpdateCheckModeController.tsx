@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { UpdateCheckModeDialog } from "@/components/central/UpdateCheckModeDialog";
 import { UpdateModePreferenceSelect } from "@/components/central/UpdateModePreferenceSelect";
 import type { CentralSkillsShellProps } from "@/components/central/CentralSkillsShell";
+import { formatBackendError } from "@/lib/backendError";
 import type { CentralSkillsCheckButtonState } from "@/pages/centralSkillsCheckButton";
 import {
   buildUpdateCheckRefreshContext,
@@ -84,7 +85,9 @@ export function useCentralUpdateCheckModeController({
         );
         setOpen(false);
       } catch (err) {
-        const message = t("central.updateCheckError", { error: String(err) });
+        const message = t("central.updateCheckError", {
+          error: formatBackendError(err, t),
+        });
         setSubmitError(message);
         toast.error(message);
       } finally {

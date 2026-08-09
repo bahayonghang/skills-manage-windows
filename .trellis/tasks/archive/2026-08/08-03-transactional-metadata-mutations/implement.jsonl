@@ -1,0 +1,6 @@
+{"file":".trellis/tasks/08-02-src-tauri-architecture-quality-performance/research/src-tauri-deep-audit.md","reason":"F5 multi-statement sequences、partial failure和stale cache证据"}
+{"file":".trellis/spec/backend/database-migrations.md","reason":"FK/schema兼容性和pool integrity contract"}
+{"file":".trellis/spec/backend/central-skill-tags.md","reason":"manual/AI tag与pending review业务语义"}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"repository sqlx errors到domain/IPC的兼容边界"}
+{"file":".trellis/spec/backend/best-effort-writes.md","reason":"区分authoritative transaction与真正可best-effort的派生状态"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"复用现有transaction/batch helpers而非新增平行repository"}

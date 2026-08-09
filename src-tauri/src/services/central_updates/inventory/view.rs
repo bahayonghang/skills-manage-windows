@@ -23,7 +23,7 @@ pub(crate) async fn get_skill_update_inventory_impl_scoped(
     let entries =
         db::list_skill_update_inventory_entries(pool, &inventory_id_for_scope(scope.as_ref()))
             .await?;
-    let (updatable, remote_missing, failed_repositories, inventory_generated_at) =
+    let (updatable, remote_missing, unsupported, failed_repositories, inventory_generated_at) =
         inventory_from_entries(entries)?;
 
     /*
@@ -69,10 +69,13 @@ pub(crate) async fn get_skill_update_inventory_impl_scoped(
         updatable,
         remote_added,
         remote_missing,
+        unsupported,
         platform_duplicates,
         deleted_platform_copies,
         orphans: Vec::new(),
         failed_repositories,
+        snapshot_retry_attempted: None,
+        snapshot_retry_recovered: None,
         generated_at: inventory_generated_at.unwrap_or_else(|| Utc::now().to_rfc3339()),
     })
 }

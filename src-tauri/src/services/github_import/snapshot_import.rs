@@ -44,7 +44,14 @@ pub(crate) async fn import_github_repo_skills_from_preview_with_branch(
     selections: Vec<GitHubSkillImportSelection>,
     app: Option<&AppHandle>,
 ) -> Result<GitHubRepoImportResult, GithubImportError> {
-    let snapshot = acquire_import_lease(preview_id, Utc::now())?;
+    let snapshot = match acquire_import_lease(preview_id, Utc::now()) {
+        Ok(snapshot) => snapshot,
+        Err(error @ GithubImportError::PreviewCleanupPending) => {
+            retry_pending_preview_cleanup_for_target(active_target).await;
+            return Err(error);
+        }
+        Err(error) => return Err(error),
+    };
     let outcome = import_from_preview_snapshot(
         pool,
         active_target,
@@ -58,14 +65,14 @@ pub(crate) async fn import_github_repo_skills_from_preview_with_branch(
 
     match outcome {
         Ok(result) => {
-            if let Some(snapshot) = consume_preview_snapshot(preview_id) {
-                release_snapshot_storage(active_target, &snapshot).await;
+            if let Some(ticket) = consume_preview_snapshot(preview_id) {
+                let _ = cleanup_preview_ticket_for_target(active_target, ticket).await;
             }
             Ok(result)
         }
         Err(error) => {
-            if let Some(snapshot) = release_import_lease(preview_id) {
-                release_snapshot_storage(active_target, &snapshot).await;
+            if let Some(ticket) = release_import_lease(preview_id) {
+                let _ = cleanup_preview_ticket_for_target(active_target, ticket).await;
             }
             Err(error)
         }

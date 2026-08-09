@@ -172,6 +172,30 @@ pub(crate) struct GitHubRepoSnapshot {
     pub(crate) files: HashMap<String, Vec<u8>>,
 }
 
+impl GitHubRepoSnapshot {
+    pub(crate) fn retained_bytes(&self) -> Result<u64, GithubImportError> {
+        checked_retained_bytes(self.files.values().map(|bytes| bytes.len() as u64))
+    }
+}
+
+pub(super) fn checked_retained_bytes(
+    lengths: impl IntoIterator<Item = u64>,
+) -> Result<u64, GithubImportError> {
+    lengths.into_iter().try_fold(0_u64, |total, length| {
+        total
+            .checked_add(length)
+            .ok_or(GithubImportError::SnapshotSizeOverflow)
+    })
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct PinnedGitHubRepoSnapshot {
+    pub(crate) resolved: ResolvedGitHubRepoSource,
+    pub(crate) resolved_commit_sha: String,
+    pub(crate) snapshot: GitHubRepoSnapshot,
+    pub(crate) candidates: Vec<RemoteSkillCandidate>,
+}
+
 pub(super) const NO_IMPORTABLE_SKILLS_ERROR: &str = "No importable skills found in this repository. Supported layouts include root SKILL.md, common skill directories such as skills/, .agents/skills/, .claude/skills/, direct repository subpaths, and bounded recursive SKILL.md discovery.";
 pub(super) const REMOTE_PREVIEW_WORKSPACE_TTL_MINUTES: i64 = 30;
 pub(super) const RECURSIVE_DISCOVERY_MAX_DEPTH: usize = 5;
@@ -228,8 +252,6 @@ pub(super) const PRIORITY_SKILL_ROOTS: &[&str] = &[
     ".zencoder/skills",
 ];
 
-pub(super) static GITHUB_PREVIEW_SNAPSHOTS: OnceLock<Mutex<HashMap<String, PreviewSnapshotEntry>>> =
-    OnceLock::new();
 pub(super) static GITHUB_SHARED_CLIENT: OnceLock<Result<reqwest::Client, reqwest::Error>> =
     OnceLock::new();
 pub(super) static GITHUB_HOST_RATE_LIMITERS: OnceLock<
@@ -319,16 +341,6 @@ impl PreviewSnapshot {
     }
 }
 
-/// Registry lifecycle state. Only one import lease may exist per snapshot; a
-/// discard requested while the lease is held is deferred until the lease ends
-/// so an in-flight read cannot lose its remote workspace.
-#[derive(Debug, Clone)]
-pub(super) struct PreviewSnapshotEntry {
-    pub(super) snapshot: Arc<PreviewSnapshot>,
-    pub(super) importing: bool,
-    pub(super) discard_pending: bool,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ResolvedGitHubRepoSource {
     pub(crate) repo: GitHubRepoRef,
@@ -357,7 +369,6 @@ pub(super) struct GitHubAccessDenial {
     pub(super) kind: GitHubAccessDenialKind,
     pub(super) operation: &'static str,
     pub(super) status: reqwest::StatusCode,
-    pub(super) github_message: Option<String>,
     pub(super) used_auth: bool,
 }
 
@@ -381,11 +392,7 @@ impl fmt::Display for GitHubAccessDenial {
                 if let Some(remaining) = remaining {
                     write!(f, " (remaining quota: {})", remaining)?;
                 }
-                if let Some(message) = &self.github_message {
-                    write!(f, ". GitHub said: {}", message)?;
-                } else {
-                    write!(f, ".")?;
-                }
+                write!(f, ".")?;
                 Ok(())
             }
             GitHubAccessDenialKind::AuthenticationOrPermission => {
@@ -402,11 +409,7 @@ impl fmt::Display for GitHubAccessDenial {
                         self.operation, status
                     )?;
                 }
-                if let Some(message) = &self.github_message {
-                    write!(f, ". GitHub said: {}", message)?;
-                } else {
-                    write!(f, ".")?;
-                }
+                write!(f, ".")?;
                 Ok(())
             }
         }

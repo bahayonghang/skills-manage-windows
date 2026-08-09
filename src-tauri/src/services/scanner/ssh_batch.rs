@@ -1,11 +1,13 @@
 use std::collections::{HashMap, HashSet};
 
+use crate::services::resource_budget::DEFAULT_FILE_BYTES;
 use crate::targets::shell_quote;
 
 use super::{parse_skill_md_content, ScannedSkill};
 
 const PATH_MARKER: &str = "\u{001e}PATH\t";
 const EOF_MARKER: &str = "\u{001f}EOF";
+pub(super) const REMOTE_READ_CHUNK_SIZE: usize = 4;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum RemoteScanItem {
@@ -16,6 +18,9 @@ pub(super) enum RemoteScanItem {
         root: String,
     },
     RootMiss {
+        root: String,
+    },
+    RootUnreadable {
         root: String,
     },
     Skill {
@@ -35,23 +40,27 @@ pub(super) fn build_probe_script(roots: &[String]) -> String {
     }
     script.push_str("; do\n");
     script.push_str("  if [ -d \"$root\" ]; then\n");
-    script.push_str("    printf 'ROOT_OK\\t%s\\n' \"$root\"\n");
-    script.push_str("    for dir in \"$root\"/* \"$root\"/.[!.]* \"$root\"/..?*; do\n");
-    script.push_str("      [ -e \"$dir\" ] || continue\n");
-    script.push_str("      if [ -d \"$dir\" ] || [ -L \"$dir\" ]; then\n");
-    script.push_str("        file=\"$dir/SKILL.md\"\n");
-    script.push_str("        if [ -f \"$file\" ]; then\n");
-    script.push_str("          if [ -L \"$dir\" ]; then\n");
-    script.push_str("            link=$(readlink \"$dir\" 2>/dev/null || true)\n");
+    script.push_str("    if [ -r \"$root\" ] && [ -x \"$root\" ]; then\n");
+    script.push_str("      printf 'ROOT_OK\\t%s\\n' \"$root\"\n");
+    script.push_str("      for dir in \"$root\"/* \"$root\"/.[!.]* \"$root\"/..?*; do\n");
+    script.push_str("        [ -e \"$dir\" ] || continue\n");
+    script.push_str("        if [ -d \"$dir\" ] || [ -L \"$dir\" ]; then\n");
+    script.push_str("          file=\"$dir/SKILL.md\"\n");
+    script.push_str("          if [ -f \"$file\" ]; then\n");
+    script.push_str("            if [ -L \"$dir\" ]; then\n");
+    script.push_str("              link=$(readlink \"$dir\" 2>/dev/null || true)\n");
     script.push_str(
-        "            printf 'SKILL\\t%s\\t%s\\tsymlink\\t%s\\n' \"$root\" \"$file\" \"$link\"\n",
+        "              printf 'SKILL\\t%s\\t%s\\tsymlink\\t%s\\n' \"$root\" \"$file\" \"$link\"\n",
     );
-    script.push_str("          else\n");
-    script.push_str("            printf 'SKILL\\t%s\\t%s\\tdir\\t\\n' \"$root\" \"$file\"\n");
+    script.push_str("            else\n");
+    script.push_str("              printf 'SKILL\\t%s\\t%s\\tdir\\t\\n' \"$root\" \"$file\"\n");
+    script.push_str("            fi\n");
     script.push_str("          fi\n");
     script.push_str("        fi\n");
-    script.push_str("      fi\n");
-    script.push_str("    done\n");
+    script.push_str("      done\n");
+    script.push_str("    else\n");
+    script.push_str("      printf 'ROOT_UNREADABLE\\t%s\\n' \"$root\"\n");
+    script.push_str("    fi\n");
     script.push_str("  elif [ -d \"$(dirname \"$root\")\" ]; then\n");
     script.push_str("    printf 'ROOT_PARENT_OK\\t%s\\n' \"$root\"\n");
     script.push_str("  else\n");
@@ -76,6 +85,9 @@ pub(super) fn parse_probe_output(output: &str) -> Vec<RemoteScanItem> {
                 "ROOT_MISS" => Some(RemoteScanItem::RootMiss {
                     root: parts.next()?.to_string(),
                 }),
+                "ROOT_UNREADABLE" => Some(RemoteScanItem::RootUnreadable {
+                    root: parts.next()?.to_string(),
+                }),
                 "SKILL" => Some(RemoteScanItem::Skill {
                     root: parts.next()?.to_string(),
                     skill_md_path: parts.next()?.to_string(),
@@ -92,6 +104,7 @@ pub(super) fn parse_probe_output(output: &str) -> Vec<RemoteScanItem> {
 }
 
 pub(super) fn build_batch_read_script(skill_md_paths: &[String]) -> String {
+    let read_bytes = DEFAULT_FILE_BYTES + 1;
     let mut script = String::from("set -eu\n");
     script.push_str("for path in");
     for path in skill_md_paths {
@@ -101,7 +114,10 @@ pub(super) fn build_batch_read_script(skill_md_paths: &[String]) -> String {
     script.push_str("; do\n");
     script.push_str(&format!("  printf '{}%s\\n' \"$path\"\n", PATH_MARKER));
     script.push_str("  if [ -r \"$path\" ]; then\n");
-    script.push_str("    cat -- \"$path\"\n");
+    script.push_str("    size=$(LC_ALL=C wc -c < \"$path\") || size=\n");
+    script.push_str(&format!(
+        "    case \"$size\" in ''|*[!0-9]*) ;; *) [ \"$size\" -le {DEFAULT_FILE_BYTES} ] && dd if=\"$path\" bs={read_bytes} count=1 2>/dev/null || true ;; esac\n"
+    ));
     script.push_str("  fi\n");
     script.push_str(&format!("  printf '{}\\n'\n", EOF_MARKER));
     script.push_str("done\n");
@@ -120,7 +136,9 @@ pub(super) fn parse_batch_read_output(output: &str) -> HashMap<String, String> {
             break;
         };
         let body = &after_path[..end];
-        content_by_path.insert(path.to_string(), body.to_string());
+        if body.len() as u64 <= DEFAULT_FILE_BYTES {
+            content_by_path.insert(path.to_string(), body.to_string());
+        }
         remaining = &after_path[end + EOF_MARKER.len()..];
     }
 
@@ -206,12 +224,14 @@ mod tests {
         assert!(script.contains("'/home/alice/.claude/skills'"));
         assert!(script.contains("ROOT_OK"));
         assert!(script.contains("ROOT_MISS"));
+        assert!(script.contains("ROOT_UNREADABLE"));
+        assert!(script.contains("[ -r \"$root\" ] && [ -x \"$root\" ]"));
     }
 
     #[test]
     fn parse_probe_output_recovers_roots_and_skills() {
         let items = parse_probe_output(
-            "ROOT_OK\t/home/alice/.claude/skills\nSKILL\t/home/alice/.claude/skills\t/home/alice/.claude/skills/foo/SKILL.md\nROOT_MISS\t/home/alice/.kiro/skills\n",
+            "ROOT_OK\t/home/alice/.claude/skills\nSKILL\t/home/alice/.claude/skills\t/home/alice/.claude/skills/foo/SKILL.md\nROOT_MISS\t/home/alice/.kiro/skills\nROOT_UNREADABLE\t/home/alice/.agents/skills\n",
         );
 
         assert_eq!(
@@ -228,7 +248,10 @@ mod tests {
                 },
                 RemoteScanItem::RootMiss {
                     root: "/home/alice/.kiro/skills".to_string()
-                }
+                },
+                RemoteScanItem::RootUnreadable {
+                    root: "/home/alice/.agents/skills".to_string()
+                },
             ]
         );
     }
@@ -261,6 +284,9 @@ mod tests {
         assert!(script.contains("'/tmp/demo path/SKILL.md'"));
         assert!(script.contains(PATH_MARKER));
         assert!(script.contains(EOF_MARKER));
+        assert!(script.contains("wc -c"));
+        assert!(script.contains("bs=1048577 count=1"));
+        assert!(!script.contains("cat --"));
     }
 
     #[test]
@@ -275,6 +301,16 @@ mod tests {
             parsed.get("/home/alice/.claude/skills/foo/SKILL.md"),
             Some(&"---\nname: Demo\ndescription: line\twith tab\n---\nBody\n".to_string())
         );
+    }
+
+    #[test]
+    fn parse_batch_read_output_drops_limit_plus_one_body() {
+        let encoded = encode_batch_read_output(&[(
+            "/tmp/oversized/SKILL.md".to_string(),
+            "a".repeat(DEFAULT_FILE_BYTES as usize + 1),
+        )]);
+
+        assert!(parse_batch_read_output(&encoded).is_empty());
     }
 
     #[test]

@@ -32,6 +32,13 @@ closed `issue` and `diagnostic` enums plus `canRebuild` and `backupCreated`.
   `database_open_failed`; preflight, migration, FK, and seed failures become
   `schema_initialization_failed`. Classification uses `DatabaseOpenFailure`,
   not error-string matching.
+- Rebuild is available only when integrity diagnosis is positively `corrupt`.
+  SQLite primary result codes `SQLITE_CORRUPT` and `SQLITE_NOTADB` count as a
+  corrupt diagnosis even when `PRAGMA integrity_check` cannot return a row.
+  `healthy`, `unavailable`, and `not_run` fail closed with `canRebuild=false`.
+- A healthy schema/checksum incompatibility stays in place for a compatible
+  binary or migration fix. It must never be converted into a clean empty
+  database through the startup recovery UI.
 - Retry repeats the normal directory/open/migrate/seed path without moving or
   rewriting the failed database. Retry and rebuild share the coordinator's
   operation mutex.
@@ -52,6 +59,14 @@ closed `issue` and `diagnostic` enums plus `canRebuild` and `backupCreated`.
   failure states still show the hidden main window after the first status call.
 - IPC, DOM, and startup tracing fields contain stable codes and enum values,
   never raw paths, SQL, database content, credentials, or source errors.
+- A provenance recovery preview opens only the two explicitly selected database
+  files in SQLite read-only/query-only mode. Each connection pins an explicit
+  read transaction before health, classification, and snapshot queries, so a
+  concurrent WAL commit cannot mix states within one preview.
+- Preview snapshot identifiers are SHA-256 digests of the schema migration,
+  Central skill ID, repository, and membership rows used by recovery. File
+  size and mtime are not authority because WAL-only commits can leave both
+  unchanged. An approved apply must rerun the preview and match both digests.
 
 ## 4. Validation & Error Matrix
 
@@ -59,9 +74,10 @@ closed `issue` and `diagnostic` enums plus `canRebuild` and `backupCreated`.
 | --- | --- |
 | Data directory cannot be created | `fatal / data_directory_unavailable`; retry and exit only |
 | SQLite pool cannot open | `recovery_required / database_open_failed` |
-| Schema preflight, migration, FK, or seed fails | `recovery_required / schema_initialization_failed` |
+| Schema preflight, migration, FK, or seed fails on a healthy DB | `recovery_required / schema_initialization_failed`, `canRebuild=false` |
 | Integrity check returns non-`ok` | Diagnostic `corrupt`; log only stable code/result |
-| Integrity check cannot run | Diagnostic `unavailable`; do not log the raw SQLx error |
+| SQLite returns typed `CORRUPT`/`NOTADB` | Diagnostic `corrupt`, rebuild allowed |
+| Integrity check cannot run for another reason | Diagnostic `unavailable`, rebuild denied; do not log the raw SQLx error |
 | Retry fails | Preserve the database and remain on the recovery surface |
 | Backup member move fails | Roll all moved members back; publish no recovery directory |
 | Error occurs after backup directory publish | Roll back from the published directory, not the old temporary path |
@@ -73,12 +89,17 @@ closed `issue` and `diagnostic` enums plus `canRebuild` and `backupCreated`.
 
 - Good: a corrupt DB and its WAL/SHM are published as one retained recovery
   set, a clean DB reaches ready, and the normal app mounts in the same process.
+- Good: an intact DB with unknown or incompatible migration metadata offers
+  retry and exit, preserves every file in place, and exposes no rebuild button.
 - Base: a healthy cold start opens the DB once, installs `AppState` once, and
   adds only the startup-status IPC before the existing app flow.
 - Good: a post-publish durability failure restores all three original files
   and removes the recovery directory before returning failure.
 - Bad: catch a raw SQLx string in `lib.rs`, display it in React, or use it to
   decide whether rebuild is allowed.
+- Bad: set `canRebuild` from `db_path.is_file()` alone. A schema compatibility
+  regression can then turn a healthy database into an empty one while leaving
+  DB-only repository provenance behind in a recovery directory.
 - Bad: return failure after moving the DB but leave rollback pointing at the
   no-longer-existing temporary recovery directory.
 
@@ -87,6 +108,13 @@ closed `issue` and `diagnostic` enums plus `canRebuild` and `backupCreated`.
 - Rust fault injection for directory failure, corrupt DB, schema preflight
   failure, retry non-mutation, DB/WAL/SHM preservation, partial move rollback,
   post-publish rollback, and retained backup after clean initialization.
+- Startup diagnosis tests prove typed `CORRUPT`/`NOTADB` remains rebuildable and
+  `healthy`/`unavailable`/`not_run` never is. Component tests prove a healthy
+  schema failure does not render the rebuild action.
+- Recovery preview tests prove classification runs inside pinned read
+  transactions, a concurrent WAL-only commit is invisible to the active
+  preview but changes the next semantic digest, and neither source database is
+  modified.
 - Serialization coverage asserting exact camelCase recovery fields and absence
   of paths or internal error text.
 - Store/component coverage for loading, ready, recovery, fatal, failed actions,

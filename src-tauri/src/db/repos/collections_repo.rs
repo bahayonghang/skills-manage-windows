@@ -79,15 +79,16 @@ pub async fn update_collection(
 
 /// Delete a collection and its skill membership rows.
 pub async fn delete_collection(pool: &DbPool, collection_id: &str) -> Result<(), sqlx::Error> {
+    let mut transaction = pool.begin().await?;
     sqlx::query("DELETE FROM collection_skills WHERE collection_id = ?")
         .bind(collection_id)
-        .execute(pool)
+        .execute(&mut *transaction)
         .await?;
     sqlx::query("DELETE FROM collections WHERE id = ?")
         .bind(collection_id)
-        .execute(pool)
-        .await
-        .map(|_| ())
+        .execute(&mut *transaction)
+        .await?;
+    transaction.commit().await
 }
 
 /// Add a skill to a collection.

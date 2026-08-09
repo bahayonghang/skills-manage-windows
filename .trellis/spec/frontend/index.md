@@ -11,6 +11,7 @@
 - [技能卡片显式场景 interface 约定](./skill-card-scenarios.md)
 - [字体偏好与中文 fallback 契约](./font-preferences.md)
 - [语义字号与 no-growth 排版契约](./typography-tokens.md)
+- [小型图标控件热区与焦点可见性契约](./icon-control-hit-area.md)
 - [Settings 页面结构约定](./settings-structure.md)
 - [Dashboard 数据契约](./dashboard-data-contract.md)
 - [Skill Usage 状态与交互契约](./skill-usage-state.md)

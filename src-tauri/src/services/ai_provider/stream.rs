@@ -2,7 +2,6 @@
 //! event emission. Anthropic and OpenAI-compatible endpoints are both handled
 //! here — only the SSE delta shape and auth header differ.
 
-use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
@@ -12,6 +11,7 @@ use super::error::{
     classify_reqwest_error, AiProviderError, ExplanationErrorInfo, ExplanationErrorKind,
 };
 use super::prompt::{build_explanation_prompt, build_stream_request_body, truncate_content};
+use super::sse::{consume_sse_stream, SseIngestionError, StreamPolicy};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExplanationChunkPayload {
@@ -96,9 +96,96 @@ async fn send_stream_request(
         req_builder = req_builder.header("authorization", format!("Bearer {}", api_key));
     }
 
-    match req_builder.json(body).send().await {
-        Ok(resp) => Ok(resp),
-        Err(e) => Err(classify_reqwest_error(&e, fallback_tried)),
+    match tokio::time::timeout(super::AI_HEADER_TIMEOUT, req_builder.json(body).send()).await {
+        Ok(Ok(resp)) => Ok(resp),
+        Ok(Err(e)) => Err(classify_reqwest_error(&e, fallback_tried)),
+        Err(_) => Err(ExplanationErrorInfo {
+            code: Some(super::error::AI_TIMEOUT.to_string()),
+            message: "The AI request timed out while waiting for response headers.".to_string(),
+            details: "The AI provider did not return response headers before the deadline."
+                .to_string(),
+            kind: ExplanationErrorKind::Timeout,
+            retryable: true,
+            fallback_tried,
+        }),
+    }
+}
+
+fn stream_ingestion_error_info(error: &SseIngestionError) -> ExplanationErrorInfo {
+    let (code, message, kind, retryable) = match error {
+        SseIngestionError::IdleTimeout { .. } => (
+            super::error::AI_TIMEOUT,
+            "The AI response stream stopped making progress.",
+            ExplanationErrorKind::Timeout,
+            true,
+        ),
+        SseIngestionError::TotalTimeout { .. } => (
+            super::error::AI_TIMEOUT,
+            "The AI response stream exceeded its total deadline.",
+            ExplanationErrorKind::Timeout,
+            true,
+        ),
+        SseIngestionError::Transport => (
+            super::AI_RESPONSE_READ_FAILED,
+            "Failed to read the AI response stream.",
+            ExplanationErrorKind::Response,
+            true,
+        ),
+        SseIngestionError::InvalidUtf8 => (
+            super::AI_RESPONSE_PARSE_FAILED,
+            "The AI response stream is not valid UTF-8.",
+            ExplanationErrorKind::Response,
+            false,
+        ),
+        SseIngestionError::WireLimit { .. }
+        | SseIngestionError::EventLimit { .. }
+        | SseIngestionError::OutputLimit { .. } => (
+            "ai.response_too_large",
+            "The AI response exceeded its resource limit.",
+            ExplanationErrorKind::Response,
+            false,
+        ),
+    };
+    ExplanationErrorInfo {
+        code: Some(code.to_string()),
+        message: message.to_string(),
+        details: error.to_string(),
+        kind,
+        retryable,
+        fallback_tried: false,
+    }
+}
+
+fn map_stream_ingestion_error(error: SseIngestionError) -> AiProviderError {
+    match error {
+        SseIngestionError::IdleTimeout { timeout_ms } => AiProviderError::ResponseTimeout {
+            phase: "response stream idle deadline",
+            timeout_ms,
+        },
+        SseIngestionError::TotalTimeout { timeout_ms } => AiProviderError::ResponseTimeout {
+            phase: "response stream total deadline",
+            timeout_ms,
+        },
+        SseIngestionError::WireLimit { limit } => AiProviderError::ResponseTooLarge {
+            phase: "response stream wire bytes",
+            limit,
+        },
+        SseIngestionError::EventLimit { limit } => AiProviderError::ResponseTooLarge {
+            phase: "response stream event buffer",
+            limit: limit as u64,
+        },
+        SseIngestionError::OutputLimit { limit } => AiProviderError::ResponseTooLarge {
+            phase: "response stream decoded output",
+            limit: limit as u64,
+        },
+        SseIngestionError::InvalidUtf8 => AiProviderError::Parse(super::coded_error(
+            super::AI_RESPONSE_PARSE_FAILED,
+            "The AI response stream is not valid UTF-8.",
+        )),
+        SseIngestionError::Transport => AiProviderError::Http(super::coded_error(
+            super::AI_RESPONSE_READ_FAILED,
+            "Failed to read the AI response stream.",
+        )),
     }
 }
 
@@ -130,10 +217,11 @@ pub(crate) async fn do_explain_skill_stream(
     let prompt = build_explanation_prompt(&truncated, lang);
     let body = build_stream_request_body(&model, &prompt);
 
-    // Streaming: only connect_timeout (total `.timeout()` would kill long streams).
+    // Long streams use explicit header, idle and total deadlines instead of
+    // reqwest's whole-response `.timeout()`.
     let client = reqwest::Client::builder()
         .user_agent(crate::commands::APP_USER_AGENT)
-        .connect_timeout(Duration::from_secs(10))
+        .connect_timeout(super::AI_CONNECT_TIMEOUT)
         .pool_idle_timeout(Duration::from_secs(90))
         .build()
         .map_err(|e| {
@@ -207,8 +295,16 @@ pub(crate) async fn do_explain_skill_stream(
 
     if !resp.status().is_success() {
         let status = resp.status();
-        let body_text = resp.text().await.unwrap_or_default();
         let status_code = status.as_u16();
+        let body_result = super::read_ai_response_body(
+            resp,
+            super::AI_ERROR_BODY_BYTES,
+            "stream error response body",
+        )
+        .await;
+        if !matches!(status_code, 401 | 403 | 429) {
+            body_result?;
+        }
         let err_kind = if status_code == 401 || status_code == 403 {
             ExplanationErrorKind::Auth
         } else {
@@ -233,7 +329,7 @@ pub(crate) async fn do_explain_skill_stream(
         let err_info = ExplanationErrorInfo {
             code: Some(code.to_string()),
             message: user_msg,
-            details: format!("HTTP {}: {}", status, body_text),
+            details: format!("HTTP {status}"),
             kind: err_kind,
             retryable: status_code == 429,
             fallback_tried: false,
@@ -252,96 +348,40 @@ pub(crate) async fn do_explain_skill_stream(
         ));
     }
 
-    // Stream SSE response
-    let mut stream = resp.bytes_stream();
-    let mut full_text = String::new();
-    let mut sse_buffer = String::new();
-    let mut saw_thinking_delta = false;
-
-    while let Some(chunk_result) = stream.next().await {
-        let chunk = chunk_result.map_err(|e| {
-            AiProviderError::Http(super::coded_error_with_details(
-                super::AI_RESPONSE_READ_FAILED,
-                "Failed to read the AI response stream.",
-                e.to_string(),
-            ))
-        })?;
-        sse_buffer.push_str(&String::from_utf8_lossy(&chunk));
-
-        // Process complete SSE lines
-        while let Some(newline_pos) = sse_buffer.find('\n') {
-            let line = sse_buffer[..newline_pos].trim().to_string();
-            sse_buffer = sse_buffer[newline_pos + 1..].to_string();
-
-            if line.is_empty() || line.starts_with(':') {
-                continue;
-            }
-
-            let data = if let Some(stripped) = line.strip_prefix("data: ") {
-                stripped
-            } else if let Some(stripped) = line.strip_prefix("data:") {
-                stripped.trim()
-            } else {
-                continue;
-            };
-
-            if data == "[DONE]" {
-                continue;
-            }
-
-            let parsed: serde_json::Value = match serde_json::from_str(data) {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-
-            let text_chunk = if is_anthropic {
-                // Anthropic SSE: { "type": "content_block_delta", "delta": { "type": "text_delta", "text": "..." } }
-                let event_type = parsed.get("type").and_then(|t| t.as_str()).unwrap_or("");
-                let delta_type = parsed
-                    .get("delta")
-                    .and_then(|d| d.get("type"))
-                    .and_then(|t| t.as_str())
-                    .unwrap_or("");
-                if event_type == "content_block_delta" && delta_type == "thinking_delta" {
-                    saw_thinking_delta = true;
-                }
-                if event_type == "content_block_delta" {
-                    parsed
-                        .get("delta")
-                        .and_then(|d| d.get("text"))
-                        .and_then(|t| t.as_str())
-                        .unwrap_or("")
-                        .to_string()
-                } else {
-                    String::new()
-                }
-            } else {
-                // OpenAI SSE: { "choices": [{ "delta": { "content": "..." } }] }
-                parsed
-                    .get("choices")
-                    .and_then(|c| c.get(0))
-                    .and_then(|c| c.get("delta"))
-                    .and_then(|d| d.get("content"))
-                    .and_then(|c| c.as_str())
-                    .unwrap_or("")
-                    .to_string()
-            };
-
-            if !text_chunk.is_empty() {
-                full_text.push_str(&text_chunk);
-                let _ = app.emit(
-                    "skill:explanation:chunk",
-                    ExplanationChunkPayload {
-                        skill_id: skill_id.to_string(),
-                        text: text_chunk,
-                    },
-                );
-            }
+    let stream_result = consume_sse_stream(
+        resp.bytes_stream(),
+        is_anthropic,
+        StreamPolicy::default(),
+        |text| {
+            let _ = app.emit(
+                "skill:explanation:chunk",
+                ExplanationChunkPayload {
+                    skill_id: skill_id.to_string(),
+                    text: text.to_string(),
+                },
+            );
+        },
+    )
+    .await;
+    let outcome = match stream_result {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            let err_info = stream_ingestion_error_info(&error);
+            let _ = app.emit(
+                "skill:explanation:error",
+                serde_json::json!({
+                    "skill_id": skill_id,
+                    "error": &err_info.message,
+                    "error_info": err_info,
+                }),
+            );
+            return Err(map_stream_ingestion_error(error));
         }
-    }
+    };
+    let full_text = outcome.full_text;
 
     if !explanation_has_content(&full_text) {
-        let err_info = empty_explanation_error_info(lang, saw_thinking_delta);
+        let err_info = empty_explanation_error_info(lang, outcome.saw_thinking_delta);
         let _ = app.emit(
             "skill:explanation:error",
             serde_json::json!({
@@ -359,7 +399,7 @@ pub(crate) async fn do_explain_skill_stream(
         "skill:explanation:complete",
         ExplanationCompletePayload {
             skill_id: skill_id.to_string(),
-            explanation: Some(full_text.clone()),
+            explanation: Some(full_text),
         },
     );
 

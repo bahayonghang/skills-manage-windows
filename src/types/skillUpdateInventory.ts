@@ -8,7 +8,8 @@ import type {
   CentralRepositoryAdditionUnskipRequest,
 } from "@/types/centralRepositorySync";
 
-export type SkillRefreshScopeKind = "all" | "skills" | "repositories" | "platform";
+export type SkillRefreshScopeKind =
+  "all" | "skills" | "repositories" | "platform";
 export type SkillRefreshMode = "regular" | "sync";
 export type SkillRefreshCachePolicy = "use_fresh" | "bypass";
 
@@ -79,6 +80,17 @@ export interface RemoteMissingSkill {
   diagnostics?: SkillUpdateDiagnostic | null;
 }
 
+export type UnsupportedSkillReasonCode =
+  | "unknown_source"
+  | "unsupported_source_type"
+  | "missing_source_path"
+  | "unsupported_source";
+
+export interface UnsupportedSkill {
+  skillId: string;
+  reasonCode: UnsupportedSkillReasonCode;
+}
+
 export interface PlatformDuplicateGroup {
   agentId: string;
   skillId: string;
@@ -99,9 +111,22 @@ export interface OrphanSkillEntry {
   brokenPath: string;
 }
 
+/**
+ * What the Failed tab may offer on a row: `retryable` re-checks the repository,
+ * `decision_required` re-checks it in incremental mode so the skill lands in the
+ * removal bucket, `unknown` (inventories stored before this field) offers none.
+ */
+export type FailedRepositoryRetry =
+  "retryable" | "decision_required" | "unknown";
+
 export interface FailedRepository {
   repositoryId: string;
   error: string;
+  /** Stable backend code for localizable reasons; absent on older inventories. */
+  errorCode?: string | null;
+  /** Static snapshot acquisition family; absent on older inventories. */
+  diagnosticCategory?: string | null;
+  retry?: FailedRepositoryRetry;
   diagnostics?: SkillUpdateDiagnostic | null;
 }
 
@@ -123,11 +148,15 @@ export interface SkillUpdateInventory {
   updatable: UpdatableSkill[];
   remoteAdded: RemoteAddedSkill[];
   remoteMissing: RemoteMissingSkill[];
+  /** Read-only classification for skills without a queryable remote source. */
+  unsupported?: UnsupportedSkill[];
   platformDuplicates: PlatformDuplicateGroup[];
   deletedPlatformCopies: DeletedPlatformCopyGroup[];
   /** P2 始终空，保留位给未来的 broken symlink / 孤儿副本扫描。 */
   orphans: OrphanSkillEntry[];
   failedRepositories: FailedRepository[];
+  snapshotRetryAttempted?: number | null;
+  snapshotRetryRecovered?: number | null;
   generatedAt: string;
 }
 
@@ -158,6 +187,27 @@ export interface SkillUpdateDecisions {
 export interface SkillUpdateApplyFailure {
   step: string;
   identifier: string;
+  phase?: CentralUpdateFailurePhase | null;
+  error: string;
+  errorCode?: string | null;
+  errorCategory?: string | null;
+}
+
+export type CentralUpdateFailurePhase =
+  | "mutation_lock"
+  | "recovery"
+  | "prepare"
+  | "stage"
+  | "database_commit"
+  | "copy_refresh"
+  | "result_finalization"
+  | "decision_apply";
+
+export interface CentralSkillUpdateFailure {
+  skillId: string;
+  phase?: CentralUpdateFailurePhase | null;
+  errorCode?: string | null;
+  errorCategory?: string | null;
   error: string;
 }
 

@@ -67,6 +67,18 @@ pub enum TargetsError {
         limit: usize,
     },
 
+    #[error("Remote file exceeds the {limit}-byte read limit.")]
+    RemoteFileTooLarge { limit: u64 },
+
+    #[error("Remote file read limit is not supported on this platform.")]
+    RemoteFileReadLimitUnsupported,
+
+    #[error("Remote file size probe returned an invalid response.")]
+    RemoteFileSizeProtocol,
+
+    #[error("Failed to read bounded file through {transport}.")]
+    RemoteFileReadFailed { transport: &'static str },
+
     #[error("Failed to terminate {transport} process tree after {trigger}: {source}")]
     ProcessTerminationFailed {
         transport: &'static str,

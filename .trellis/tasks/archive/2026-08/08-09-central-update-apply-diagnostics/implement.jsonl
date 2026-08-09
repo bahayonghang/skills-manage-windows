@@ -1,0 +1,9 @@
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Map typed failure data from Rust recovery through IPC, Operation Logs, Runtime Logs, i18n, and toast rendering."}
+{"file":".trellis/spec/backend/central-update-batching.md","reason":"Preserve ordered per-skill outcomes, target locking, Local/SSH/WSL batching, and durable update journals."}
+{"file":".trellis/spec/backend/fs-db-operation-journal.md","reason":"Keep recovery fail-closed, journal phases durable, and pending rows isolated to the affected skill."}
+{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"Retain the top-level target guard and avoid nested or unlocked recovery/mutation paths."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Carry typed domain failures and stable codes instead of reconstructing them from Display strings."}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Ensure IPC, Operation Logs, Runtime Logs, exports, and toasts exclude raw paths, URLs, credentials, and transport output."}
+{"file":".trellis/spec/backend/test-support.md","reason":"Use repository fixtures and FakeRunner conventions for Local, SSH, and WSL recovery regressions."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Render reviewed backend codes through i18n and keep user-visible failure feedback actionable and bounded."}
+{"file":".trellis/tasks/08-09-central-update-apply-diagnostics/research/diagnosis.md","reason":"Use the confirmed live-data causal chain, rejected hypotheses, and no-live-mutation safety boundary."}

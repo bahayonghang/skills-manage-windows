@@ -1,5 +1,7 @@
-use crate::services::resource_budget::{BudgetExceeded, ResourceBudget};
-use futures_util::StreamExt;
+use crate::services::bounded_ingestion::{
+    read_response_bytes_bounded, read_response_text_bounded, BoundedReadError, ReadLimit,
+};
+use crate::services::resource_budget::ResourceBudget;
 
 use super::*;
 
@@ -113,54 +115,32 @@ pub(super) async fn read_raw_response_with_budget(
     budget_kind: RawBytesBudget,
     path: &str,
 ) -> Result<Vec<u8>, GithubImportError> {
-    if let Some(content_length) = response.content_length() {
-        reject_raw_bytes_budget(budget, budget_kind, path, content_length)?;
-    }
-
-    let mut bytes = Vec::new();
-    let mut total = 0_u64;
-    let mut stream = response.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| {
-            GithubImportError::Http(format!("Failed to read skill metadata: {}", e))
-        })?;
-        let chunk_len = u64::try_from(chunk.len())
-            .map_err(|_| raw_budget_overflow_error(budget, budget_kind, path))?;
-        total = total
-            .checked_add(chunk_len)
-            .ok_or_else(|| raw_budget_overflow_error(budget, budget_kind, path))?;
-        reject_raw_bytes_budget(budget, budget_kind, path, total)?;
-        bytes.extend_from_slice(&chunk);
-    }
-    Ok(bytes)
+    let limit = match budget_kind {
+        RawBytesBudget::Metadata => ReadLimit::new("GitHub skill metadata", budget.file_bytes),
+        RawBytesBudget::RepositoryFile => {
+            ReadLimit::new("GitHub repository file", budget.archive_entry_bytes)
+        }
+    };
+    read_response_bytes_bounded(response, limit)
+        .await
+        .map_err(|error| map_raw_read_error(error, budget, budget_kind, path))
 }
 
-fn raw_budget_overflow_error(
+fn map_raw_read_error(
+    error: BoundedReadError,
     budget: ResourceBudget,
     budget_kind: RawBytesBudget,
     path: &str,
 ) -> GithubImportError {
-    let (label, limit) = match budget_kind {
-        RawBytesBudget::Metadata => (format!("File '{path}'"), budget.file_bytes),
-        RawBytesBudget::RepositoryFile => (
-            format!("GitHub repository archive entry '{path}'"),
-            budget.archive_entry_bytes,
-        ),
-    };
-    GithubImportError::Budget(BudgetExceeded::new(label, u64::MAX, limit))
-}
-
-fn reject_raw_bytes_budget(
-    budget: ResourceBudget,
-    budget_kind: RawBytesBudget,
-    path: &str,
-    size: u64,
-) -> Result<(), GithubImportError> {
-    match budget_kind {
-        RawBytesBudget::Metadata => budget.reject_file_read_size(path, size),
-        RawBytesBudget::RepositoryFile => budget.reject_archive_entry_size(path, size),
+    if let Some((actual, _)) = error.actual_and_limit() {
+        let budget_error = match budget_kind {
+            RawBytesBudget::Metadata => budget.reject_file_read_size(path, actual),
+            RawBytesBudget::RepositoryFile => budget.reject_archive_entry_size(path, actual),
+        }
+        .expect_err("bounded reader reported an over-limit size");
+        return GithubImportError::Budget(budget_error);
     }
-    .map_err(GithubImportError::Budget)
+    GithubImportError::Http("Failed to read skill metadata.".to_string())
 }
 
 pub(super) fn validate_repo_ref(repo: &GitHubRepoRef) -> Result<(), GithubImportError> {
@@ -176,7 +156,7 @@ fn invalid_repo_component(field: &'static str, value: &str) -> GithubImportError
     }
 }
 
-fn validate_repo_owner(value: &str) -> Result<(), GithubImportError> {
+pub(super) fn validate_repo_owner(value: &str) -> Result<(), GithubImportError> {
     if value.is_empty()
         || value.trim() != value
         || value.starts_with('-')
@@ -190,7 +170,7 @@ fn validate_repo_owner(value: &str) -> Result<(), GithubImportError> {
     Ok(())
 }
 
-fn validate_repo_name(value: &str) -> Result<(), GithubImportError> {
+pub(super) fn validate_repo_name(value: &str) -> Result<(), GithubImportError> {
     if value.is_empty()
         || value.trim() != value
         || matches!(value, "." | "..")
@@ -328,7 +308,40 @@ where
 {
     send_github_request_with_endpoints(
         client,
-        surface,
+        RequestPolicy::standard(surface),
+        GITHUB_MIRROR_ENDPOINTS,
+        true,
+        build_url,
+        failure_prefix,
+        auth_token,
+    )
+    .await
+    .map(|response| response.response)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum GitHubEndpointProvenance {
+    TrustedDirect,
+    Mirror,
+}
+
+pub(super) struct GitHubArchiveInitialResponse {
+    pub(super) response: reqwest::Response,
+    pub(super) provenance: GitHubEndpointProvenance,
+}
+
+pub(super) async fn send_github_archive_request_with_fallback<F>(
+    client: &reqwest::Client,
+    build_url: F,
+    failure_prefix: &str,
+    auth_token: Option<&str>,
+) -> Result<GitHubArchiveInitialResponse, GithubImportError>
+where
+    F: Fn(&GitHubMirrorEndpoint) -> String,
+{
+    send_github_request_with_endpoints(
+        client,
+        RequestPolicy::archive(),
         GITHUB_MIRROR_ENDPOINTS,
         true,
         build_url,
@@ -352,7 +365,31 @@ where
 {
     send_github_request_with_endpoints(
         client,
-        surface,
+        RequestPolicy::standard(surface),
+        endpoints,
+        false,
+        build_url,
+        failure_prefix,
+        auth_token,
+    )
+    .await
+    .map(|response| response.response)
+}
+
+#[cfg(test)]
+pub(super) async fn send_github_archive_request_with_test_endpoints<F>(
+    client: &reqwest::Client,
+    endpoints: &[GitHubMirrorEndpoint],
+    build_url: F,
+    failure_prefix: &str,
+    auth_token: Option<&str>,
+) -> Result<GitHubArchiveInitialResponse, GithubImportError>
+where
+    F: Fn(&GitHubMirrorEndpoint) -> String,
+{
+    send_github_request_with_endpoints(
+        client,
+        RequestPolicy::archive(),
         endpoints,
         false,
         build_url,
@@ -362,20 +399,61 @@ where
     .await
 }
 
+#[derive(Clone, Copy)]
+enum ResponseAcceptance {
+    SuccessOnly,
+    ArchiveInitialRedirect,
+}
+
+impl ResponseAcceptance {
+    fn accepts(self, status: reqwest::StatusCode) -> bool {
+        status.is_success()
+            || matches!(self, Self::ArchiveInitialRedirect)
+                && matches!(
+                    status,
+                    reqwest::StatusCode::MOVED_PERMANENTLY | reqwest::StatusCode::FOUND
+                )
+    }
+}
+
+#[derive(Clone, Copy)]
+struct RequestPolicy {
+    surface: GitHubFetchSurface,
+    acceptance: ResponseAcceptance,
+}
+
+impl RequestPolicy {
+    fn standard(surface: GitHubFetchSurface) -> Self {
+        Self {
+            surface,
+            acceptance: ResponseAcceptance::SuccessOnly,
+        }
+    }
+
+    fn archive() -> Self {
+        Self {
+            surface: GitHubFetchSurface::Api,
+            acceptance: ResponseAcceptance::ArchiveInitialRedirect,
+        }
+    }
+}
+
 async fn send_github_request_with_endpoints<F>(
     client: &reqwest::Client,
-    surface: GitHubFetchSurface,
+    policy: RequestPolicy,
     endpoints: &[GitHubMirrorEndpoint],
     require_https: bool,
     build_url: F,
     failure_prefix: &str,
     auth_token: Option<&str>,
-) -> Result<reqwest::Response, GithubImportError>
+) -> Result<GitHubArchiveInitialResponse, GithubImportError>
 where
     F: Fn(&GitHubMirrorEndpoint) -> String,
 {
+    let surface = policy.surface;
     let mut attempts = Vec::new();
     let mut last_retryable_denial = None;
+    let mut last_archive_error = None;
 
     let endpoint_urls = endpoints
         .iter()
@@ -393,7 +471,12 @@ where
             .iter()
             .filter(|(candidate, _)| candidate.label != "github")
             .any(|(_, candidate_url)| candidate_url == url);
-        if endpoint.label == "github" && !mirrors_share_same_url {
+        let provenance = if endpoint.label == "github" && !mirrors_share_same_url {
+            GitHubEndpointProvenance::TrustedDirect
+        } else {
+            GitHubEndpointProvenance::Mirror
+        };
+        if provenance == GitHubEndpointProvenance::TrustedDirect {
             if let Some(token) = auth_token {
                 request = request.bearer_auth(token);
             }
@@ -438,8 +521,11 @@ where
                         }));
                 }
 
-                if status.is_success() {
-                    return Ok(response);
+                if policy.acceptance.accepts(status) {
+                    return Ok(GitHubArchiveInitialResponse {
+                        response,
+                        provenance,
+                    });
                 }
 
                 if status == reqwest::StatusCode::NOT_FOUND {
@@ -454,10 +540,19 @@ where
                         });
                         continue;
                     }
-                    return Ok(response);
+                    return Ok(GitHubArchiveInitialResponse {
+                        response,
+                        provenance,
+                    });
                 }
 
                 if should_retry_via_mirror_status(surface, status) {
+                    if matches!(
+                        policy.acceptance,
+                        ResponseAcceptance::ArchiveInitialRedirect
+                    ) {
+                        last_archive_error = Some(GithubImportError::ArchiveStatusExhausted);
+                    }
                     attempts.push(MirrorAttemptOutcome {
                         status: Some(status),
                         error_message: format!(
@@ -476,22 +571,34 @@ where
                 )));
             }
             Err(error) => {
+                let archive_error = matches!(
+                    policy.acceptance,
+                    ResponseAcceptance::ArchiveInitialRedirect
+                )
+                .then(|| GithubImportError::from_archive_transport(&error));
                 if is_retryable_github_transport_error(&error) {
+                    if let Some(error) = archive_error {
+                        last_archive_error = Some(error);
+                    }
                     attempts.push(MirrorAttemptOutcome {
                         status: error.status(),
                         error_message: format!(
                             "{} mirror '{}' failed: {}",
                             surface_label(surface),
                             endpoint.label,
-                            error
+                            sanitized_github_transport_error(&error)
                         ),
                     });
                     continue;
                 }
 
+                if let Some(error) = archive_error {
+                    return Err(error);
+                }
                 return Err(GithubImportError::Http(format!(
                     "{}: {}",
-                    failure_prefix, error
+                    failure_prefix,
+                    sanitized_github_transport_error(&error)
                 )));
             }
         }
@@ -499,6 +606,10 @@ where
 
     if let Some(denial) = last_retryable_denial {
         return Err(GithubImportError::from_denial(denial));
+    }
+
+    if let Some(error) = last_archive_error {
+        return Err(error);
     }
 
     Err(GithubImportError::Http(format!(
@@ -524,6 +635,26 @@ pub(super) fn should_retry_via_mirror_status(
 
 pub(super) fn is_retryable_github_transport_error(error: &reqwest::Error) -> bool {
     error.is_timeout() || error.is_connect() || error.is_request() || error.is_body()
+}
+
+pub(super) fn sanitized_github_transport_error(error: &reqwest::Error) -> &'static str {
+    if error.is_timeout() {
+        "request timed out"
+    } else if error.is_connect() {
+        "connection failed"
+    } else if error.is_redirect() {
+        "redirect failed"
+    } else if error.is_body() {
+        "response body failed"
+    } else if error.is_decode() {
+        "response decoding failed"
+    } else if error.is_builder() {
+        "request configuration failed"
+    } else if error.is_request() {
+        "request failed"
+    } else {
+        "network request failed"
+    }
 }
 
 pub(super) fn summarize_mirror_attempts(attempts: &[MirrorAttemptOutcome]) -> String {
@@ -564,7 +695,10 @@ pub(super) async fn parse_github_denial_response(
     }
 
     let headers = response.headers().clone();
-    let body = response.text().await.ok();
+    let body =
+        read_response_text_bounded(response, ReadLimit::new("GitHub error response", 64 * 1024))
+            .await
+            .ok();
     let github_message = body.as_deref().and_then(parse_github_error_message);
 
     let remaining = header_value(&headers, "x-ratelimit-remaining");
@@ -595,7 +729,6 @@ pub(super) async fn parse_github_denial_response(
         kind,
         operation,
         status,
-        github_message,
         used_auth,
     })
 }

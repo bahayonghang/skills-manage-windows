@@ -81,6 +81,22 @@ describe("StartupGate", () => {
     expect(screen.queryByRole("button", { name: "备份并重建数据库" })).not.toBeInTheDocument();
   });
 
+  it("offers no rebuild for a healthy database with incompatible schema metadata", async () => {
+    mockIpcCommand("get_startup_status", {
+      phase: "recovery_required",
+      issue: "schema_initialization_failed",
+      diagnostic: "healthy",
+      canRebuild: false,
+      backupCreated: false,
+    });
+
+    render(<StartupGate><div>app</div></StartupGate>);
+
+    expect(await screen.findByRole("heading", { name: "本地数据需要恢复" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新检查" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "备份并重建数据库" })).not.toBeInTheDocument();
+  });
+
   it("shows a safe inline error without rendering the rejected IPC message", async () => {
     mockIpcCommands({
       get_startup_status: RECOVERY_STATUS,

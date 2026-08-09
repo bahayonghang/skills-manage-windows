@@ -10,6 +10,16 @@ All notable changes to this project will be documented in this file.
 - New Tauri commands `refresh_skill_update_inventory`, `apply_skill_update_decisions`, `clear_skill_update_inventory`, `get_skill_update_inventory`, `scan_platform_duplicate_skills`.
 - New DB table `skill_repository_pending_additions` and column `skill_repositories.last_synced_at` to persist refresh results across sessions.
 - Backend `SkillUpdateStatus` enum replaces the previous string constants.
+- **Central Library** now offers repository/source navigation, top filters, adaptive card grids, layout and density controls, inline tag editing, and per-skill or bulk platform uninstall.
+- Update checks can be scoped to the current platform or selected repositories, with explicit refresh modes, repository progress, retry feedback, and one-click cleanup for stale platform copies.
+- Add target-aware Central state export/import for local, SSH, and WSL targets, including origin metadata, v1 JSON compatibility, and cross-target warnings.
+- Add Reasonix and Grok built-in platform targets, plus an installation-origin navigator that separates SkillPort-managed, repository-linked, and independently installed skills, and usage-count sorting.
+- Add a status and work-queue dashboard with activity and top-tag summaries; expand Usage with platform filters, rankings, heatmaps, provider health, recent calls, and skill details.
+- Add an expanded built-in tag taxonomy, protected custom tags, AI tag proposals requiring review before creation, and an AI task control panel for progress, cancellation, and rate-limit visibility.
+- Add a local runtime diagnostics console with separate Operation and Runtime logs, plus redacted read, export, and cleanup flows.
+- Add unified import for local ZIPs and GitHub repositories, with safe ZIP preview/import, plugin-manifest and file-tree previews, selected subtree import, a tree-manifest fast path with bounded archive fallback, and branch selection.
+- Add secure GitHub import deep links with pending-intent routing and Windows single-instance cold/warm lifecycle handling.
+- Add stable skill identities and a versioned shared `skillport-cli` JSON contract for desktop/CLI interoperability.
 
 ### Changed
 
@@ -18,6 +28,26 @@ All notable changes to this project will be documented in this file.
 - PlatformView's *Scan duplicates* button now opens the Update Center on the *Platform duplicates* tab instead of a standalone dialog.
 - `UnifiedSkillCard` shows additional badges for inventory-only signals (platform duplicate, orphan).
 - `DuplicatePlatformSkillsDialog`, `CentralUpdateConfirmDialog`, `RemoteMissingSkillsDialog`, `CentralRepositorySyncDialog` are marked `@deprecated` and will be removed after one minor release.
+- Central and Platform views now support configurable font fallbacks and type scale, compact typography, semantic status colors, keyboard-shortcut reference, and stronger keyboard focus/accessibility behavior.
+- Remote update and sync operations batch SSH/WSL work, isolate cancellation per job, report bounded progress, and supervise process trees.
+
+### Fixed
+
+- GitHub import now preserves root-level skill content, avoids treating valid top-level `skill/SKILL.md` files as false positives, continues after recoverable preview failures, and removes stale items from deleted repositories.
+- Central refresh and cleanup now stay within the requested target and platform scope, handle repository/path migrations, preserve skipped decisions, and surface failed checks without mixing inventory with the installed baseline.
+- Central mutations and database migrations now recover through versioned backups, foreign-key cleanup, transactional relationship repair, and a recoverable filesystem/database operation journal.
+- Startup database and directory faults now open a recovery flow instead of terminating the desktop app, while invalid target configuration is isolated from healthy targets.
+
+### Security
+
+- GitHub import now enforces bounded resource budgets, constrained raw fetch authorities, and safe fallback paths; remote Central paths reject symbolic-link escapes.
+- Renderer capabilities and credential access are narrowed behind backend policy, and Operation/Runtime logs share a redaction policy for sensitive values.
+
+### Release & CI
+
+- Desktop publishing now validates Windows EXE, NSIS, and MSI Authenticode separately from the updater signature, verifies `latest.json` and checksums, runs install smoke checks, and publishes only after the full artifact set passes validation.
+- Release builds now stage macOS universal CLI and desktop assets portably and keep the Tauri multi-binary entrypoint explicit.
+- CI now parallelizes common and cross-platform gates, adds fail-closed supply-chain and generated-doc drift checks, limits validation to pull requests targeting `dev` or `main`, and deploys one verified Pages artifact.
 
 ## 0.11.0 - 2026-05-11
 

@@ -1,0 +1,13 @@
+{"file":".trellis/tasks/08-03-diagnose-update-check-failure/research/diagnosis.md","reason":"确认实现修复的是已证实的 302 回归且未错误归因到 PAT。"}
+{"file":".trellis/spec/backend/github-import-preview-contract.md","reason":"安全复核 redirect、endpoint、SSRF、auth 与资源预算契约。"}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"检查错误传播使用语义变体和稳定 typed IPC，不依赖字符串判断。"}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"检查 IPC、Operation Log、Runtime Log 与前端状态不存在敏感动态文本。"}
+{"file":".trellis/spec/backend/central-update-inventory-progress.md","reason":"检查 refresh progress 和 inventory persistence 在成功/失败路径均结算。"}
+{"file":".trellis/tasks/08-03-diagnose-update-check-failure/research/all-skills-inventory-gap.md","reason":"复核第二缺陷修复确实覆盖所有 scope skill，且没有越权恢复 provenance。"}
+{"file":".trellis/spec/backend/transactional-mutations.md","reason":"检查 inventory run/entries 原子性、rollback 与 refresh 不触碰安装 baseline。"}
+{"file":".trellis/spec/backend/skill-deletion-integrity.md","reason":"检查 Central 根缺失时 parent/owned relations 保留，且权威空根仍能清理真实 stale 行。"}
+{"file":".trellis/spec/frontend/async-ui-test-stability.md","reason":"检查 unsupported UI、默认 tab、进度语义与 i18n 回归覆盖。"}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"检查定向测试、跨层回归、生成物和完整 just ci 门禁。"}
+{"file":".trellis/tasks/08-03-diagnose-update-check-failure/research/startup-rebuild-provenance-loss.md","reason":"复核实际恢复目录、checksum 和 membership 计数与实现假设一致。"}
+{"file":".trellis/spec/backend/database-migrations.md","reason":"检查 legacy alias 精确绑定版本且未知 checksum 继续失败。"}
+{"file":".trellis/spec/backend/startup-recovery.md","reason":"检查完整健康数据库无法从启动 UI 进入 rebuild。"}

@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Real app icons extracted from /Applications/*.app
@@ -59,7 +60,6 @@ type LobeIconProps = React.SVGProps<SVGSVGElement> & {
 const LOBEHUB_ICONS: Record<string, React.ComponentType<LobeIconProps>> = {
   "claude-code": ClaudeCodeIcon,
   "antigravity": AntigravityIcon,
-  "antigravity-cli": AntigravityIcon,
   grok: GrokIcon,
   "copilot": GithubCopilotIcon,
   "gemini-cli": GeminiCliIcon,
@@ -90,6 +90,21 @@ function PlatformIconComponent({ agentId, className, size = 16 }: PlatformIconPr
         className={cn("shrink-0 rounded-sm", className)}
         aria-hidden
       />
+    );
+  }
+
+  // Antigravity CLI — base product mark plus a terminal badge so it is
+  // statically distinguishable from the plain "antigravity" icon.
+  if (agentId === "antigravity-cli") {
+    return (
+      <span className={cn("relative inline-flex shrink-0", className)} aria-hidden>
+        <AntigravityIcon size={size} className="shrink-0" aria-hidden />
+        <Terminal
+          className="absolute -bottom-1 -right-1 size-2.5 rounded-sm bg-background p-0.5 text-primary ring-1 ring-primary/40"
+          strokeWidth={2.5}
+          aria-hidden
+        />
+      </span>
     );
   }
 

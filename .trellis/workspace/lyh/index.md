@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 81
-- **Last Active**: 2026-08-01
+- **Total Sessions**: 91
+- **Last Active**: 2026-08-09
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~863 | Active |
+| `journal-2.md` | ~1115 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,16 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 91 | 2026-08-09 | 完成 Central 更新失败修复与任务归档 | `c8b4d0a` | `dev` |
+| 90 | 2026-08-07 | 修复 Update Center 失败观测与恢复隔离 | `53e3db69` | `dev` |
+| 89 | 2026-08-05 | Dashboard 与 Central Skills 界面打磨 | `685099c5`, `00134d83` | `dev` |
+| 88 | 2026-08-05 | 完成检查更新故障修复与任务归档 | `d41aa441` | `codex/fix-update-check-archive-redirect` |
+| 87 | 2026-08-03 | 完成 src-tauri 优化父任务验收 | `ae75eb84212d8b65fac0ed3c64336cd9b779aaaa` | `dev` |
+| 86 | 2026-08-03 | 完成 SQL Central 分页下推 | `dc7aa090d097f85da6479669f66829bab08ed284` | `dev` |
+| 85 | 2026-08-03 | Complete transactional metadata mutations | `1dfb7068` | `dev` |
+| 84 | 2026-08-03 | Complete bounded external text ingestion | `c126b3cf` | `dev` |
+| 83 | 2026-08-03 | 完成 GitHub 快照生命周期边界 | `c2aaea06774bc77eed7865255ed6509214ec2491` | `dev` |
+| 82 | 2026-08-03 | Marketplace Central 安装一致性 | `a52591c9` | `dev` |
 | 81 | 2026-08-01 | 工程交付流程优化父任务集成收尾 | `d68387bffdd2f9e0b9f05d978ed925976913ef42`, `d03548d3dbed17a69cef88b5f7ff08e760e6f6ad` | `dev` |
 | 80 | 2026-08-01 | 桌面发布可信度提升交付 | `f4dadb798acf0bdd22f82818379144de9eefe7eb` | `dev` |
 | 79 | 2026-08-01 | 开发与 PR 体验治理交付收尾 | `cc8a12bde9394142d5ac6cb100d2f28e596e1451` | `dev` |

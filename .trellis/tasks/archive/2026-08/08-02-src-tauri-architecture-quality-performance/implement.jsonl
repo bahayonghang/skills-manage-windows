@@ -1,0 +1,5 @@
+{"file":".trellis/tasks/08-02-src-tauri-architecture-quality-performance/research/src-tauri-deep-audit.md","reason":"审计证据、严重度、任务映射和已排除问题的唯一需求源"}
+{"file":".trellis/spec/backend/index.md","reason":"定位所有活动 backend contracts，避免重复或冲突实现"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"实现跨 IPC、service、repository、target 与持久化边界时检查数据流"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"优先复用既有 GitHub import、resource budget、lock、journal 与 transaction helpers"}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"所有 child 和父任务的最终质量门禁"}

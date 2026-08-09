@@ -65,11 +65,10 @@ async fn read_remote_optional_manifest_file(
     manifest_path: &str,
 ) -> Option<Vec<u8>> {
     let remote_path = remote_join(remote_repo_dir, manifest_path);
-    let raw = connection.read_file(&remote_path).await.ok()?;
-    ResourceBudget::default_skill()
-        .reject_file_read_size(&remote_path, raw.len() as u64)
-        .ok()?;
-    Some(raw)
+    connection
+        .read_file_bounded(&remote_path, ResourceBudget::default_skill().file_bytes)
+        .await
+        .ok()
 }
 
 pub(super) fn plugin_manifest_discovery_from_manifest_bytes(

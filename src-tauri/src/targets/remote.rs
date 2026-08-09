@@ -22,6 +22,17 @@ pub enum ConnectedRemoteTarget {
 }
 
 impl ConnectedRemoteTarget {
+    pub fn active_target(&self) -> ActiveTarget {
+        match self {
+            ConnectedRemoteTarget::Ssh(connection) => {
+                ActiveTarget::Ssh(Box::new(connection.target.clone()))
+            }
+            ConnectedRemoteTarget::Wsl(connection) => {
+                ActiveTarget::Wsl(Box::new(connection.target.clone()))
+            }
+        }
+    }
+
     pub fn target_id(&self) -> &str {
         match self {
             ConnectedRemoteTarget::Ssh(connection) => connection.target.id.as_str(),
@@ -170,6 +181,21 @@ impl ConnectedRemoteTarget {
         match self {
             ConnectedRemoteTarget::Ssh(connection) => connection.read_file(path).await,
             ConnectedRemoteTarget::Wsl(connection) => connection.read_file(path).await,
+        }
+    }
+
+    pub async fn read_file_bounded(
+        &self,
+        path: &str,
+        max_bytes: u64,
+    ) -> Result<Vec<u8>, TargetsError> {
+        match self {
+            ConnectedRemoteTarget::Ssh(connection) => {
+                connection.read_file_bounded(path, max_bytes).await
+            }
+            ConnectedRemoteTarget::Wsl(connection) => {
+                connection.read_file_bounded(path, max_bytes).await
+            }
         }
     }
 

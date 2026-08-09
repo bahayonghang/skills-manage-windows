@@ -106,6 +106,15 @@ pub(crate) fn normalize_github_source_url(url: &str) -> Result<String, GithubImp
     Ok(normalized)
 }
 
+pub(crate) fn github_repository_key_from_source(url: &str) -> Result<String, GithubImportError> {
+    let parsed = parse_github_source(url)?;
+    Ok(format!(
+        "{}/{}",
+        parsed.owner.to_ascii_lowercase(),
+        parsed.repo.to_ascii_lowercase()
+    ))
+}
+
 pub(super) fn is_github_shorthand_source(value: &str) -> bool {
     let mut segments = value.split('/').filter(|segment| !segment.is_empty());
     let Some(owner) = segments.next() else {

@@ -1,0 +1,6 @@
+{"file":".trellis/tasks/08-02-src-tauri-architecture-quality-performance/research/src-tauri-deep-audit.md","reason":"复核F5函数范围和非目标"}
+{"file":".trellis/spec/backend/database-migrations.md","reason":"检查FK/cascade/schema和old/new DB tests"}
+{"file":".trellis/spec/backend/central-skill-tags.md","reason":"检查AI/manual/pending replacement行为"}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"检查error text与IPC contract未漂移"}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"故障注入与large batch tests可发现且隔离"}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"执行完整Rust/schema/docs gate"}

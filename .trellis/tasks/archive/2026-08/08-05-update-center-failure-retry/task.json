@@ -1,0 +1,28 @@
+{
+  "id": "update-center-failure-retry",
+  "name": "update-center-failure-retry",
+  "title": "更新中心失败项重试与移除决策自动化",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-08-05",
+  "completedAt": "2026-08-05",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "description": "更新中心 Failed 面板增加单条/批量重试（分片刷新后端合并），常规检查模式在快照内自动完成技能移动/改名归位，取消手动切换模式的要求"
+  }
+}

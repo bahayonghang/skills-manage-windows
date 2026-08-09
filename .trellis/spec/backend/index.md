@@ -3,6 +3,7 @@
 ## Guidelines
 
 - [Central Skill Tags](./central-skill-tags.md)
+- [SQL-Backed Central Skill Pagination](./central-skills-pagination.md)
 - [Best-Effort 写入约定](./best-effort-writes.md)
 - [重 IO 的 spawn_blocking 约定](./spawn-blocking-io.md)
 - [域错误枚举约定（thiserror）](./domain-error-enums.md)
@@ -23,7 +24,10 @@
 - [Local Archive Import Contract](./local-archive-import.md)
 - [Skill Deletion Integrity Contract](./skill-deletion-integrity.md)
 - [Versioned SQLite Migration Contract](./database-migrations.md)
+- [Transactional Metadata and Cache Mutations](./transactional-mutations.md)
 - [Recoverable FS + DB Operation Journal Contract](./fs-db-operation-journal.md)
 - [Settings Domain Boundary and Target Quarantine Contract](./settings-domain-boundary.md)
 - [Exclusive Job Lifecycle Contract](./exclusive-job-lifecycle.md)
+- [Bounded External Text Ingestion Contract](./external-text-ingestion.md)
 - [Recoverable Desktop Startup Contract](./startup-recovery.md)
+- [Update Inventory Retry and Relocation Contract](./update-inventory-retry.md)

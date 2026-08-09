@@ -7,6 +7,7 @@
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, VecDeque};
 use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 
 #[cfg(test)]
 use uuid::Uuid;
@@ -14,6 +15,7 @@ use uuid::Uuid;
 use crate::fs_util::run_blocking_fs_with;
 use crate::services::github_import::{repo_file_relative_to_source, GitHubRepoSnapshot};
 use crate::services::installation::copy_dir_all;
+use crate::services::resource_budget::DEFAULT_ARCHIVE_ENTRY_BYTES;
 use crate::targets::{connect_remote_target, ActiveTarget, ConnectedRemoteTarget};
 
 use super::error::CentralUpdatesError;
@@ -47,7 +49,7 @@ pub(crate) struct RemoteSkillFile {
 /// target type.
 pub(crate) enum CentralFs {
     Local,
-    Remote(Box<ConnectedRemoteTarget>),
+    Remote(Arc<ConnectedRemoteTarget>),
 }
 
 impl CentralFs {
@@ -70,7 +72,7 @@ impl CentralFs {
                 let conn = connect_remote_target(&target)
                     .await
                     .map_err(|e| CentralUpdatesError::Remote(e.to_string()))?;
-                Ok(Self::Remote(Box::new(conn)))
+                Ok(Self::Remote(Arc::new(conn)))
             }
         }
     }
@@ -350,7 +352,7 @@ async fn hash_remote_directory(
                         return Err(CentralUpdatesError::UnsupportedRemotePath(child_path));
                     }
                     let bytes = conn
-                        .read_file(&child_path)
+                        .read_file_bounded(&child_path, DEFAULT_ARCHIVE_ENTRY_BYTES)
                         .await
                         .map_err(|e| CentralUpdatesError::Remote(e.to_string()))?;
                     let digest = Sha256::digest(&bytes);

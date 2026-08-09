@@ -2,7 +2,10 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
 use crate::db::{self, DbPool};
-use crate::services::resource_budget::ResourceBudget;
+use crate::services::{
+    bounded_ingestion::{read_file_text_bounded, BoundedReadError, ReadLimit},
+    resource_budget::{BudgetExceeded, ResourceBudget},
+};
 use crate::targets::{
     connect_remote_target, remote_file_type_is_dir, ActiveTarget, ConnectedRemoteTarget,
 };
@@ -67,21 +70,68 @@ pub async fn read_skill_content_for_target_impl(
             let connection = connect_remote_target(&active_target)
                 .await
                 .map_err(|e| CentralSkillsError::Remote(e.to_string()))?;
-            let bytes = connection
-                .read_file(&skill.file_path)
-                .await
-                .map_err(|e| CentralSkillsError::Remote(e.to_string()))?;
-            String::from_utf8(bytes).map_err(|e| CentralSkillsError::RemoteFileNotUtf8 {
-                path: skill.file_path.clone(),
-                source: e,
-            })
+            read_remote_skill_content(&connection, &skill.file_path).await
         }
     }
 }
 
-fn read_skill_file_content(path: &str) -> Result<String, CentralSkillsError> {
-    std::fs::read_to_string(path)
-        .map_err(|e| CentralSkillsError::io(format!("Failed to read '{}'", path), e))
+pub(super) fn read_skill_file_content(path: &str) -> Result<String, CentralSkillsError> {
+    read_file_text_bounded(
+        Path::new(path),
+        ReadLimit::new(
+            "Local skill file",
+            ResourceBudget::default_skill().file_bytes,
+        ),
+    )
+    .map_err(|error| map_local_file_read_error(error, path))
+}
+
+pub(super) async fn read_remote_skill_content(
+    connection: &ConnectedRemoteTarget,
+    path: &str,
+) -> Result<String, CentralSkillsError> {
+    let max_bytes = ResourceBudget::default_skill().file_bytes;
+    let bytes = connection
+        .read_file_bounded(path, max_bytes)
+        .await
+        .map_err(|error| map_remote_file_read_error(error, max_bytes))?;
+    String::from_utf8(bytes).map_err(|_| CentralSkillsError::SkillFileNotUtf8 { target: "Remote" })
+}
+
+fn map_local_file_read_error(error: BoundedReadError, path: &str) -> CentralSkillsError {
+    match error {
+        BoundedReadError::LimitExceeded { actual, limit, .. } => {
+            CentralSkillsError::Budget(BudgetExceeded::new("Local skill file", actual, limit))
+        }
+        BoundedReadError::InvalidUtf8 { .. } => {
+            CentralSkillsError::SkillFileNotUtf8 { target: "Local" }
+        }
+        BoundedReadError::Io { source, .. } => {
+            CentralSkillsError::io(format!("Failed to read '{path}'"), source)
+        }
+        BoundedReadError::Http { .. } => CentralSkillsError::io(
+            "Failed to read local skill file",
+            std::io::Error::other("read failed"),
+        ),
+    }
+}
+
+fn map_remote_file_read_error(
+    error: crate::targets::TargetsError,
+    max_bytes: u64,
+) -> CentralSkillsError {
+    if matches!(
+        error,
+        crate::targets::TargetsError::RemoteFileTooLarge { .. }
+    ) {
+        CentralSkillsError::Budget(BudgetExceeded::new(
+            "Remote skill file",
+            max_bytes.saturating_add(1),
+            max_bytes,
+        ))
+    } else {
+        CentralSkillsError::Remote(error.to_string())
+    }
 }
 
 pub async fn read_file_by_path_for_target_impl(
@@ -120,11 +170,11 @@ pub(super) fn read_file_by_path_impl(
     if !metadata.is_file() {
         return Err(CentralSkillsError::NotAFile(resolved.display().to_string()));
     }
-    budget
-        .reject_file_read_size(&resolved.to_string_lossy(), metadata.len())
-        .map_err(CentralSkillsError::Budget)?;
-    std::fs::read_to_string(&resolved)
-        .map_err(|e| CentralSkillsError::io(format!("Failed to read '{}'", resolved.display()), e))
+    read_file_text_bounded(
+        &resolved,
+        ReadLimit::new("Local skill file", budget.file_bytes),
+    )
+    .map_err(|error| map_local_file_read_error(error, &resolved.to_string_lossy()))
 }
 
 pub async fn list_directory_tree_for_target_impl(
@@ -392,16 +442,10 @@ async fn read_remote_file_by_path_impl(
         return Err(CentralSkillsError::RemotePathNotFile(allowed_path));
     }
     let bytes = connection
-        .read_file(&allowed_path)
+        .read_file_bounded(&allowed_path, budget.file_bytes)
         .await
-        .map_err(|e| CentralSkillsError::Remote(e.to_string()))?;
-    budget
-        .reject_file_read_size(&allowed_path, bytes.len() as u64)
-        .map_err(CentralSkillsError::Budget)?;
-    String::from_utf8(bytes).map_err(|e| CentralSkillsError::RemoteFileNotUtf8 {
-        path: allowed_path,
-        source: e,
-    })
+        .map_err(|error| map_remote_file_read_error(error, budget.file_bytes))?;
+    String::from_utf8(bytes).map_err(|_| CentralSkillsError::SkillFileNotUtf8 { target: "Remote" })
 }
 
 async fn resolve_skill_access_root(
@@ -458,7 +502,8 @@ mod path_guard_tests {
     use std::sync::Arc;
 
     use crate::targets::{
-        ConnectedRemoteTarget, ConnectedSshTarget, RemoteTargetConfig, SshAuthMethod,
+        ConnectedRemoteTarget, ConnectedSshTarget, ConnectedWslTarget, RemoteTargetConfig,
+        SshAuthMethod, WslTargetConfig,
     };
     use crate::test_support::FakeRunner;
 
@@ -484,6 +529,20 @@ mod path_guard_tests {
         ConnectedRemoteTarget::Ssh(ConnectedSshTarget::for_tests_with_runner(target, runner))
     }
 
+    fn fake_wsl_connection(runner: Arc<FakeRunner>) -> ConnectedRemoteTarget {
+        ConnectedRemoteTarget::Wsl(ConnectedWslTarget::for_tests_with_runner(
+            WslTargetConfig {
+                id: "wsl-test".to_string(),
+                label: "WSL test".to_string(),
+                distribution: "Ubuntu-24.04".to_string(),
+                remote_home: "/home/alice".to_string(),
+                remote_os: "Linux".to_string(),
+                symlink_enabled: true,
+            },
+            runner,
+        ))
+    }
+
     #[test]
     fn local_guard_allows_file_within_skill_root() {
         let temp = TempDir::new().unwrap();
@@ -497,6 +556,31 @@ mod path_guard_tests {
                 .unwrap();
 
         assert_eq!(content, "# hello");
+    }
+
+    #[test]
+    fn local_skill_reads_reject_oversized_and_invalid_utf8_files() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("SKILL.md");
+        std::fs::write(
+            &path,
+            vec![b'a'; ResourceBudget::default_skill().file_bytes as usize + 1],
+        )
+        .unwrap();
+        assert!(matches!(
+            read_skill_file_content(&path.to_string_lossy()).unwrap_err(),
+            CentralSkillsError::Budget(_)
+        ));
+        assert!(!read_skill_file_content(&path.to_string_lossy())
+            .unwrap_err()
+            .to_string()
+            .contains(&path.to_string_lossy().to_string()));
+
+        std::fs::write(&path, [0xff, 0xfe]).unwrap();
+        assert!(matches!(
+            read_skill_file_content(&path.to_string_lossy()).unwrap_err(),
+            CentralSkillsError::SkillFileNotUtf8 { target: "Local" }
+        ));
     }
 
     #[test]
@@ -618,24 +702,52 @@ mod path_guard_tests {
 
     #[tokio::test]
     async fn remote_read_uses_canonical_candidate_for_inspect_and_read() {
-        let runner = Arc::new(FakeRunner::new());
-        runner.push_success("/canonical/skill/docs/README.md\0");
-        runner.push_success("file\t\n");
-        runner.push_success("canonical content");
-        let connection = fake_remote_connection(runner.clone());
+        for make_connection in [fake_remote_connection, fake_wsl_connection] {
+            let runner = Arc::new(FakeRunner::new());
+            runner.push_success("/canonical/skill/docs/README.md\0");
+            runner.push_success("file\t\n");
+            runner.push_success("canonical content");
+            let connection = make_connection(runner.clone());
 
-        let content =
-            read_remote_file_by_path_impl(&connection, "docs-link/README.md", "/install/skill")
-                .await
-                .unwrap();
+            let content =
+                read_remote_file_by_path_impl(&connection, "docs-link/README.md", "/install/skill")
+                    .await
+                    .unwrap();
 
-        assert_eq!(content, "canonical content");
-        let calls = runner.calls();
-        assert_eq!(calls.len(), 3);
-        for call in &calls[1..] {
-            let command = call.args.last().unwrap();
-            assert!(command.contains("/canonical/skill/docs/README.md"));
-            assert!(!command.contains("docs-link"));
+            assert_eq!(content, "canonical content");
+            let calls = runner.calls();
+            assert_eq!(calls.len(), 3);
+            for call in &calls[1..] {
+                let command = call.args.last().unwrap();
+                assert!(command.contains("/canonical/skill/docs/README.md"));
+                assert!(!command.contains("docs-link"));
+            }
+            let read = calls.last().unwrap();
+            assert!(read.args.last().unwrap().contains("wc -c"));
+            assert!(read.args.last().unwrap().contains("bs=1048577 count=1"));
+        }
+    }
+
+    #[tokio::test]
+    async fn remote_main_skill_read_has_ssh_wsl_size_and_utf8_parity() {
+        for make_connection in [fake_remote_connection, fake_wsl_connection] {
+            let runner = Arc::new(FakeRunner::new());
+            runner.push_output(44, "", "secret detail");
+            runner.push_output_bytes(0, &[0xff, 0xfe], &[]);
+            let connection = make_connection(runner);
+
+            assert!(matches!(
+                read_remote_skill_content(&connection, "/remote/SKILL.md")
+                    .await
+                    .unwrap_err(),
+                CentralSkillsError::Budget(_)
+            ));
+            assert!(matches!(
+                read_remote_skill_content(&connection, "/remote/SKILL.md")
+                    .await
+                    .unwrap_err(),
+                CentralSkillsError::SkillFileNotUtf8 { target: "Remote" }
+            ));
         }
     }
 

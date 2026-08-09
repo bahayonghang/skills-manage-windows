@@ -100,57 +100,74 @@ pub(crate) async fn recover_pending_delete_operations_with_transport(
     remote: Option<&crate::targets::ConnectedRemoteTarget>,
 ) -> Result<(), CentralOperationError> {
     for row in db::list_pending_fs_db_operations(pool, target_id).await? {
-        if row.target_kind != target_kind {
-            return Err(CentralOperationError::InvalidManifest(
-                "operation target identity mismatch".to_string(),
-            ));
-        }
         if row.operation_kind != "central_delete" {
             continue;
         }
-        let phase =
-            OperationPhase::from_str(&row.phase).map_err(CentralOperationError::InvalidManifest)?;
-        let OperationManifest::Delete(manifest) = decode_manifest(&row)? else {
-            return Err(CentralOperationError::InvalidManifest(
-                "delete row contains an update manifest".to_string(),
-            ));
-        };
-        let result = match phase {
-            OperationPhase::Prepared | OperationPhase::FsStaged => if let Some(remote) = remote {
-                restore_delete_remote(remote, &manifest).await
-            } else {
-                restore_delete_local(&manifest).await
-            }
-            .map(|()| OperationPhase::RolledBack),
-            OperationPhase::DbCommitted => if let Some(remote) = remote {
-                finalize_delete_remote(remote, &manifest).await
-            } else {
-                finalize_delete_local(&manifest).await
-            }
-            .map(|()| OperationPhase::Completed),
-            OperationPhase::Completed | OperationPhase::RolledBack => continue,
-            _ => Err(CentralOperationError::InvalidManifest(format!(
-                "phase {} is invalid for delete recovery",
-                row.phase
-            ))),
-        };
-        match result {
-            Ok(next) => {
-                db::transition_fs_db_operation(pool, &row.id, &row.phase, next.as_str()).await?
-            }
-            Err(error) => {
-                db::record_fs_db_operation_error(
-                    pool,
-                    &row.id,
-                    error.code(),
-                    &error.redacted_message(),
-                )
-                .await?;
-                return Err(error);
-            }
-        }
+        recover_pending_delete_operation_with_transport(pool, target_id, target_kind, remote, &row)
+            .await?;
     }
     Ok(())
+}
+
+pub(crate) async fn recover_pending_delete_operation_with_transport(
+    pool: &DbPool,
+    target_id: &str,
+    target_kind: &str,
+    remote: Option<&crate::targets::ConnectedRemoteTarget>,
+    row: &FsDbOperationRow,
+) -> Result<(), CentralOperationError> {
+    if row.target_id != target_id || row.target_kind != target_kind {
+        return Err(CentralOperationError::InvalidManifest(
+            "operation target identity mismatch".to_string(),
+        ));
+    }
+    if row.operation_kind != "central_delete" {
+        return Err(CentralOperationError::InvalidManifest(
+            "delete recovery received a non-delete row".to_string(),
+        ));
+    }
+    let phase =
+        OperationPhase::from_str(&row.phase).map_err(CentralOperationError::InvalidManifest)?;
+    let OperationManifest::Delete(manifest) = decode_manifest(row)? else {
+        return Err(CentralOperationError::InvalidManifest(
+            "delete row contains an update manifest".to_string(),
+        ));
+    };
+    let result = match phase {
+        OperationPhase::Prepared | OperationPhase::FsStaged => if let Some(remote) = remote {
+            restore_delete_remote(remote, &manifest).await
+        } else {
+            restore_delete_local(&manifest).await
+        }
+        .map(|()| OperationPhase::RolledBack),
+        OperationPhase::DbCommitted => if let Some(remote) = remote {
+            finalize_delete_remote(remote, &manifest).await
+        } else {
+            finalize_delete_local(&manifest).await
+        }
+        .map(|()| OperationPhase::Completed),
+        OperationPhase::Completed | OperationPhase::RolledBack => return Ok(()),
+        _ => Err(CentralOperationError::InvalidManifest(format!(
+            "phase {} is invalid for delete recovery",
+            row.phase
+        ))),
+    };
+    match result {
+        Ok(next) => {
+            db::transition_fs_db_operation(pool, &row.id, &row.phase, next.as_str()).await?;
+            Ok(())
+        }
+        Err(error) => {
+            db::record_fs_db_operation_error(
+                pool,
+                &row.id,
+                error.code(),
+                &error.redacted_message(),
+            )
+            .await?;
+            Err(error)
+        }
+    }
 }
 
 pub async fn retry_operation(

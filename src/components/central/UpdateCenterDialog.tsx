@@ -19,8 +19,10 @@ import {
   type UpdateCenterTab,
 } from "@/stores/updateCenterStore";
 import type {
+  SkillRefreshMode,
   SkillRefreshScope,
   SkillRefreshScopeKind,
+  SkillUpdateApplyFailure,
 } from "@/types/skillUpdateInventory";
 import type { UpdatableRowState } from "@/components/central/updateCenter/UpdatableTabPanel";
 import {
@@ -55,6 +57,7 @@ const TAB_ORDER: readonly UpdateCenterTab[] = [
   "added",
   "missing",
   "failed",
+  "unsupported",
   "duplicates",
   "deletedPlatformCopies",
   "orphans",
@@ -62,6 +65,21 @@ const TAB_ORDER: readonly UpdateCenterTab[] = [
 
 export function UpdateCenterDialog() {
   const { t } = useTranslation();
+
+  function formatApplyFailure(failure: SkillUpdateApplyFailure): string {
+    const message = formatBackendError(
+      {
+        code: failure.errorCode ?? "central_updates.item_failure",
+        message: t("backendErrors.central_updates.item_failed"),
+        retryable: false,
+      },
+      t,
+    );
+    return t("central.updateCenter.failureToast", {
+      identifier: failure.identifier || "batch",
+      error: message,
+    });
+  }
   const inventory = useUpdateCenterStore((state) => state.inventory);
   const isDialogOpen = useUpdateCenterStore((state) => state.isDialogOpen);
   const isRefreshing = useUpdateCenterStore((state) => state.isRefreshing);
@@ -70,20 +88,32 @@ export function UpdateCenterDialog() {
   const activeTab = useUpdateCenterStore((state) => state.activeTab);
   const refreshContext = useUpdateCenterStore((state) => state.refreshContext);
   const refreshMode = useUpdateCenterStore((state) => state.refreshMode);
-  const lastRefreshedAt = useUpdateCenterStore((state) => state.lastRefreshedAt);
+  const lastRefreshedAt = useUpdateCenterStore(
+    (state) => state.lastRefreshedAt,
+  );
   const error = useUpdateCenterStore((state) => state.error);
   const closeDialog = useUpdateCenterStore((state) => state.closeDialog);
   const refresh = useUpdateCenterStore((state) => state.refresh);
+  const retryRepositories = useUpdateCenterStore(
+    (state) => state.retryRepositories,
+  );
+  const retryingRepositoryIds = useUpdateCenterStore(
+    (state) => state.retryingRepositoryIds,
+  );
   const apply = useUpdateCenterStore((state) => state.apply);
   const clear = useUpdateCenterStore((state) => state.clear);
-  const forceUpdateSkills = useUpdateCenterStore((state) => state.forceUpdateSkills);
+  const forceUpdateSkills = useUpdateCenterStore(
+    (state) => state.forceUpdateSkills,
+  );
   const forceMirrorRepositories = useUpdateCenterStore(
     (state) => state.forceMirrorRepositories,
   );
   const setActiveTab = useUpdateCenterStore((state) => state.setActiveTab);
   const setRefreshMode = useUpdateCenterStore((state) => state.setRefreshMode);
   const skills = useCentralSkillsStore((state) => state.skills ?? []);
-  const repositories = useCentralSkillsStore((state) => state.repositories ?? []);
+  const repositories = useCentralSkillsStore(
+    (state) => state.repositories ?? [],
+  );
 
   const [scopeKind, setScopeKind] = useState<SkillRefreshScopeKind>("all");
   const [decisions, setDecisions] = useState<DecisionState>(emptyDecisionState);
@@ -163,11 +193,7 @@ export function UpdateCenterDialog() {
   }, [isDialogOpen, refreshContext]);
 
   function currentRefreshScope(): SkillRefreshScope {
-    return buildRefreshScope(
-      scopeKind,
-      refreshContext,
-      refreshMode,
-    );
+    return buildRefreshScope(scopeKind, refreshContext, refreshMode);
   }
 
   function handleRefresh() {
@@ -185,19 +211,19 @@ export function UpdateCenterDialog() {
     const payload = buildDecisions(
       decisions,
       inventory,
-      scope.kind === "platform" ? scope.agentIds ?? [] : undefined,
+      scope.kind === "platform" ? (scope.agentIds ?? []) : undefined,
     );
     try {
       const result = await apply(payload, scope);
       const succeeded =
-        result.updatedSkillIds.length
-        + result.keptMissingSkillIds.length
-        + result.deletedSkillIds.length
-        + result.importedSkillIds.length
-        + result.skippedAdditions.length
-        + result.unskippedAdditions.length
-        + result.removedPlatformDuplicatePaths.length
-        + result.removedDeletedPlatformCopyPaths.length;
+        result.updatedSkillIds.length +
+        result.keptMissingSkillIds.length +
+        result.deletedSkillIds.length +
+        result.importedSkillIds.length +
+        result.skippedAdditions.length +
+        result.unskippedAdditions.length +
+        result.removedPlatformDuplicatePaths.length +
+        result.removedDeletedPlatformCopyPaths.length;
       const failedCount = result.failures.length;
       if (failedCount === 0) {
         toast.success(
@@ -211,12 +237,14 @@ export function UpdateCenterDialog() {
           }),
         );
         for (const failure of result.failures.slice(0, 3)) {
-          toast.error(`${failure.step}: ${failure.error}`);
+          toast.error(formatApplyFailure(failure));
         }
       }
     } catch (err) {
       toast.error(
-        t("central.updateCenter.applyError", { error: formatBackendError(err, t) }),
+        t("central.updateCenter.applyError", {
+          error: formatBackendError(err, t),
+        }),
       );
     }
   }
@@ -232,7 +260,7 @@ export function UpdateCenterDialog() {
     const scope = currentRefreshScope();
     const payload = buildDeletedPlatformCopyCleanupDecisions(
       inventory,
-      scope.kind === "platform" ? scope.agentIds ?? [] : undefined,
+      scope.kind === "platform" ? (scope.agentIds ?? []) : undefined,
     );
     setIsCleaningLeftovers(true);
     try {
@@ -253,17 +281,51 @@ export function UpdateCenterDialog() {
           }),
         );
         for (const failure of result.failures.slice(0, 3)) {
-          toast.error(`${failure.step}: ${failure.error}`);
+          toast.error(formatApplyFailure(failure));
         }
       }
     } catch (err) {
       toast.error(
         t("central.updateCenter.deletedPlatformCopies.cleanupAllError", {
-          error: String(err),
+          error: formatBackendError(err, t),
         }),
       );
     } finally {
       setIsCleaningLeftovers(false);
+    }
+  }
+
+  async function handleRetryRepositories(
+    repositoryIds: string[],
+    mode?: SkillRefreshMode,
+  ) {
+    if (repositoryIds.length === 0) return;
+    try {
+      const result = await retryRepositories(
+        repositoryIds,
+        currentRefreshScope(),
+        mode ? { mode } : undefined,
+      );
+      if (result.failed.length === 0) {
+        toast.success(
+          t("central.updateCenter.failed.retrySuccess", {
+            count: result.succeeded.length,
+          }),
+        );
+      } else {
+        toast.error(
+          t("central.updateCenter.failed.retryPartial", {
+            succeeded: result.succeeded.length,
+            failed: result.failed.length,
+          }),
+        );
+      }
+    } catch (err) {
+      toast.error(
+        t("central.updateCenter.failed.retryError", {
+          error: formatBackendError(err, t),
+        }),
+      );
     }
   }
 
@@ -415,6 +477,9 @@ export function UpdateCenterDialog() {
         },
       }));
     },
+    retryRepositories(repositoryIds, mode) {
+      void handleRetryRepositories(repositoryIds, mode);
+    },
   };
 
   return (
@@ -458,6 +523,8 @@ export function UpdateCenterDialog() {
               handlers={handlers}
               existingSkillSources={existingSkillSources}
               repositorySources={repositorySources}
+              retryingRepositoryIds={retryingRepositoryIds}
+              actionsDisabled={isRefreshing || isApplying || isForcing}
             />
           </div>
         </DialogBody>
@@ -476,10 +543,10 @@ export function UpdateCenterDialog() {
             size="sm"
             onClick={handleForceUpdateSelected}
             disabled={
-              isApplying
-              || isRefreshing
-              || isForcing
-              || selectedUpdateIds.length === 0
+              isApplying ||
+              isRefreshing ||
+              isForcing ||
+              selectedUpdateIds.length === 0
             }
           >
             {t("central.updateCenter.forceUpdateSelected", {
@@ -491,17 +558,19 @@ export function UpdateCenterDialog() {
             size="sm"
             onClick={handleCleanAllDeletedPlatformCopies}
             disabled={
-              isApplying
-              || isRefreshing
-              || isForcing
-              || deletedPlatformCopyPathCount === 0
-              || !inventory
+              isApplying ||
+              isRefreshing ||
+              isForcing ||
+              deletedPlatformCopyPathCount === 0 ||
+              !inventory
             }
           >
             {isCleaningLeftovers ? (
               <>
                 <Loader2 className="size-3.5 animate-spin" />
-                {t("central.updateCenter.deletedPlatformCopies.cleanupAllApplying")}
+                {t(
+                  "central.updateCenter.deletedPlatformCopies.cleanupAllApplying",
+                )}
               </>
             ) : (
               <>
@@ -517,11 +586,11 @@ export function UpdateCenterDialog() {
             size="sm"
             onClick={handleForceMirrorRepositories}
             disabled={
-              isApplying
-              || isRefreshing
-              || isForcing
-              || scopeKind !== "repositories"
-              || refreshContext.repositoryIds.length === 0
+              isApplying ||
+              isRefreshing ||
+              isForcing ||
+              scopeKind !== "repositories" ||
+              refreshContext.repositoryIds.length === 0
             }
           >
             {t("central.updateCenter.forceMirrorRepositories")}
@@ -537,7 +606,9 @@ export function UpdateCenterDialog() {
           <Button
             size="sm"
             onClick={handleApplySelected}
-            disabled={isApplying || isForcing || totalSelected === 0 || !inventory}
+            disabled={
+              isApplying || isForcing || totalSelected === 0 || !inventory
+            }
           >
             {(isApplying && !isCleaningLeftovers) || isForcing ? (
               <>

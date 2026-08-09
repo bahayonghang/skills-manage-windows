@@ -1488,6 +1488,281 @@ async fn test_rescan_removes_deleted_skills_from_db() {
         .is_none());
 }
 
+#[tokio::test]
+async fn test_missing_central_root_preserves_skill_identity_and_owned_relations() {
+    let tmp = TempDir::new().unwrap();
+    let central_root = tmp.path().join("central");
+    let offline_root = tmp.path().join("central-offline");
+    let pool = setup_test_db().await;
+
+    sqlx::query("DELETE FROM agents")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM scan_directories")
+        .execute(&pool)
+        .await
+        .unwrap();
+    db::insert_custom_agent(
+        &pool,
+        &db::Agent {
+            id: "central".to_string(),
+            display_name: "Central".to_string(),
+            category: "central".to_string(),
+            global_skills_dir: central_root.to_string_lossy().into_owned(),
+            project_skills_dir: None,
+            icon_name: None,
+            is_detected: false,
+            is_builtin: true,
+            is_enabled: true,
+        },
+    )
+    .await
+    .unwrap();
+    create_skill_dir(
+        &central_root,
+        "central-preserve",
+        &valid_skill_md("Central Preserve", "must survive incomplete scans"),
+    );
+
+    scan_all_skills_impl(&pool).await.unwrap();
+    let original = db::get_skill_by_id(&pool, "central-preserve")
+        .await
+        .unwrap()
+        .expect("central skill should exist after the authoritative scan");
+    let now = chrono::Utc::now().to_rfc3339();
+    sqlx::query(
+        "INSERT INTO skill_update_states (skill_id, source_type, status)
+         VALUES ('central-preserve', 'github', 'up_to_date')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_repositories
+         (id, name, source_type, pinned, is_unknown, created_at, updated_at)
+         VALUES ('central-preserve-repo', 'Central Preserve Repo', 'github', 0, 0, ?, ?)",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_repository_members
+         (skill_id, repository_id, added_at, updated_at)
+         VALUES ('central-preserve', 'central-preserve-repo', ?, ?)",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO collection_skills (collection_id, skill_id, added_at)
+         VALUES ('stale-collection', 'central-preserve', ?)",
+    )
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_tag_links (skill_id, tag_id, source, added_at)
+         VALUES ('central-preserve', 'uncategorized', 'manual', ?)",
+    )
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_ai_tag_reviews
+         (skill_id, tag_id, confidence, status, suggested_at, updated_at)
+         VALUES ('central-preserve', 'uncategorized', 0.5, 'pending', ?, ?)",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO skill_explanations
+         (skill_id, explanation, lang, model, created_at, updated_at)
+         VALUES ('central-preserve', 'preserve', 'en', 'fixture', ?, ?)",
+    )
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    fs::rename(&central_root, &offline_root).unwrap();
+    let result = scan_all_skills_impl(&pool).await.unwrap();
+    assert_eq!(result.skills_by_agent.get("central"), Some(&0));
+
+    let preserved = db::get_skill_by_id(&pool, "central-preserve")
+        .await
+        .unwrap()
+        .expect("a missing Central root must not delete persisted skills");
+    assert_eq!(preserved.uid, original.uid);
+    for table in [
+        "skill_update_states",
+        "skill_repository_members",
+        "collection_skills",
+        "skill_tag_links",
+        "skill_ai_tag_reviews",
+        "skill_explanations",
+        "skill_installations",
+    ] {
+        let count = sqlx::query_scalar::<_, i64>(&format!(
+            "SELECT COUNT(*) FROM {table} WHERE skill_id = 'central-preserve'"
+        ))
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(count, 1, "missing Central root must preserve {table}");
+    }
+    assert!(
+        db::get_skill_repository_by_id(&pool, "central-preserve-repo")
+            .await
+            .unwrap()
+            .is_some(),
+        "missing Central root must not prune the assigned repository"
+    );
+}
+
+#[tokio::test]
+async fn test_central_root_read_failure_aborts_before_stale_reconciliation() {
+    let tmp = TempDir::new().unwrap();
+    let central_root = tmp.path().join("central");
+    let offline_root = tmp.path().join("central-offline");
+    let pool = setup_test_db().await;
+
+    sqlx::query("DELETE FROM agents")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM scan_directories")
+        .execute(&pool)
+        .await
+        .unwrap();
+    db::insert_custom_agent(
+        &pool,
+        &db::Agent {
+            id: "central".to_string(),
+            display_name: "Central".to_string(),
+            category: "central".to_string(),
+            global_skills_dir: central_root.to_string_lossy().into_owned(),
+            project_skills_dir: None,
+            icon_name: None,
+            is_detected: false,
+            is_builtin: true,
+            is_enabled: true,
+        },
+    )
+    .await
+    .unwrap();
+    create_skill_dir(
+        &central_root,
+        "central-preserve",
+        &valid_skill_md("Central Preserve", "must survive failed root enumeration"),
+    );
+
+    scan_all_skills_impl(&pool).await.unwrap();
+    let original = db::get_skill_by_id(&pool, "central-preserve")
+        .await
+        .unwrap()
+        .expect("central skill should exist after the authoritative scan");
+
+    // A file at the configured root is a deterministic cross-platform
+    // read_dir failure. Before the guard, it was published as an empty scan.
+    fs::rename(&central_root, &offline_root).unwrap();
+    fs::write(&central_root, b"not a directory").unwrap();
+
+    let error = scan_all_skills_impl(&pool)
+        .await
+        .expect_err("a Central root read failure must abort before persistence");
+    assert!(matches!(error, ScannerError::CentralRootRead(_)));
+    let preserved = db::get_skill_by_id(&pool, "central-preserve")
+        .await
+        .unwrap()
+        .expect("failed Central enumeration must preserve persisted skills");
+    assert_eq!(preserved.uid, original.uid);
+    assert_eq!(
+        db::get_skill_installations(&pool, "central-preserve")
+            .await
+            .unwrap()
+            .len(),
+        1,
+        "failed Central enumeration must preserve installations",
+    );
+}
+
+#[tokio::test]
+async fn test_existing_empty_central_root_reconciles_stale_skills() {
+    let tmp = TempDir::new().unwrap();
+    let central_root = tmp.path().join("central");
+    let pool = setup_test_db().await;
+
+    sqlx::query("DELETE FROM agents")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM scan_directories")
+        .execute(&pool)
+        .await
+        .unwrap();
+    db::insert_custom_agent(
+        &pool,
+        &db::Agent {
+            id: "central".to_string(),
+            display_name: "Central".to_string(),
+            category: "central".to_string(),
+            global_skills_dir: central_root.to_string_lossy().into_owned(),
+            project_skills_dir: None,
+            icon_name: None,
+            is_detected: false,
+            is_builtin: true,
+            is_enabled: true,
+        },
+    )
+    .await
+    .unwrap();
+    create_skill_dir(
+        &central_root,
+        "central-stale",
+        &valid_skill_md("Central Stale", "removed from an authoritative root"),
+    );
+
+    scan_all_skills_impl(&pool).await.unwrap();
+    fs::remove_dir_all(central_root.join("central-stale")).unwrap();
+    assert!(central_root.is_dir());
+
+    scan_all_skills_impl(&pool).await.unwrap();
+    assert!(
+        db::get_skill_by_id(&pool, "central-stale")
+            .await
+            .unwrap()
+            .is_none(),
+        "a successfully scanned empty Central root must remove stale skills"
+    );
+}
+
+#[test]
+fn parse_skill_md_skips_oversized_and_invalid_utf8_files() {
+    let tmp = TempDir::new().unwrap();
+    let oversized = tmp.path().join("oversized.md");
+    fs::write(
+        &oversized,
+        vec![b'a'; crate::services::resource_budget::DEFAULT_FILE_BYTES as usize + 1],
+    )
+    .unwrap();
+    let invalid = tmp.path().join("invalid.md");
+    fs::write(&invalid, [0xff, 0xfe]).unwrap();
+
+    assert!(parse_skill_md(&oversized).is_none());
+    assert!(parse_skill_md(&invalid).is_none());
+}
+
 // ── Regression: is_central preserved when codex shares the central dir ───
 
 /// When a central-category agent and a coding-category agent (codex) both
