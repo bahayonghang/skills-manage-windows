@@ -7,6 +7,7 @@
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, VecDeque};
 use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 
 #[cfg(test)]
 use uuid::Uuid;
@@ -48,7 +49,7 @@ pub(crate) struct RemoteSkillFile {
 /// target type.
 pub(crate) enum CentralFs {
     Local,
-    Remote(Box<ConnectedRemoteTarget>),
+    Remote(Arc<ConnectedRemoteTarget>),
 }
 
 impl CentralFs {
@@ -71,7 +72,7 @@ impl CentralFs {
                 let conn = connect_remote_target(&target)
                     .await
                     .map_err(|e| CentralUpdatesError::Remote(e.to_string()))?;
-                Ok(Self::Remote(Box::new(conn)))
+                Ok(Self::Remote(Arc::new(conn)))
             }
         }
     }

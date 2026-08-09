@@ -127,6 +127,9 @@
       "relocation_failed": "该技能已移动，但重新绑定新位置失败。",
       "inventory_invariant": "无法完成更新清单。"
     },
+    "central_operation": {
+      "delete_restore_collision": "Central 恢复证据发生冲突。请在操作日志中检查并处理待恢复操作。"
+    },
     "recovery": {
       "reconcile_guard_unavailable": "Central 恢复操作正忙，请稍后重试。",
       "reconcile_preflight_blocked": "prepared 删除操作已不再满足核销条件，请重新预览。",
@@ -1423,6 +1426,7 @@
       "forcingChanges": "正在强制更新…",
       "applySuccess": "已应用 {{count}} 项",
       "applyPartialFailure": "已应用 {{succeeded}} 项，失败 {{failed}} 项",
+      "failureToast": "{{identifier}}：{{error}}",
       "applyError": "应用失败：{{error}}",
       "forceUpdateSelected": "强制更新（{{count}}）",
       "forceUpdateConfirm": "将从远端仓库强制覆盖 {{count}} 个已选 Central skill。Central skill 文件和关联的 copy 安装可能会被替换。",

@@ -130,7 +130,48 @@ pub struct DeleteCentralSkillPreview {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FailedCentralSkillDelete {
     pub skill_id: String,
+    #[serde(default)]
+    pub phase: Option<String>,
+    #[serde(default)]
+    pub error_code: Option<String>,
+    #[serde(default)]
+    pub error_category: Option<String>,
+    #[serde(serialize_with = "serialize_public_delete_error")]
+    #[cfg_attr(feature = "ipc-codegen", specta(type = String))]
     pub error: String,
+}
+
+impl FailedCentralSkillDelete {
+    pub(crate) fn preview_fallback(skill_id: String) -> Self {
+        Self {
+            skill_id,
+            phase: Some("prepare".to_string()),
+            error_code: Some("central_skills.delete_preview_failed".to_string()),
+            error_category: Some("central_skills.validation".to_string()),
+            error: "This Central skill could not be deleted.".to_string(),
+        }
+    }
+
+    pub(crate) fn from_error(
+        skill_id: String,
+        phase: &'static str,
+        error: &super::error::CentralSkillsError,
+    ) -> Self {
+        Self {
+            skill_id,
+            phase: Some(phase.to_string()),
+            error_code: Some(error.stable_delete_error_code()),
+            error_category: Some(error.diagnostic_category().to_string()),
+            error: error.public_delete_message().to_string(),
+        }
+    }
+}
+
+fn serialize_public_delete_error<S>(_: &String, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str("This Central skill could not be deleted.")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

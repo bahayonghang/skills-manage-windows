@@ -71,12 +71,12 @@ pub(crate) async fn force_update_central_skills_impl(
                     reason,
                 });
             }
-            Err(RemoteSkillLoadError::Other(error)) => {
+            Err(RemoteSkillLoadError::Other(_error)) => {
                 result.failed.push(ForceSkillUpdateFailure {
                     skill_id: skill.id.clone(),
                     repository_id: None,
                     source_path: None,
-                    error,
+                    error: "This update item could not be applied.".to_string(),
                 });
             }
         }
@@ -111,7 +111,7 @@ pub(crate) async fn force_update_central_skills_impl(
                 skill_id: skill.id,
                 repository_id: repository_id_for_state_from_db(pool, &before).await?,
                 source_path: before.source_path,
-                error: error.to_string(),
+                error: error.error().public_update_message().to_string(),
             }),
         }
     }
@@ -196,12 +196,14 @@ pub(crate) async fn force_mirror_central_repositories_impl(
                     reason,
                 });
             }
-            Err(RemoteSkillLoadError::Other(error)) => failed_items.push(ForceSkillUpdateFailure {
-                skill_id: skill.id.clone(),
-                repository_id: None,
-                source_path: None,
-                error,
-            }),
+            Err(RemoteSkillLoadError::Other(_error)) => {
+                failed_items.push(ForceSkillUpdateFailure {
+                    skill_id: skill.id.clone(),
+                    repository_id: None,
+                    source_path: None,
+                    error: "This update item could not be applied.".to_string(),
+                })
+            }
         }
     }
     let overwrite_plans = pending_overwrites
@@ -234,7 +236,7 @@ pub(crate) async fn force_mirror_central_repositories_impl(
                 skill_id: skill.id,
                 repository_id: repository_id_for_state_from_db(pool, &before).await?,
                 source_path: before.source_path,
-                error: error.to_string(),
+                error: error.error().public_update_message().to_string(),
             }),
         }
     }

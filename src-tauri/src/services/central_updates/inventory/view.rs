@@ -74,6 +74,8 @@ pub(crate) async fn get_skill_update_inventory_impl_scoped(
         deleted_platform_copies,
         orphans: Vec::new(),
         failed_repositories,
+        snapshot_retry_attempted: None,
+        snapshot_retry_recovered: None,
         generated_at: inventory_generated_at.unwrap_or_else(|| Utc::now().to_rfc3339()),
     })
 }

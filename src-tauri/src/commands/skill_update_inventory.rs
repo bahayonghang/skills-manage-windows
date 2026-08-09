@@ -4,10 +4,8 @@
 //! This module keeps the existing command names and payload shapes stable
 //! while translating `State<AppState>` into service inputs.
 
-use serde::Serialize;
 use serde_json::{json, Value};
-use std::sync::Arc;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 
 use crate::operation_log::{
     target_context_from_active_target, with_operation_log, OperationLogEvent,
@@ -21,12 +19,9 @@ use crate::services::central_updates::inventory::{
     scan_platform_duplicate_skills_with_pool, DeletedPlatformCopyGroup,
     ForceRepositoryMirrorRequest, ForceRepositoryMirrorResult, ForceSkillUpdateRequest,
     ForceSkillUpdateResult, PlatformDuplicateGroup, SkillRefreshMode, SkillRefreshScope,
-    SkillRefreshScopeKind, SkillUpdateApplyResult, SkillUpdateDecisions, SkillUpdateInventory,
+    SkillUpdateApplyResult, SkillUpdateDecisions, SkillUpdateInventory,
 };
-use crate::services::central_updates::{
-    CentralFs, CentralUpdatesError, SnapshotCachePolicy, SnapshotProgressEvent,
-    SnapshotProgressReporter, SnapshotProgressStatus,
-};
+use crate::services::central_updates::{CentralFs, CentralUpdatesError, SnapshotCachePolicy};
 use crate::services::github_import;
 use crate::AppState;
 
@@ -34,18 +29,17 @@ use crate::AppState;
 mod apply_log;
 use apply_log::apply_operation_spec;
 
-const UPDATE_INVENTORY_PROGRESS_EVENT: &str = "central://skill-update-inventory-progress";
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct SkillUpdateInventoryProgressPayload {
-    operation_id: String,
-    status: &'static str,
-    total: usize,
-    completed: usize,
-    repository_key: Option<String>,
-    repository_name: Option<String>,
-}
+#[path = "skill_update_inventory_refresh_log.rs"]
+mod refresh_log;
+use refresh_log::{
+    inventory_progress_reporter, refresh_request_details, refresh_result_details,
+    retry_refresh_result_details, retry_request_details,
+};
+#[cfg(test)]
+use refresh_log::{
+    refresh_failure_diagnostics, REFRESH_FAILURE_CATEGORY_FALLBACK, REFRESH_FAILURE_CODE_FALLBACK,
+    REFRESH_RUNTIME_ACTION, RETRY_RUNTIME_ACTION,
+};
 
 /// Legacy string-error call sites (apply / force update / force mirror) have no
 /// typed domain error to classify, so they report this fixed family instead of
@@ -195,7 +189,7 @@ pub async fn retry_failed_update_repositories(
                     "Retried failed update repositories",
                     "Failed to retry update repositories",
                     request_details,
-                    refresh_result_details,
+                    retry_refresh_result_details,
                 ),
                 || async {
                     let fs = CentralFs::from_active_target(active_target)
@@ -520,65 +514,6 @@ fn merge_details(mut base: Value, extra: Value) -> Value {
     base
 }
 
-fn refresh_request_details(scope: &SkillRefreshScope) -> Value {
-    let kind = match scope.kind {
-        SkillRefreshScopeKind::All => "all",
-        SkillRefreshScopeKind::Skills => "skills",
-        SkillRefreshScopeKind::Repositories => "repositories",
-        SkillRefreshScopeKind::Platform => "platform",
-    };
-    json!({
-        "scopeKind": kind,
-        "requestedSkills": scope.skill_ids.as_ref().map_or(0, Vec::len),
-        "requestedRepositories": scope.repository_ids.as_ref().map_or(0, Vec::len),
-        "requestedAgents": scope.agent_ids.as_ref().map_or(0, Vec::len),
-    })
-}
-
-fn retry_request_details(
-    scope: &SkillRefreshScope,
-    repository_ids: &[String],
-    mode_override: Option<SkillRefreshMode>,
-) -> Value {
-    let mut details = refresh_request_details(scope);
-    details["retriedRepositories"] = json!(repository_ids.len());
-    details["modeOverride"] = json!(mode_override.map(|mode| match mode {
-        SkillRefreshMode::Regular => "regular",
-        SkillRefreshMode::Sync => "sync",
-    }));
-    details
-}
-
-fn inventory_progress_reporter(app: AppHandle, operation_id: String) -> SnapshotProgressReporter {
-    let progress_app = Arc::new(app);
-    Arc::new(move |event: SnapshotProgressEvent| {
-        let payload = SkillUpdateInventoryProgressPayload {
-            operation_id: operation_id.clone(),
-            status: match event.status {
-                SnapshotProgressStatus::Started => "started",
-                SnapshotProgressStatus::RepositoryStarted => "repository_started",
-                SnapshotProgressStatus::RepositoryCompleted => "repository_completed",
-                SnapshotProgressStatus::RepositoryFailed => "repository_failed",
-                SnapshotProgressStatus::Finalizing => "finalizing",
-            },
-            total: event.total,
-            completed: event.completed,
-            repository_key: event.repository_key,
-            repository_name: event.repository_name,
-        };
-        let _ = progress_app.emit(UPDATE_INVENTORY_PROGRESS_EVENT, payload);
-    })
-}
-
-fn refresh_result_details(result: &SkillUpdateInventory) -> Value {
-    json!({
-        "updatable": result.updatable.len(),
-        "remoteAdded": result.remote_added.len(),
-        "remoteMissing": result.remote_missing.len(),
-        "failedRepositories": result.failed_repositories.len(),
-    })
-}
-
 fn apply_request_details(decisions: &SkillUpdateDecisions) -> Value {
     json!({
         "updates": decisions.updates.len(),
@@ -662,6 +597,112 @@ mod tests {
         let details = serde_json::to_string(&error.operation_details()).expect("serialize");
         assert!(!details.contains("secret"));
         assert!(!details.contains("301"));
+    }
+
+    #[test]
+    fn refresh_result_details_bounds_static_failure_items_and_retry_diagnostics() {
+        assert_eq!(REFRESH_RUNTIME_ACTION, "update_center.refresh");
+        assert_eq!(RETRY_RUNTIME_ACTION, "update_center.retry_repositories");
+        assert_ne!(REFRESH_RUNTIME_ACTION, RETRY_RUNTIME_ACTION);
+        let failed_repositories = (0..51)
+            .map(|index| {
+                json!({
+                    "repositoryId": format!("safe-repository-{index:02}"),
+                    "error": "token=secret https://example.invalid owner/private ref=secret C:\\Users\\private response body HTTP 503 reqwest",
+                    "errorCode": if index % 2 == 0 {
+                        "github_import.transport_failed"
+                    } else {
+                        "github_import.response_invalid"
+                    },
+                    "diagnosticCategory": if index % 2 == 0 {
+                        "github_import.archive_timeout"
+                    } else {
+                        "github_import.archive_integrity"
+                    },
+                    "retry": "retryable"
+                })
+            })
+            .collect::<Vec<_>>();
+        let inventory: SkillUpdateInventory = serde_json::from_value(json!({
+            "updatable": [],
+            "remoteAdded": [],
+            "remoteMissing": [],
+            "unsupported": [],
+            "platformDuplicates": [],
+            "deletedPlatformCopies": [],
+            "orphans": [],
+            "failedRepositories": failed_repositories,
+            "generatedAt": "2026-08-09T00:00:00Z",
+            "snapshotRetryAttempted": 3,
+            "snapshotRetryRecovered": 2
+        }))
+        .unwrap();
+
+        let diagnostics = refresh_failure_diagnostics(&inventory);
+        assert_eq!(
+            diagnostics.failure_codes,
+            vec![
+                "github_import.response_invalid".to_string(),
+                "github_import.transport_failed".to_string()
+            ]
+        );
+        assert_eq!(
+            diagnostics.failure_categories,
+            vec![
+                "github_import.archive_integrity".to_string(),
+                "github_import.archive_timeout".to_string()
+            ]
+        );
+        assert_eq!(diagnostics.failure_items.len(), 50);
+        assert_eq!(diagnostics.failure_items_truncated, 1);
+        assert_eq!(diagnostics.retry_attempted, 3);
+        assert_eq!(diagnostics.retry_recovered, 2);
+        assert_eq!(
+            diagnostics.failure_items[0],
+            json!({
+                "repositoryId": "safe-repository-00",
+                "errorCode": "github_import.transport_failed",
+                "errorCategory": "github_import.archive_timeout"
+            })
+        );
+        let details = serde_json::to_string(&refresh_result_details(&inventory)).unwrap();
+        for secret in [
+            "token=secret",
+            "example.invalid",
+            "owner/private",
+            "ref=secret",
+            "Users\\private",
+            "response body",
+            "503",
+            "reqwest",
+        ] {
+            assert!(!details.contains(secret), "leaked {secret}");
+        }
+
+        let hostile: SkillUpdateInventory = serde_json::from_value(json!({
+            "updatable": [],
+            "remoteAdded": [],
+            "remoteMissing": [],
+            "platformDuplicates": [],
+            "orphans": [],
+            "failedRepositories": [{
+                "repositoryId": "https://example.invalid/owner/private?token=secret",
+                "error": "raw response body",
+                "errorCode": "github_import.transport_failed/HTTP503",
+                "diagnosticCategory": "github_import.archive_timeout token=secret",
+                "retry": "retryable"
+            }],
+            "generatedAt": "2026-08-09T00:00:00Z"
+        }))
+        .unwrap();
+        assert_eq!(
+            refresh_failure_diagnostics(&hostile).failure_items[0],
+            json!({
+                "repositoryId": "batch",
+                "errorCode": REFRESH_FAILURE_CODE_FALLBACK,
+                "errorCategory": REFRESH_FAILURE_CATEGORY_FALLBACK,
+            })
+        );
     }
 
     #[test]

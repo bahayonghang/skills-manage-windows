@@ -107,6 +107,8 @@ fn merge_inventory_for_repositories(
     slice: SkillUpdateInventory,
     targets: &RepositoryRetryTargets,
 ) -> SkillUpdateInventory {
+    let snapshot_retry_attempted = slice.snapshot_retry_attempted;
+    let snapshot_retry_recovered = slice.snapshot_retry_recovered;
     let mut updatable = base
         .updatable
         .into_iter()
@@ -148,6 +150,8 @@ fn merge_inventory_for_repositories(
         deleted_platform_copies: base.deleted_platform_copies,
         orphans: base.orphans,
         failed_repositories,
+        snapshot_retry_attempted,
+        snapshot_retry_recovered,
         generated_at: chrono::Utc::now().to_rfc3339(),
     }
 }

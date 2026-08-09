@@ -16,6 +16,10 @@
 
 失败项文案只允许是 `ipc_error::public_message_for_code` 返回的已审阅句子，不得把域错误 Display、传输细节、仓库 URL、本地路径或 token 放进 `error`。技能标识不进文案，需要定位时放 `diagnostics.source_path`。
 
+Snapshot acquisition 写入的失败项还必须带 optional/default `diagnostic_category`，并由同一 typed classifier 同时决定 category 与自动重试资格。refresh/retry 结果携带 optional retry attempted/recovered 计数；旧持久化 inventory 缺少这些字段时读取为 `None`。
+
+refresh/retry Operation Log 最多保存 50 个 `{repositoryId,errorCode,errorCategory}`，保持结果顺序并记录截断数；repository ID 通过有限长度 ASCII allowlist，不安全值降级为固定 `batch`。Runtime Log 只保存排序去重 code/category 与 retry counts，且 refresh/retry 使用各自准确的 action。两层均不得读取 failed row 的动态 `error` 生成诊断。
+
 ## 2. 仓库归属与重试合并语义
 
 ### 2.1 Actionable inventory 的仓库归属

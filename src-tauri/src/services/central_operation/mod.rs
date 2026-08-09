@@ -7,9 +7,11 @@ mod types;
 
 pub use error::CentralOperationError;
 pub use reconcile::{preview_prepared_delete_reconciliation, reconcile_prepared_delete};
-pub(crate) use recovery::recover_pending_delete_operations_with_transport;
-pub(crate) use recovery::recover_pending_operations_under_guard;
 pub use recovery::{list_pending_operations, recover_pending_operations, retry_operation};
+pub(crate) use recovery::{
+    recover_pending_delete_operation_with_transport,
+    recover_pending_delete_operations_with_transport,
+};
 pub use types::{
     CopyProjection, DeleteManifest, ManagedPath, OperationKind, OperationManifest, OperationPhase,
     PendingOperationSummary, PreparedDeleteReconciliationPreview, UpdateManifest, MANIFEST_VERSION,

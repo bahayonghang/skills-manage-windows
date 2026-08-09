@@ -234,6 +234,9 @@ export interface DeleteCentralSkillPreview {
 
 export interface FailedCentralSkillDelete {
   skill_id: string;
+  phase?: string | null;
+  error_code?: string | null;
+  error_category?: string | null;
   error: string;
 }
 
@@ -469,7 +472,7 @@ export interface CentralSkillUpdateProgressPayload {
 
 export interface CentralSkillUpdateResult {
   succeeded: string[];
-  failed: Array<{ skillId: string; error: string }>;
+  failed: import("./skillUpdateInventory").CentralSkillUpdateFailure[];
   skipped: Array<{ skillId: string; reason: string }>;
   states: CentralSkillUpdateState[];
 }

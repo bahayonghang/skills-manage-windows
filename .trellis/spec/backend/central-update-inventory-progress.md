@@ -70,6 +70,9 @@ listen<SkillUpdateInventoryProgressPayload>(
   `unsupported`。
 - `repository_started` 必须在获得 4 路 semaphore permit 后发出；每个已开始仓库必须
   以 completed 或 failed 结算。完成顺序不得成为业务或测试假设。
+- 首轮仍最多 4 路并发且必须全部 settled 后，才可对 typed classifier 标记为安全可重试的
+  timeout/request/body/5xx-exhausted 仓库做一次稳定顺序的串行补偿。补偿成功写入正常 cache；
+  每个唯一仓库只在最终结果时结算一次，内部 retry 不得让 `completed > total`。
 - GitHub archive 的合法 `302 -> codeload` 第二跳属于同一次仓库 snapshot：只有
   bounded archive 读取与 snapshot 构建成功后才发 `repository_completed`。redirect
   校验拒绝、第二跳 3xx 或下载失败必须发 `repository_failed`，且 completed 只递增一次。
@@ -85,6 +88,8 @@ listen<SkillUpdateInventoryProgressPayload>(
 - 已分类的失败必须写 `error_code` + 经审阅的固定文案；域错误 Display、URL、token、路径
   一律不得进入该条目。旧持久化条目缺少 `error_code` 时按 `None` 读取，前端回落到已存
   文案。
+- `FailedRepository.diagnostic_category` 与 inventory 的 retry attempted/recovered 字段均为
+  optional/default 兼容字段。category 与 retry eligibility 必须来自同一个 typed classifier。
 
 ## 4. Validation & Error Matrix
 
@@ -97,6 +102,8 @@ listen<SkillUpdateInventoryProgressPayload>(
 | event emit 失败                                                     | best effort；不得让库存刷新失败                                                                     |
 | 单个仓库下载失败                                                    | 发 `repository_failed`；写入该仓库的 `failed_repositories` 条目；其余仓库继续比较并持久化 inventory |
 | archive redirect 被拒绝或第二跳失败                                 | 同上；条目携带稳定 `error_code`，不写入域错误 Display 文本                                          |
+| 首轮 typed transient 失败且补偿成功                                  | 最终不写 failed repository；progress 只结算 completed 一次；retry recovered 加一                   |
+| invalid ref、redirect、denial、not found、parse/integrity 或 budget 失败 | 不自动重试；保留最终 typed category                                                                |
 | 同一 repository 产生多个失败原因                                    | 只保留第一条（snapshot 获取失败优先），避免 entry 主键冲突                                          |
 | archive redirect 第二跳成功并构建 snapshot                          | 发 `repository_completed`；继续比较与最终持久化                                                     |
 | scope 有 141 skills，但只有 7 个 skills 归属 1 个 GitHub repository | progress `total=1`；仍分类全部 141 个 skills，并把其余无法查询项持久化为 `unsupported`              |
@@ -125,6 +132,8 @@ listen<SkillUpdateInventoryProgressPayload>(
   `skill_update_states` 仍逐字段不变。
 - Rust 快照聚合：一个仓库失败时其余仓库快照必须保留；fail-fast 包装器仍对首个失败返回
   Err，供沿用旧契约的调用方使用。
+- Rust retry matrix：timeout/request/body/5xx 最多补偿一次且串行峰值为 1；policy/auth/not-found/
+  parse/integrity/budget 调用次数保持 1；稳定顺序与最终一次性 progress settlement 必须断言。
 - Rust inventory：同一 scope 同时包含 queryable、up-to-date、unassigned、unsupported-source
   和 invalid-source-path skills；断言 repository `total` 去重、unsupported reason、无错误网络
   请求、run/entry reload，以及 refresh 前后 `skill_update_states` 逐字段一致。

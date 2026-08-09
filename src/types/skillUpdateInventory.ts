@@ -124,6 +124,8 @@ export interface FailedRepository {
   error: string;
   /** Stable backend code for localizable reasons; absent on older inventories. */
   errorCode?: string | null;
+  /** Static snapshot acquisition family; absent on older inventories. */
+  diagnosticCategory?: string | null;
   retry?: FailedRepositoryRetry;
   diagnostics?: SkillUpdateDiagnostic | null;
 }
@@ -153,6 +155,8 @@ export interface SkillUpdateInventory {
   /** P2 始终空，保留位给未来的 broken symlink / 孤儿副本扫描。 */
   orphans: OrphanSkillEntry[];
   failedRepositories: FailedRepository[];
+  snapshotRetryAttempted?: number | null;
+  snapshotRetryRecovered?: number | null;
   generatedAt: string;
 }
 
@@ -183,9 +187,28 @@ export interface SkillUpdateDecisions {
 export interface SkillUpdateApplyFailure {
   step: string;
   identifier: string;
+  phase?: CentralUpdateFailurePhase | null;
   error: string;
   errorCode?: string | null;
   errorCategory?: string | null;
+}
+
+export type CentralUpdateFailurePhase =
+  | "mutation_lock"
+  | "recovery"
+  | "prepare"
+  | "stage"
+  | "database_commit"
+  | "copy_refresh"
+  | "result_finalization"
+  | "decision_apply";
+
+export interface CentralSkillUpdateFailure {
+  skillId: string;
+  phase?: CentralUpdateFailurePhase | null;
+  errorCode?: string | null;
+  errorCategory?: string | null;
+  error: string;
 }
 
 export interface SkillUpdateApplyResult {

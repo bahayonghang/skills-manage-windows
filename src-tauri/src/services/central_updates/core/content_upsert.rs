@@ -58,7 +58,7 @@ async fn journaled_central_content_upsert_with_fs(
             "Central content upsert returned no outcome for skill '{skill_id}'."
         ))
     })?;
-    outcome.result
+    outcome.result.map_err(|error| error.into_error())
 }
 
 fn content_upsert_plan(
@@ -320,13 +320,58 @@ mod tests {
         vec![
             (
                 ssh_runner,
-                CentralFs::Remote(Box::new(ConnectedRemoteTarget::Ssh(ssh))),
+                CentralFs::Remote(Arc::new(ConnectedRemoteTarget::Ssh(ssh))),
             ),
             (
                 wsl_runner,
-                CentralFs::Remote(Box::new(ConnectedRemoteTarget::Wsl(wsl))),
+                CentralFs::Remote(Arc::new(ConnectedRemoteTarget::Wsl(wsl))),
             ),
         ]
+    }
+
+    async fn insert_pending_delete(pool: &DbPool, fs: &CentralFs, skill_id: &str) -> String {
+        let operation_id = format!("pending-delete-{}-{skill_id}", fs.target_kind());
+        let manifest = crate::services::central_operation::OperationManifest::Delete(
+            crate::services::central_operation::DeleteManifest {
+                version: crate::services::central_operation::MANIFEST_VERSION,
+                operation_id: operation_id.clone(),
+                paths: vec![crate::services::central_operation::ManagedPath {
+                    original: format!("/home/tester/.skillsmanage/skills/{skill_id}"),
+                    backup: format!("/home/tester/.skillsmanage/skills/.{skill_id}-backup"),
+                    marker: format!("/home/tester/.skillsmanage/skills/.{skill_id}-marker"),
+                    expected_present: true,
+                    fingerprint: None,
+                }],
+            },
+        );
+        let manifest_json = serde_json::to_string(&manifest).unwrap();
+        crate::db::insert_fs_db_operation(
+            pool,
+            crate::db::NewFsDbOperation {
+                id: &operation_id,
+                batch_id: None,
+                target_id: fs.target_id(),
+                target_kind: fs.target_kind(),
+                operation_kind: "central_delete",
+                skill_id,
+                manifest_version: crate::services::central_operation::MANIFEST_VERSION,
+                manifest_json: &manifest_json,
+                old_fingerprint: None,
+                new_fingerprint: None,
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query(
+            "UPDATE fs_db_operations
+             SET updated_at = '2000-01-01T00:00:00Z'
+             WHERE id = ?",
+        )
+        .bind(&operation_id)
+        .execute(pool)
+        .await
+        .unwrap();
+        operation_id
     }
 
     fn remote_hash_output(
@@ -444,6 +489,70 @@ mod tests {
                 serde_json::from_str(&journal.get::<String, _>("manifest_json"))
                     .expect("journal manifest");
             assert_eq!(manifest["payload"]["hadTarget"], false);
+        }
+    }
+
+    #[tokio::test]
+    async fn fake_ssh_and_wsl_skip_unrelated_pending_recovery_rows() {
+        let snapshot = snapshot();
+        let files =
+            collect_remote_skill_files(&snapshot, "skills/safe-skill").expect("remote skill files");
+
+        for (runner, fs) in fake_remote_filesystems(files.clone()) {
+            let pool = crate::test_support::mem_pool().await;
+            let operation_id = insert_pending_delete(&pool, &fs, "unrelated").await;
+
+            let state =
+                journaled_central_content_upsert_with_fs(&pool, &fs, input(&snapshot)).await;
+
+            assert!(state.is_ok(), "{state:?}");
+            let row = crate::db::get_fs_db_operation(&pool, &operation_id)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(row.phase, "prepared");
+            assert_eq!(row.updated_at, "2000-01-01T00:00:00Z");
+            assert!(row.last_error_code.is_none());
+            let scripts = runner.scripts.lock().unwrap().join("\n");
+            assert!(!scripts.contains("unrelated"));
+        }
+    }
+
+    #[tokio::test]
+    async fn fake_ssh_and_wsl_report_selected_pending_recovery_per_skill() {
+        let snapshot = snapshot();
+        let files =
+            collect_remote_skill_files(&snapshot, "skills/safe-skill").expect("remote skill files");
+
+        for (runner, fs) in fake_remote_filesystems(files) {
+            let pool = crate::test_support::mem_pool().await;
+            let operation_id = insert_pending_delete(&pool, &fs, "safe-skill").await;
+            let plan = content_upsert_plan(input(&snapshot), "local-before".to_string()).unwrap();
+
+            let outcomes = update_skills_batch(&pool, &fs, vec![plan], None).await;
+
+            let error = outcomes[0].result.as_ref().unwrap_err();
+            assert_eq!(
+                error.phase,
+                crate::services::central_updates::CentralUpdateFailurePhase::Recovery
+            );
+            assert_eq!(
+                error.error().stable_error_code(),
+                "central_operation.remote_fingerprint_protocol"
+            );
+            let row = crate::db::get_fs_db_operation(&pool, &operation_id)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(row.target_id, fs.target_id());
+            assert_eq!(row.target_kind, fs.target_kind());
+            assert_eq!(row.phase, "prepared");
+            assert_eq!(
+                row.last_error_code.as_deref(),
+                Some("remote_fingerprint_protocol")
+            );
+            assert!(runner.stage_archive.lock().unwrap().is_none());
+            assert!(!runner.swapped.load(Ordering::SeqCst));
         }
     }
 }

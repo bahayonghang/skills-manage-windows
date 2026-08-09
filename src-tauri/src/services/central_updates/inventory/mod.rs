@@ -41,7 +41,8 @@ use super::snapshots::{
     CentralUpdateSnapshotCache, SnapshotProgressEvent, SnapshotProgressReporter,
 };
 use super::types::{
-    unsupported_reason_code, RemoteSkillLoadError, SkillUpdateStatus, SnapshotCachePolicy,
+    unsupported_reason_code, CentralUpdateFailurePhase, RemoteSkillLoadError, SkillUpdateStatus,
+    SnapshotCachePolicy,
 };
 
 mod apply_steps;
@@ -227,6 +228,10 @@ pub(crate) async fn compute_skill_update_inventory(
         progress.clone(),
     )
     .await?;
+    let snapshot_retry_attempted =
+        Some(u32::try_from(acquisition.retry_attempted).unwrap_or(u32::MAX));
+    let snapshot_retry_recovered =
+        Some(u32::try_from(acquisition.retry_recovered).unwrap_or(u32::MAX));
     let snapshots = acquisition.snapshots;
     let snapshot_failures = acquisition
         .failures
@@ -241,6 +246,7 @@ pub(crate) async fn compute_skill_update_inventory(
                     .unwrap_or(key),
                 error,
                 error_code,
+                diagnostic_category: Some(failure.error.snapshot_diagnostic_category().to_string()),
                 retry: FailedRepositoryRetry::Retryable,
                 diagnostics: None,
             }
@@ -408,6 +414,7 @@ pub(crate) async fn compute_skill_update_inventory(
                 repository_id: failure.repository_id,
                 error: repository_check_failed_message(),
                 error_code: Some(REPOSITORY_CHECK_FAILED_CODE.to_string()),
+                diagnostic_category: None,
                 retry: FailedRepositoryRetry::Retryable,
                 diagnostics: None,
             });
@@ -465,6 +472,8 @@ pub(crate) async fn compute_skill_update_inventory(
         deleted_platform_copies,
         orphans: Vec::new(),
         failed_repositories,
+        snapshot_retry_attempted,
+        snapshot_retry_recovered,
         generated_at: now,
     })
 }
@@ -543,7 +552,6 @@ pub(crate) async fn apply_skill_update_decisions_impl(
                 result.failures.push(SkillUpdateApplyFailure::new(
                     "import_addition",
                     repository.id,
-                    "GitHub repository URL is unavailable.".to_string(),
                 ));
                 continue;
             }
@@ -586,10 +594,9 @@ pub(crate) async fn apply_skill_update_decisions_impl(
                         .push(imported.imported_skill_id.clone());
                 }
             }
-            Err(error) => result.failures.push(SkillUpdateApplyFailure::new(
+            Err(_error) => result.failures.push(SkillUpdateApplyFailure::new(
                 "import_addition",
                 repository.id,
-                error.to_string(),
             )),
         }
     }
@@ -617,18 +624,19 @@ pub(crate) async fn apply_skill_update_decisions_impl(
             Ok(update_result) => {
                 result.updated_skill_ids = update_result.succeeded;
                 for failure in update_result.failed {
-                    result.failures.push(SkillUpdateApplyFailure::new(
-                        "update",
-                        failure.skill_id,
-                        failure.error,
-                    ));
+                    result
+                        .failures
+                        .push(SkillUpdateApplyFailure::from_central_update(failure));
                 }
             }
-            Err(error) => result.failures.push(SkillUpdateApplyFailure::new(
-                "update",
-                decisions.updates.join(","),
-                error.to_string(),
-            )),
+            Err(error) => result
+                .failures
+                .push(SkillUpdateApplyFailure::from_central_error(
+                    "update",
+                    "batch",
+                    CentralUpdateFailurePhase::DecisionApply,
+                    error,
+                )),
         }
     }
 

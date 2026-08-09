@@ -5,7 +5,7 @@ type GeneratedIpcCommandSpec<Args, Result> = { args: Args; result: Result };
 const command = <Args, Result>() => ({}) as GeneratedIpcCommandSpec<Args, Result>;
 
 export const GENERATED_IPC_COMMANDS = {
-  apply_central_repository_sync: command<{ decisions: CentralRepositorySyncDecisions }, CentralRepositorySyncApplyResult>(),
+  apply_central_repository_sync: command<{ decisions: CentralRepositorySyncDecisions }, CentralRepositorySyncApplyResult_Serialize>(),
   apply_central_store_location_change: command<{ request: CentralStoreLocationApplyRequest }, CentralStoreLocationChangeResult>(),
   apply_local_remote_sync: command<{ request: LocalRemoteSyncApplyRequest }, LocalRemoteSyncApplyResult_Serialize>(),
   batch_install_central_skills: command<{ skillIds: string[]; agentIds: string[]; method: string | null; projectPath: string | null }, CentralBatchInstallResult>(),
@@ -22,10 +22,10 @@ export const GENERATED_IPC_COMMANDS = {
 	agentIds?: string[] | null,
 } | null }, null>(),
   delete_central_skill: command<{ skillId: string; removeAgentIds: string[] }, DeleteCentralSkillResult>(),
-  delete_central_skills: command<{ requests: BatchDeleteCentralSkillRequest[] }, BatchDeleteCentralSkillResult>(),
+  delete_central_skills: command<{ requests: BatchDeleteCentralSkillRequest[] }, BatchDeleteCentralSkillResult_Serialize>(),
   delete_collection: command<{ collectionId: string }, null>(),
-  delete_skill_repository: command<{ repositoryId: string; requests: BatchDeleteCentralSkillRequest[] }, DeleteSkillRepositoryResult>(),
-  force_mirror_central_repositories: command<{ request: ForceRepositoryMirrorRequest }, ForceRepositoryMirrorResult>(),
+  delete_skill_repository: command<{ repositoryId: string; requests: BatchDeleteCentralSkillRequest[] }, DeleteSkillRepositoryResult_Serialize>(),
+  force_mirror_central_repositories: command<{ request: ForceRepositoryMirrorRequest }, ForceRepositoryMirrorResult_Serialize>(),
   force_update_central_skills: command<{ request: ForceSkillUpdateRequest }, ForceSkillUpdateResult>(),
   get_ai_api_key_state: command<{ provider: string | null }, AiApiKeyState_Serialize>(),
   get_central_skill_update_states: command<undefined, SkillUpdateState[]>(),
@@ -149,9 +149,16 @@ export type BatchDeleteCentralSkillRequest = {
 	remove_agent_ids: string[],
 };
 
-export type BatchDeleteCentralSkillResult = {
+export type BatchDeleteCentralSkillResult = BatchDeleteCentralSkillResult_Serialize | BatchDeleteCentralSkillResult_Deserialize;
+
+export type BatchDeleteCentralSkillResult_Deserialize = {
 	succeeded: BatchDeleteCentralSkillSuccess[],
-	failed: FailedCentralSkillDelete[],
+	failed: FailedCentralSkillDelete_Deserialize[],
+};
+
+export type BatchDeleteCentralSkillResult_Serialize = {
+	succeeded: BatchDeleteCentralSkillSuccess[],
+	failed: FailedCentralSkillDelete_Serialize[],
 };
 
 export type BatchDeleteCentralSkillSuccess = {
@@ -219,9 +226,21 @@ export type CentralRepositoryAdditionUnskipRequest = {
 	sourcePath: string,
 };
 
-export type CentralRepositorySyncApplyResult = {
+export type CentralRepositorySyncApplyResult = CentralRepositorySyncApplyResult_Serialize | CentralRepositorySyncApplyResult_Deserialize;
+
+export type CentralRepositorySyncApplyResult_Deserialize = {
 	keptSkillIds: string[],
-	deleteResult: BatchDeleteCentralSkillResult,
+	deleteResult: BatchDeleteCentralSkillResult_Deserialize,
+	importResults: GitHubRepoImportResult[],
+	skippedAdditions: CentralRepositoryAdditionSkipRequest[],
+	unskippedAdditions: CentralRepositoryAdditionUnskipRequest[],
+	failedRepositories: CentralRepositorySyncFailure[],
+	states: SkillUpdateState[],
+};
+
+export type CentralRepositorySyncApplyResult_Serialize = {
+	keptSkillIds: string[],
+	deleteResult: BatchDeleteCentralSkillResult_Serialize,
 	importResults: GitHubRepoImportResult[],
 	skippedAdditions: CentralRepositoryAdditionSkipRequest[],
 	unskippedAdditions: CentralRepositoryAdditionUnskipRequest[],
@@ -293,10 +312,18 @@ export type DeleteCentralSkillResult = {
 	retained_agent_ids: string[],
 };
 
-export type DeleteSkillRepositoryResult = {
+export type DeleteSkillRepositoryResult = DeleteSkillRepositoryResult_Serialize | DeleteSkillRepositoryResult_Deserialize;
+
+export type DeleteSkillRepositoryResult_Deserialize = {
 	repository: SkillRepository,
 	deleted_repository: boolean,
-	delete_result: BatchDeleteCentralSkillResult,
+	delete_result: BatchDeleteCentralSkillResult_Deserialize,
+};
+
+export type DeleteSkillRepositoryResult_Serialize = {
+	repository: SkillRepository,
+	deleted_repository: boolean,
+	delete_result: BatchDeleteCentralSkillResult_Serialize,
 };
 
 export type DeletedPlatformCopyGroup = {
@@ -308,8 +335,21 @@ export type DeletedPlatformCopyGroup = {
 
 export type DuplicateResolution = "overwrite" | "skip" | "rename";
 
-export type FailedCentralSkillDelete = {
+export type FailedCentralSkillDelete = FailedCentralSkillDelete_Serialize | FailedCentralSkillDelete_Deserialize;
+
+export type FailedCentralSkillDelete_Deserialize = {
 	skill_id: string,
+	phase?: string | null,
+	error_code?: string | null,
+	error_category?: string | null,
+	error: string,
+};
+
+export type FailedCentralSkillDelete_Serialize = {
+	skill_id: string,
+	phase: string | null,
+	error_code: string | null,
+	error_category: string | null,
 	error: string,
 };
 
@@ -329,6 +369,12 @@ export type FailedRepository = {
 	 *  for inventories persisted before this field existed.
 	 */
 	errorCode?: string | null,
+	/**
+	 *  Static snapshot acquisition family. This is intentionally separate from
+	 *  the public code so transport subtypes remain diagnosable without raw
+	 *  request, response, URL, or status detail.
+	 */
+	diagnosticCategory?: string | null,
 	retry?: FailedRepositoryRetry,
 	diagnostics?: SkillUpdateDiagnostic | null,
 };
@@ -356,10 +402,21 @@ export type ForceRepositoryMirrorRequest = {
 	removeCopyInstallationsForDeleted?: boolean,
 };
 
-export type ForceRepositoryMirrorResult = {
+export type ForceRepositoryMirrorResult = ForceRepositoryMirrorResult_Serialize | ForceRepositoryMirrorResult_Deserialize;
+
+export type ForceRepositoryMirrorResult_Deserialize = {
 	overwritten: ForceSkillUpdateSuccess[],
 	imported: ImportedGitHubSkillSummary[],
-	deleted: BatchDeleteCentralSkillResult,
+	deleted: BatchDeleteCentralSkillResult_Deserialize,
+	skipped: ForceSkillUpdateSkip[],
+	failedRepositories: FailedRepository[],
+	failedItems: ForceSkillUpdateFailure[],
+};
+
+export type ForceRepositoryMirrorResult_Serialize = {
+	overwritten: ForceSkillUpdateSuccess[],
+	imported: ImportedGitHubSkillSummary[],
+	deleted: BatchDeleteCentralSkillResult_Serialize,
 	skipped: ForceSkillUpdateSkip[],
 	failedRepositories: FailedRepository[],
 	failedItems: ForceSkillUpdateFailure[],
@@ -671,6 +728,8 @@ export type SkillUpdateInventory_Deserialize = {
 	/**  Phase P2 始终空，留位给后续 orphan 扫描（broken symlink / 孤儿 .copy 目录）。 */
 	orphans: OrphanSkillEntry[],
 	failedRepositories: FailedRepository[],
+	snapshotRetryAttempted?: number | null,
+	snapshotRetryRecovered?: number | null,
 	generatedAt: string,
 };
 
@@ -684,6 +743,8 @@ export type SkillUpdateInventory_Serialize = {
 	/**  Phase P2 始终空，留位给后续 orphan 扫描（broken symlink / 孤儿 .copy 目录）。 */
 	orphans: OrphanSkillEntry[],
 	failedRepositories: FailedRepository[],
+	snapshotRetryAttempted: number | null,
+	snapshotRetryRecovered: number | null,
 	generatedAt: string,
 };
 

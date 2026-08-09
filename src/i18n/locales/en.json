@@ -127,6 +127,9 @@
       "relocation_failed": "The moved skill could not be reattached to its new location.",
       "inventory_invariant": "The update inventory could not be finalized."
     },
+    "central_operation": {
+      "delete_restore_collision": "Central recovery evidence conflicts with the current files. Review and resolve the pending operation in Operation Logs."
+    },
     "recovery": {
       "reconcile_guard_unavailable": "Central recovery is busy. Try again shortly.",
       "reconcile_preflight_blocked": "The prepared delete operation no longer passes reconciliation checks. Preview it again.",
@@ -1423,6 +1426,7 @@
       "forcingChanges": "Forcing…",
       "applySuccess": "Applied {{count}} changes",
       "applyPartialFailure": "Applied {{succeeded}}, failed {{failed}}",
+      "failureToast": "{{identifier}}: {{error}}",
       "applyError": "Apply failed: {{error}}",
       "forceUpdateSelected": "Force update ({{count}})",
       "forceUpdateConfirm": "Force overwrite {{count}} selected Central skill(s) from the remote repository. Central skill files and linked copy installations may be replaced.",

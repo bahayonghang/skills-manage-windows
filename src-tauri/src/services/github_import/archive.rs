@@ -251,10 +251,11 @@ async fn finish_repository_archive_response(
         )
         .await
         .unwrap_or_else(|| {
-            GithubImportError::Http(format!(
-                "Failed to download GitHub repository archive: HTTP {}",
-                status
-            ))
+            if status.is_server_error() {
+                GithubImportError::ArchiveStatusExhausted
+            } else {
+                GithubImportError::Http("Failed to download GitHub repository archive.".to_string())
+            }
         }));
     }
 
@@ -267,7 +268,7 @@ async fn finish_repository_archive_response(
         BoundedReadError::LimitExceeded { actual, limit, .. } => GithubImportError::Budget(
             BudgetExceeded::new("GitHub repository archive", actual, limit),
         ),
-        _ => GithubImportError::Http("Failed to read GitHub repository archive.".to_string()),
+        _ => GithubImportError::ArchiveResponseBody,
     })
 }
 
@@ -299,10 +300,7 @@ async fn send_codeload_request(
 }
 
 fn archive_transport_error(error: reqwest::Error) -> GithubImportError {
-    GithubImportError::Http(format!(
-        "Failed to download GitHub repository archive: {}",
-        sanitized_github_transport_error(&error)
-    ))
+    GithubImportError::from_archive_transport(&error)
 }
 
 fn single_archive_location(

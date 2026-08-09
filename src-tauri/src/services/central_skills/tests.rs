@@ -8,6 +8,7 @@ use chrono::Utc;
 use sqlx::SqlitePool;
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 use tempfile::TempDir;
 
 use crate::test_support::mem_pool as setup_test_db;
@@ -126,6 +127,205 @@ fn make_remote_installation(
         symlink_target: None,
         created_at: Utc::now().to_rfc3339(),
     }
+}
+
+async fn insert_pending_delete_collision(pool: &SqlitePool, root: &Path, skill_id: &str) -> String {
+    let operation_id = format!("pending-delete-{skill_id}");
+    let manifest = crate::services::central_operation::OperationManifest::Delete(
+        crate::services::central_operation::DeleteManifest {
+            version: crate::services::central_operation::MANIFEST_VERSION,
+            operation_id: operation_id.clone(),
+            paths: vec![crate::services::central_operation::ManagedPath {
+                original: root
+                    .join(format!("{skill_id}-original"))
+                    .to_string_lossy()
+                    .into_owned(),
+                backup: root
+                    .join(format!("{skill_id}-backup"))
+                    .to_string_lossy()
+                    .into_owned(),
+                marker: root
+                    .join(format!("{skill_id}-marker"))
+                    .to_string_lossy()
+                    .into_owned(),
+                expected_present: true,
+                fingerprint: None,
+            }],
+        },
+    );
+    let manifest_json = serde_json::to_string(&manifest).unwrap();
+    db::insert_fs_db_operation(
+        pool,
+        db::NewFsDbOperation {
+            id: &operation_id,
+            batch_id: None,
+            target_id: "local",
+            target_kind: "local",
+            operation_kind: "central_delete",
+            skill_id,
+            manifest_version: crate::services::central_operation::MANIFEST_VERSION,
+            manifest_json: &manifest_json,
+            old_fingerprint: None,
+            new_fingerprint: None,
+        },
+    )
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE fs_db_operations
+         SET updated_at = '2000-01-01T00:00:00Z'
+         WHERE id = ?",
+    )
+    .bind(&operation_id)
+    .execute(pool)
+    .await
+    .unwrap();
+    operation_id
+}
+
+async fn insert_pending_update(pool: &SqlitePool, root: &Path, skill_id: &str) -> String {
+    let operation_id = format!("pending-update-{skill_id}");
+    let target = root.join(skill_id);
+    let old_fingerprint = crate::services::central_updates::CentralFs::Local
+        .hash_directories(std::slice::from_ref(&target))
+        .await
+        .unwrap()
+        .remove(&target)
+        .expect("pending update target fingerprint");
+    let manifest = crate::services::central_operation::UpdateManifest {
+        version: crate::services::central_operation::MANIFEST_VERSION,
+        operation_id: operation_id.clone(),
+        target: target.to_string_lossy().into_owned(),
+        staging: root
+            .join(format!("{skill_id}-staging"))
+            .to_string_lossy()
+            .into_owned(),
+        backup: root
+            .join(format!("{skill_id}-backup"))
+            .to_string_lossy()
+            .into_owned(),
+        marker: root
+            .join(format!("{skill_id}-marker"))
+            .to_string_lossy()
+            .into_owned(),
+        had_target: true,
+        old_fingerprint: Some(old_fingerprint.clone()),
+        new_fingerprint: "sha256-manifest:selected-update".to_string(),
+        copies: Vec::new(),
+    };
+    let manifest_json = serde_json::to_string(
+        &crate::services::central_operation::OperationManifest::Update(manifest.clone()),
+    )
+    .unwrap();
+    db::insert_fs_db_operation(
+        pool,
+        db::NewFsDbOperation {
+            id: &operation_id,
+            batch_id: None,
+            target_id: "local",
+            target_kind: "local",
+            operation_kind: "central_update",
+            skill_id,
+            manifest_version: crate::services::central_operation::MANIFEST_VERSION,
+            manifest_json: &manifest_json,
+            old_fingerprint: Some(&old_fingerprint),
+            new_fingerprint: Some(&manifest.new_fingerprint),
+        },
+    )
+    .await
+    .unwrap();
+    operation_id
+}
+
+async fn insert_remote_pending_delete_collision(
+    pool: &SqlitePool,
+    target_id: &str,
+    skill_id: &str,
+) -> String {
+    let operation_id = format!("pending-delete-{skill_id}");
+    let root = "/home/alice/.skillsmanage/skills";
+    let manifest = crate::services::central_operation::OperationManifest::Delete(
+        crate::services::central_operation::DeleteManifest {
+            version: crate::services::central_operation::MANIFEST_VERSION,
+            operation_id: operation_id.clone(),
+            paths: vec![crate::services::central_operation::ManagedPath {
+                original: format!("{root}/{skill_id}-original"),
+                backup: format!("{root}/{skill_id}-backup"),
+                marker: format!("{root}/{skill_id}-marker"),
+                expected_present: true,
+                fingerprint: None,
+            }],
+        },
+    );
+    let manifest_json = serde_json::to_string(&manifest).unwrap();
+    db::insert_fs_db_operation(
+        pool,
+        db::NewFsDbOperation {
+            id: &operation_id,
+            batch_id: None,
+            target_id,
+            target_kind: "ssh",
+            operation_kind: "central_delete",
+            skill_id,
+            manifest_version: crate::services::central_operation::MANIFEST_VERSION,
+            manifest_json: &manifest_json,
+            old_fingerprint: None,
+            new_fingerprint: None,
+        },
+    )
+    .await
+    .unwrap();
+    operation_id
+}
+
+async fn insert_remote_pending_update(
+    pool: &SqlitePool,
+    target_id: &str,
+    target_kind: &str,
+    skill_id: &str,
+) -> String {
+    let operation_id = format!("pending-update-{target_kind}-{skill_id}");
+    let root = "/home/alice/.skillsmanage/skills";
+    let target = format!("{root}/{skill_id}");
+    let empty_fingerprint = concat!(
+        "sha256-manifest:",
+        "e3b0c44298fc1c149afbf4c8996fb924",
+        "27ae41e4649b934ca495991b7852b855"
+    );
+    let manifest = crate::services::central_operation::UpdateManifest {
+        version: crate::services::central_operation::MANIFEST_VERSION,
+        operation_id: operation_id.clone(),
+        target,
+        staging: format!("{root}/.{skill_id}-staging"),
+        backup: format!("{root}/.{skill_id}-backup"),
+        marker: format!("{root}/.{skill_id}-marker"),
+        had_target: true,
+        old_fingerprint: Some(empty_fingerprint.to_string()),
+        new_fingerprint: "sha256-manifest:selected-update".to_string(),
+        copies: Vec::new(),
+    };
+    let manifest_json = serde_json::to_string(
+        &crate::services::central_operation::OperationManifest::Update(manifest.clone()),
+    )
+    .unwrap();
+    db::insert_fs_db_operation(
+        pool,
+        db::NewFsDbOperation {
+            id: &operation_id,
+            batch_id: None,
+            target_id,
+            target_kind,
+            operation_kind: "central_update",
+            skill_id,
+            manifest_version: crate::services::central_operation::MANIFEST_VERSION,
+            manifest_json: &manifest_json,
+            old_fingerprint: Some(empty_fingerprint),
+            new_fingerprint: Some(&manifest.new_fingerprint),
+        },
+    )
+    .await
+    .unwrap();
+    operation_id
 }
 
 #[tokio::test]
@@ -350,8 +550,20 @@ async fn test_preview_remote_delete_rejects_central_path_outside_remote_root() {
         .unwrap();
 
     assert!(result.previews.is_empty());
-    assert_eq!(result.failed[0].skill_id, "outside-remote");
-    assert!(result.failed[0].error.contains("outside remote root"));
+    let failure = &result.failed[0];
+    assert_eq!(failure.skill_id, "outside-remote");
+    assert_eq!(failure.phase.as_deref(), Some("prepare"));
+    assert_eq!(
+        failure.error_code.as_deref(),
+        Some("central_skills.delete_preview_failed")
+    );
+    assert_eq!(
+        failure.error_category.as_deref(),
+        Some("central_skills.validation")
+    );
+    assert_eq!(failure.error, "This Central skill could not be deleted.");
+    let serialized = serde_json::to_string(failure).unwrap();
+    assert!(!serialized.contains("/tmp/outside-remote"));
 }
 
 // ── get_skills_by_agent ───────────────────────────────────────────────────
@@ -867,6 +1079,432 @@ async fn test_batch_delete_central_skills_dedupes_and_merges_copy_agents() {
     assert!(!central_dir.exists());
     assert!(!cursor_copy_dir.exists());
     assert!(!claude_copy_dir.exists());
+}
+
+#[tokio::test]
+async fn delete_selected_skill_ignores_unrelated_pending_collision() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let central_root = temp.path().join("central");
+    let selected_dir = central_root.join("claude-md-improver");
+    write_test_skill_dir(&selected_dir);
+    set_test_central_root(&pool, &central_root).await;
+    db::upsert_skill(
+        &pool,
+        &make_central_skill_at("claude-md-improver", "Claude MD Improver", &selected_dir),
+    )
+    .await
+    .unwrap();
+    let unrelated_operation = insert_pending_delete_collision(&pool, temp.path(), "yao-meta").await;
+    let before = db::get_fs_db_operation(&pool, &unrelated_operation)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let result = delete_central_skill_impl(&pool, "claude-md-improver", &[]).await;
+
+    assert!(result.is_ok(), "{result:?}");
+    assert!(!selected_dir.exists());
+    assert!(db::get_skill_by_id(&pool, "claude-md-improver")
+        .await
+        .unwrap()
+        .is_none());
+    let after = db::get_fs_db_operation(&pool, &unrelated_operation)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(after.phase, before.phase);
+    assert_eq!(after.updated_at, before.updated_at);
+    assert_eq!(after.last_error_code, before.last_error_code);
+    assert_eq!(after.last_error_message, before.last_error_message);
+}
+
+#[tokio::test]
+async fn batch_delete_reports_selected_recovery_collision_and_continues_in_request_order() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let central_root = temp.path().join("central");
+    set_test_central_root(&pool, &central_root).await;
+    for skill_id in ["skill-a", "skill-b"] {
+        let skill_dir = central_root.join(skill_id);
+        write_test_skill_dir(&skill_dir);
+        db::upsert_skill(
+            &pool,
+            &make_central_skill_at(skill_id, skill_id, &skill_dir),
+        )
+        .await
+        .unwrap();
+    }
+    insert_pending_delete_collision(&pool, temp.path(), "skill-a").await;
+
+    let result = delete_central_skills_impl(
+        &pool,
+        &[
+            BatchDeleteCentralSkillRequest {
+                skill_id: "skill-a".to_string(),
+                remove_agent_ids: Vec::new(),
+            },
+            BatchDeleteCentralSkillRequest {
+                skill_id: "skill-b".to_string(),
+                remove_agent_ids: Vec::new(),
+            },
+        ],
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(result.failed.len(), 1);
+    let failure = &result.failed[0];
+    assert_eq!(failure.skill_id, "skill-a");
+    assert_eq!(failure.phase.as_deref(), Some("recovery"));
+    assert_eq!(
+        failure.error_code.as_deref(),
+        Some("central_operation.delete_restore_collision")
+    );
+    assert_eq!(
+        failure.error_category.as_deref(),
+        Some("central_skills.central_operation")
+    );
+    assert_eq!(failure.error, "This Central skill could not be deleted.");
+    assert_eq!(result.succeeded.len(), 1);
+    assert_eq!(result.succeeded[0].skill_id, "skill-b");
+    assert!(central_root.join("skill-a").exists());
+    assert!(!central_root.join("skill-b").exists());
+    let serialized = serde_json::to_string(failure).unwrap();
+    assert!(!serialized.contains(temp.path().to_string_lossy().as_ref()));
+    assert!(!serialized.contains("manifest"));
+}
+
+#[tokio::test]
+async fn batch_delete_recovers_selected_pending_update_before_deleting() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let central_root = temp.path().join("central");
+    set_test_central_root(&pool, &central_root).await;
+    for skill_id in ["skill-with-update", "skill-clear"] {
+        let skill_dir = central_root.join(skill_id);
+        write_test_skill_dir(&skill_dir);
+        db::upsert_skill(
+            &pool,
+            &make_central_skill_at(skill_id, skill_id, &skill_dir),
+        )
+        .await
+        .unwrap();
+    }
+    let operation_id = insert_pending_update(&pool, &central_root, "skill-with-update").await;
+    let result = delete_central_skills_impl(
+        &pool,
+        &[
+            BatchDeleteCentralSkillRequest {
+                skill_id: "skill-with-update".to_string(),
+                remove_agent_ids: Vec::new(),
+            },
+            BatchDeleteCentralSkillRequest {
+                skill_id: "skill-clear".to_string(),
+                remove_agent_ids: Vec::new(),
+            },
+        ],
+    )
+    .await
+    .unwrap();
+
+    assert!(result.failed.is_empty(), "{:?}", result.failed);
+    assert_eq!(result.succeeded.len(), 2);
+    assert_eq!(result.succeeded[0].skill_id, "skill-with-update");
+    assert_eq!(result.succeeded[1].skill_id, "skill-clear");
+    assert!(!central_root.join("skill-with-update").exists());
+    assert!(!central_root.join("skill-clear").exists());
+    let after = db::get_fs_db_operation(&pool, &operation_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(after.phase, "rolled_back");
+    let completed_delete = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM fs_db_operations
+         WHERE skill_id = 'skill-with-update'
+           AND operation_kind = 'central_delete'
+           AND phase = 'completed'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(completed_delete, 1);
+}
+
+#[tokio::test]
+async fn batch_delete_reports_selected_update_recovery_collision_and_continues() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let central_root = temp.path().join("central");
+    set_test_central_root(&pool, &central_root).await;
+    for skill_id in ["skill-with-update", "skill-clear"] {
+        let skill_dir = central_root.join(skill_id);
+        write_test_skill_dir(&skill_dir);
+        db::upsert_skill(
+            &pool,
+            &make_central_skill_at(skill_id, skill_id, &skill_dir),
+        )
+        .await
+        .unwrap();
+    }
+    let operation_id = insert_pending_update(&pool, &central_root, "skill-with-update").await;
+    fs::write(
+        central_root.join("skill-with-update").join("SKILL.md"),
+        "changed after journal preparation",
+    )
+    .unwrap();
+
+    let result = delete_central_skills_impl(
+        &pool,
+        &[
+            BatchDeleteCentralSkillRequest {
+                skill_id: "skill-with-update".to_string(),
+                remove_agent_ids: Vec::new(),
+            },
+            BatchDeleteCentralSkillRequest {
+                skill_id: "skill-clear".to_string(),
+                remove_agent_ids: Vec::new(),
+            },
+        ],
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(result.failed.len(), 1);
+    let failure = &result.failed[0];
+    assert_eq!(failure.skill_id, "skill-with-update");
+    assert_eq!(failure.phase.as_deref(), Some("recovery"));
+    assert_eq!(
+        failure.error_code.as_deref(),
+        Some("central_operation.update_rollback_target_fingerprint")
+    );
+    assert_eq!(
+        failure.error_category.as_deref(),
+        Some("central_updates.central_operation")
+    );
+    assert_eq!(result.succeeded.len(), 1);
+    assert_eq!(result.succeeded[0].skill_id, "skill-clear");
+    assert!(central_root.join("skill-with-update").exists());
+    assert!(!central_root.join("skill-clear").exists());
+    let pending = db::get_fs_db_operation(&pool, &operation_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(pending.phase, "prepared");
+    assert_eq!(
+        pending.last_error_code.as_deref(),
+        Some("update_rollback_target_fingerprint")
+    );
+}
+
+#[tokio::test]
+async fn fake_ssh_batch_delete_filters_pending_rows_and_reuses_one_target_connection() {
+    use crate::targets::{
+        ActiveTarget, ConnectedRemoteTarget, ConnectedSshTarget, RemoteTargetConfig, SshAuthMethod,
+    };
+    use crate::test_support::FakeRunner;
+
+    let pool = crate::test_support::mem_pool_with_home("/home/alice").await;
+    let target = RemoteTargetConfig {
+        id: "ssh-delete-batch".to_string(),
+        label: "SSH delete batch".to_string(),
+        host: "example.invalid".to_string(),
+        username: "alice".to_string(),
+        port: 22,
+        auth_method: SshAuthMethod::Key,
+        key_path: "~/.ssh/id_ed25519".to_string(),
+        credential_key: None,
+        protected_password: None,
+        password: None,
+        remote_home: "/home/alice".to_string(),
+        remote_os: "linux".to_string(),
+        symlink_enabled: true,
+    };
+    let active_target = ActiveTarget::Ssh(Box::new(target.clone()));
+    let runner = Arc::new(FakeRunner::new());
+    let connection = Arc::new(ConnectedRemoteTarget::Ssh(
+        ConnectedSshTarget::for_tests_with_runner(target, runner.clone()),
+    ));
+    let selected_skill_id = "selected-remote";
+    let selected_dir = "/home/alice/.skillsmanage/skills/selected-remote";
+    db::upsert_skill(
+        &pool,
+        &make_remote_central_skill(selected_skill_id, selected_dir),
+    )
+    .await
+    .unwrap();
+    let unrelated_operation =
+        insert_remote_pending_delete_collision(&pool, active_target.id(), "unrelated-remote").await;
+    let before = db::get_fs_db_operation(&pool, &unrelated_operation)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let digest = "a".repeat(64);
+    runner.push_success("");
+    runner.push_success(&digest);
+    runner.push_success("STAGED\n");
+    runner.push_success(&digest);
+    runner.push_success("FINALIZED\n");
+
+    let result = super::delete::delete_central_skills_for_target_with_connection_for_tests(
+        &pool,
+        &active_target,
+        Arc::clone(&connection),
+        &[BatchDeleteCentralSkillRequest {
+            skill_id: selected_skill_id.to_string(),
+            remove_agent_ids: Vec::new(),
+        }],
+        Some("remote-delete-batch"),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(result.succeeded.len(), 1);
+    assert_eq!(result.succeeded[0].skill_id, selected_skill_id);
+    assert!(result.failed.is_empty());
+    assert_eq!(connection.target_id(), active_target.id());
+    assert_eq!(runner.calls().len(), 5);
+    let after = db::get_fs_db_operation(&pool, &unrelated_operation)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(after.phase, before.phase);
+    assert_eq!(after.updated_at, before.updated_at);
+    assert_eq!(after.last_error_code, before.last_error_code);
+    assert_eq!(after.last_error_message, before.last_error_message);
+
+    let selected_operation = sqlx::query_as::<_, (String, String)>(
+        "SELECT target_id, target_kind FROM fs_db_operations WHERE skill_id = ?",
+    )
+    .bind(selected_skill_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        selected_operation,
+        (active_target.id().to_string(), "ssh".to_string())
+    );
+}
+
+#[tokio::test]
+async fn fake_ssh_and_wsl_delete_recover_selected_update_with_one_connection() {
+    use crate::targets::{
+        ActiveTarget, ConnectedRemoteTarget, ConnectedSshTarget, ConnectedWslTarget,
+        RemoteTargetConfig, SshAuthMethod, WslTargetConfig,
+    };
+    use crate::test_support::FakeRunner;
+
+    let ssh_runner = Arc::new(FakeRunner::new());
+    let ssh_target = RemoteTargetConfig {
+        id: "ssh-delete-update-recovery".to_string(),
+        label: "SSH delete update recovery".to_string(),
+        host: "example.invalid".to_string(),
+        username: "alice".to_string(),
+        port: 22,
+        auth_method: SshAuthMethod::Key,
+        key_path: "~/.ssh/id_ed25519".to_string(),
+        credential_key: None,
+        protected_password: None,
+        password: None,
+        remote_home: "/home/alice".to_string(),
+        remote_os: "linux".to_string(),
+        symlink_enabled: true,
+    };
+    let ssh_active = ActiveTarget::Ssh(Box::new(ssh_target.clone()));
+    let ssh_connection = Arc::new(ConnectedRemoteTarget::Ssh(
+        ConnectedSshTarget::for_tests_with_runner(ssh_target, ssh_runner.clone()),
+    ));
+
+    let wsl_runner = Arc::new(FakeRunner::new());
+    let wsl_target = WslTargetConfig {
+        id: "wsl-delete-update-recovery".to_string(),
+        label: "WSL delete update recovery".to_string(),
+        distribution: "TestDistro".to_string(),
+        remote_home: "/home/alice".to_string(),
+        remote_os: "linux".to_string(),
+        symlink_enabled: true,
+    };
+    let wsl_active = ActiveTarget::Wsl(Box::new(wsl_target.clone()));
+    let wsl_connection = Arc::new(ConnectedRemoteTarget::Wsl(
+        ConnectedWslTarget::for_tests_with_runner(wsl_target, wsl_runner.clone()),
+    ));
+
+    for (active_target, connection, runner) in [
+        (ssh_active, ssh_connection, ssh_runner),
+        (wsl_active, wsl_connection, wsl_runner),
+    ] {
+        let pool = crate::test_support::mem_pool_with_home("/home/alice").await;
+        let skill_id = "selected-update";
+        let selected_dir = "/home/alice/.skillsmanage/skills/selected-update";
+        db::upsert_skill(&pool, &make_remote_central_skill(skill_id, selected_dir))
+            .await
+            .unwrap();
+        let operation_id = insert_remote_pending_update(
+            &pool,
+            active_target.id(),
+            match active_target.kind() {
+                crate::targets::TargetKind::Ssh => "ssh",
+                crate::targets::TargetKind::Wsl => "wsl",
+                crate::targets::TargetKind::Local => unreachable!(),
+            },
+            skill_id,
+        )
+        .await;
+
+        runner.push_output(1, "", "");
+        runner.push_success("");
+        runner.push_output(1, "", "");
+        runner.push_success(&format!("ROOT\t{selected_dir}\nEND\t{selected_dir}\n"));
+        runner.push_success("ROLLED_BACK\n");
+        let digest = "a".repeat(64);
+        runner.push_success("");
+        runner.push_success(&digest);
+        runner.push_success("STAGED\n");
+        runner.push_success(&digest);
+        runner.push_success("FINALIZED\n");
+
+        let result = super::delete::delete_central_skills_for_target_with_connection_for_tests(
+            &pool,
+            &active_target,
+            Arc::clone(&connection),
+            &[BatchDeleteCentralSkillRequest {
+                skill_id: skill_id.to_string(),
+                remove_agent_ids: Vec::new(),
+            }],
+            Some("remote-delete-update-recovery"),
+        )
+        .await
+        .unwrap();
+
+        assert!(result.failed.is_empty(), "{:?}", result.failed);
+        assert_eq!(result.succeeded.len(), 1);
+        assert_eq!(connection.target_id(), active_target.id());
+        assert_eq!(runner.calls().len(), 10);
+        assert_eq!(
+            db::get_fs_db_operation(&pool, &operation_id)
+                .await
+                .unwrap()
+                .unwrap()
+                .phase,
+            "rolled_back"
+        );
+        let delete_row = sqlx::query_as::<_, (String, String)>(
+            "SELECT target_id, target_kind FROM fs_db_operations
+             WHERE skill_id = ? AND operation_kind = 'central_delete'",
+        )
+        .bind(skill_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(delete_row.0, active_target.id());
+        let expected_kind = match active_target.kind() {
+            crate::targets::TargetKind::Ssh => "ssh",
+            crate::targets::TargetKind::Wsl => "wsl",
+            crate::targets::TargetKind::Local => unreachable!(),
+        };
+        assert_eq!(delete_row.1, expected_kind);
+    }
 }
 
 #[tokio::test]

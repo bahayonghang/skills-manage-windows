@@ -30,7 +30,7 @@ fn fake_remote_fs() -> (Arc<FakeRunner>, CentralFs) {
     let connection = ConnectedSshTarget::for_tests_with_runner(target, runner.clone());
     (
         runner,
-        CentralFs::Remote(Box::new(ConnectedRemoteTarget::Ssh(connection))),
+        CentralFs::Remote(Arc::new(ConnectedRemoteTarget::Ssh(connection))),
     )
 }
 
@@ -52,7 +52,7 @@ fn fake_remote_update_filesystems() -> Vec<(Arc<FakeRunner>, CentralFs)> {
         (ssh_runner, ssh),
         (
             wsl_runner,
-            CentralFs::Remote(Box::new(ConnectedRemoteTarget::Wsl(wsl))),
+            CentralFs::Remote(Arc::new(ConnectedRemoteTarget::Wsl(wsl))),
         ),
     ]
 }
@@ -544,7 +544,7 @@ async fn remote_batch_write_checks_cancellation_between_chunks() {
         symlink_enabled: true,
     };
     let connection = ConnectedSshTarget::for_tests_with_runner(target, runner.clone());
-    let fs = CentralFs::Remote(Box::new(ConnectedRemoteTarget::Ssh(connection)));
+    let fs = CentralFs::Remote(Arc::new(ConnectedRemoteTarget::Ssh(connection)));
 
     let outcomes = fs
         .write_skill_dirs_atomic_cancellable(
@@ -654,7 +654,7 @@ async fn live_wsl_ten_skill_batch_benchmark() {
         symlink_enabled: true,
     };
     let connection = open_wsl_target(&target).unwrap();
-    let fs = CentralFs::Remote(Box::new(ConnectedRemoteTarget::Wsl(connection)));
+    let fs = CentralFs::Remote(Arc::new(ConnectedRemoteTarget::Wsl(connection)));
     let root = format!("/tmp/skillport-batch-bench-{}", Uuid::new_v4());
     let writes = (0..10)
         .map(|index| {

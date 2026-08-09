@@ -274,6 +274,27 @@ impl CentralUpdatesError {
         }
     }
 
+    pub(crate) fn snapshot_diagnostic_category(&self) -> &'static str {
+        match self {
+            Self::GithubImport(error) => error.snapshot_diagnostic_category(),
+            _ => self.diagnostic_category(),
+        }
+    }
+
+    pub(crate) fn stable_error_code(&self) -> String {
+        if let Self::CentralOperation(error) = self {
+            return format!("central_operation.{}", error.code());
+        }
+        self.reviewed_operation_failure()
+            .map(|(code, _)| code)
+            .unwrap_or("central_updates.update_failed")
+            .to_string()
+    }
+
+    pub(crate) const fn public_update_message(&self) -> &'static str {
+        "This update item could not be applied."
+    }
+
     pub(crate) fn to_ipc_error(&self) -> String {
         match self {
             Self::GithubImport(error) => error.to_ipc_error(),

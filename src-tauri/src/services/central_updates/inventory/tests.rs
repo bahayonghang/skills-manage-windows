@@ -2427,6 +2427,87 @@ async fn apply_delete_missing_removes_skill() {
 }
 
 #[tokio::test]
+async fn apply_delete_missing_preserves_selected_recovery_diagnostics() {
+    let temp = TempDir::new().unwrap();
+    let home = temp.path().to_path_buf();
+    let pool = setup_test_db_with_home(&home).await;
+    let skill_id = "recovery-blocked";
+    let central_dir = home.join(".skillsmanage/skills").join(skill_id);
+    std::fs::create_dir_all(&central_dir).unwrap();
+    std::fs::write(central_dir.join("SKILL.md"), b"---\nname: Blocked\n---").unwrap();
+    db::upsert_skill(&pool, &make_central_skill(skill_id, &central_dir))
+        .await
+        .unwrap();
+
+    let operation_id = "pending-delete-recovery-blocked";
+    let manifest = crate::services::central_operation::OperationManifest::Delete(
+        crate::services::central_operation::DeleteManifest {
+            version: crate::services::central_operation::MANIFEST_VERSION,
+            operation_id: operation_id.to_string(),
+            paths: vec![crate::services::central_operation::ManagedPath {
+                original: home
+                    .join("collision-original")
+                    .to_string_lossy()
+                    .into_owned(),
+                backup: home.join("collision-backup").to_string_lossy().into_owned(),
+                marker: home.join("collision-marker").to_string_lossy().into_owned(),
+                expected_present: true,
+                fingerprint: None,
+            }],
+        },
+    );
+    let manifest_json = serde_json::to_string(&manifest).unwrap();
+    db::insert_fs_db_operation(
+        &pool,
+        db::NewFsDbOperation {
+            id: operation_id,
+            batch_id: None,
+            target_id: "local",
+            target_kind: "local",
+            operation_kind: "central_delete",
+            skill_id,
+            manifest_version: crate::services::central_operation::MANIFEST_VERSION,
+            manifest_json: &manifest_json,
+            old_fingerprint: None,
+            new_fingerprint: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let mut result = SkillUpdateApplyResult::default();
+    apply_delete_missing_step(
+        &pool,
+        &ActiveTarget::Local,
+        &[BatchDeleteCentralSkillRequest {
+            skill_id: skill_id.to_string(),
+            remove_agent_ids: Vec::new(),
+        }],
+        &mut result,
+    )
+    .await;
+
+    assert!(result.deleted_skill_ids.is_empty());
+    assert_eq!(result.failures.len(), 1);
+    let failure = &result.failures[0];
+    assert_eq!(failure.step, "delete_missing");
+    assert_eq!(failure.identifier, skill_id);
+    assert_eq!(failure.phase.as_deref(), Some("recovery"));
+    assert_eq!(
+        failure.error_code.as_deref(),
+        Some("central_operation.delete_restore_collision")
+    );
+    assert_eq!(
+        failure.error_category.as_deref(),
+        Some("central_skills.central_operation")
+    );
+    assert_eq!(failure.error, "This Central skill could not be deleted.");
+    let serialized = serde_json::to_string(failure).unwrap();
+    assert!(!serialized.contains(home.to_string_lossy().as_ref()));
+    assert!(!serialized.contains("manifest"));
+}
+
+#[tokio::test]
 #[ignore = "import 路径需要本地 preview workspace 或 GitHub 网络；core 步骤在其他测试中覆盖"]
 async fn apply_imports_remote_added_and_clears_pending_row() {
     // 占位骨架：apply 的 import 分支无法在不触网的情况下完整测试。
@@ -2859,9 +2940,16 @@ async fn apply_rejects_platform_cleanup_outside_allowed_agents() {
 
     assert_eq!(result.failures.len(), 1);
     assert_eq!(result.failures[0].step, "remove_platform_duplicate");
-    assert!(result.failures[0]
-        .error
-        .contains("outside the allowed platform scope"));
+    assert_eq!(result.failures[0].identifier, "cursor::dup");
+    assert_eq!(result.failures[0].phase.as_deref(), Some("decision_apply"));
+    assert_eq!(
+        result.failures[0].error_code.as_deref(),
+        Some("central_updates.remove_platform_duplicate_failed")
+    );
+    assert_eq!(
+        result.failures[0].error,
+        "This update item could not be applied."
+    );
     assert!(cursor_skill_dir.exists());
     assert!(result.removed_platform_duplicate_paths.is_empty());
 }
@@ -2907,9 +2995,16 @@ async fn apply_rejects_deleted_platform_copy_outside_allowed_agents() {
 
     assert_eq!(result.failures.len(), 1);
     assert_eq!(result.failures[0].step, "remove_deleted_platform_copy");
-    assert!(result.failures[0]
-        .error
-        .contains("outside the allowed platform scope"));
+    assert_eq!(result.failures[0].identifier, "cursor::removed-skill");
+    assert_eq!(result.failures[0].phase.as_deref(), Some("decision_apply"));
+    assert_eq!(
+        result.failures[0].error_code.as_deref(),
+        Some("central_updates.remove_deleted_platform_copy_failed")
+    );
+    assert_eq!(
+        result.failures[0].error,
+        "This update item could not be applied."
+    );
     assert!(cursor_skill_dir.exists());
     assert!(result.removed_deleted_platform_copy_paths.is_empty());
 }

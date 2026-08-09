@@ -119,6 +119,7 @@ pub(super) async fn resolve_regular_mode_relocations(
                     repository_id: item.repository_id.clone(),
                     error: repository_check_failed_message(),
                     error_code: Some(REPOSITORY_CHECK_FAILED_CODE.to_string()),
+                    diagnostic_category: None,
                     retry: FailedRepositoryRetry::Retryable,
                     diagnostics: None,
                 });
@@ -198,6 +199,7 @@ pub(super) async fn resolve_regular_mode_relocations(
                         remote_load_error_message(error)
                     ),
                     error_code: Some(RELOCATION_FAILED_CODE.to_string()),
+                    diagnostic_category: None,
                     retry: FailedRepositoryRetry::Retryable,
                     diagnostics: None,
                 });
@@ -227,6 +229,7 @@ fn source_missing_failure(repository_id: &str, source_path: Option<String>) -> F
             .unwrap_or("The tracked source path no longer contains a skill.")
             .to_string(),
         error_code: Some(SKILL_SOURCE_MISSING_CODE.to_string()),
+        diagnostic_category: None,
         retry: FailedRepositoryRetry::DecisionRequired,
         diagnostics: source_path.map(|source_path| super::SkillUpdateDiagnostic {
             source_url: None,
@@ -347,6 +350,7 @@ pub(super) async fn reconcile_relocated_remote_skills(
                         remote_load_error_message(error)
                     ),
                     error_code: Some(RELOCATION_FAILED_CODE.to_string()),
+                    diagnostic_category: None,
                     retry: FailedRepositoryRetry::Retryable,
                     diagnostics: None,
                 });

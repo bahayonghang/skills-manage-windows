@@ -122,6 +122,18 @@ pub enum GithubImportError {
     #[error("GitHub repository archive redirect was rejected.")]
     ArchiveRedirectRejected,
 
+    #[error("GitHub repository archive request timed out.")]
+    ArchiveTimeout,
+
+    #[error("GitHub repository archive request failed.")]
+    ArchiveRequest,
+
+    #[error("GitHub repository archive response could not be read.")]
+    ArchiveResponseBody,
+
+    #[error("GitHub repository archive remained unavailable after server retries.")]
+    ArchiveStatusExhausted,
+
     #[error("GitHub repository archive exceeds the resource budget (more than {0} files).")]
     ArchiveFileBudgetExceeded(usize),
 
@@ -361,7 +373,11 @@ impl GithubImportError {
 
             // ── Network / archive acquisition ───────────────────────────────
             Self::ArchiveRedirectRejected => "github_import.archive_redirect_rejected",
-            Self::Http(_) => "github_import.transport_failed",
+            Self::Http(_)
+            | Self::ArchiveTimeout
+            | Self::ArchiveRequest
+            | Self::ArchiveResponseBody
+            | Self::ArchiveStatusExhausted => "github_import.transport_failed",
             Self::RateLimited(_) => "github_import.rate_limited",
             Self::AccessDenied(_) => "github_import.access_denied",
             Self::RepoNotFound => "github_import.repo_not_found",
@@ -393,6 +409,12 @@ impl GithubImportError {
     /// their IPC code; uncoded ones report a fixed variant family so an
     /// unmapped failure is still identifiable without logging its Display text.
     pub fn diagnostic_category(&self) -> &'static str {
+        if let Some(classification) = self
+            .snapshot_failure_classification()
+            .filter(|classification| classification.retryable)
+        {
+            return classification.diagnostic_category;
+        }
         if let Some(code) = self.ipc_error_code() {
             return code;
         }
@@ -406,6 +428,91 @@ impl GithubImportError {
         }
     }
 
+    pub(crate) fn is_snapshot_retryable(&self) -> bool {
+        self.snapshot_failure_classification()
+            .is_some_and(|classification| classification.retryable)
+    }
+
+    pub(super) fn from_archive_transport(error: &reqwest::Error) -> Self {
+        if error.is_timeout() {
+            Self::ArchiveTimeout
+        } else if error.is_redirect() {
+            Self::ArchiveRedirectRejected
+        } else if error.is_body() {
+            Self::ArchiveResponseBody
+        } else {
+            Self::ArchiveRequest
+        }
+    }
+
+    pub(crate) fn snapshot_diagnostic_category(&self) -> &'static str {
+        self.snapshot_failure_classification()
+            .map(|classification| classification.diagnostic_category)
+            .unwrap_or_else(|| self.diagnostic_category())
+    }
+
+    fn snapshot_failure_classification(&self) -> Option<SnapshotFailureClassification> {
+        let classification = match self {
+            Self::ArchiveTimeout => {
+                SnapshotFailureClassification::retryable("github_import.archive_timeout")
+            }
+            Self::ArchiveRequest => {
+                SnapshotFailureClassification::retryable("github_import.archive_request")
+            }
+            Self::ArchiveResponseBody => {
+                SnapshotFailureClassification::retryable("github_import.archive_response_body")
+            }
+            Self::ArchiveStatusExhausted => {
+                SnapshotFailureClassification::retryable("github_import.archive_status_exhausted")
+            }
+            Self::ArchiveRedirectRejected => {
+                SnapshotFailureClassification::terminal("github_import.archive_redirect_rejected")
+            }
+            Self::AccessDenied(_) => {
+                SnapshotFailureClassification::terminal("github_import.access_denied")
+            }
+            Self::RateLimited(_) => {
+                SnapshotFailureClassification::terminal("github_import.rate_limited")
+            }
+            Self::RepoNotFound | Self::ArchiveUnavailable => {
+                SnapshotFailureClassification::terminal("github_import.repository_not_found")
+            }
+            Self::Parse(_) | Self::PreviewSnapshotIntegrity => {
+                SnapshotFailureClassification::terminal("github_import.archive_integrity")
+            }
+            Self::Budget(_)
+            | Self::ArchiveFileBudgetExceeded(_)
+            | Self::ArchiveSizeOverflow
+            | Self::SnapshotSizeOverflow
+            | Self::TreeManifestEntryBudgetExceeded(_)
+            | Self::TreeManifestSizeOverflow => {
+                SnapshotFailureClassification::terminal("github_import.archive_budget")
+            }
+            Self::InvalidUrl(_)
+            | Self::InvalidRepoUrl
+            | Self::SubpathTraversal
+            | Self::RepoUrlNotHttps
+            | Self::RepoUrlNotGithub
+            | Self::RepoUrlMissingOwner
+            | Self::RepoUrlMissingRepo
+            | Self::RepoUrlMissingOwnerRepo
+            | Self::TreeUrlMissingBranch
+            | Self::BlobUrlUnsupported
+            | Self::UnsupportedSubpath(_)
+            | Self::UnsupportedRepoPath(_)
+            | Self::InvalidRepoComponent { .. }
+            | Self::InvalidBranchSelection
+            | Self::BranchSelectionConflict => {
+                SnapshotFailureClassification::terminal("github_import.invalid_repository_ref")
+            }
+            Self::Http(_) => {
+                SnapshotFailureClassification::terminal("github_import.transport_unknown")
+            }
+            _ => return None,
+        };
+        Some(classification)
+    }
+
     /// Serialize for the IPC boundary.
     ///
     /// Reviewed snapshot lifecycle and branch-selection failures use a stable
@@ -416,6 +523,74 @@ impl GithubImportError {
         match self.ipc_code() {
             Some(code) => format!("github_import.{}:{}", code, self),
             None => self.to_string(),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SnapshotFailureClassification {
+    retryable: bool,
+    diagnostic_category: &'static str,
+}
+
+impl SnapshotFailureClassification {
+    const fn retryable(diagnostic_category: &'static str) -> Self {
+        Self {
+            retryable: true,
+            diagnostic_category,
+        }
+    }
+
+    const fn terminal(diagnostic_category: &'static str) -> Self {
+        Self {
+            retryable: false,
+            diagnostic_category,
+        }
+    }
+}
+
+#[cfg(test)]
+mod snapshot_failure_tests {
+    use super::*;
+
+    #[test]
+    fn snapshot_retryability_and_diagnostic_category_share_one_typed_classifier() {
+        let retryable = [
+            (
+                GithubImportError::ArchiveTimeout,
+                "github_import.archive_timeout",
+            ),
+            (
+                GithubImportError::ArchiveRequest,
+                "github_import.archive_request",
+            ),
+            (
+                GithubImportError::ArchiveResponseBody,
+                "github_import.archive_response_body",
+            ),
+            (
+                GithubImportError::ArchiveStatusExhausted,
+                "github_import.archive_status_exhausted",
+            ),
+        ];
+        for (error, category) in retryable {
+            assert!(error.is_snapshot_retryable());
+            assert_eq!(error.snapshot_diagnostic_category(), category);
+        }
+
+        let not_retryable = [
+            GithubImportError::InvalidBranchSelection,
+            GithubImportError::ArchiveRedirectRejected,
+            GithubImportError::AccessDenied("token=secret".to_string()),
+            GithubImportError::RepoNotFound,
+            GithubImportError::Parse("response body".to_string()),
+            GithubImportError::Budget(crate::services::resource_budget::BudgetExceeded::new(
+                "archive", 2, 1,
+            )),
+            GithubImportError::PreviewSnapshotIntegrity,
+        ];
+        for error in not_retryable {
+            assert!(!error.is_snapshot_retryable(), "{error:?}");
         }
     }
 }

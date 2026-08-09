@@ -453,6 +453,7 @@ where
     let surface = policy.surface;
     let mut attempts = Vec::new();
     let mut last_retryable_denial = None;
+    let mut last_archive_error = None;
 
     let endpoint_urls = endpoints
         .iter()
@@ -546,6 +547,12 @@ where
                 }
 
                 if should_retry_via_mirror_status(surface, status) {
+                    if matches!(
+                        policy.acceptance,
+                        ResponseAcceptance::ArchiveInitialRedirect
+                    ) {
+                        last_archive_error = Some(GithubImportError::ArchiveStatusExhausted);
+                    }
                     attempts.push(MirrorAttemptOutcome {
                         status: Some(status),
                         error_message: format!(
@@ -564,7 +571,15 @@ where
                 )));
             }
             Err(error) => {
+                let archive_error = matches!(
+                    policy.acceptance,
+                    ResponseAcceptance::ArchiveInitialRedirect
+                )
+                .then(|| GithubImportError::from_archive_transport(&error));
                 if is_retryable_github_transport_error(&error) {
+                    if let Some(error) = archive_error {
+                        last_archive_error = Some(error);
+                    }
                     attempts.push(MirrorAttemptOutcome {
                         status: error.status(),
                         error_message: format!(
@@ -577,6 +592,9 @@ where
                     continue;
                 }
 
+                if let Some(error) = archive_error {
+                    return Err(error);
+                }
                 return Err(GithubImportError::Http(format!(
                     "{}: {}",
                     failure_prefix,
@@ -588,6 +606,10 @@ where
 
     if let Some(denial) = last_retryable_denial {
         return Err(GithubImportError::from_denial(denial));
+    }
+
+    if let Some(error) = last_archive_error {
+        return Err(error);
     }
 
     Err(GithubImportError::Http(format!(

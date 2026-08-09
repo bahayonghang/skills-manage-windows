@@ -29,10 +29,14 @@ Normal update, force update, and force mirror must route through `update_skills_
 - Batch archives contain `.skillport-manifest.tsv` plus one generated numeric directory per skill.
 - Remote execution remains behind `ConnectedRemoteTarget` and `CommandRunner`.
 - Each skill receives a durable operation ID and manifest before staging. Cancellation before staging returns cancelled; after staging starts the Saga settles or leaves a recoverable row.
+- Under the target mutation guard, a new update batch reads pending rows once and recovers only rows whose `skill_id` is selected. A row-specific recovery failure occupies only that skill's ordered result slot; unrelated pending rows and their evidence are not touched. Startup and explicit recovery retain their full-target fail-fast behavior.
+- Duplicate request skill IDs are classified before scoped recovery. The first request slot owns recovery and mutation; later duplicate slots return a typed `prepare` failure and never duplicate recovery evidence or filesystem writes.
+- Shared Local/SSH/WSL delete single and batch entry points use the same selected-row boundary: deduplicate in first-request order, merge requested agent IDs, acquire one target guard, open at most one remote connection, read pending rows once, and continue unrelated skills after a row-specific recovery failure.
 - Skill/repository persistence and `db_committed` share one SQLite transaction. Copy plans are persisted before refresh; incomplete copies remain `copies_pending` and are retried without reapplying canonical contents.
 - Archive construction and Local recursive IO run through `run_blocking_fs_with`.
 - Operation Logs store total action duration and non-sensitive counts only. Phase spans may record target kind, counts, chunk counts, and payload bytes, never host, username, credentials, contents, or full paths.
 - Update Center apply status is derived from item outcomes: no failures is `succeeded`, failures with no successful/skipped item is `failed`, and mixed outcomes are `partial`. Apply logs and runtime events contain counts plus reviewed stable codes/categories only; item Display strings never cross the serialization boundary.
+- Every failed item carries a controlled `phase`, stable `errorCode`, stable `errorCategory`, safe logical identifier, and fixed public message. Operation Logs retain at most 50 safe item tuples plus a truncation count; Runtime Logs retain only sorted/deduplicated code/category sets and phase counts.
 
 ## 4. Validation & Error Matrix
 
@@ -46,6 +50,9 @@ Normal update, force update, and force mirror must route through `update_skills_
 | Cancel or transport failure after durable staging starts | Roll back staged artifacts or retain a pending journal row; never report an unjournaled cancellation |
 | Copy refresh fails after DB commit | Preserve canonical new state and exact incomplete projection plan in `copies_pending` |
 | Copy target basename differs from skill id | Return `CopyInstallOutsideSkillDir` without executing that target |
+| Selected skill has an unrecoverable pending row | Return a `recovery` failure for that skill and continue unrelated plans in request order |
+| Unselected skill has a pending row | Do not retry it or change its phase, timestamp, error evidence, or filesystem artifacts |
+| A selected delete collides during recovery | Return the typed recovery code/category for that skill; do not degrade it to decision-apply; continue other requested deletes |
 
 ## 5. Good / Base / Bad Cases
 
@@ -60,6 +67,9 @@ Normal update, force update, and force mirror must route through `update_skills_
 - Assert mixed `OK` / `ERR` output preserves partial success.
 - Assert unsafe ids/paths fail before any runner call.
 - Assert cancellation after one chunk prevents the next call.
+- Assert Local and Fake SSH/WSL batches skip unrelated pending rows; selected recovery failure affects only the matching ordered result.
+- Assert duplicate selected IDs keep first-request ownership even when that skill's pending recovery fails.
+- Fake SSH/WSL delete assertions include target ID/kind, one shared connection, and exact command counts so filtering cannot add hidden recovery round trips.
 - Keep an ignored Windows WSL `/tmp` benchmark for a fixed 10-skill fixture; never benchmark against `~/.skillsmanage`.
 
 ## 7. Wrong vs Correct

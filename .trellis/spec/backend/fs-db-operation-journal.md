@@ -69,7 +69,7 @@ Delete may use `fs_staged -> db_committed` because its backup rename is the dest
 - A first content upsert uses `OperationKind::CentralUpdate` plus `UpdateManifest(had_target=false)`. It does not introduce a parallel journal kind or schema. Candidate validation and snapshot acquisition finish before the target lock; final apply acquires that lock, recovers pending rows, and commits the skill row, repository membership, commit/digest provenance, and `db_committed` transition in one SQLite transaction.
 - Copy refresh failure leaves `copies_pending`; it does not roll back committed canonical state. Recovery retries only incomplete projections, then finalizes backup and transitions to `completed`.
 - Cancellation may prevent an operation before its destructive phase. After durable staging begins, the operation must synchronously settle or retain recoverable journal state; it must not be returned as an unjournaled cancellation.
-- Every Central delete/update/recovery acquires the same target-derived cross-process lease. New mutations recover pending rows for that target under the lease before proceeding. There is no unlocked fallback.
+- Every Central delete/update/recovery acquires the same target-derived cross-process lease. Under that lease, a new batch mutation recovers only pending rows for the selected skills before proceeding; startup recovery and explicit Retry remain full-target and fail-fast. There is no unlocked fallback.
 - Desktop startup recovers Local rows only. SSH/WSL rows are listed without transport; explicit retry or the next mutation for the same target may establish remote transport.
 - IPC resolves one `TargetContext`. The operation row target ID/kind must match that context; active-target changes never substitute a different DB or transport.
 - Only terminal rows are eligible for retention deletion. Pending rows and their recovery artifacts have no TTL cleanup.
@@ -90,6 +90,7 @@ Delete may use `fs_staged -> db_committed` because its backup rename is the dest
 | Journal/error/rollback/finalize write fails | Propagate the failure; never silently continue |
 | Copy projection fails after commit | Keep `copies_pending`, record a bounded redacted error, allow retry |
 | Remote target is offline | Keep pending row; fail only that target's mutation/retry |
+| Unrelated skill has a pending row when a batch starts | Do not inspect, retry, timestamp, or rewrite that row's recovery evidence |
 | Repeated restore/finalize/retry | Return the same converged old/new state without overwriting new user data |
 | Operation Logs list/detail/export | Contain summary/code/ID only; never contain `manifest_json` or full paths |
 

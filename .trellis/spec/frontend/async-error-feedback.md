@@ -12,6 +12,7 @@
 - 可见 UI 调用方负责交互反馈：捕获错误、显示当前界面内联错误，并发出 toast。
 - 可见 UI 渲染 backend rejection 时必须经 `formatBackendError(err, t)` 保留稳定 code 的
   i18n 语义并丢弃动态 details；不得用 `String(err)` 直接拼入 toast 或内联错误。
+- partial-success item payload 必须用 `formatBackendError` 渲染 reviewed `errorCode`，并与 backend 提供的安全逻辑 `identifier` 组合；不得展示原始 item `error`、step 内路径，或从拼接字符串解析 code。Apply selected 与 cleanup 复用同一 formatter。
 - 新一轮提交或关闭弹窗时必须清除上一次内联错误。
 - 成功路径不得因为失败处理改变原有导航/打开面板参数。
 - 被多处 fire-and-forget 复用的共享 loader（如 `loadCentralSkills`）不得直接改成 rethrow；用可选参数（如 `{ throwOnError?: boolean }`，默认保持吞错写 store error）让需要反馈的可见 UI 调用方显式选择 rethrow，避免给既有调用点制造 unhandled rejection。

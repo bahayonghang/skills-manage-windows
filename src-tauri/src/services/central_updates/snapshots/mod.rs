@@ -6,7 +6,8 @@
 //! instance for the whole app (re-exported from `lib.rs` as
 //! `crate::CentralUpdateSnapshotCache`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -347,6 +348,8 @@ pub(crate) struct SnapshotRepositoryFailure {
 pub(crate) struct SnapshotAcquisition {
     pub(crate) snapshots: SharedGitHubSnapshots,
     pub(crate) failures: Vec<SnapshotRepositoryFailure>,
+    pub(crate) retry_attempted: usize,
+    pub(crate) retry_recovered: usize,
 }
 
 /// Fail-fast wrapper kept for callers that treat any repository failure as a
@@ -389,13 +392,46 @@ pub(crate) async fn prepare_snapshots_for_repo_refs_collecting_failures(
     cache_policy: SnapshotCachePolicy,
     progress: Option<SnapshotProgressReporter>,
 ) -> Result<SnapshotAcquisition, CentralUpdatesError> {
-    let mut repos_by_key = HashMap::<String, GitHubRepoRef>::new();
+    let client = client.clone();
+    let auth = auth_token.map(str::to_string);
+    prepare_snapshots_for_repo_refs_collecting_failures_with_downloader(
+        repos,
+        cache,
+        cache_policy,
+        progress,
+        SNAPSHOT_DOWNLOAD_CONCURRENCY,
+        move |repo| {
+            let client = client.clone();
+            let auth = auth.clone();
+            async move {
+                github_import::download_repo_snapshot(&client, &repo, auth.as_deref()).await
+            }
+        },
+    )
+    .await
+}
+
+async fn prepare_snapshots_for_repo_refs_collecting_failures_with_downloader<D, F>(
+    repos: &[GitHubRepoRef],
+    cache: &CentralUpdateSnapshotCache,
+    cache_policy: SnapshotCachePolicy,
+    progress: Option<SnapshotProgressReporter>,
+    initial_concurrency: usize,
+    downloader: D,
+) -> Result<SnapshotAcquisition, CentralUpdatesError>
+where
+    D: Fn(GitHubRepoRef) -> F + Clone,
+    F: Future<Output = Result<GitHubRepoSnapshot, GithubImportError>>,
+{
+    let mut seen = HashSet::new();
+    let mut ordered_repos = Vec::new();
     for repo in repos {
-        repos_by_key
-            .entry(repo_cache_key(repo))
-            .or_insert_with(|| repo.clone());
+        let key = repo_cache_key(repo);
+        if seen.insert(key) {
+            ordered_repos.push(repo.clone());
+        }
     }
-    let total = repos_by_key.len();
+    let total = ordered_repos.len();
     let completed = Arc::new(AtomicUsize::new(0));
     report_progress(
         &progress,
@@ -410,7 +446,8 @@ pub(crate) async fn prepare_snapshots_for_repo_refs_collecting_failures(
 
     let mut snapshots = HashMap::new();
     let mut missing = Vec::new();
-    for (key, repo) in repos_by_key {
+    for repo in ordered_repos {
+        let key = repo_cache_key(&repo);
         if cache_policy == SnapshotCachePolicy::UseFresh {
             if let Some(snapshot) = cache.get_fresh(&key) {
                 snapshots.insert(key, snapshot);
@@ -429,26 +466,17 @@ pub(crate) async fn prepare_snapshots_for_repo_refs_collecting_failures(
         }
     }
 
-    let semaphore = Arc::new(Semaphore::new(SNAPSHOT_DOWNLOAD_CONCURRENCY));
-    let auth = auth_token.map(str::to_string);
+    let semaphore = Arc::new(Semaphore::new(initial_concurrency.max(1)));
     let downloads = missing.into_iter().map(|repo| {
-        let client = client.clone();
         let semaphore = Arc::clone(&semaphore);
-        let auth = auth.clone();
+        let downloader = downloader.clone();
         let progress = progress.clone();
         let completed = Arc::clone(&completed);
         async move {
             let _permit = match semaphore.acquire_owned().await {
                 Ok(permit) => permit,
                 Err(_) => {
-                    report_repository_settled(
-                        &progress,
-                        &completed,
-                        total,
-                        &repo,
-                        SnapshotProgressStatus::RepositoryFailed,
-                    );
-                    return Err((repo, CentralUpdatesError::SnapshotDownloaderClosed));
+                    return Err((repo, CentralUpdatesError::SnapshotDownloaderClosed, false));
                 }
             };
             report_repository(
@@ -458,46 +486,86 @@ pub(crate) async fn prepare_snapshots_for_repo_refs_collecting_failures(
                 completed.load(Ordering::SeqCst),
                 &repo,
             );
-            match github_import::download_repo_snapshot(&client, &repo, auth.as_deref()).await {
-                Ok(snapshot) => {
-                    report_repository_settled(
-                        &progress,
-                        &completed,
-                        total,
-                        &repo,
-                        SnapshotProgressStatus::RepositoryCompleted,
-                    );
-                    Ok((repo_cache_key(&repo), snapshot))
-                }
+            match downloader(repo.clone()).await {
+                Ok(snapshot) => Ok((repo, snapshot)),
                 Err(error) => {
-                    report_repository_settled(
-                        &progress,
-                        &completed,
-                        total,
-                        &repo,
-                        SnapshotProgressStatus::RepositoryFailed,
-                    );
-                    Err((repo, error.into()))
+                    let retryable = error.is_snapshot_retryable();
+                    Err((repo, error.into(), retryable))
                 }
             }
         }
     });
 
     let mut failures = Vec::new();
+    let mut retryable_failures = Vec::new();
     for result in futures_util::future::join_all(downloads).await {
         match result {
-            Ok((key, snapshot)) => {
+            Ok((repo, snapshot)) => {
+                let key = repo_cache_key(&repo);
                 let snapshot = Arc::new(snapshot);
                 let _ = cache.insert(key.clone(), Arc::clone(&snapshot))?;
                 snapshots.insert(key, snapshot);
+                report_repository_settled(
+                    &progress,
+                    &completed,
+                    total,
+                    &repo,
+                    SnapshotProgressStatus::RepositoryCompleted,
+                );
             }
-            Err((repo, error)) => failures.push(SnapshotRepositoryFailure { repo, error }),
+            Err((repo, _error, true)) => retryable_failures.push(repo),
+            Err((repo, error, false)) => {
+                report_repository_settled(
+                    &progress,
+                    &completed,
+                    total,
+                    &repo,
+                    SnapshotProgressStatus::RepositoryFailed,
+                );
+                failures.push(SnapshotRepositoryFailure { repo, error });
+            }
+        }
+    }
+
+    let retry_attempted = retryable_failures.len();
+    let mut retry_recovered = 0;
+    for repo in retryable_failures {
+        match downloader(repo.clone()).await {
+            Ok(snapshot) => {
+                let key = repo_cache_key(&repo);
+                let snapshot = Arc::new(snapshot);
+                let _ = cache.insert(key.clone(), Arc::clone(&snapshot))?;
+                snapshots.insert(key, snapshot);
+                retry_recovered += 1;
+                report_repository_settled(
+                    &progress,
+                    &completed,
+                    total,
+                    &repo,
+                    SnapshotProgressStatus::RepositoryCompleted,
+                );
+            }
+            Err(error) => {
+                report_repository_settled(
+                    &progress,
+                    &completed,
+                    total,
+                    &repo,
+                    SnapshotProgressStatus::RepositoryFailed,
+                );
+                failures.push(SnapshotRepositoryFailure {
+                    repo,
+                    error: error.into(),
+                });
+            }
         }
     }
 
     Ok(SnapshotAcquisition {
         snapshots,
         failures,
+        retry_attempted,
+        retry_recovered,
     })
 }
 

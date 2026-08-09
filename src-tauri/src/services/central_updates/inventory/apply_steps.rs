@@ -2,13 +2,11 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use crate::db::{self, Agent, DbPool};
-use crate::services::central_skills::{
-    self, BatchDeleteCentralSkillRequest, BatchDeleteCentralSkillResult,
-};
+use crate::services::central_skills::{self, BatchDeleteCentralSkillRequest};
 use crate::services::central_updates::{
     keep_remote_missing_central_skills_impl, normalize_repo_path,
     CentralRepositoryAdditionSkipRequest, CentralRepositoryAdditionUnskipRequest,
-    CentralUpdatesError,
+    CentralUpdateFailurePhase, CentralUpdatesError,
 };
 use crate::services::installation::{uninstall_skill, InstallTransport};
 use crate::targets::{connect_remote_target, ActiveTarget};
@@ -30,11 +28,9 @@ pub(crate) async fn apply_keep_missing_step(
     }
     match keep_remote_missing_central_skills_impl(pool, keep_missing).await {
         Ok(kept) => result.kept_missing_skill_ids = kept,
-        Err(error) => result.failures.push(SkillUpdateApplyFailure::new(
-            "keep_missing",
-            keep_missing.join(","),
-            error.to_string(),
-        )),
+        Err(_error) => result
+            .failures
+            .push(SkillUpdateApplyFailure::new("keep_missing", "batch")),
     }
 }
 
@@ -48,7 +44,7 @@ pub(crate) async fn apply_delete_missing_step(
     if delete_missing.is_empty() {
         return;
     }
-    let delete_outcome: Result<BatchDeleteCentralSkillResult, String> = match active_target {
+    let delete_outcome = match active_target {
         ActiveTarget::Local => {
             central_skills::delete_central_skills_impl(pool, delete_missing).await
         }
@@ -56,26 +52,23 @@ pub(crate) async fn apply_delete_missing_step(
             central_skills::delete_central_skills_remote_impl(pool, active_target, delete_missing)
                 .await
         }
-    }
-    .map_err(|e| e.to_string());
+    };
     match delete_outcome {
         Ok(batch) => {
             for ok in batch.succeeded {
                 result.deleted_skill_ids.push(ok.skill_id);
             }
             for failure in batch.failed {
-                result.failures.push(SkillUpdateApplyFailure::new(
-                    "delete_missing",
-                    failure.skill_id,
-                    failure.error,
-                ));
+                result
+                    .failures
+                    .push(SkillUpdateApplyFailure::from_central_delete(failure));
             }
         }
-        Err(error) => result.failures.push(SkillUpdateApplyFailure::new(
-            "delete_missing",
-            String::new(),
-            error,
-        )),
+        Err(error) => result
+            .failures
+            .push(SkillUpdateApplyFailure::from_central_delete_error(
+                "batch", error,
+            )),
     }
 }
 
@@ -88,11 +81,10 @@ pub(crate) async fn apply_skip_addition_step(
     for request in skip_additions {
         let source_path = match normalize_repo_path(&request.source_path) {
             Ok(p) => p,
-            Err(error) => {
+            Err(_error) => {
                 result.failures.push(SkillUpdateApplyFailure::new(
                     "skip_addition",
-                    format!("{}::{}", request.repository_id, request.source_path),
-                    error.to_string(),
+                    request.repository_id,
                 ));
                 continue;
             }
@@ -114,10 +106,9 @@ pub(crate) async fn apply_skip_addition_step(
                     .skipped_additions
                     .push(format!("{}::{}", saved.repository_id, saved.source_path));
             }
-            Err(error) => result.failures.push(SkillUpdateApplyFailure::new(
+            Err(_error) => result.failures.push(SkillUpdateApplyFailure::new(
                 "skip_addition",
-                format!("{}::{}", request.repository_id, source_path),
-                error.to_string(),
+                request.repository_id,
             )),
         }
     }
@@ -132,11 +123,10 @@ pub(crate) async fn apply_unskip_addition_step(
     for request in unskip_additions {
         let source_path = match normalize_repo_path(&request.source_path) {
             Ok(p) => p,
-            Err(error) => {
+            Err(_error) => {
                 result.failures.push(SkillUpdateApplyFailure::new(
                     "unskip_addition",
-                    format!("{}::{}", request.repository_id, request.source_path),
-                    error.to_string(),
+                    request.repository_id,
                 ));
                 continue;
             }
@@ -147,10 +137,9 @@ pub(crate) async fn apply_unskip_addition_step(
             Ok(_) => result
                 .unskipped_additions
                 .push(format!("{}::{}", request.repository_id, source_path)),
-            Err(error) => result.failures.push(SkillUpdateApplyFailure::new(
+            Err(_error) => result.failures.push(SkillUpdateApplyFailure::new(
                 "unskip_addition",
-                format!("{}::{}", request.repository_id, source_path),
-                error.to_string(),
+                request.repository_id,
             )),
         }
     }
@@ -168,20 +157,15 @@ pub(crate) async fn apply_remove_platform_duplicates_step(
             result.failures.push(SkillUpdateApplyFailure::new(
                 "remove_platform_duplicate",
                 format!("{}::{}", removal.agent_id, removal.skill_id),
-                format!(
-                    "Agent '{}' is outside the allowed platform scope.",
-                    removal.agent_id
-                ),
             ));
             continue;
         }
         let observations = match db::get_agent_skill_observations(pool, &removal.agent_id).await {
             Ok(rows) => rows,
-            Err(error) => {
+            Err(_error) => {
                 result.failures.push(SkillUpdateApplyFailure::new(
                     "remove_platform_duplicate",
                     format!("{}::{}", removal.agent_id, removal.skill_id),
-                    error.to_string(),
                 ));
                 continue;
             }
@@ -206,11 +190,14 @@ pub(crate) async fn apply_remove_platform_duplicates_step(
             .await
             {
                 Ok(()) => result.removed_platform_duplicate_paths.push(path),
-                Err(error) => result.failures.push(SkillUpdateApplyFailure::new(
-                    "remove_platform_duplicate",
-                    format!("{}::{}::{}", removal.agent_id, removal.skill_id, path),
-                    error.to_string(),
-                )),
+                Err(error) => result
+                    .failures
+                    .push(SkillUpdateApplyFailure::from_central_error(
+                        "remove_platform_duplicate",
+                        format!("{}::{}", removal.agent_id, removal.skill_id),
+                        CentralUpdateFailurePhase::DecisionApply,
+                        CentralUpdatesError::Installation(error),
+                    )),
             }
         }
     }
@@ -229,10 +216,6 @@ pub(crate) async fn apply_remove_deleted_platform_copies_step(
             result.failures.push(SkillUpdateApplyFailure::new(
                 "remove_deleted_platform_copy",
                 format!("{}::{}", removal.agent_id, removal.skill_id),
-                format!(
-                    "Agent '{}' is outside the allowed platform scope.",
-                    removal.agent_id
-                ),
             ));
             continue;
         }
@@ -241,11 +224,14 @@ pub(crate) async fn apply_remove_deleted_platform_copies_step(
                 Ok(()) => result
                     .removed_deleted_platform_copy_paths
                     .push(path.clone()),
-                Err(error) => result.failures.push(SkillUpdateApplyFailure::new(
-                    "remove_deleted_platform_copy",
-                    format!("{}::{}::{}", removal.agent_id, removal.skill_id, path),
-                    error.to_string(),
-                )),
+                Err(error) => result
+                    .failures
+                    .push(SkillUpdateApplyFailure::from_central_error(
+                        "remove_deleted_platform_copy",
+                        format!("{}::{}", removal.agent_id, removal.skill_id),
+                        CentralUpdateFailurePhase::DecisionApply,
+                        error,
+                    )),
             }
         }
     }

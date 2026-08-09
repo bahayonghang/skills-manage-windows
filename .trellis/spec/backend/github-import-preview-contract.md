@@ -191,6 +191,10 @@ async fn finish_repository_archive_response(
 - A successful terminal response uses the same bounded archive reader and
   extraction budgets as a direct 2xx archive. Existing 404, denial, transport,
   mirror-auth isolation, and resource-budget semantics remain unchanged.
+- Archive acquisition classifies timeout, request/connect, response-body read,
+  and exhausted retryable server status as typed variants. These variants keep
+  the public `github_import.transport_failed` code while exposing distinct
+  static diagnostic categories; no classifier parses `Display` text.
 - `ArchiveRedirectRejected` has no dynamic fields and maps to
   `github_import.archive_redirect_rejected`; URLs, headers, repository paths,
   response bodies, and credentials never enter the error value.
@@ -209,6 +213,7 @@ async fn finish_repository_archive_response(
 | Pinned 40-hex SHA uses `refs/heads`, or ordinary branch uses direct suffix | `ArchiveRedirectRejected`; no second request |
 | Numeric API response is not 302, or codeload response is 3xx | `ArchiveRedirectRejected`; do not continue the chain |
 | API/raw endpoint returns 3xx | Preserve the global no-redirect behavior |
+| Archive timeout/request/body read or exhausted retryable server status | Preserve a typed static family for downstream retry and diagnostics |
 
 ### 5. Good / Base / Bad Cases
 

@@ -22,6 +22,7 @@ import type {
   SkillRefreshMode,
   SkillRefreshScope,
   SkillRefreshScopeKind,
+  SkillUpdateApplyFailure,
 } from "@/types/skillUpdateInventory";
 import type { UpdatableRowState } from "@/components/central/updateCenter/UpdatableTabPanel";
 import {
@@ -64,6 +65,21 @@ const TAB_ORDER: readonly UpdateCenterTab[] = [
 
 export function UpdateCenterDialog() {
   const { t } = useTranslation();
+
+  function formatApplyFailure(failure: SkillUpdateApplyFailure): string {
+    const message = formatBackendError(
+      {
+        code: failure.errorCode ?? "central_updates.item_failure",
+        message: t("backendErrors.central_updates.item_failed"),
+        retryable: false,
+      },
+      t,
+    );
+    return t("central.updateCenter.failureToast", {
+      identifier: failure.identifier || "batch",
+      error: message,
+    });
+  }
   const inventory = useUpdateCenterStore((state) => state.inventory);
   const isDialogOpen = useUpdateCenterStore((state) => state.isDialogOpen);
   const isRefreshing = useUpdateCenterStore((state) => state.isRefreshing);
@@ -221,17 +237,7 @@ export function UpdateCenterDialog() {
           }),
         );
         for (const failure of result.failures.slice(0, 3)) {
-          const message = failure.errorCode
-            ? formatBackendError(
-                {
-                  code: failure.errorCode,
-                  message: t("backendErrors.central_updates.item_failed"),
-                  retryable: false,
-                },
-                t,
-              )
-            : t("backendErrors.central_updates.item_failed");
-          toast.error(`${failure.step}: ${message}`);
+          toast.error(formatApplyFailure(failure));
         }
       }
     } catch (err) {
@@ -275,12 +281,7 @@ export function UpdateCenterDialog() {
           }),
         );
         for (const failure of result.failures.slice(0, 3)) {
-          toast.error(
-            `${failure.step}: ${formatBackendError(
-              `${failure.errorCode ?? "central_updates.item_failure"}:${failure.error}`,
-              t,
-            )}`,
-          );
+          toast.error(formatApplyFailure(failure));
         }
       }
     } catch (err) {

@@ -2,17 +2,23 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::db::{self, DbPool};
-use crate::targets::{connect_remote_target, ActiveTarget, RemoteTargetConfig};
+use crate::targets::{ActiveTarget, RemoteTargetConfig};
 
 use super::common::{installation_details, shared_root_agent_ids, unique_agent_ids};
 use super::error::CentralSkillsError;
 use super::types::{
     BatchDeleteCentralSkillPreviewResult, BatchDeleteCentralSkillRequest,
-    BatchDeleteCentralSkillResult, BatchDeleteCentralSkillSuccess, DeleteCentralSkillPreview,
-    DeleteCentralSkillResult, FailedCentralSkillDelete,
+    DeleteCentralSkillPreview, DeleteCentralSkillResult, FailedCentralSkillDelete,
 };
-
+mod batch;
 mod repository;
+
+use batch::delete_central_skills_for_target;
+#[cfg(test)]
+pub(super) use batch::delete_central_skills_for_target_with_connection_for_tests;
+pub use batch::{
+    delete_central_skills_impl, delete_central_skills_remote_impl, delete_central_skills_ssh_impl,
+};
 
 pub use repository::{
     delete_skill_repository_impl, delete_skill_repository_remote_impl,
@@ -280,10 +286,9 @@ pub async fn preview_delete_central_skills_ssh_impl(
 
         match preview_delete_central_skill_ssh_impl(pool, skill_id).await {
             Ok(preview) => previews.push(preview),
-            Err(error) => failed.push(FailedCentralSkillDelete {
-                skill_id: skill_id.clone(),
-                error: error.to_string(),
-            }),
+            Err(_error) => {
+                failed.push(FailedCentralSkillDelete::preview_fallback(skill_id.clone()))
+            }
         }
     }
 
@@ -296,25 +301,27 @@ pub async fn delete_central_skill_remote_impl(
     skill_id: &str,
     remove_agent_ids: &[String],
 ) -> Result<DeleteCentralSkillResult, CentralSkillsError> {
-    delete_central_skill_remote_with_batch(pool, active_target, skill_id, remove_agent_ids, None)
-        .await
+    let requests = [BatchDeleteCentralSkillRequest {
+        skill_id: skill_id.to_string(),
+        remove_agent_ids: remove_agent_ids.to_vec(),
+    }];
+    let mut outcomes =
+        delete_central_skills_for_target(pool, active_target, &requests, None).await?;
+    outcomes
+        .pop()
+        .expect("single delete request must produce one outcome")
+        .result
+        .map_err(|error| error.error)
 }
 
-async fn delete_central_skill_remote_with_batch(
+async fn delete_central_skill_remote_under_guard(
     pool: &DbPool,
     active_target: &ActiveTarget,
+    connection: &crate::targets::ConnectedRemoteTarget,
     skill_id: &str,
     remove_agent_ids: &[String],
     batch_id: Option<&str>,
 ) -> Result<DeleteCentralSkillResult, CentralSkillsError> {
-    let _mutation_guard = crate::services::central_mutation::acquire_target_mutation_guard(
-        active_target,
-        "delete Central skill",
-        crate::services::central_mutation::DEFAULT_CENTRAL_MUTATION_TIMEOUT,
-    )
-    .await?;
-    crate::services::central_operation::recover_pending_operations_under_guard(pool, active_target)
-        .await?;
     let skill = db::get_skill_by_id(pool, skill_id)
         .await?
         .ok_or_else(|| CentralSkillsError::SkillNotFound(skill_id.to_string()))?;
@@ -351,10 +358,6 @@ async fn delete_central_skill_remote_with_batch(
         .into_iter()
         .map(|agent| (agent.id.clone(), agent))
         .collect();
-    let connection = connect_remote_target(active_target)
-        .await
-        .map_err(|e| CentralSkillsError::Remote(e.to_string()))?;
-
     let mut removed_agent_ids = Vec::new();
     let mut retained_agent_ids = Vec::new();
     let mut removable_paths = Vec::new();
@@ -394,7 +397,7 @@ async fn delete_central_skill_remote_with_batch(
     removable_paths.push(central_path.clone());
     let operation_id = uuid::Uuid::new_v4().to_string();
     let manifest = crate::services::central_operation::build_remote_delete_manifest(
-        &connection,
+        connection,
         &operation_id,
         removable_paths,
     )
@@ -409,7 +412,7 @@ async fn delete_central_skill_remote_with_batch(
     )
     .await?;
     if let Err(error) =
-        crate::services::central_operation::stage_delete_remote(&connection, &manifest).await
+        crate::services::central_operation::stage_delete_remote(connection, &manifest).await
     {
         record_recovery_error(pool, &operation_id, &error).await?;
         return Err(error.into());
@@ -417,7 +420,7 @@ async fn delete_central_skill_remote_with_batch(
     db::transition_fs_db_operation(pool, &operation_id, "prepared", "fs_staged").await?;
     db::commit_delete_fs_db_operation(pool, &operation_id, skill_id).await?;
     if let Err(error) =
-        crate::services::central_operation::finalize_delete_remote(&connection, &manifest).await
+        crate::services::central_operation::finalize_delete_remote(connection, &manifest).await
     {
         record_recovery_error(pool, &operation_id, &error).await?;
         return Err(error.into());
@@ -439,68 +442,6 @@ pub async fn delete_central_skill_ssh_impl(
 ) -> Result<DeleteCentralSkillResult, CentralSkillsError> {
     let active_target = ActiveTarget::Ssh(Box::new(target.clone()));
     delete_central_skill_remote_impl(pool, &active_target, skill_id, remove_agent_ids).await
-}
-
-pub async fn delete_central_skills_remote_impl(
-    pool: &DbPool,
-    active_target: &ActiveTarget,
-    requests: &[BatchDeleteCentralSkillRequest],
-) -> Result<BatchDeleteCentralSkillResult, CentralSkillsError> {
-    let mut ordered_requests: Vec<BatchDeleteCentralSkillRequest> = Vec::new();
-    for request in requests {
-        if let Some(existing) = ordered_requests
-            .iter_mut()
-            .find(|existing| existing.skill_id == request.skill_id)
-        {
-            for agent_id in &request.remove_agent_ids {
-                if !existing.remove_agent_ids.contains(agent_id) {
-                    existing.remove_agent_ids.push(agent_id.clone());
-                }
-            }
-        } else {
-            ordered_requests.push(BatchDeleteCentralSkillRequest {
-                skill_id: request.skill_id.clone(),
-                remove_agent_ids: unique_agent_ids(request.remove_agent_ids.clone()),
-            });
-        }
-    }
-
-    let mut succeeded = Vec::new();
-    let mut failed = Vec::new();
-    let batch_id = uuid::Uuid::new_v4().to_string();
-    for request in ordered_requests {
-        match delete_central_skill_remote_with_batch(
-            pool,
-            active_target,
-            &request.skill_id,
-            &request.remove_agent_ids,
-            Some(&batch_id),
-        )
-        .await
-        {
-            Ok(result) => succeeded.push(BatchDeleteCentralSkillSuccess {
-                skill_id: request.skill_id,
-                removed_central_path: result.removed_central_path,
-                removed_agent_ids: result.removed_agent_ids,
-                retained_agent_ids: result.retained_agent_ids,
-            }),
-            Err(error) => failed.push(FailedCentralSkillDelete {
-                skill_id: request.skill_id,
-                error: error.to_string(),
-            }),
-        }
-    }
-
-    Ok(BatchDeleteCentralSkillResult { succeeded, failed })
-}
-
-pub async fn delete_central_skills_ssh_impl(
-    pool: &DbPool,
-    target: &RemoteTargetConfig,
-    requests: &[BatchDeleteCentralSkillRequest],
-) -> Result<BatchDeleteCentralSkillResult, CentralSkillsError> {
-    let active_target = ActiveTarget::Ssh(Box::new(target.clone()));
-    delete_central_skills_remote_impl(pool, &active_target, requests).await
 }
 
 pub async fn preview_delete_central_skill_impl(
@@ -564,10 +505,9 @@ pub async fn preview_delete_central_skills_impl(
 
         match preview_delete_central_skill_impl(pool, skill_id).await {
             Ok(preview) => previews.push(preview),
-            Err(error) => failed.push(FailedCentralSkillDelete {
-                skill_id: skill_id.clone(),
-                error: error.to_string(),
-            }),
+            Err(_error) => {
+                failed.push(FailedCentralSkillDelete::preview_fallback(skill_id.clone()))
+            }
         }
     }
 
@@ -579,27 +519,26 @@ pub async fn delete_central_skill_impl(
     skill_id: &str,
     remove_agent_ids: &[String],
 ) -> Result<DeleteCentralSkillResult, CentralSkillsError> {
-    delete_central_skill_with_batch(pool, skill_id, remove_agent_ids, None).await
+    let requests = [BatchDeleteCentralSkillRequest {
+        skill_id: skill_id.to_string(),
+        remove_agent_ids: remove_agent_ids.to_vec(),
+    }];
+    let mut outcomes =
+        delete_central_skills_for_target(pool, &ActiveTarget::Local, &requests, None).await?;
+    outcomes
+        .pop()
+        .expect("single delete request must produce one outcome")
+        .result
+        .map_err(|error| error.error)
 }
 
-async fn delete_central_skill_with_batch(
+async fn delete_central_skill_local_under_guard(
     pool: &DbPool,
     skill_id: &str,
     remove_agent_ids: &[String],
     batch_id: Option<&str>,
 ) -> Result<DeleteCentralSkillResult, CentralSkillsError> {
     let active_target = ActiveTarget::Local;
-    let _mutation_guard = crate::services::central_mutation::acquire_target_mutation_guard(
-        &active_target,
-        "delete Central skill",
-        crate::services::central_mutation::DEFAULT_CENTRAL_MUTATION_TIMEOUT,
-    )
-    .await?;
-    crate::services::central_operation::recover_pending_operations_under_guard(
-        pool,
-        &active_target,
-    )
-    .await?;
     let skill = db::get_skill_by_id(pool, skill_id)
         .await?
         .ok_or_else(|| CentralSkillsError::SkillNotFound(skill_id.to_string()))?;
@@ -685,55 +624,4 @@ async fn delete_central_skill_with_batch(
         removed_agent_ids,
         retained_agent_ids,
     })
-}
-
-pub async fn delete_central_skills_impl(
-    pool: &DbPool,
-    requests: &[BatchDeleteCentralSkillRequest],
-) -> Result<BatchDeleteCentralSkillResult, CentralSkillsError> {
-    let mut ordered_requests: Vec<BatchDeleteCentralSkillRequest> = Vec::new();
-    for request in requests {
-        if let Some(existing) = ordered_requests
-            .iter_mut()
-            .find(|existing| existing.skill_id == request.skill_id)
-        {
-            for agent_id in &request.remove_agent_ids {
-                if !existing.remove_agent_ids.contains(agent_id) {
-                    existing.remove_agent_ids.push(agent_id.clone());
-                }
-            }
-        } else {
-            ordered_requests.push(BatchDeleteCentralSkillRequest {
-                skill_id: request.skill_id.clone(),
-                remove_agent_ids: unique_agent_ids(request.remove_agent_ids.clone()),
-            });
-        }
-    }
-
-    let mut succeeded = Vec::new();
-    let mut failed = Vec::new();
-    let batch_id = uuid::Uuid::new_v4().to_string();
-    for request in ordered_requests {
-        match delete_central_skill_with_batch(
-            pool,
-            &request.skill_id,
-            &request.remove_agent_ids,
-            Some(&batch_id),
-        )
-        .await
-        {
-            Ok(result) => succeeded.push(BatchDeleteCentralSkillSuccess {
-                skill_id: request.skill_id,
-                removed_central_path: result.removed_central_path,
-                removed_agent_ids: result.removed_agent_ids,
-                retained_agent_ids: result.retained_agent_ids,
-            }),
-            Err(error) => failed.push(FailedCentralSkillDelete {
-                skill_id: request.skill_id,
-                error: error.to_string(),
-            }),
-        }
-    }
-
-    Ok(BatchDeleteCentralSkillResult { succeeded, failed })
 }
