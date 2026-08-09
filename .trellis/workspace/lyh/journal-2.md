@@ -1092,3 +1092,24 @@ Made metadata and Marketplace cache mutations atomic with bounded batching, roll
 ### Status
 
 [OK] **Completed**
+
+
+## Session 91: 完成 Central 更新失败修复与任务归档
+
+**Date**: 2026-08-09
+**Task**: 完成 Central 更新失败修复与任务归档
+**Branch**: `dev`
+
+### Summary
+
+按所选技能隔离 Central 更新和删除恢复，增加 GitHub 快照瞬时失败一次串行补偿，并补齐脱敏的 Apply/Refresh 诊断；完整 just ci 与实际验证通过，任务已归档并 squash 合并到 dev。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c8b4d0a` | (see git log) |
+
+### Status
+
+[OK] **Completed**

@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 90
-- **Last Active**: 2026-08-07
+- **Total Sessions**: 91
+- **Last Active**: 2026-08-09
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1094 | Active |
+| `journal-2.md` | ~1115 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 91 | 2026-08-09 | 完成 Central 更新失败修复与任务归档 | `c8b4d0a` | `dev` |
 | 90 | 2026-08-07 | 修复 Update Center 失败观测与恢复隔离 | `53e3db69` | `dev` |
 | 89 | 2026-08-05 | Dashboard 与 Central Skills 界面打磨 | `685099c5`, `00134d83` | `dev` |
 | 88 | 2026-08-05 | 完成检查更新故障修复与任务归档 | `d41aa441` | `codex/fix-update-check-archive-redirect` |
