@@ -81,7 +81,9 @@ interface MarketplaceShellProps {
   onGitHubImport: (
     selections: GitHubSkillImportSelection[]
   ) => Promise<GitHubRepoImportResult>;
-  onGitHubPreview: () => Promise<import("@/types").GitHubRepoPreview | null>;
+  onGitHubPreview: (
+    branch: string
+  ) => Promise<import("@/types").GitHubRepoPreview | null>;
   onInstallFromSource: (skillId: string) => Promise<void>;
   onInstallImportedSkill: (
     skillId: string,

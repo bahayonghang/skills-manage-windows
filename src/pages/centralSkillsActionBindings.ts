@@ -307,7 +307,6 @@ export function useCentralSkillsActionBindings({
     t,
     state: {
       deleteTargetSkill: actionState.deleteTargetSkill,
-      githubBranch: actionState.githubBranch,
       githubRepoUrl: actionState.githubRepoUrl,
       manualSelectedTagIds: actionState.manualSelectedTagIds,
       manualTagQuery: actionState.manualTagQuery,

@@ -15,13 +15,17 @@ describe("CentralSkillsView shared GitHub import + categorize handlers", () => {
   });
   afterEach(S.cleanupCentralSkillsViewTestState);
 
-  it("shares the controlled optional branch field with the Central launcher", async () => {
+  it("shares the controlled branch selector with the Central launcher", async () => {
     renderCentralSkillsView();
     await S.openGitHubImportViaLauncher(screen);
 
-    const branchInput = await screen.findByLabelText("Branch (optional)");
-    fireEvent.change(branchInput, { target: { value: "dev" } });
-    expect(branchInput).toHaveValue("dev");
+    expect(
+      await screen.findByRole("radio", { name: "main" }),
+    ).toHaveAttribute("aria-checked", "true");
+    const devOption = screen.getByRole("radio", { name: "dev" });
+    fireEvent.click(devOption);
+    expect(devOption).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Custom" })).toBeInTheDocument();
   });
 
   it("清空搜索后恢复完整列表", async () => {

@@ -38,7 +38,9 @@ export interface GitHubRepoImportWizardProps {
   isPreviewLoading: boolean;
   isImporting: boolean;
   importResult: GitHubRepoImportResult | null;
-  onPreview: () => Promise<GitHubRepoPreview | null> | GitHubRepoPreview | null;
+  onPreview: (
+    branch: string,
+  ) => Promise<GitHubRepoPreview | null> | GitHubRepoPreview | null;
   onImport: (
     selections: GitHubSkillImportSelection[],
   ) => Promise<GitHubRepoImportResult | void> | GitHubRepoImportResult | void;

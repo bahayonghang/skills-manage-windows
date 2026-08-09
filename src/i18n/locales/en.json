@@ -2378,9 +2378,16 @@
       "result": "Result"
     },
     "githubRepoUrl": "GitHub repository URL",
-    "githubBranchLabel": "Branch (optional)",
-    "githubBranchPlaceholder": "dev",
-    "githubBranchDefaultHint": "Leave branch blank to use the repository default.",
+    "githubBranchLabel": "Branch",
+    "githubBranchOption": {
+      "main": "main",
+      "dev": "dev",
+      "custom": "Custom"
+    },
+    "githubCustomBranchLabel": "Custom branch",
+    "githubCustomBranchPlaceholder": "feature/my-branch",
+    "githubBranchDefaultHint": "main is selected by default. Choose dev or enter a custom branch.",
+    "githubCustomBranchHint": "Enter the exact branch name to preview.",
     "previewImport": "Preview import",
     "githubImportNoWriteHint": "Preview is read-only and performs no write before you confirm import.",
     "githubImportDesktopOnlyHint": "GitHub repo preview and import are desktop-only actions in this release.",

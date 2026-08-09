@@ -242,9 +242,9 @@ export function MarketplaceView() {
     setDetailSkill(skill);
   }
 
-  async function handleGitHubPreview() {
+  async function handleGitHubPreview(branch: string) {
     try {
-      return await previewGitHubRepoImport(githubRepoUrl, githubBranch);
+      return await previewGitHubRepoImport(githubRepoUrl, branch);
     } catch {
       return null;
     }

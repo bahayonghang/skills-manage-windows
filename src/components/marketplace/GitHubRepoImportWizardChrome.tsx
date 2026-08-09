@@ -1,13 +1,11 @@
 import { Fragment } from "react";
 import {
-  AlertCircle,
   CheckCircle2,
   ExternalLink,
   GitBranch,
   Loader2,
   RefreshCw,
   ShieldCheck,
-  Sparkles,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -25,12 +23,9 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
-  formatGitHubImportError,
-  isPreviewSnapshotFailure,
-  looksLikeConfiguredGitHubTokenFailure,
-  looksLikeGitHubAuthGuidance,
   type WizardStep,
 } from "@/components/marketplace/githubImportWizardUtils";
+import { GitHubRepoImportUrlInputBlock } from "@/components/marketplace/GitHubRepoImportWizardInput";
 import { isRemoteLikeTarget, isSshTarget } from "@/lib/targetKind";
 
 /**
@@ -65,7 +60,7 @@ interface GitHubRepoImportWizardHeaderProps {
   activeTarget: TargetSummary;
   onRepoUrlChange: (value: string) => void;
   onBranchChange: (value: string) => void;
-  onPreviewSubmit: () => void;
+  onPreviewSubmit: (branch: string) => void;
 }
 
 export function GitHubRepoImportWizardHeader({
@@ -176,7 +171,7 @@ export function GitHubRepoImportWizardHeader({
           previewToolbarRepoHref={previewToolbarRepoHref}
           selectedSkillsCount={selectedSkillsCount}
           activeTarget={activeTarget}
-          onPreviewSubmit={onPreviewSubmit}
+          onPreviewSubmit={() => onPreviewSubmit(branch || "main")}
         />
       ) : step === "input" ? (
         <GitHubRepoImportUrlInputBlock
@@ -189,127 +184,6 @@ export function GitHubRepoImportWizardHeader({
           onBranchChange={onBranchChange}
           onPreviewSubmit={onPreviewSubmit}
         />
-      ) : null}
-    </div>
-  );
-}
-
-interface GitHubRepoImportUrlInputBlockProps {
-  repoUrl: string;
-  branch: string;
-  previewError: string | null;
-  isPreviewLoading: boolean;
-  browserMode: boolean;
-  onRepoUrlChange: (value: string) => void;
-  onBranchChange: (value: string) => void;
-  onPreviewSubmit: () => void;
-}
-
-function GitHubRepoImportUrlInputBlock({
-  repoUrl,
-  branch,
-  previewError,
-  isPreviewLoading,
-  browserMode,
-  onRepoUrlChange,
-  onBranchChange,
-  onPreviewSubmit,
-}: GitHubRepoImportUrlInputBlockProps) {
-  const { t } = useTranslation();
-
-  return (
-    <div className="mt-4 rounded-xl border border-border/70 bg-muted/10 p-4">
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-end">
-        <div className="min-w-0">
-          <label
-            className="mb-2 block text-sm font-medium"
-            htmlFor="github-repo-url"
-          >
-            {t("marketplace.githubRepoUrl")}
-          </label>
-          <Input
-            id="github-repo-url"
-            value={repoUrl}
-            onChange={(event) => onRepoUrlChange(event.target.value)}
-            placeholder="https://github.com/owner/repo"
-          />
-        </div>
-        <div className="min-w-0">
-          <label
-            className="mb-2 block text-sm font-medium"
-            htmlFor="github-repo-branch"
-          >
-            {t("marketplace.githubBranchLabel")}
-          </label>
-          <div className="relative">
-            <GitBranch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="github-repo-branch"
-              value={branch}
-              onChange={(event) => onBranchChange(event.target.value)}
-              placeholder={t("marketplace.githubBranchPlaceholder")}
-              aria-describedby="github-repo-branch-hint"
-              className="pl-9"
-            />
-          </div>
-        </div>
-        <Button
-          onClick={onPreviewSubmit}
-          disabled={isPreviewLoading || !repoUrl.trim()}
-        >
-          {isPreviewLoading ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Sparkles className="size-4" />
-          )}
-          <span>{t("marketplace.previewImport")}</span>
-        </Button>
-      </div>
-      <p
-        id="github-repo-branch-hint"
-        className="mt-2 text-xs text-muted-foreground"
-      >
-        {t("marketplace.githubBranchDefaultHint")}
-      </p>
-      <p className="mt-2 text-xs text-muted-foreground">
-        {browserMode
-          ? t("marketplace.githubImportDesktopOnlyHint")
-          : t("marketplace.githubImportNoWriteHint")}
-      </p>
-      {browserMode ? (
-        <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="mt-0.5 size-4 shrink-0 text-primary" />
-            <span>{t("marketplace.githubImportDesktopOnlyState")}</span>
-          </div>
-        </div>
-      ) : null}
-      {previewError ? (
-        <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive-text">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="mt-0.5 size-4 shrink-0" />
-            <div className="space-y-2">
-              <span className="block">
-                {formatGitHubImportError(previewError, t)}
-              </span>
-              {isPreviewSnapshotFailure(previewError) ? (
-                <span
-                  className="block text-xs text-destructive-text"
-                  data-testid="github-import-repreview-hint"
-                >
-                  {t("marketplace.githubImportRepreviewHint")}
-                </span>
-              ) : null}
-              {looksLikeGitHubAuthGuidance(previewError) ? (
-                <span className="block text-xs text-destructive-text">
-                  {looksLikeConfiguredGitHubTokenFailure(previewError)
-                    ? t("marketplace.githubPatConfiguredFailureHint")
-                    : t("marketplace.githubPatSettingsHint")}
-                </span>
-              ) : null}
-            </div>
-          </div>
-        </div>
       ) : null}
     </div>
   );

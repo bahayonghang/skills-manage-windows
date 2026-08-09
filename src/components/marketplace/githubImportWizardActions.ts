@@ -54,7 +54,9 @@ export function createGitHubImportWizardActions({
   selectedImportPayload: GitHubSkillImportSelection[];
   activeTarget: TargetSummary;
   sshPasswordRepairValue: string;
-  onPreview: () => Promise<GitHubRepoPreview | null> | GitHubRepoPreview | null;
+  onPreview: (
+    branch: string,
+  ) => Promise<GitHubRepoPreview | null> | GitHubRepoPreview | null;
   onImport: (
     selections: GitHubSkillImportSelection[],
   ) => Promise<GitHubRepoImportResult | void> | GitHubRepoImportResult | void;
@@ -142,10 +144,10 @@ export function createGitHubImportWizardActions({
     setIsRenameEditing(false);
   }
 
-  async function handlePreviewSubmit() {
+  async function handlePreviewSubmit(branch: string) {
     const nextSelectedSkillPath = selectedSkillPath;
     try {
-      const nextPreview = await onPreview();
+      const nextPreview = await onPreview(branch);
       if (nextPreview) {
         if (!preview) {
           setSelectedSkillPath(nextSelectedSkillPath);

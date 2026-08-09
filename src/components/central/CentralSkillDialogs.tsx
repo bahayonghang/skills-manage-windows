@@ -261,7 +261,7 @@ export function CentralSkillDialogs({
     requests: BatchDeleteCentralSkillRequest[]
   ) => Promise<BatchDeleteCentralSkillResult>;
   onGitHubImport: GitHubRepoImportWizardProps["onImport"];
-  onGitHubPreview: () => Promise<GitHubRepoPreview | null>;
+  onGitHubPreview: (branch: string) => Promise<GitHubRepoPreview | null>;
   onInstall: (
     skillId: string,
     agentIds: string[],

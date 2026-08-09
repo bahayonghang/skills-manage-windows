@@ -2378,9 +2378,16 @@
       "result": "结果"
     },
     "githubRepoUrl": "GitHub 仓库 URL",
-    "githubBranchLabel": "分支（可选）",
-    "githubBranchPlaceholder": "dev",
-    "githubBranchDefaultHint": "留空时使用仓库默认分支。",
+    "githubBranchLabel": "分支",
+    "githubBranchOption": {
+      "main": "main",
+      "dev": "dev",
+      "custom": "自定义"
+    },
+    "githubCustomBranchLabel": "自定义分支",
+    "githubCustomBranchPlaceholder": "feature/my-branch",
+    "githubBranchDefaultHint": "默认选择 main，也可以切换到 dev 或输入自定义分支。",
+    "githubCustomBranchHint": "请输入要预览的完整分支名称。",
     "previewImport": "预览导入",
     "githubImportNoWriteHint": "预览为只读操作，在你确认导入前不会执行任何写入。",
     "githubImportDesktopOnlyHint": "当前版本仅桌面应用支持 GitHub 仓库预览与导入。",
