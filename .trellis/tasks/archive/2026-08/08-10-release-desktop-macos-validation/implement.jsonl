@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/index.md","reason":"Route the Rust fixture repair through the repository backend contracts."}
+{"file":".trellis/spec/backend/process-supervision.md","reason":"Preserve fail-closed termination and descendant cleanup while making overflow fixtures deterministic."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Apply the required Rust and just ci validation ladder without weakening macOS coverage."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Keep regression coverage at the existing module-level Rust test seam and require non-zero discovery."}

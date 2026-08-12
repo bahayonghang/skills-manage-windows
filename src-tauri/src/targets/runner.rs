@@ -485,6 +485,7 @@ mod tests {
                     }
                 }
                 let _ = std::io::stdout().flush();
+                std::thread::sleep(Duration::from_secs(30));
             }
             "large_stderr" => {
                 let chunk = vec![b'x'; 8 * 1024];
@@ -494,6 +495,7 @@ mod tests {
                     }
                 }
                 let _ = std::io::stderr().flush();
+                std::thread::sleep(Duration::from_secs(30));
             }
             "close_stdin" => {
                 close_fixture_stdin();

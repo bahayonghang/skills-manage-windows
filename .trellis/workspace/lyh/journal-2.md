@@ -1113,3 +1113,24 @@ Made metadata and Marketplace cache mutations atomic with bounded batching, roll
 ### Status
 
 [OK] **Completed**
+
+
+## Session 92: 修复 Release Desktop macOS 输出超限测试竞态
+
+**Date**: 2026-08-10
+**Task**: 修复 Release Desktop macOS 输出超限测试竞态
+**Branch**: `task/release-desktop-macos-validation`
+
+### Summary
+
+让 stdout/stderr overflow fixture 保持存活直至 supervisor 主动终止，保留真实 TerminationFailed 的 fail-closed 语义；补充 process supervision 防复发规范，并通过压力测试、完整 Rust gate 与 just ci。macOS exact-head hosted 验证因未授权远端操作而保留未执行。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9b149888e6ed4b87d012e695708d208e48d266e7` | (see git log) |
+
+### Status
+
+[OK] **Completed**
