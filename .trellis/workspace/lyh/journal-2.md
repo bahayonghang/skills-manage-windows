@@ -1134,3 +1134,24 @@ Made metadata and Marketplace cache mutations atomic with bounded batching, roll
 ### Status
 
 [OK] **Completed**
+
+
+## Session 93: Unknown-source Central reset
+
+**Date**: 2026-08-14
+**Task**: Unknown-source Central reset
+**Branch**: `dev`
+
+### Summary
+
+在 Update Center Unsupported 为当前 target 增加无 membership 中央技能重置：预览确认后走 journaled batch delete，Apply 在 mutation lock 内与预览 skillIds 求交，成功后清空该 pool inventory。just ci 已通过。未改开发者本机已修复的 Local 库。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `caeca7bf` | (see git log) |
+
+### Status
+
+[OK] **Completed**
