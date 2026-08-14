@@ -1,8 +1,10 @@
 import { GENERATED_IPC_COMMANDS } from "./generatedCommandMap";
 
+import type { ResetUnknownSourceSkillsPreview } from "@/types/resetUnknownSource";
 import type {
   AgentWithStatus,
   ArchiveFingerprint,
+  BatchDeleteCentralSkillResult,
   BatchUninstallSkillRequest,
   BatchUninstallSkillResult,
   BootstrapSnapshot,
@@ -205,6 +207,14 @@ export const HANDWRITTEN_IPC_COMMANDS = {
   // ── platform skills ───────────────────────────────────────────────────────
   get_skills_by_agent: command<{ agentId: string }, ScannedSkill[]>(),
   get_central_skills: command<undefined, SkillWithLinks[]>(),
+  preview_reset_unknown_source_skills: command<
+    undefined,
+    ResetUnknownSourceSkillsPreview
+  >(),
+  reset_unknown_source_skills: command<
+    { skillIds: string[]; removeCopyAgentIds: string[] },
+    BatchDeleteCentralSkillResult
+  >(),
   get_central_top_tags: command<{ limit: number }, CentralTopTag[]>(),
   uninstall_skill_from_agent: command<
     { skillId: string; agentId: string; rowId?: string },

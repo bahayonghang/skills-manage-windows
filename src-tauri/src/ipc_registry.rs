@@ -63,6 +63,8 @@ macro_rules! __skillport_runtime_commands {
             preview_delete_central_skills => commands::skills::preview_delete_central_skills,
             delete_central_skill => commands::skills::delete_central_skill,
             delete_central_skills => commands::skills::delete_central_skills,
+            preview_reset_unknown_source_skills => commands::skills::preview_reset_unknown_source_skills,
+            reset_unknown_source_skills => commands::skills::reset_unknown_source_skills,
             preview_delete_skill_repository => commands::skills::preview_delete_skill_repository,
             delete_skill_repository => commands::skills::delete_skill_repository,
             get_skill_detail => commands::skills::get_skill_detail,

@@ -204,6 +204,13 @@ pub struct BatchDeleteCentralSkillResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResetUnknownSourceSkillsPreview {
+    pub skill_ids: Vec<String>,
+    pub preview: BatchDeleteCentralSkillPreviewResult,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeleteSkillRepositoryPreview {
     pub repository: SkillRepositoryWithStats,
     pub delete_preview: BatchDeleteCentralSkillPreviewResult,

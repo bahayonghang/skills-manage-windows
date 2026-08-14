@@ -1,4 +1,5 @@
 import { invoke, isTauriRuntime } from "@/lib/ipc";
+import { backendErrorStateValue } from "@/lib/backendError";
 import {
   BatchDeleteCentralSkillPreviewResult,
   BatchInstallResult,
@@ -11,6 +12,7 @@ import {
 } from "@/types";
 import { indexUpdateStates } from "./centralSkillsStore.shared";
 import type { CentralSkillsState, CentralStoreContext } from "./centralSkillsStore.types";
+import { useUpdateCenterStore } from "./updateCenterStore";
 
 function normalizeBatchInstallResult(result: BatchInstallResult): Required<BatchInstallResult> {
   return {
@@ -35,9 +37,11 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
   | "batchInstallSkills"
   | "loadDeletePreview"
   | "loadBatchDeletePreview"
+  | "loadUnknownSourceResetPreview"
   | "loadRepositoryDeletePreview"
   | "deleteCentralSkill"
   | "deleteCentralSkills"
+  | "resetUnknownSourceSkills"
   | "deleteSkillRepository"
   | "togglePlatformLink"
 > {
@@ -128,6 +132,10 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
     });
   },
 
+  loadUnknownSourceResetPreview: async () => {
+    return invoke("preview_reset_unknown_source_skills");
+  },
+
   loadRepositoryDeletePreview: async (repositoryId) => {
     if (!isTauriRuntime()) {
       throw new Error("Desktop-only feature: repository deletion is available in the Tauri app.");
@@ -196,6 +204,40 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
       return result;
     } catch (err) {
       set({ error: String(err), isDeleting: false });
+      throw err;
+    }
+  },
+
+  resetUnknownSourceSkills: async (skillIds, removeCopyAgentIds) => {
+    set({ isDeleting: true, error: null });
+    try {
+      const result = await invoke("reset_unknown_source_skills", {
+        skillIds,
+        removeCopyAgentIds,
+      });
+      const [skills, repositories, tags, reviews, updateStates] = await Promise.all([
+        invoke<SkillWithLinks[]>("get_central_skills"),
+        invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
+        invoke<SkillTag[]>("get_skill_tags"),
+        invoke<SkillAiTagReview[]>("get_pending_ai_tag_reviews"),
+        invoke("get_central_skill_update_states"),
+      ]);
+      set({
+        skills: skills ?? [],
+        repositories: repositories ?? [],
+        tags: tags ?? [],
+        aiTagReviews: reviews ?? [],
+        updateStatuses: indexUpdateStates(updateStates ?? []),
+        isDeleting: false,
+      });
+      try {
+        await useUpdateCenterStore.getState().loadInventory();
+      } catch (inventoryError) {
+        set({ error: backendErrorStateValue(inventoryError) });
+      }
+      return result;
+    } catch (err) {
+      set({ error: backendErrorStateValue(err), isDeleting: false });
       throw err;
     }
   },

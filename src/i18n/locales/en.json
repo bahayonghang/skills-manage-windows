@@ -166,6 +166,14 @@
       "remote_target_unsupported": "Local ZIP import is unavailable for SSH and WSL targets.",
       "internal": "The local ZIP import failed.",
       "unknown": "The local ZIP import failed. Try again or inspect the Operation Logs."
+    },
+    "central": {
+      "reset_failed": "Unknown-source Central skills could not be reset."
+    },
+    "central_skills": {
+      "mutation_lock_failed": "Central is busy with another change. Try again shortly.",
+      "delete_preview_failed": "This Central skill could not be deleted.",
+      "delete_failed": "This Central skill could not be deleted."
     }
   },
   "targets": {
@@ -1400,6 +1408,15 @@
       "emptyAllClean": "Everything is up to date",
       "tabEmpty": "No entries in this category",
       "unsupportedDescription": "These skills could not be checked because they do not have a supported remote source.",
+      "resetUnknownSource": "Reset skills without a remote source",
+      "resetUnknownSourceDesc": "Deletes Central skills that have no GitHub membership on this target so you can re-import them with provenance. Linked installs are removed. Copy installs stay unless you select them.",
+      "resetUnknownSourceDanger": "{{count}} Central skill(s) without a remote source will be deleted from this target.",
+      "resetUnknownSourceConfirm": "Reset {{count}} skill(s)",
+      "resetUnknownSourceSuccess": "Removed {{count}} skill(s) without a remote source. Re-import them from GitHub to enable update checks.",
+      "resetUnknownSourcePartial": "Removed {{succeeded}}, failed {{failed}}",
+      "resetUnknownSourceError": "Reset failed: {{error}}",
+      "resetUnknownSourcePreviewError": "Could not preview skills without a remote source: {{error}}",
+      "resetUnknownSourceEmpty": "No Central skills without a remote source on this target.",
       "unsupportedReasons": {
         "unknown_source": "No remote source is available for automatic checks.",
         "unsupported_source_type": "This remote source type does not support automatic checks.",

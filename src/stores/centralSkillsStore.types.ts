@@ -25,6 +25,7 @@ import {
   SkillTagSuggestionResult,
   SkillWithLinks,
 } from "@/types";
+import type { ResetUnknownSourceSkillsPreview } from "@/types/resetUnknownSource";
 import type {
   CentralRepositorySyncApplyResult,
   CentralRepositorySyncDecisions,
@@ -79,6 +80,7 @@ export interface CentralSkillsState {
   loadBatchDeletePreview: (
     skillIds: string[],
   ) => Promise<BatchDeleteCentralSkillPreviewResult>;
+  loadUnknownSourceResetPreview: () => Promise<ResetUnknownSourceSkillsPreview>;
   loadRepositoryDeletePreview: (
     repositoryId: string,
   ) => Promise<DeleteSkillRepositoryPreview>;
@@ -88,6 +90,10 @@ export interface CentralSkillsState {
   ) => Promise<void>;
   deleteCentralSkills: (
     requests: BatchDeleteCentralSkillRequest[],
+  ) => Promise<BatchDeleteCentralSkillResult>;
+  resetUnknownSourceSkills: (
+    skillIds: string[],
+    removeCopyAgentIds: string[],
   ) => Promise<BatchDeleteCentralSkillResult>;
   deleteSkillRepository: (
     repositoryId: string,

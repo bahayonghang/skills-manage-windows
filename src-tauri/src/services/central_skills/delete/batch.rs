@@ -146,7 +146,7 @@ pub(super) async fn delete_central_skills_for_target(
     .await
 }
 
-async fn delete_central_skills_under_guard(
+pub(super) async fn delete_central_skills_under_guard(
     pool: &DbPool,
     active_target: &ActiveTarget,
     ordered_requests: Vec<BatchDeleteCentralSkillRequest>,
@@ -235,7 +235,7 @@ pub(crate) async fn delete_central_skills_for_target_with_connection_for_tests(
     Ok(public_delete_batch_result(outcomes))
 }
 
-fn public_delete_batch_result(
+pub(super) fn public_delete_batch_result(
     outcomes: Vec<CentralSkillDeleteItemOutcome>,
 ) -> BatchDeleteCentralSkillResult {
     let mut succeeded = Vec::new();

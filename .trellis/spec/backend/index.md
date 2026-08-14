@@ -23,6 +23,7 @@
 - [Import Deep-Link Lifecycle Contract](./import-deep-link-lifecycle.md)
 - [Local Archive Import Contract](./local-archive-import.md)
 - [Skill Deletion Integrity Contract](./skill-deletion-integrity.md)
+- [Unknown-Source Central Reset Contract](./unknown-source-reset.md)
 - [Versioned SQLite Migration Contract](./database-migrations.md)
 - [Transactional Metadata and Cache Mutations](./transactional-mutations.md)
 - [Recoverable FS + DB Operation Journal Contract](./fs-db-operation-journal.md)

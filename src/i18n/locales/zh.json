@@ -166,6 +166,14 @@
       "remote_target_unsupported": "SSH 和 WSL 目标不支持本地 ZIP 导入。",
       "internal": "本地 ZIP 导入失败。",
       "unknown": "本地 ZIP 导入失败，请重试或检查操作日志。"
+    },
+    "central": {
+      "reset_failed": "无法重置缺少远端来源的中央技能。"
+    },
+    "central_skills": {
+      "mutation_lock_failed": "中央技能库正在处理其他变更，请稍后再试。",
+      "delete_preview_failed": "无法删除该中央技能。",
+      "delete_failed": "无法删除该中央技能。"
     }
   },
   "targets": {
@@ -1400,6 +1408,15 @@
       "emptyAllClean": "所有内容都是最新的",
       "tabEmpty": "该分类暂无条目",
       "unsupportedDescription": "以下技能缺少受支持的远端来源，因此无法检查更新。",
+      "resetUnknownSource": "重置无远端来源的技能",
+      "resetUnknownSourceDesc": "删除当前目标上没有 GitHub 来源关系的中央技能，以便重新导入并带上来源。链接安装会自动卸除；复制安装默认保留，可在确认时勾选删除。",
+      "resetUnknownSourceDanger": "将从此目标删除 {{count}} 个没有远端来源的中央技能。",
+      "resetUnknownSourceConfirm": "重置 {{count}} 个技能",
+      "resetUnknownSourceSuccess": "已删除 {{count}} 个无远端来源的技能。请从 GitHub 重新导入后再检查更新。",
+      "resetUnknownSourcePartial": "已删除 {{succeeded}} 个，失败 {{failed}} 个",
+      "resetUnknownSourceError": "重置失败：{{error}}",
+      "resetUnknownSourcePreviewError": "无法预览无远端来源的技能：{{error}}",
+      "resetUnknownSourceEmpty": "当前目标没有缺少远端来源的中央技能。",
       "unsupportedReasons": {
         "unknown_source": "没有可用于自动检查的远端来源。",
         "unsupported_source_type": "此远端来源类型不支持自动检查。",

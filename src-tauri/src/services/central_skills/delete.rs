@@ -12,6 +12,7 @@ use super::types::{
 };
 mod batch;
 mod repository;
+mod reset;
 
 use batch::delete_central_skills_for_target;
 #[cfg(test)]
@@ -24,6 +25,12 @@ pub use repository::{
     delete_skill_repository_impl, delete_skill_repository_remote_impl,
     delete_skill_repository_ssh_impl, preview_delete_skill_repository_impl,
     preview_delete_skill_repository_ssh_impl,
+};
+#[cfg(test)]
+pub(crate) use reset::reset_unknown_source_skills_for_target_with_connection_for_tests;
+pub use reset::{
+    list_unknown_source_central_skill_ids, preview_reset_unknown_source_skills_impl,
+    reset_unknown_source_skills_impl,
 };
 
 fn skill_delete_dir(skill: &db::Skill) -> Result<PathBuf, CentralSkillsError> {

@@ -351,6 +351,10 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
         "central_updates.inventory_invariant" => {
             Some("The update inventory could not be finalized.")
         }
+        "central.reset_failed" => Some("Unknown-source Central skills could not be reset."),
+        "central_skills.mutation_lock_failed" => {
+            Some("Central is busy with another change. Try again shortly.")
+        }
         "installation.pending_central_recovery" => {
             Some("Central recovery is pending for this skill.")
         }
@@ -455,6 +459,25 @@ mod tests {
             assert_eq!(
                 error.message,
                 "GitHub repository archive redirect was rejected."
+            );
+            assert!(!error.retryable);
+            assert!(!serde_json::to_string(&error).unwrap().contains(seed));
+        }
+    }
+
+    #[test]
+    fn reset_failed_code_keeps_only_the_reviewed_public_message() {
+        let seeds = [
+            "ghp_super_secret",
+            "https://github.com/private/repo",
+            r"C:\Users\alice\.skillsmanage\skills\npx-skill",
+        ];
+        for seed in seeds {
+            let error = IpcError::from(format!("central.reset_failed:{seed}"));
+            assert_eq!(error.code, "central.reset_failed");
+            assert_eq!(
+                error.message,
+                "Unknown-source Central skills could not be reset."
             );
             assert!(!error.retryable);
             assert!(!serde_json::to_string(&error).unwrap().contains(seed));

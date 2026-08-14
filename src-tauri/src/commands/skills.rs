@@ -27,12 +27,13 @@ pub use crate::services::central_skills::{
     get_skills_by_agent_impl, list_directory_tree_for_target_impl,
     preview_delete_central_skills_impl, preview_delete_central_skills_ssh_impl,
     preview_delete_skill_repository_impl, preview_delete_skill_repository_ssh_impl,
+    preview_reset_unknown_source_skills_impl, reset_unknown_source_skills_impl,
     BatchDeleteCentralSkillPreviewResult, BatchDeleteCentralSkillRequest,
     BatchDeleteCentralSkillResult, BatchDeleteCentralSkillSuccess, CentralSkillsPage,
     CentralSkillsPageRequest, DeleteCentralSkillPreview, DeleteCentralSkillResult,
     DeleteSkillRepositoryPreview, DeleteSkillRepositoryResult, DirectoryTreeEntry,
-    FailedCentralSkillDelete, SkillDetail, SkillInstallationDetail, SkillPathAccessContext,
-    SkillWithLinks,
+    FailedCentralSkillDelete, ResetUnknownSourceSkillsPreview, SkillDetail,
+    SkillInstallationDetail, SkillPathAccessContext, SkillWithLinks,
 };
 
 /// Tauri command: return all skills installed for a given agent, including
@@ -242,6 +243,121 @@ pub async fn delete_central_skills(
                         .error(error)
                         .details(json!({
                             "requestCount": requests.len(),
+                        }))
+                        .duration_ms(started_at.elapsed().as_millis() as i64),
+                    )
+                    .await;
+                }
+            }
+            result
+        }
+        .await
+    )
+}
+
+#[tauri::command]
+pub async fn preview_reset_unknown_source_skills(
+    state: State<'_, AppState>,
+) -> crate::ipc_error::IpcResult<ResetUnknownSourceSkillsPreview> {
+    crate::ipc_boundary!(
+        async move {
+            let request_context = state.resolve_target_context().await?;
+            let pool = request_context.db().clone();
+            let active_target = request_context.target().clone();
+            central_skills::preview_reset_unknown_source_skills_impl(&pool, &active_target)
+                .await
+                .map_err(reset_command_error)
+        }
+        .await
+    )
+}
+
+#[tauri::command]
+pub async fn reset_unknown_source_skills(
+    state: State<'_, AppState>,
+    skill_ids: Vec<String>,
+    remove_copy_agent_ids: Vec<String>,
+) -> crate::ipc_error::IpcResult<BatchDeleteCentralSkillResult> {
+    crate::ipc_boundary!(
+        async move {
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let target_context = target_context_from_active_target(&active_target);
+            let pool = request_context.db().clone();
+            let started_at = Instant::now();
+            let target_kind = match &active_target {
+                ActiveTarget::Local => "local",
+                ActiveTarget::Ssh(_) => "ssh",
+                ActiveTarget::Wsl(_) => "wsl",
+            };
+            let result = central_skills::reset_unknown_source_skills_impl(
+                &pool,
+                &active_target,
+                &skill_ids,
+                &remove_copy_agent_ids,
+            )
+            .await
+            .map_err(reset_command_error);
+            match &result {
+                Ok(batch_result) => {
+                    let attempted = batch_result.succeeded.len() + batch_result.failed.len();
+                    let status = match (batch_result.succeeded.len(), batch_result.failed.len()) {
+                        (_, 0) => "succeeded",
+                        (0, _) => "failed",
+                        _ => "partial",
+                    };
+                    let failed_codes: Vec<String> = batch_result
+                        .failed
+                        .iter()
+                        .filter_map(|item| item.error_code.clone())
+                        .collect();
+                    record_operation_log_best_effort(
+                        &state.db,
+                        target_context,
+                        OperationLogEvent::new(
+                            "delete",
+                            "central.reset_unknown_source",
+                            status,
+                            format!(
+                                "Reset {} unknown-source Central skill(s), {} failed",
+                                batch_result.succeeded.len(),
+                                batch_result.failed.len()
+                            ),
+                        )
+                        .subject(
+                            "batch",
+                            "central.reset_unknown_source",
+                            "Unknown-source Central reset",
+                        )
+                        .details(json!({
+                            "targetKind": target_kind,
+                            "attempted": attempted,
+                            "succeeded": batch_result.succeeded.len(),
+                            "failed": batch_result.failed.len(),
+                            "failedCodes": failed_codes,
+                        }))
+                        .duration_ms(started_at.elapsed().as_millis() as i64),
+                    )
+                    .await;
+                }
+                Err(error) => {
+                    record_operation_log_best_effort(
+                        &state.db,
+                        target_context,
+                        OperationLogEvent::new(
+                            "delete",
+                            "central.reset_unknown_source",
+                            "failed",
+                            "Failed to reset unknown-source Central skills",
+                        )
+                        .subject(
+                            "batch",
+                            "central.reset_unknown_source",
+                            "Unknown-source Central reset",
+                        )
+                        .error(error)
+                        .details(json!({
+                            "targetKind": target_kind,
                         }))
                         .duration_ms(started_at.elapsed().as_millis() as i64),
                     )
@@ -493,6 +609,15 @@ pub async fn list_directory_tree(
         }
         .await
     )
+}
+
+fn reset_command_error(error: central_skills::CentralSkillsError) -> String {
+    let code = error.stable_delete_error_code();
+    if code == "central_skills.mutation_lock_failed" {
+        format!("{code}:{}", error.public_delete_message())
+    } else {
+        format!("central.reset_failed:{code}")
+    }
 }
 
 fn path_access_context(

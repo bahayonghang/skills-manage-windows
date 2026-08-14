@@ -199,3 +199,8 @@ transaction.commit().await?;
 Runtime delete paths do not consume or duplicate the relation list. The
 compile-time definition remains the source for migration, repair, and tests;
 SQLite owns runtime cascade atomicity.
+
+Unknown-source Central reset (`preview_reset_unknown_source_skills` /
+`reset_unknown_source_skills`) reuses this journaled parent delete. See
+`unknown-source-reset.md`. It must not call `rebuild_startup_database` or
+issue a second raw `DELETE FROM skills`.

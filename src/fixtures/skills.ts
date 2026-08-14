@@ -87,6 +87,14 @@ export function registerSkillsFixtures(): void {
     get_skills_by_agent: ({ agentId }) =>
       BROWSER_FIXTURE_SKILLS_BY_AGENT[agentId] ?? [],
     get_central_skills: () => [],
+    preview_reset_unknown_source_skills: () => ({
+      skillIds: [],
+      preview: { previews: [], failed: [] },
+    }),
+    reset_unknown_source_skills: () => ({
+      succeeded: [],
+      failed: [],
+    }),
     // 卸载依赖真实文件系统，浏览器演示态保持「桌面运行时必需」语义。
     uninstall_skill_from_agent: () =>
       Promise.reject(

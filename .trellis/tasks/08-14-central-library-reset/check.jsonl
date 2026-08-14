@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/unknown-source-reset.md", "reason": "Check candidate set, confirmed skillIds, mutation lock, and inventory clear rules."}
+{"file": ".trellis/spec/backend/skill-deletion-integrity.md", "reason": "Check that reset deletes only parent skills, cascades the seven owned relations, and prunes empty repositories."}
+{"file": ".trellis/spec/backend/fs-db-operation-journal.md", "reason": "Check FS backup/restore and db_committed atomicity; no unjournaled mass delete."}
+{"file": ".trellis/spec/backend/target-context.md", "reason": "Check Local reset does not write SSH cache and SSH reset does not write Local db.sqlite."}
+{"file": ".trellis/spec/backend/startup-recovery.md", "reason": "Check that canRebuild stays false for healthy DBs and reset does not reopen startup rebuild."}
+{"file": ".trellis/spec/backend/test-support.md", "reason": "Check tests do not open ~/.skillsmanage production paths."}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "Check confirmation/cancel/failure feedback and redacted error rendering."}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "Check Operation Log and IPC errors omit paths, URLs, tokens, and SQL."}

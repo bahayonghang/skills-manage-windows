@@ -524,6 +524,80 @@ describe("centralSkillsStore", () => {
     expect(useCentralSkillsStore.getState().isDeleting).toBe(false);
   });
 
+  it("loads unknown-source reset preview from the active target", async () => {
+    const preview = {
+      skillIds: ["npx-skill"],
+      preview: {
+        previews: [
+          {
+            skill_id: "npx-skill",
+            skill_name: "npx-skill",
+            central_path: "~/.skillsmanage/skills/npx-skill",
+            copy_installations: [],
+            auto_removed_agent_ids: [],
+          },
+        ],
+        failed: [],
+      },
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(preview);
+
+    const result = await useCentralSkillsStore
+      .getState()
+      .loadUnknownSourceResetPreview();
+
+    expect(result).toEqual(preview);
+    expect(invoke).toHaveBeenCalledWith("preview_reset_unknown_source_skills");
+  });
+
+  it("resets unknown-source skills and reloads central plus inventory", async () => {
+    const result = {
+      succeeded: [
+        {
+          skill_id: "npx-skill",
+          removed_central_path: "~/.skillsmanage/skills/npx-skill",
+          removed_agent_ids: [],
+          retained_agent_ids: [],
+        },
+      ],
+      failed: [],
+    };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(result)
+      .mockResolvedValueOnce([mockSkills[1]])
+      .mockResolvedValueOnce(mockRepositories)
+      .mockResolvedValueOnce(mockTags)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce({
+        updatable: [],
+        remoteAdded: [],
+        remoteMissing: [],
+        unsupported: [],
+        platformDuplicates: [],
+        deletedPlatformCopies: [],
+        orphans: [],
+        failedRepositories: [],
+        generatedAt: "2026-08-14T00:00:00Z",
+      });
+
+    const actual = await useCentralSkillsStore
+      .getState()
+      .resetUnknownSourceSkills(["npx-skill"], []);
+
+    expect(actual).toEqual(result);
+    expect(invoke).toHaveBeenCalledWith("reset_unknown_source_skills", {
+      skillIds: ["npx-skill"],
+      removeCopyAgentIds: [],
+    });
+    expect(invoke).toHaveBeenCalledWith("get_central_skills");
+    expect(invoke).toHaveBeenCalledWith("get_skill_update_inventory", {
+      scope: null,
+    });
+    expect(useCentralSkillsStore.getState().skills).toEqual([mockSkills[1]]);
+    expect(useCentralSkillsStore.getState().isDeleting).toBe(false);
+  });
+
   it("loads repository delete preview", async () => {
     const repository: SkillRepositoryWithStats = {
       id: "github-openai-skills-main",
