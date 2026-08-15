@@ -1155,3 +1155,37 @@ Made metadata and Marketplace cache mutations atomic with bounded batching, roll
 ### Status
 
 [OK] **Completed**
+
+
+## Session 94: GitHub import preview readable failure
+
+**Date**: 2026-08-15
+**Task**: GitHub import preview readable failure
+**Branch**: `dev`
+
+### Summary
+
+给 NoImportableSkills 补稳定 IPC code，向导直接展示无可导入技能，Runtime Log 保留该 code。
+
+### Main Changes
+
+- NoImportableSkills 映射为 github_import.no_importable_skills
+- 向导与 Runtime Log 展示 reviewed 失败而不是内部兜底句
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `289aa6a9` | (see git log) |
+
+### Testing
+
+- [OK] just ci
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 无。未做桌面实网预览 HERO-Anti-OverDefense
