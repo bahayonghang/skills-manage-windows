@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 94
+- **Total Sessions**: 95
 - **Last Active**: 2026-08-15
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1191 | Active |
+| `journal-2.md` | ~1212 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 95 | 2026-08-15 | Skill Usage 未使用技能视图 | `bb7f42587b4b053e968b5a2958ab4d2a6aa64046` | `dev` |
 | 94 | 2026-08-15 | GitHub import preview readable failure | `289aa6a9` | `dev` |
 | 93 | 2026-08-14 | Unknown-source Central reset | `caeca7bf` | `dev` |
 | 92 | 2026-08-10 | 修复 Release Desktop macOS 输出超限测试竞态 | `9b149888e6ed4b87d012e695708d208e48d266e7` | `task/release-desktop-macos-validation` |

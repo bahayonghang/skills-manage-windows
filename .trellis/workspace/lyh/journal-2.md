@@ -1189,3 +1189,24 @@ Made metadata and Marketplace cache mutations atomic with bounded batching, roll
 ### Next Steps
 
 - 无。未做桌面实网预览 HERO-Anti-OverDefense
+
+
+## Session 95: Skill Usage 未使用技能视图
+
+**Date**: 2026-08-15
+**Task**: Skill Usage 未使用技能视图
+**Branch**: `dev`
+
+### Summary
+
+Skill Usage 页新增未使用/长期未用技能视图：新命令 usage_get_unused_skills 覆盖 Central 库与各平台安装双维度（never_used/stale，默认 90 天阈值）；前端 UnusedSkillsPanel 视图本地切换 30/60/90 天与排序筛选；usageStore 第四序列号防陈旧。体积预算拆分 usage_unused_repo.rs。just ci 全绿。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bb7f42587b4b053e968b5a2958ab4d2a6aa64046` | (see git log) |
+
+### Status
+
+[OK] **Completed**
