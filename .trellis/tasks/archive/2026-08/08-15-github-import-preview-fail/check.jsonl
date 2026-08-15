@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/github-import-preview-contract.md", "reason": "Check that NoImportableSkills stays a reviewed IPC code and is not collapsed to internal.unexpected."}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "Check that #[error] Display text was not rewritten and commands still return IpcError."}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "Check wizard inline error uses formatBackendError and coded i18n, with no raw fallback sentence."}
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "Full gate is just ci; report skipped desktop/network verification explicitly."}
