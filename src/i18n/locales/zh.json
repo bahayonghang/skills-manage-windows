@@ -109,7 +109,8 @@
       "response_invalid": "GitHub 返回了无法解析的响应。",
       "invalid_url": "该仓库的请求地址不被允许。",
       "budget_exceeded": "该仓库超出了安全下载上限。",
-      "credential_unavailable": "无法读取已保存的 GitHub 令牌。请在设置中重新保存。"
+      "credential_unavailable": "无法读取已保存的 GitHub 令牌。请在设置中重新保存。",
+      "no_importable_skills": "该仓库没有可导入的技能。SkillPort 需要仓库根目录或受支持的 skills 目录中存在 SKILL.md。"
     },
     "central_updates": {
       "item_failed": "此更新项目无法应用。",

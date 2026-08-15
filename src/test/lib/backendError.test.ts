@@ -103,6 +103,7 @@ describe("backend error helpers", () => {
       "github_import.invalid_url",
       "github_import.budget_exceeded",
       "github_import.credential_unavailable",
+      "github_import.no_importable_skills",
       "central_updates.repository_check_failed",
     ];
 

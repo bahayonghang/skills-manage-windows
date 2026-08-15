@@ -76,11 +76,16 @@ function stringifyError(error: unknown): string {
 
 function errorToDetails(error: unknown): unknown {
   if (error instanceof Error) {
-    return {
+    const details: Record<string, unknown> = {
       name: error.name,
       message: error.message,
       stack: error.stack,
     };
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === "string" && code.length > 0) {
+      details.code = code;
+    }
+    return details;
   }
   return { value: String(error) };
 }

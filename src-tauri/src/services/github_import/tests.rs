@@ -5481,6 +5481,21 @@ metadata:
         }
 
         #[test]
+        fn no_importable_skills_uses_stable_ipc_code_without_dynamic_details() {
+            let error = GithubImportError::NoImportableSkills;
+            let envelope = error.to_ipc_error();
+            assert_eq!(error.preview_snapshot_code(), None);
+            assert_eq!(error.ipc_code(), Some("no_importable_skills"));
+            assert!(envelope.starts_with("github_import.no_importable_skills:"));
+            for leaked in ["github-preview-", "/tmp/", "sha256-v1:", "ghp_"] {
+                assert!(
+                    !envelope.contains(leaked),
+                    "envelope leaked {leaked}: {envelope}"
+                );
+            }
+        }
+
+        #[test]
         fn branch_selection_errors_use_stable_ipc_codes_without_dynamic_details() {
             for (error, code) in [
                 (GithubImportError::InvalidBranchSelection, "branch_invalid"),

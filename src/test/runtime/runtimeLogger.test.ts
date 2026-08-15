@@ -111,6 +111,33 @@ describe("runtimeLogger", () => {
     });
   });
 
+  it("records a stable IPC error code on preview failures", async () => {
+    enableTauriRuntime();
+    installRuntimeLogger();
+
+    const error = Object.assign(
+      new Error("This GitHub repository does not contain an importable skill."),
+      { code: "github_import.no_importable_skills" },
+    );
+    recordIpcFailure("preview_github_repo_import", { repoUrl: "[REDACTED]" }, error);
+
+    await vi.waitFor(() => {
+      expect(invokeRaw).toHaveBeenCalledWith("record_frontend_runtime_log", {
+        payload: expect.objectContaining({
+          level: "error",
+          source: "ipc.failure",
+          message: "IPC command failed: preview_github_repo_import",
+          details: expect.objectContaining({
+            command: "preview_github_repo_import",
+            error: expect.objectContaining({
+              code: "github_import.no_importable_skills",
+            }),
+          }),
+        }),
+      });
+    });
+  });
+
   it("does not proxy console calls", async () => {
     enableTauriRuntime();
     installRuntimeLogger();

@@ -109,7 +109,8 @@
       "response_invalid": "GitHub returned a response that could not be read.",
       "invalid_url": "The request address for this repository is not allowed.",
       "budget_exceeded": "The repository exceeds the safe download limits.",
-      "credential_unavailable": "The stored GitHub token could not be read. Save it again in Settings."
+      "credential_unavailable": "The stored GitHub token could not be read. Save it again in Settings.",
+      "no_importable_skills": "This repository has no importable skill. SkillPort needs a SKILL.md at the repository root or in a supported skills directory."
     },
     "central_updates": {
       "item_failed": "This update item could not be applied.",

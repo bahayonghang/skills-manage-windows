@@ -237,6 +237,12 @@ describe("ipc adapter", () => {
         "GitHub repository archive redirect was rejected.",
       ],
       [
+        "no importable skills coded string",
+        "github_import.no_importable_skills:No importable skills found in this repository.",
+        "github_import.no_importable_skills",
+        "This GitHub repository does not contain an importable skill.",
+      ],
+      [
         "JavaScript Error",
         new Error("Transport failure"),
         "internal.unexpected",

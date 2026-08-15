@@ -371,6 +371,9 @@ impl GithubImportError {
             Self::InvalidBranchSelection => "github_import.branch_invalid",
             Self::BranchSelectionConflict => "github_import.branch_conflict",
 
+            // ── Candidate discovery ─────────────────────────────────────────
+            Self::NoImportableSkills => "github_import.no_importable_skills",
+
             // ── Network / archive acquisition ───────────────────────────────
             Self::ArchiveRedirectRejected => "github_import.archive_redirect_rejected",
             Self::Http(_)

@@ -557,6 +557,77 @@ Bare `github`, bare `settings`, or embedded character sequences such as the
   and configured-token denial messages.
 - Full gate: `just ci`.
 
+## Scenario: Preview Domain Error IPC Coding
+
+### 1. Scope / Trigger
+
+Apply this scenario when GitHub preview returns a domain failure that the
+wizard must show as a reviewed public message. The first coded case is
+`NoImportableSkills`. Do not use this scenario to expand candidate discovery
+or to import repositories that have no `SKILL.md`.
+
+### 2. Signatures
+
+```rust
+impl GithubImportError {
+    pub fn ipc_error_code(&self) -> Option<&'static str>;
+    pub fn to_ipc_error(&self) -> String;
+}
+```
+
+`NoImportableSkills` maps to `github_import.no_importable_skills`. The enum
+`#[error]` Display stays the historical `NO_IMPORTABLE_SKILLS_ERROR` string
+for CLI `NotFound` mapping.
+
+### 3. Contracts
+
+- Preview with zero importable candidates returns `NoImportableSkills`.
+- `to_ipc_error()` emits `github_import.no_importable_skills:<Display>`.
+- `IpcError::from_legacy_boundary` keeps only the code and the reviewed
+  static sentence: `This GitHub repository does not contain an importable skill.`
+- The wizard renders `backendErrors.github_import.no_importable_skills` through
+  `formatBackendError`. It must not show `internal.unexpected` or
+  `See runtime logs for details.`
+- This failure is not a preview-snapshot lifecycle error. The wizard must not
+  show the re-preview hint or PAT guidance.
+- Frontend Runtime Log `ipc.failure` details must include the stable code.
+  Preview remains read-only and does not write Operation Log.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+| --- | --- |
+| Repository has no `SKILL.md` | `github_import.no_importable_skills`; wizard shows i18n copy |
+| Envelope contains a path, token, or repo URL after the code | IPC message stays the reviewed static sentence |
+| Historical uncoded Display string reaches the wizard | Keep the historical text; do not force the new code |
+| `NoSelections` or other uncoded variants | Keep Display text; do not collapse them in this change |
+
+### 5. Tests Required
+
+- Backend envelope test: `ipc_code`, prefix, no path/token leak, and
+  `preview_snapshot_code() == None`.
+- `IpcError` from-legacy test for the reviewed public sentence.
+- Frontend normalize test for the coded string.
+- Wizard test for the coded envelope: i18n visible, no runtime-log fallback,
+  no re-preview hint, no PAT guidance.
+- Runtime logger test: `preview_github_repo_import` details include the code.
+- Full gate: `just ci`.
+
+### 6. Wrong vs Correct
+
+#### Wrong
+
+```rust
+// Leaving NoImportableSkills uncoded drops the failure into internal.unexpected.
+_ => return None,
+```
+
+#### Correct
+
+```rust
+Self::NoImportableSkills => "github_import.no_importable_skills",
+```
+
 ## Scenario: Root Skill Repository Content Boundary
 
 ### 1. Scope / Trigger

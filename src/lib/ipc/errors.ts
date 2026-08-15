@@ -132,6 +132,8 @@ function canonicalMessage(code: string): string | null {
       return "The GitHub repository exceeds the import resource limits.";
     case "github_import.credential_unavailable":
       return "The stored GitHub token could not be read. Save it again in Settings.";
+    case "github_import.no_importable_skills":
+      return "This GitHub repository does not contain an importable skill.";
     case "credential.ssh_password_unavailable":
       return "The SSH password is unavailable. Open Settings, save it, and retry.";
     case "runtime.desktop_required":

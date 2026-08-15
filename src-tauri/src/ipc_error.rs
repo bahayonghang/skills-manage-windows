@@ -288,6 +288,9 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
         "github_import.branch_conflict" => {
             Some("GitHub branch in the repository URL does not match the selected branch.")
         }
+        "github_import.no_importable_skills" => {
+            Some("This GitHub repository does not contain an importable skill.")
+        }
         "github_import.archive_redirect_rejected" => {
             Some("GitHub repository archive redirect was rejected.")
         }
@@ -436,6 +439,10 @@ mod tests {
             (
                 "github_import.branch_conflict",
                 "GitHub branch in the repository URL does not match the selected branch.",
+            ),
+            (
+                "github_import.no_importable_skills",
+                "This GitHub repository does not contain an importable skill.",
             ),
         ] {
             let error = IpcError::from(format!("{code}:private branch detail"));
