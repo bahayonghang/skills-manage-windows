@@ -67,6 +67,11 @@ export interface UsageRefreshResult {
   providers: ProviderHealth[];
   scope: UsageScopeInfo;
   usedCachedData: boolean;
+  /**
+   * 本地 target 返回过期缓存页时为 true：后台重扫进行中，完成后经
+   * `usage://scan-completed` 事件（payload = target id）通知静默重取。
+   */
+  scanning: boolean;
   refreshError: string | null;
 }
 

@@ -270,6 +270,7 @@ export function registerUsageFixtures(): void {
       providers: BROWSER_FIXTURE_PROVIDERS,
       scope: BROWSER_FIXTURE_SCOPE,
       usedCachedData: false,
+      scanning: false,
       refreshError: null,
     }),
     usage_get_overview: ({ source }) => overviewFor(source),

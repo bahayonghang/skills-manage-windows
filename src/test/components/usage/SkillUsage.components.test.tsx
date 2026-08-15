@@ -23,6 +23,7 @@ const wrap = (ui: React.ReactNode) => <MemoryRouter>{ui}</MemoryRouter>;
 const initialUsageActions = {
   refresh: useUsageStore.getState().refresh,
   subscribeTargetChanged: useUsageStore.getState().subscribeTargetChanged,
+  subscribeScanCompleted: useUsageStore.getState().subscribeScanCompleted,
 };
 
 const skills: SkillUsageSummary[] = [
@@ -101,6 +102,7 @@ beforeEach(() => {
     refreshError: null,
     usedCachedData: false,
     lastRefreshMs: null,
+    backgroundScanning: false,
     ...initialUsageActions,
   });
   useTargetStore.setState({
@@ -498,5 +500,43 @@ describe("SkillUsageView", () => {
     expect(
       screen.getByText(/数据源状态|Provider health/).closest("details"),
     ).not.toHaveAttribute("open");
+  });
+
+  it("shows a background-scan hint in the header while a rescan runs", async () => {
+    useUsageStore.setState({
+      overview: {
+        kpis: {
+          totalCalls: 40,
+          uniqueSkills: 3,
+          uniqueProjects: 2,
+          uniqueSources: 2,
+          uniqueSessions: 12,
+        },
+        topSkills: skills,
+        heatmap: [],
+        lastScanMs: Date.now(),
+      },
+      recent: [],
+      providers: [],
+      scope: {
+        targetId: "local",
+        label: "Local",
+        isRemote: false,
+        remoteReachable: false,
+      },
+      lastRefreshMs: Date.now(),
+      backgroundScanning: true,
+      refresh: vi.fn(async () => null),
+      subscribeTargetChanged: vi.fn(async () => () => undefined),
+      subscribeScanCompleted: vi.fn(async () => () => undefined),
+    });
+    const { SkillUsageView } = await import("@/pages/SkillUsageView");
+    render(wrap(<SkillUsageView />));
+
+    expect(screen.getByTestId("background-scan-hint")).toHaveTextContent(
+      /正在后台重新扫描|Refreshing in the background/,
+    );
+    // 缓存页保持可见，无骨架屏回退
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });

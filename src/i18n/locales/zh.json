@@ -303,6 +303,7 @@
     "unavailable": "不可用",
     "showingCachedAfterError": "刷新失败，正在显示上次成功扫描的数据",
     "scanning": "正在扫描各平台会话日志…",
+    "scanningBackground": "正在后台重新扫描…",
     "range": {
       "allRecorded": "全部已记录历史",
       "latestCalls": "最新 {{count}} 条",

@@ -5,7 +5,9 @@
 //! `services::usage::Scope::Remote` 替换。
 //!
 //! 命令一览：
-//! - `usage_refresh(force)` —— 触发扫描，5 分钟缓存内 force=false 直接命中缓存
+//! - `usage_refresh(force)` —— 触发扫描；5 分钟缓存内 force=false 直接命中缓存；
+//!   本地 target 缓存过期时立即返回缓存页（`scanning=true`）并后台重扫，
+//!   完成后 emit `usage://scan-completed`（payload = target id）
 //! - `usage_get_overview(top_skills_limit)` —— KPI + Top skills + 16w 热力图
 //! - `usage_get_recent(limit)` —— 最近 N 条调用，给 RecentCallsFeed
 //! - `usage_get_providers()` —— Provider 健康表（含 stub）
@@ -16,7 +18,7 @@
 //! - `usage_get_unused_skills(source, threshold_days)` —— 从未使用/长期未用
 //!   报表（Central 库 + 平台安装双维度，只读派生）
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
@@ -30,6 +32,10 @@ use crate::services::usage::{
 };
 use crate::targets::{connect_remote_target, ActiveTarget};
 use crate::AppState;
+
+/// 本地后台重扫在途标记（按 target id 去重，避免页面反复进入时叠加扫描）。
+static USAGE_SCAN_IN_FLIGHT: std::sync::LazyLock<std::sync::Mutex<HashSet<String>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(HashSet::new()));
 
 #[derive(Debug, Clone)]
 struct ActiveUsageTarget {
@@ -87,6 +93,10 @@ pub struct UsageRefreshResult {
     pub providers: Vec<ProviderHealth>,
     pub scope: UsageScopeInfo,
     pub used_cached_data: bool,
+    /// 本地 target 存在过期缓存时为 true：本次返回的是缓存页，后台重扫
+    /// 进行中，完成后经 `usage://scan-completed` 事件（payload = target id）
+    /// 通知前端静默重取。增量字段，旧前端忽略即可。
+    pub scanning: bool,
     pub refresh_error: Option<String>,
 }
 
@@ -96,6 +106,7 @@ async fn build_refresh_page(
     summary: RefreshSummary,
     scope: UsageScopeInfo,
     used_cached_data: bool,
+    scanning: bool,
     refresh_error: Option<String>,
 ) -> Result<UsageRefreshResult, String> {
     let overview = usage::build_overview(&state.db, target_id, None, 50)
@@ -115,12 +126,47 @@ async fn build_refresh_page(
         providers,
         scope,
         used_cached_data,
+        scanning,
         refresh_error,
     })
 }
 
+/// 本地分支是否走「缓存优先 + 后台重扫」：有历史扫描记录（缓存页可展示）、
+/// 已过 5 分钟 TTL、且不是 force 强刷。首次扫描（无记录）维持阻塞。
+fn should_background_rescan(force: bool, last_scan_ms: Option<i64>, now_ms: i64) -> bool {
+    !force && matches!(last_scan_ms, Some(last) if now_ms - last >= usage::CACHE_TTL_MS)
+}
+
+/// 启动本地后台重扫：同一 target 同时只允许一个在途任务；完成后（无论
+/// 成败）emit `usage://scan-completed`（payload = target id）。
+fn spawn_background_usage_scan(app: &tauri::AppHandle, pool: crate::db::DbPool, target_id: String) {
+    {
+        let mut in_flight = USAGE_SCAN_IN_FLIGHT.lock().unwrap();
+        if !in_flight.insert(target_id.clone()) {
+            return;
+        }
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let result = usage::refresh(&pool, &Scope::Local, true).await;
+        if let Err(error) = &result {
+            tracing::warn!(error = %error, "background usage rescan failed");
+        }
+        USAGE_SCAN_IN_FLIGHT.lock().unwrap().remove(&target_id);
+        use tauri::Emitter;
+        let _ = app.emit("usage://scan-completed", &target_id);
+    });
+}
+
+/// `usage_refresh(force)` —— 触发扫描。
+///
+/// 本地 target 的感知延迟优化：存在过期缓存时立即返回缓存页
+/// （`scanning=true`）并 spawn 后台重扫，完成后 emit
+/// `usage://scan-completed`；首次扫描（无任何缓存）与 force 强刷维持阻塞。
+/// Remote target 的乐观缓存路径不变。
 #[tauri::command]
 pub async fn usage_refresh(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     force: bool,
 ) -> crate::ipc_error::IpcResult<UsageRefreshResult> {
@@ -145,6 +191,7 @@ pub async fn usage_refresh(
                     },
                     scope_info_for_target(&target, None),
                     true,
+                    false,
                     None,
                 )
                 .await;
@@ -154,6 +201,39 @@ pub async fn usage_refresh(
 
     match &target.active {
         ActiveTarget::Local => {
+            if !force {
+                if let Some(last_scan_ms) =
+                    crate::db::get_last_scan_ms(&state.db, &target.target_id)
+                        .await
+                        .map_err(|e| e.to_string())?
+                {
+                    let now_ms = Utc::now().timestamp_millis();
+                    if should_background_rescan(force, Some(last_scan_ms), now_ms) {
+                        // 过期缓存立即返回 + 后台重扫；完成后前端经
+                        // `usage://scan-completed` 静默重取。
+                        spawn_background_usage_scan(
+                            &app,
+                            state.db.clone(),
+                            target.target_id.clone(),
+                        );
+                        return build_refresh_page(
+                            &state,
+                            &target.target_id,
+                            RefreshSummary {
+                                cached: true,
+                                calls_written: 0,
+                                providers_available: 0,
+                                scanned_at_ms: last_scan_ms,
+                            },
+                            scope_info_for_target(&target, Some(false)),
+                            true,
+                            true,
+                            None,
+                        )
+                        .await;
+                    }
+                }
+            }
             let summary = usage::refresh(&state.db, &Scope::Local, force)
                 .await
                 .map_err(|e| e.to_string())?;
@@ -163,6 +243,7 @@ pub async fn usage_refresh(
                 summary.clone(),
                 scope_info_for_target(&target, Some(false)),
                 summary.cached,
+                false,
                 None,
             )
             .await
@@ -185,6 +266,7 @@ pub async fn usage_refresh(
                         summary.clone(),
                         scope_info_for_target(&target, Some(true)),
                         summary.cached,
+                        false,
                         None,
                     )
                     .await
@@ -204,6 +286,7 @@ pub async fn usage_refresh(
                         cached_fallback_summary(last_scan_ms),
                         scope_info_for_target(&target, Some(false)),
                         last_scan_ms.is_some(),
+                        false,
                         Some(error.to_string()),
                     )
                     .await
@@ -436,5 +519,55 @@ mod tests {
         let empty_summary = cached_fallback_summary(None);
         assert!(!empty_summary.cached);
         assert_eq!(empty_summary.scanned_at_ms, 0);
+    }
+
+    #[test]
+    fn background_rescan_only_for_stale_local_cache_without_force() {
+        let now = 10_000_000_i64;
+        let fresh = now - usage::CACHE_TTL_MS + 1;
+        let stale_boundary = now - usage::CACHE_TTL_MS;
+
+        // 首次扫描（无缓存记录）→ 阻塞
+        assert!(!should_background_rescan(false, None, now));
+        // 缓存新鲜 → 由 refresh 内部 TTL 直接命中，不走后台重扫
+        assert!(!should_background_rescan(false, Some(fresh), now));
+        // 过期（含恰好在 TTL 边界）→ 缓存优先 + 后台重扫
+        assert!(should_background_rescan(false, Some(stale_boundary), now));
+        assert!(should_background_rescan(false, Some(1), now));
+        // force 强刷维持阻塞语义
+        assert!(!should_background_rescan(true, Some(1), now));
+        assert!(!should_background_rescan(true, None, now));
+    }
+
+    #[test]
+    fn usage_refresh_result_serializes_scanning_flag() {
+        let result = UsageRefreshResult {
+            summary: RefreshSummary {
+                cached: true,
+                calls_written: 0,
+                providers_available: 0,
+                scanned_at_ms: 1_700_000_000_000,
+            },
+            overview: UsageOverview {
+                kpis: Default::default(),
+                top_skills: Vec::new(),
+                heatmap: Vec::new(),
+                last_scan_ms: Some(1_700_000_000_000),
+            },
+            recent: Vec::new(),
+            providers: Vec::new(),
+            scope: UsageScopeInfo {
+                target_id: "local".to_string(),
+                label: "Local".to_string(),
+                is_remote: false,
+                remote_reachable: false,
+            },
+            used_cached_data: true,
+            scanning: true,
+            refresh_error: None,
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["scanning"], serde_json::json!(true));
+        assert_eq!(json["usedCachedData"], serde_json::json!(true));
     }
 }

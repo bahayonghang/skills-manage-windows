@@ -34,6 +34,7 @@ const toastInfoMock = vi.mocked(toast.info);
 const initialActions = {
   refresh: useUsageStore.getState().refresh,
   subscribeTargetChanged: useUsageStore.getState().subscribeTargetChanged,
+  subscribeScanCompleted: useUsageStore.getState().subscribeScanCompleted,
 };
 
 function overviewFixture() {
@@ -69,6 +70,7 @@ function refreshPayload(overrides: Record<string, unknown> = {}) {
       remoteReachable: false,
     },
     usedCachedData: false,
+    scanning: false,
     refreshError: null,
     ...overrides,
   };
@@ -104,6 +106,7 @@ beforeEach(() => {
     usedCachedData: false,
     selectedSource: null,
     lastRefreshMs: null,
+    backgroundScanning: false,
     ...initialActions,
   });
   useTargetStore.setState({
@@ -343,6 +346,7 @@ describe("usageStore", () => {
   it("bootstrap refreshes when active target differs from cached usage scope inside TTL", async () => {
     const refresh = vi.fn(async () => null);
     const subscribeTargetChanged = vi.fn(async () => () => undefined);
+    const subscribeScanCompleted = vi.fn(async () => () => undefined);
     useUsageStore.setState({
       overview: overviewFixture(),
       recent: [],
@@ -356,6 +360,7 @@ describe("usageStore", () => {
       lastRefreshMs: Date.now(),
       refresh,
       subscribeTargetChanged,
+      subscribeScanCompleted,
     });
     useTargetStore.setState({
       targets: [
@@ -374,6 +379,7 @@ describe("usageStore", () => {
 
     await waitFor(() => expect(refresh).toHaveBeenCalledWith(false));
     expect(subscribeTargetChanged).toHaveBeenCalledTimes(1);
+    expect(subscribeScanCompleted).toHaveBeenCalledTimes(1);
   });
 
   it("bootstrap cleans up late listener registration after unmount", async () => {
@@ -586,6 +592,7 @@ describe("usageStore", () => {
         platforms: [],
       },
       unusedLoading: true,
+      backgroundScanning: true,
       refresh,
     });
 
@@ -602,6 +609,7 @@ describe("usageStore", () => {
     expect(state.unused).toBeNull();
     expect(state.unusedLoading).toBe(false);
     expect(state.unusedError).toBeNull();
+    expect(state.backgroundScanning).toBe(false);
     expect(refresh).toHaveBeenCalledWith(true);
   });
 
@@ -696,5 +704,145 @@ describe("usageStore", () => {
     expect(state.unusedLoading).toBe(false);
     expect(state.unusedError).toContain("unused failed");
     expect(state.error).toBeNull();
+  });
+
+  it("marks backgroundScanning when refresh returns a cached page mid-scan", async () => {
+    mockIpcCommands({
+      usage_refresh: refreshPayload({ scanning: true }),
+      usage_get_unused_skills: { central: [], platforms: [] },
+    });
+
+    await useUsageStore.getState().refresh(true);
+
+    const state = useUsageStore.getState();
+    expect(state.backgroundScanning).toBe(true);
+    expect(state.overview?.kpis.totalCalls).toBe(4);
+    expect(state.refreshing).toBe(false);
+  });
+
+  it("silently refetches page data when the background scan completes", async () => {
+    type ScanCompletedHandler = (event: { payload: string }) => void;
+    let scanCompletedHandler: ScanCompletedHandler | undefined;
+    mockTauriListen.mockImplementation(
+      async (event: string, handler: unknown) => {
+        if (event === "usage://scan-completed") {
+          scanCompletedHandler = handler as ScanCompletedHandler;
+        }
+        return () => undefined;
+      },
+    );
+    const freshOverview = {
+      ...overviewFixture(),
+      kpis: { ...overviewFixture().kpis, totalCalls: 42 },
+    };
+    mockIpcCommands({
+      usage_get_overview: freshOverview,
+      usage_get_recent: [],
+      usage_get_unused_skills: { central: [], platforms: [] },
+    });
+    useUsageStore.setState({
+      overview: overviewFixture(),
+      backgroundScanning: true,
+      refreshing: false,
+      loading: false,
+    });
+
+    await useUsageStore.getState().subscribeScanCompleted();
+    expect(scanCompletedHandler).toBeDefined();
+    scanCompletedHandler!({ payload: "local" });
+
+    await waitFor(() =>
+      expect(useUsageStore.getState().overview?.kpis.totalCalls).toBe(42),
+    );
+    expect(ipcInvokeCalls("usage_get_overview")[0].args).toEqual({
+      topSkillsLimit: 0,
+      source: null,
+    });
+    expect(ipcInvokeCalls("usage_get_recent")[0].args).toEqual({
+      limit: 20,
+      source: null,
+    });
+    expect(ipcInvokeCalls("usage_get_unused_skills")).toHaveLength(1);
+    // 静默更新：无 loading/refreshing 抖动，无 toast，无 error
+    const state = useUsageStore.getState();
+    expect(state.backgroundScanning).toBe(false);
+    expect(state.refreshing).toBe(false);
+    expect(state.loading).toBe(false);
+    expect(state.error).toBeNull();
+    expect(toastInfoMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores scan-completed events for other targets", async () => {
+    type ScanCompletedHandler = (event: { payload: string }) => void;
+    let scanCompletedHandler: ScanCompletedHandler | undefined;
+    mockTauriListen.mockImplementation(
+      async (event: string, handler: unknown) => {
+        if (event === "usage://scan-completed") {
+          scanCompletedHandler = handler as ScanCompletedHandler;
+        }
+        return () => undefined;
+      },
+    );
+    mockIpcCommand("usage_get_overview", overviewFixture());
+    useUsageStore.setState({
+      overview: overviewFixture(),
+      backgroundScanning: true,
+    });
+
+    await useUsageStore.getState().subscribeScanCompleted();
+    scanCompletedHandler!({ payload: "ssh-prod" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(ipcInvokeCalls()).toHaveLength(0);
+    expect(useUsageStore.getState().backgroundScanning).toBe(true);
+    expect(useUsageStore.getState().overview?.kpis.totalCalls).toBe(4);
+  });
+
+  it("discards a silent scan refetch when the source changes mid-flight", async () => {
+    type ScanCompletedHandler = (event: { payload: string }) => void;
+    let scanCompletedHandler: ScanCompletedHandler | undefined;
+    mockTauriListen.mockImplementation(
+      async (event: string, handler: unknown) => {
+        if (event === "usage://scan-completed") {
+          scanCompletedHandler = handler as ScanCompletedHandler;
+        }
+        return () => undefined;
+      },
+    );
+    const staleOverview = deferred<ReturnType<typeof overviewFixture>>();
+    mockIpcCommands({
+      usage_get_overview: ({ source }: { source: string | null }) =>
+        source === null
+          ? staleOverview.promise
+          : {
+              ...overviewFixture(),
+              kpis: { ...overviewFixture().kpis, totalCalls: 7 },
+            },
+      usage_get_recent: [],
+      usage_get_unused_skills: { central: [], platforms: [] },
+    });
+    useUsageStore.setState({ overview: overviewFixture() });
+
+    await useUsageStore.getState().subscribeScanCompleted();
+    scanCompletedHandler!({ payload: "local" });
+    await waitFor(() =>
+      expect(ipcInvokeCalls("usage_get_overview")).toHaveLength(1),
+    );
+
+    // 静默重取尚未返回时用户切换 source：旧响应必须被序列号守卫丢弃
+    await useUsageStore.getState().selectSource("Codex CLI");
+    expect(useUsageStore.getState().overview?.kpis.totalCalls).toBe(7);
+
+    staleOverview.resolve({
+      ...overviewFixture(),
+      kpis: { ...overviewFixture().kpis, totalCalls: 99 },
+    });
+    await waitFor(() =>
+      expect(ipcInvokeCalls("usage_get_overview")).toHaveLength(2),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(useUsageStore.getState().selectedSource).toBe("Codex CLI");
+    expect(useUsageStore.getState().overview?.kpis.totalCalls).toBe(7);
   });
 });

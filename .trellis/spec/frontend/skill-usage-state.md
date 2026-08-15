@@ -40,6 +40,11 @@ invoke("usage_get_skill_detail", { skill, source });
   fetches once per refresh at the strictest threshold (30d); the 30/60/90 chips,
   status filter, and sort are view-local reclassification on `callCount` +
   `lastUsedMs` and must not enter the store or change backend requests.
+- A local-target refresh may return a stale cached page with `scanning: true`
+  (exposed as `backgroundScanning`). When `usage://scan-completed` arrives with
+  the active target id, the store silently refetches overview + recent + unused
+  through the existing sequence guards: no skeleton, no `loading`/`refreshing`
+  flip, no toast, and failures are swallowed until the next explicit refresh.
 - `overview === null` is the first-load authority even before the bootstrap effect
   sets `refreshing`. Render the final-layout scanning skeleton and withhold numeric
   KPI output until an overview exists or a page-level error is available.

@@ -26,5 +26,6 @@ pub(crate) mod tag_groups_repo;
 pub(crate) mod tags_repo;
 pub(crate) mod update_inventory_repo;
 pub(crate) mod update_states_repo;
+pub(crate) mod usage_file_cache_repo;
 pub(crate) mod usage_repo;
 pub(crate) mod usage_unused_repo;

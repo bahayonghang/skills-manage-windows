@@ -214,6 +214,104 @@ async fn build_overview_and_recent_filter_by_source() {
     );
 }
 
+// ─── 增量扫描（skill_call_file_cache，migration 5）────────────────────────────
+
+fn call_facts(rows: &[SkillCallRow]) -> Vec<(String, i64, String, String, String)> {
+    rows.iter()
+        .map(|r| {
+            (
+                r.skill.clone(),
+                r.timestamp_ms,
+                r.project.clone(),
+                r.session_id.clone(),
+                r.source.clone(),
+            )
+        })
+        .collect()
+}
+
+// The guard intentionally serializes process-wide environment changes for the
+// complete async test; no task spawned by this test acquires the same lock.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test]
+async fn refresh_incremental_rescan_reuses_file_cache_and_stays_equivalent() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let pool = setup_pool().await;
+    let dir = TempDir::new().unwrap();
+    write_claude_fixture(&dir);
+    std::env::set_var("CLAUDE_CONFIG_DIR", dir.path());
+    let claude_only: Vec<Box<dyn UsageProvider>> =
+        vec![Box::new(providers::claude_code::ClaudeCodeProvider)];
+
+    // 第一轮：全量扫描并建立文件缓存
+    let first = refresh_with_providers(&pool, &Scope::Local, true, claude_only)
+        .await
+        .unwrap();
+    assert_eq!(first.calls_written, 2);
+    let cache_rows = db::list_file_cache_rows(&pool, "local", "claude-code")
+        .await
+        .unwrap();
+    assert_eq!(cache_rows.len(), 1, "history.jsonl cached");
+    let facts_before = call_facts(&db::list_calls_for_target(&pool, "local").await.unwrap());
+
+    // 第二轮（force）：指纹未变 → 缓存命中，skill_calls 内容逐条相等；
+    // 缓存行的 scanned_at_ms 不动 = 没有发生重新解析 + upsert
+    let claude_only: Vec<Box<dyn UsageProvider>> =
+        vec![Box::new(providers::claude_code::ClaudeCodeProvider)];
+    refresh_with_providers(&pool, &Scope::Local, true, claude_only)
+        .await
+        .unwrap();
+    let facts_after = call_facts(&db::list_calls_for_target(&pool, "local").await.unwrap());
+    assert_eq!(facts_before, facts_after, "incremental rescan diverged");
+    let cache_second = db::list_file_cache_rows(&pool, "local", "claude-code")
+        .await
+        .unwrap();
+    assert_eq!(cache_second.len(), 1);
+    assert_eq!(cache_second[0].scanned_at_ms, cache_rows[0].scanned_at_ms);
+
+    // 改动 history.jsonl → 指纹失配 → 重解析，新事实进入 skill_calls
+    let history = r#"{"display":"/review","project":"/p1","sessionId":"s1","timestamp":1700000000000}
+{"display":"/facts","project":"/p2","sessionId":"s2","timestamp":1700000010000}
+{"display":"/brand-new","project":"/p3","sessionId":"s3","timestamp":1700000020000}"#;
+    std::fs::write(dir.path().join("history.jsonl"), history).unwrap();
+    let claude_only: Vec<Box<dyn UsageProvider>> =
+        vec![Box::new(providers::claude_code::ClaudeCodeProvider)];
+    refresh_with_providers(&pool, &Scope::Local, true, claude_only)
+        .await
+        .unwrap();
+    let facts_third = call_facts(&db::list_calls_for_target(&pool, "local").await.unwrap());
+    assert_eq!(facts_third.len(), 3);
+    assert!(facts_third.iter().any(|(skill, ..)| skill == "brand-new"));
+    let cache_third = db::list_file_cache_rows(&pool, "local", "claude-code")
+        .await
+        .unwrap();
+    assert_eq!(cache_third.len(), 1, "changed file upserted in place");
+
+    // 删除 history.jsonl → provider 不可用 → 缓存行清空、事实清空
+    std::fs::remove_file(dir.path().join("history.jsonl")).unwrap();
+    let claude_only: Vec<Box<dyn UsageProvider>> =
+        vec![Box::new(providers::claude_code::ClaudeCodeProvider)];
+    refresh_with_providers(&pool, &Scope::Local, true, claude_only)
+        .await
+        .unwrap();
+    assert!(
+        db::list_calls_for_target(&pool, "local")
+            .await
+            .unwrap()
+            .is_empty(),
+        "unavailable provider facts are replaced with empty"
+    );
+    assert!(
+        db::list_file_cache_rows(&pool, "local", "claude-code")
+            .await
+            .unwrap()
+            .is_empty(),
+        "unavailable provider cache rows are cleared"
+    );
+
+    std::env::remove_var("CLAUDE_CONFIG_DIR");
+}
+
 // ─── build_unused_report ─────────────────────────────────────────────────────
 
 fn unused_call(skill: &str, timestamp_ms: i64, source: &str) -> NewSkillCall {

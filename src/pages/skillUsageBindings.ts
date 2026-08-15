@@ -14,6 +14,9 @@ export function useUsageBootstrap() {
   const refresh = useUsageStore((s) => s.refresh);
   const refreshUnused = useUsageStore((s) => s.refreshUnused);
   const subscribeTargetChanged = useUsageStore((s) => s.subscribeTargetChanged);
+  const subscribeScanCompleted = useUsageStore(
+    (s) => s.subscribeScanCompleted,
+  );
   const activeTargetId = useTargetStore((s) => s.activeTarget.id);
   const initialBootstrapStateRef = useRef({
     activeTargetId,
@@ -22,6 +25,7 @@ export function useUsageBootstrap() {
     refresh,
     refreshUnused,
     scope,
+    subscribeScanCompleted,
     subscribeTargetChanged,
     unused,
   });
@@ -34,6 +38,7 @@ export function useUsageBootstrap() {
       refresh: initialRefresh,
       refreshUnused: initialRefreshUnused,
       scope: initialScope,
+      subscribeScanCompleted: initialSubscribeScanCompleted,
       subscribeTargetChanged: initialSubscribeTargetChanged,
       unused: initialUnused,
     } = initialBootstrapStateRef.current;
@@ -52,23 +57,28 @@ export function useUsageBootstrap() {
     } else if (initialUnused === null) {
       void initialRefreshUnused();
     }
-    // 订阅 active target 切换事件——切换后 store 自动 evict + reload
+    // 订阅 active target 切换事件——切换后 store 自动 evict + reload；
+    // 以及后台重扫完成事件——到达后 store 内静默重取页面数据
     let disposed = false;
-    let unlistenFn: (() => void) | null = null;
-    void initialSubscribeTargetChanged().then((u) => {
-      if (disposed) {
-        try {
-          u();
-        } catch {
-          /* ignore */
+    const unlistenFns: (() => void)[] = [];
+    const trackUnlisten = (registration: Promise<() => void>) => {
+      void registration.then((u) => {
+        if (disposed) {
+          try {
+            u();
+          } catch {
+            /* ignore */
+          }
+          return;
         }
-        return;
-      }
-      unlistenFn = u;
-    });
+        unlistenFns.push(u);
+      });
+    };
+    trackUnlisten(initialSubscribeTargetChanged());
+    trackUnlisten(initialSubscribeScanCompleted());
     return () => {
       disposed = true;
-      if (unlistenFn) {
+      for (const unlistenFn of unlistenFns) {
         try {
           unlistenFn();
         } catch {
@@ -98,6 +108,7 @@ export function useUsageBindings() {
   const refreshError = useUsageStore((s) => s.refreshError);
   const usedCachedData = useUsageStore((s) => s.usedCachedData);
   const lastRefreshMs = useUsageStore((s) => s.lastRefreshMs);
+  const backgroundScanning = useUsageStore((s) => s.backgroundScanning);
   const refresh = useUsageStore((s) => s.refresh);
   const selectSource = useUsageStore((s) => s.selectSource);
   const loadDetail = useUsageStore((s) => s.loadDetail);
@@ -122,6 +133,7 @@ export function useUsageBindings() {
     refreshError,
     usedCachedData,
     lastRefreshMs,
+    backgroundScanning,
     refresh,
     selectSource,
     loadDetail,

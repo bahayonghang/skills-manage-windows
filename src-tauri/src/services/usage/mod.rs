@@ -14,11 +14,14 @@
 pub mod aggregate;
 mod enrichment;
 mod error;
+pub mod file_cache;
 pub mod fs_backend;
+mod incremental;
 pub mod providers;
 
 pub use enrichment::UsageSkillMatchStatus;
 pub use error::UsageError;
+pub use file_cache::ProviderFileCache;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -202,6 +205,20 @@ pub trait UsageProvider: Send + Sync {
     /// 健康表的 `available=false` 但不影响其他 provider；空目录返回
     /// `Ok(vec![])` 而非 Err。
     async fn collect(&self, scope: &Scope) -> Result<Vec<SkillCall>, UsageError>;
+
+    /// 增量收集：`cache` 是从 `skill_call_file_cache` 载入的按文件指纹缓存；
+    /// 实现方按「指纹未变 → 缓存 calls，变化/新增 → 读盘解析并 record」合并出
+    /// 与全量扫描完全一致的 calls，并返回更新后的缓存句柄供编排器持久化 diff。
+    /// 默认实现忽略缓存、退化为全量 [`UsageProvider::collect`]（stub 与
+    /// Remote scope 走这条路——后者在编排器侧就不进增量路径）。
+    async fn collect_incremental(
+        &self,
+        scope: &Scope,
+        cache: ProviderFileCache,
+    ) -> Result<(ProviderFileCache, Vec<SkillCall>), UsageError> {
+        let calls = self.collect(scope).await?;
+        Ok((cache, calls))
+    }
 }
 
 // ─── Cache & Refresh ─────────────────────────────────────────────────────────
@@ -258,21 +275,43 @@ async fn refresh_with_providers(
         }
     }
 
-    // 2) 并发跑全部 provider
-    let futures = providers.iter().map(|p| async move {
-        let avail = p.available(scope).await;
-        if !avail {
-            return (p.id(), p.display_name(), false, Vec::new());
-        }
-        match p.collect(scope).await {
-            Ok(calls) => (p.id(), p.display_name(), true, calls),
-            Err(error) => {
-                tracing::warn!(
-                    provider = p.id(),
-                    error = %error,
-                    "usage provider collect failed"
-                );
-                (p.id(), p.display_name(), false, Vec::new())
+    // 2) 并发跑全部 provider。Local scope 走增量扫描（skill_call_file_cache
+    //    指纹 diff，未变文件零磁盘 IO）；Remote scope 保持既有全量路径。
+    let local_scan = !scope.is_remote();
+    let futures = providers.iter().map(|p| {
+        let target_id = target_id.clone();
+        async move {
+            let avail = p.available(scope).await;
+            if !avail {
+                // 数据源整体消失 → 清空缓存行，避免目录复活时拿陈旧指纹对错号。
+                if local_scan {
+                    if let Err(error) =
+                        db::delete_file_cache_for_provider(pool, &target_id, p.id()).await
+                    {
+                        tracing::warn!(
+                            provider = p.id(),
+                            error = %error,
+                            "usage file cache cleanup failed"
+                        );
+                    }
+                }
+                return (p.id(), p.display_name(), false, Vec::new());
+            }
+            let collected = if local_scan {
+                incremental::collect_local_incremental(pool, &target_id, p.as_ref(), scope).await
+            } else {
+                p.collect(scope).await
+            };
+            match collected {
+                Ok(calls) => (p.id(), p.display_name(), true, calls),
+                Err(error) => {
+                    tracing::warn!(
+                        provider = p.id(),
+                        error = %error,
+                        "usage provider collect failed"
+                    );
+                    (p.id(), p.display_name(), false, Vec::new())
+                }
             }
         }
     });
@@ -748,6 +787,8 @@ pub async fn list_provider_health(
     Ok(rows.into_iter().map(ProviderHealth::from).collect())
 }
 
+#[cfg(test)]
+mod bench;
 #[cfg(test)]
 mod tests;
 

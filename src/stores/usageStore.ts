@@ -32,6 +32,8 @@ interface UsageState {
   refreshError: string | null;
   usedCachedData: boolean;
   lastRefreshMs: number | null;
+  /** 本地 target 返回过期缓存页时为 true：后台重扫中，完成后静默重取。 */
+  backgroundScanning: boolean;
 
   refresh: (force?: boolean) => Promise<UsageRefreshResult | null>;
   selectSource: (source: string | null) => Promise<void>;
@@ -40,6 +42,7 @@ interface UsageState {
   refreshUnused: () => Promise<void>;
   loadScope: () => Promise<UsageScopeInfo | null>;
   subscribeTargetChanged: () => Promise<() => void>;
+  subscribeScanCompleted: () => Promise<() => void>;
 }
 
 let inFlightRefresh: {
@@ -84,6 +87,7 @@ export const useUsageStore = create<UsageState>((set, get) => ({
   refreshError: null,
   usedCachedData: false,
   lastRefreshMs: null,
+  backgroundScanning: false,
 
   async refresh(force = false) {
     const targetId = activeUsageTargetId();
@@ -109,6 +113,7 @@ export const useUsageStore = create<UsageState>((set, get) => ({
           refreshing: false,
           refreshError: result.refreshError,
           usedCachedData: result.usedCachedData,
+          backgroundScanning: result.scanning,
           error:
             result.refreshError && !result.usedCachedData
               ? result.refreshError
@@ -316,9 +321,56 @@ export const useUsageStore = create<UsageState>((set, get) => ({
           refreshError: null,
           usedCachedData: false,
           selectedSource: null,
+          backgroundScanning: false,
         });
         void get().refresh(true);
       });
+      return () => {
+        try {
+          const result: unknown = unlisten();
+          if (result && typeof result === "object" && "catch" in result) {
+            (result as Promise<unknown>).catch(() => undefined);
+          }
+        } catch {
+          // Browser fixtures expose a no-op listener.
+        }
+      };
+    } catch {
+      return () => undefined;
+    }
+  },
+
+  async subscribeScanCompleted() {
+    try {
+      const unlisten = await listen<string>(
+        "usage://scan-completed",
+        (event) => {
+          const targetId = activeUsageTargetId();
+          if (event.payload !== targetId) return;
+          // 后台重扫完成：静默重取页面数据——不动 refreshing/loading、不清空
+          // 现有面板、不弹 toast，提交仍走 pageSequence/unusedSequence 守卫。
+          set({ backgroundScanning: false });
+          const source = get().selectedSource;
+          const requestSequence = ++pageSequence;
+          void (async () => {
+            try {
+              const [overview, recent] = await Promise.all([
+                invoke("usage_get_overview", { topSkillsLimit: 0, source }),
+                invoke("usage_get_recent", { limit: 20, source }),
+              ]);
+              if (
+                pageRequestMatches(requestSequence, targetId) &&
+                source === get().selectedSource
+              ) {
+                set({ overview, recent });
+              }
+            } catch {
+              // 静默更新失败不打扰用户；下次手动/进入页面的刷新会重试
+            }
+          })();
+          void get().refreshUnused();
+        },
+      );
       return () => {
         try {
           const result: unknown = unlisten();

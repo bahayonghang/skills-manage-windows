@@ -181,6 +181,7 @@ fn migration_sources_are_checksum_locked() {
         descriptor_checksum(2).unwrap(),
         descriptor_checksum(3).unwrap(),
         descriptor_checksum(4).unwrap(),
+        descriptor_checksum(5).unwrap(),
     ];
     assert_eq!(
         checksums,
@@ -189,6 +190,7 @@ fn migration_sources_are_checksum_locked() {
             "92aeea552f562f4142946460635a6d7d2d75c89f8899ea2063a80c213bcf14aa",
             "ad1c327066e8bd7a0f5d5aca5ccd6666247d92fc2dfbee5d9c37c6a60ae948a8",
             "f1225528d87dccc2b06e0553a241fd3f0e56463cf69faafb18976401da111188",
+            "1d7efcd9c5d218f4ccf4f3c4d59a286129e8e4090e6786a4fa7075313bec2ba3",
         ]
     );
     assert_eq!(checksums.len(), versions::MIGRATIONS.len());
@@ -217,7 +219,7 @@ async fn selected_release_fixtures_upgrade_with_backup_and_cascades() {
                 .fetch_all(&pool)
                 .await
                 .unwrap();
-        assert_eq!(versions.len(), 4);
+        assert_eq!(versions.len(), 5);
         for (index, row) in versions.iter().enumerate() {
             let version = i64::try_from(index + 1).unwrap();
             assert_eq!(row.try_get::<i64, _>("version").unwrap(), version);
@@ -237,6 +239,8 @@ async fn selected_release_fixtures_upgrade_with_backup_and_cascades() {
         assert!(!sentinel.try_get::<String, _>("uid").unwrap().is_empty());
         assert_owned_foreign_keys(&pool).await;
         assert!(file_has_table(&database_path, "fs_db_operations").await);
+        // Migration 5 adds the incremental usage-scan file cache.
+        assert!(file_has_table(&database_path, "skill_call_file_cache").await);
         // Migration 4 adds nullable per-skill provenance; pre-existing rows stay
         // NULL and are read as "provenance unknown".
         let provenance = db::get_skill_repository_provenance(&pool, "fixture-skill")
@@ -408,7 +412,7 @@ async fn preflight_rejects_checksum_gap_and_future_versions_without_backup() {
     )
     .await;
     assert_preflight_rejection(
-        "INSERT INTO schema_migrations (version, checksum, applied_at) VALUES (5, 'future', 'now')",
+        "INSERT INTO schema_migrations (version, checksum, applied_at) VALUES (6, 'future', 'now')",
         "newer than supported",
     )
     .await;

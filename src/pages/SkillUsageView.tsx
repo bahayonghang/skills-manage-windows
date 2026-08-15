@@ -49,6 +49,7 @@ export function SkillUsageView() {
     refreshError,
     usedCachedData,
     lastRefreshMs,
+    backgroundScanning,
     refresh,
     selectSource,
     loadDetail,
@@ -93,6 +94,18 @@ export function SkillUsageView() {
             {scope && <ScopeBadge scope={scope} />}
           </div>
           <div className="flex items-center gap-2">
+            {backgroundScanning && (
+              <span
+                data-testid="background-scan-hint"
+                className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:inline-flex"
+              >
+                <Loader2
+                  aria-hidden
+                  className="size-3 animate-spin motion-reduce:animate-none"
+                />
+                {t("skillUsage.scanningBackground")}
+              </span>
+            )}
             <span className="hidden text-xs text-muted-foreground sm:inline">
               {lastRefreshMs
                 ? t("skillUsage.lastRefreshed", {

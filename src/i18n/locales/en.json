@@ -303,6 +303,7 @@
     "unavailable": "Unavailable",
     "showingCachedAfterError": "Refresh failed; showing the last successful scan",
     "scanning": "Scanning session logs across platforms…",
+    "scanningBackground": "Refreshing in the background…",
     "range": {
       "allRecorded": "All recorded history",
       "latestCalls": "Latest {{count}}",
