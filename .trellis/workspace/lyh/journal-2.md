@@ -1210,3 +1210,24 @@ Skill Usage 页新增未使用/长期未用技能视图：新命令 usage_get_un
 ### Status
 
 [OK] **Completed**
+
+
+## Session 96: Usage 页加载性能优化
+
+**Date**: 2026-08-15
+**Task**: Usage 页加载性能优化
+**Branch**: `dev`
+
+### Summary
+
+Usage 扫描性能：子串预过滤+流式解析+spawn_blocking+批量写入；migration 5 skill_call_file_cache 增量扫描（稳态 10.96s→153ms，冷扫 10.95s→4.91s，峰值内存 5.25→0.26GiB）；usage_refresh 缓存优先返回+usage://scan-completed 事件，前端静默重取。just ci 全绿。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `276ad607` | (see git log) |
+
+### Status
+
+[OK] **Completed**
