@@ -9,7 +9,7 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: mockTauriListen,
 }));
 
-import { useUsageStore } from "@/stores/usageStore";
+import { UNUSED_REQUEST_THRESHOLD_DAYS, useUsageStore } from "@/stores/usageStore";
 import { useTargetStore } from "@/stores/targetStore";
 import { ipcFixtureError } from "@/lib/ipc/errors";
 import { useUsageBootstrap } from "@/pages/skillUsageBindings";
@@ -91,6 +91,9 @@ beforeEach(() => {
     recent: [],
     providers: [],
     detail: null,
+    unused: null,
+    unusedLoading: false,
+    unusedError: null,
     scope: null,
     selectedSkill: null,
     loading: false,
@@ -116,18 +119,33 @@ beforeEach(() => {
 
 describe("usageStore", () => {
   it("refresh uses the single usage_refresh payload and stores all returned panels", async () => {
-    mockIpcCommand("usage_refresh", refreshPayload());
+    mockIpcCommands({
+      usage_refresh: refreshPayload(),
+      usage_get_unused_skills: { central: [], platforms: [] },
+    });
 
     const result = await useUsageStore.getState().refresh(true);
 
     expect(result?.summary.callsWritten).toBe(4);
     expect(ipcInvokeCalls("usage_refresh")[0].args).toEqual({ force: true });
-    expect(ipcInvokeCalls()).toHaveLength(1);
 
     const state = useUsageStore.getState();
     expect(state.overview?.kpis.totalCalls).toBe(4);
     expect(state.refreshing).toBe(false);
     expect(state.lastRefreshMs).toBe(1700000000000);
+
+    // 成功扫描后自动刷新未使用清单，且只请求最严阈值（视图本地重分类 30/60/90）
+    await waitFor(() =>
+      expect(ipcInvokeCalls("usage_get_unused_skills")).toHaveLength(1),
+    );
+    expect(ipcInvokeCalls("usage_get_unused_skills")[0].args).toEqual({
+      source: null,
+      thresholdDays: UNUSED_REQUEST_THRESHOLD_DAYS,
+    });
+    expect(useUsageStore.getState().unused).toEqual({
+      central: [],
+      platforms: [],
+    });
   });
 
   it("deduplicates concurrent refresh calls for the same active target", async () => {
@@ -222,6 +240,7 @@ describe("usageStore", () => {
         },
       },
       usage_get_recent: [],
+      usage_get_unused_skills: { central: [], platforms: [] },
     });
 
     await useUsageStore.getState().selectSource("Claude Code");
@@ -230,6 +249,7 @@ describe("usageStore", () => {
     expect(ipcInvokedCommands()).toEqual([
       "usage_get_overview",
       "usage_get_recent",
+      "usage_get_unused_skills",
     ]);
     expect(ipcInvokeCalls("usage_get_overview")[0].args).toEqual({
       topSkillsLimit: 0,
@@ -238,6 +258,11 @@ describe("usageStore", () => {
     expect(ipcInvokeCalls("usage_get_recent")[0].args).toEqual({
       limit: 20,
       source: "Claude Code",
+    });
+    // source 切换同样作用于未使用报告
+    expect(ipcInvokeCalls("usage_get_unused_skills")[0].args).toEqual({
+      source: "Claude Code",
+      thresholdDays: UNUSED_REQUEST_THRESHOLD_DAYS,
     });
   });
 
@@ -264,10 +289,11 @@ describe("usageStore", () => {
         },
       },
       usage_get_recent: [],
+      usage_get_unused_skills: { central: [], platforms: [] },
     });
 
     await useUsageStore.getState().refresh(true);
-    await waitFor(() => expect(ipcInvokeCalls()).toHaveLength(3));
+    await waitFor(() => expect(ipcInvokeCalls()).toHaveLength(4));
 
     expect(useUsageStore.getState().selectedSource).toBe("Claude Code");
     expect(ipcInvokeCalls("usage_get_overview")[0].args).toEqual({
@@ -278,13 +304,17 @@ describe("usageStore", () => {
       limit: 20,
       source: "Claude Code",
     });
+    // 未使用报告沿用同一 source 口径
+    expect(ipcInvokeCalls("usage_get_unused_skills")[0].args).toEqual({
+      source: "Claude Code",
+      thresholdDays: UNUSED_REQUEST_THRESHOLD_DAYS,
+    });
   });
 
   it("refresh falls back to all platforms when selected provider has no calls", async () => {
     useUsageStore.setState({ selectedSource: "Claude Code" });
-    mockIpcCommand(
-      "usage_refresh",
-      refreshPayload({
+    mockIpcCommands({
+      usage_refresh: refreshPayload({
         summary: {
           cached: false,
           callsWritten: 0,
@@ -301,12 +331,13 @@ describe("usageStore", () => {
           },
         ],
       }),
-    );
+      usage_get_unused_skills: { central: [], platforms: [] },
+    });
 
     await useUsageStore.getState().refresh(true);
 
     expect(useUsageStore.getState().selectedSource).toBeNull();
-    expect(ipcInvokeCalls()).toHaveLength(1);
+    expect(ipcInvokeCalls("usage_refresh")).toHaveLength(1);
   });
 
   it("bootstrap refreshes when active target differs from cached usage scope inside TTL", async () => {
@@ -536,6 +567,25 @@ describe("usageStore", () => {
       ],
       selectedSource: "Claude Code",
       loading: true,
+      unused: {
+        central: [
+          {
+            skillId: "legacy-cleanup",
+            name: "legacy-cleanup",
+            matchStatus: "matched" as const,
+            origin: "central" as const,
+            agents: ["claude-code"],
+            installedPath: null,
+            callCount: 0,
+            lastUsedMs: null,
+            staticTokenEstimate: 960,
+            staticByteCount: 3_840,
+            status: "never_used" as const,
+          },
+        ],
+        platforms: [],
+      },
+      unusedLoading: true,
       refresh,
     });
 
@@ -549,6 +599,102 @@ describe("usageStore", () => {
     expect(state.providers).toEqual([]);
     expect(state.loading).toBe(false);
     expect(state.selectedSource).toBeNull();
+    expect(state.unused).toBeNull();
+    expect(state.unusedLoading).toBe(false);
+    expect(state.unusedError).toBeNull();
     expect(refresh).toHaveBeenCalledWith(true);
+  });
+
+  it("refreshUnused requests the strictest threshold once and commits the report", async () => {
+    const report = {
+      central: [
+        {
+          skillId: "legacy-cleanup",
+          name: "legacy-cleanup",
+          matchStatus: "matched",
+          origin: "central",
+          agents: ["claude-code"],
+          installedPath: null,
+          callCount: 0,
+          lastUsedMs: null,
+          staticTokenEstimate: 960,
+          staticByteCount: 3840,
+          status: "never_used",
+        },
+      ],
+      platforms: [],
+    };
+    mockIpcCommand("usage_get_unused_skills", report);
+
+    await useUsageStore.getState().refreshUnused();
+
+    expect(ipcInvokeCalls("usage_get_unused_skills")[0].args).toEqual({
+      source: null,
+      thresholdDays: UNUSED_REQUEST_THRESHOLD_DAYS,
+    });
+    const state = useUsageStore.getState();
+    expect(state.unused).toEqual(report);
+    expect(state.unusedLoading).toBe(false);
+    expect(state.unusedError).toBeNull();
+  });
+
+  it("discards an out-of-order unused response", async () => {
+    const first = deferred<{ central: never[]; platforms: never[] }>();
+    const second = deferred<{
+      central: { name: string }[];
+      platforms: never[];
+    }>();
+    let call = 0;
+    mockIpcCommand("usage_get_unused_skills", () =>
+      call++ === 0 ? first.promise : second.promise,
+    );
+
+    const staleRequest = useUsageStore.getState().refreshUnused();
+    const latestRequest = useUsageStore.getState().refreshUnused();
+
+    second.resolve({ central: [{ name: "new" }], platforms: [] });
+    await latestRequest;
+    expect(useUsageStore.getState().unused?.central[0]?.name).toBe("new");
+
+    first.resolve({ central: [], platforms: [] });
+    await staleRequest;
+    expect(useUsageStore.getState().unused?.central[0]?.name).toBe("new");
+    expect(useUsageStore.getState().unusedLoading).toBe(false);
+  });
+
+  it("discards unused results when the target changes mid-flight", async () => {
+    const pending = deferred<{ central: never[]; platforms: never[] }>();
+    mockIpcCommand("usage_get_unused_skills", () => pending.promise);
+
+    const request = useUsageStore.getState().refreshUnused();
+    useTargetStore.setState({
+      targets: [
+        { id: "ssh-prod", kind: "ssh", label: "alice@prod", isActive: true },
+      ],
+      activeTarget: {
+        id: "ssh-prod",
+        kind: "ssh",
+        label: "alice@prod",
+        isActive: true,
+      },
+    });
+    pending.resolve({ central: [], platforms: [] });
+    await request;
+
+    expect(useUsageStore.getState().unused).toBeNull();
+  });
+
+  it("records an unused-specific error without touching the page error", async () => {
+    mockIpcCommand("usage_get_unused_skills", () =>
+      Promise.reject(ipcFixtureError("storage.unavailable", "unused failed")),
+    );
+
+    await useUsageStore.getState().refreshUnused();
+
+    const state = useUsageStore.getState();
+    expect(state.unused).toBeNull();
+    expect(state.unusedLoading).toBe(false);
+    expect(state.unusedError).toContain("unused failed");
+    expect(state.error).toBeNull();
   });
 });

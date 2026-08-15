@@ -102,3 +102,32 @@ export interface UsageScopeInfo {
    */
   remoteReachable: boolean;
 }
+
+// ─── usage_get_unused_skills（与 Rust aggregate::UnusedSkill* 对齐）────────────
+
+export type UnusedSkillOrigin = "central" | "platform";
+
+export type UnusedSkillStatus = "never_used" | "stale";
+
+export interface UnusedSkillEntry {
+  /** Central skill id；平台散件为 null */
+  skillId: string | null;
+  name: string;
+  matchStatus: UsageSkillMatchStatus;
+  origin: UnusedSkillOrigin;
+  /** 安装/链接的平台 agent id（升序去重） */
+  agents: string[];
+  /** 平台维度为观察到的 dir_path；Central 维度为 canonical_path */
+  installedPath: string | null;
+  /** 0 = 从未使用 */
+  callCount: number;
+  lastUsedMs: number | null;
+  staticTokenEstimate: number | null;
+  staticByteCount: number | null;
+  status: UnusedSkillStatus;
+}
+
+export interface UnusedSkillsReport {
+  central: UnusedSkillEntry[];
+  platforms: UnusedSkillEntry[];
+}

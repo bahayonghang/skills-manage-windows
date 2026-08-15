@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/frontend/skill-usage-state.md", "reason": "验收时核对：组件无直接 invoke、视图本地过滤未进 store、target 切换失效正确"}
+{"file": ".trellis/spec/backend/skill-usage-analytics.md", "reason": "验收时核对：skill_calls 语义未改、source 过滤一致、未引入新表/迁移"}
+{"file": ".trellis/tasks/08-15-skill-usage-unused-skills/prd.md", "reason": "验收标准 AC1–AC5 的权威来源"}

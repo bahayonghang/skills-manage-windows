@@ -145,14 +145,14 @@ describe("ipc command coverage ratchet", () => {
     expect(TYPED_IPC_COMMAND_NAMES.length).toBeGreaterThanOrEqual(40);
   });
 
-  it("freezes the 135 typed / 47 untyped / 182 frontend migration counts", () => {
-    expect(HANDWRITTEN_IPC_COMMAND_NAMES).toHaveLength(92);
+  it("freezes the 136 typed / 47 untyped / 183 frontend migration counts", () => {
+    expect(HANDWRITTEN_IPC_COMMAND_NAMES).toHaveLength(93);
     expect(GENERATED_IPC_COMMAND_NAMES).toHaveLength(43);
-    expect(TYPED_IPC_COMMAND_NAMES).toHaveLength(135);
+    expect(TYPED_IPC_COMMAND_NAMES).toHaveLength(136);
     expect(UNTYPED_IPC_COMMANDS).toHaveLength(47);
     expect(
       new Set([...TYPED_IPC_COMMAND_NAMES, ...UNTYPED_IPC_COMMANDS]).size,
-    ).toBe(182);
+    ).toBe(183);
   });
 
   it("keeps generated and handwritten command maps disjoint", () => {
@@ -208,7 +208,7 @@ describe("ipc command coverage ratchet", () => {
       ...TYPED_IPC_COMMAND_NAMES,
       ...UNTYPED_IPC_COMMANDS,
     ]);
-    expect(runtime).toHaveLength(189);
+    expect(runtime).toHaveLength(190);
     expect([...frontend].filter((command) => !runtimeSet.has(command))).toEqual(
       [],
     );
@@ -217,7 +217,7 @@ describe("ipc command coverage ratchet", () => {
     );
   });
 
-  it("keeps one runtime handler registry and the 185 / 4 fallibility boundary", () => {
+  it("keeps one runtime handler registry and the 186 / 4 fallibility boundary", () => {
     const handlerOwners = collectProductionFiles(
       TAURI_SOURCE_ROOT,
       /\.rs$/,
@@ -234,8 +234,8 @@ describe("ipc command coverage ratchet", () => {
       .filter(([, result]) => !result?.includes("IpcResult<"))
       .map(([name]) => name)
       .sort();
-    expect(signatures.size).toBe(189);
-    expect(fallible).toHaveLength(185);
+    expect(signatures.size).toBe(190);
+    expect(fallible).toHaveLength(186);
     expect(infallible).toEqual([
       "exit_startup",
       "get_app_runtime_info",

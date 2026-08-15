@@ -50,5 +50,6 @@ pub use repos::tags_repo::*;
 pub use repos::update_inventory_repo::*;
 pub use repos::update_states_repo::*;
 pub use repos::usage_repo::*;
+pub use repos::usage_unused_repo::*;
 pub use seed::*;
 pub use types::*;

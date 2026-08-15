@@ -88,7 +88,7 @@ pub fn resolve_usage_skills(
         .collect()
 }
 
-fn normalize_identity(value: &str) -> String {
+pub(super) fn normalize_identity(value: &str) -> String {
     value.trim().to_lowercase()
 }
 

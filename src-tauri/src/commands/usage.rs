@@ -13,6 +13,8 @@
 //!   注入「近 N 天 K 次」徽章用，批量 name → count
 //! - `usage_resolve_skill_id(name)` —— 名称匹配中央库 skill_id，给柱图点击跳详情
 //! - `usage_get_skill_detail(skill)` —— 单技能详情（按项目分布 + 16w 稀疏图）
+//! - `usage_get_unused_skills(source, threshold_days)` —— 从未使用/长期未用
+//!   报表（Central 库 + 平台安装双维度，只读派生）
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -23,7 +25,7 @@ use tauri::State;
 
 use crate::services::usage::{
     self,
-    aggregate::{RecentSkillCall, SkillUsageDetail, UsageOverview},
+    aggregate::{RecentSkillCall, SkillUsageDetail, UnusedSkillsReport, UsageOverview},
     ProviderHealth, RefreshSummary, Scope,
 };
 use crate::targets::{connect_remote_target, ActiveTarget};
@@ -328,6 +330,40 @@ pub async fn usage_resolve_skill_id(
             usage::resolve_skill_id(&state.db, &target.target_id, &skill_name)
                 .await
                 .map_err(|e| e.to_string())
+        }
+        .await
+    )
+}
+
+/// 从未使用 / 长期未用报表：Central 库（`skills.is_central=1`）+ 平台安装
+/// （`agent_skill_observations`）两个维度。只读派生，不改 `skill_calls` 语义。
+///
+/// usage 事实沿用本模块既有口径——always-local 池按 `target_id` 隔离；技能库
+/// 侧用 `TargetRegistry::db_for_target` 从同一个已解析 target 派生缓存池
+/// （local 时与 `state.db` 相同），不引入 AppState 迁移期 ambient helper。
+#[tauri::command]
+pub async fn usage_get_unused_skills(
+    state: State<'_, AppState>,
+    source: Option<String>,
+    threshold_days: Option<u32>,
+) -> crate::ipc_error::IpcResult<UnusedSkillsReport> {
+    crate::ipc_boundary!(
+        async move {
+            let target = active_usage_target(&state).await?;
+            let skills_db = state
+                .targets
+                .db_for_target(&state.db, &target.active)
+                .await
+                .map_err(|e| e.to_string())?;
+            usage::build_unused_report(
+                &state.db,
+                &skills_db,
+                &target.target_id,
+                source.as_deref(),
+                threshold_days.unwrap_or(usage::DEFAULT_UNUSED_THRESHOLD_DAYS),
+            )
+            .await
+            .map_err(|e| e.to_string())
         }
         .await
     )

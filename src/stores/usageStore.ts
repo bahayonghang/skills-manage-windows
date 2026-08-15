@@ -8,6 +8,7 @@ import type {
   ProviderHealth,
   RecentSkillCall,
   SkillUsageDetail,
+  UnusedSkillsReport,
   UsageOverview,
   UsageRefreshResult,
   UsageScopeInfo,
@@ -18,6 +19,9 @@ interface UsageState {
   recent: RecentSkillCall[];
   providers: ProviderHealth[];
   detail: SkillUsageDetail | null;
+  unused: UnusedSkillsReport | null;
+  unusedLoading: boolean;
+  unusedError: string | null;
   scope: UsageScopeInfo | null;
   selectedSource: string | null;
   selectedSkill: string | null;
@@ -33,6 +37,7 @@ interface UsageState {
   selectSource: (source: string | null) => Promise<void>;
   loadDetail: (skill: string) => Promise<void>;
   clearDetail: () => void;
+  refreshUnused: () => Promise<void>;
   loadScope: () => Promise<UsageScopeInfo | null>;
   subscribeTargetChanged: () => Promise<() => void>;
 }
@@ -44,6 +49,14 @@ let inFlightRefresh: {
 let refreshSequence = 0;
 let pageSequence = 0;
 let detailSequence = 0;
+let unusedSequence = 0;
+
+/**
+ * 未使用面板只向后端请求一次最严阈值（30 天）。30/60/90 天切换是视图本地的
+ * 重新分类（callCount === 0 → never_used，否则按 lastUsedMs 与选中阈值比较），
+ * 30 天报告是 60/90 天结果的超集，因此前端重分类精确、且不再触发后端往返。
+ */
+export const UNUSED_REQUEST_THRESHOLD_DAYS = 30;
 
 function activeUsageTargetId(): string {
   return useTargetStore.getState().activeTarget.id ?? "local";
@@ -58,6 +71,9 @@ export const useUsageStore = create<UsageState>((set, get) => ({
   recent: [],
   providers: [],
   detail: null,
+  unused: null,
+  unusedLoading: false,
+  unusedError: null,
   scope: null,
   selectedSource: null,
   selectedSkill: null,
@@ -140,6 +156,9 @@ export const useUsageStore = create<UsageState>((set, get) => ({
           });
         }
 
+        // 未使用清单派生自 skill_calls，只在成功扫描后刷新；面板自身有序列号防陈旧。
+        void get().refreshUnused();
+
         if (result.usedCachedData && result.refreshError) {
           toast.info(i18n.t("skillUsage.showingCachedAfterError"));
         }
@@ -193,6 +212,8 @@ export const useUsageStore = create<UsageState>((set, get) => ({
           selectedSource: source,
           loading: false,
         });
+        // source 口径同样作用于未使用报告的 calls 聚合，随 source 切换重取。
+        void get().refreshUnused();
       }
     } catch (error) {
       if (pageRequestMatches(requestSequence, targetId)) {
@@ -233,6 +254,33 @@ export const useUsageStore = create<UsageState>((set, get) => ({
     set({ selectedSkill: null, detail: null, detailLoading: false });
   },
 
+  async refreshUnused() {
+    const targetId = activeUsageTargetId();
+    const source = get().selectedSource;
+    const requestSequence = ++unusedSequence;
+    set({ unusedLoading: true, unusedError: null });
+    try {
+      const unused = await invoke("usage_get_unused_skills", {
+        source,
+        thresholdDays: UNUSED_REQUEST_THRESHOLD_DAYS,
+      });
+      if (
+        requestSequence === unusedSequence &&
+        targetId === activeUsageTargetId() &&
+        source === get().selectedSource
+      ) {
+        set({ unused, unusedLoading: false });
+      }
+    } catch (error) {
+      if (
+        requestSequence === unusedSequence &&
+        targetId === activeUsageTargetId()
+      ) {
+        set({ unusedLoading: false, unusedError: errorMessage(error) });
+      }
+    }
+  },
+
   async loadScope() {
     try {
       const scope = await invoke("usage_get_scope_info");
@@ -249,6 +297,7 @@ export const useUsageStore = create<UsageState>((set, get) => ({
         ++refreshSequence;
         ++pageSequence;
         ++detailSequence;
+        ++unusedSequence;
         // 连同页面数据一起清空：重扫期间不得继续展示上一个 target 的面板
         set({
           overview: null,
@@ -258,6 +307,9 @@ export const useUsageStore = create<UsageState>((set, get) => ({
           detail: null,
           selectedSkill: null,
           detailLoading: false,
+          unused: null,
+          unusedLoading: false,
+          unusedError: null,
           scope: null,
           lastRefreshMs: null,
           error: null,

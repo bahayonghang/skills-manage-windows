@@ -543,6 +543,167 @@ pub async fn resolve_skill_id(
         .and_then(|item| item.resolved_skill_id))
 }
 
+/// `usage_get_unused_skills` 的默认「长期未用」阈值（天）。
+pub const DEFAULT_UNUSED_THRESHOLD_DAYS: u32 = 90;
+
+/// 构建「从未使用 / 长期未用」报表（只读派生，不写任何表）。
+///
+/// 双 pool 约定：
+/// - `usage_pool`：`skill_calls` / `skill_usage_metadata` 所在池，按
+///   `target_id` 隔离（远程 target 的 usage 缓存也落在这里，见
+///   `commands::usage` 的既有口径）；`source` 过滤只作用于 calls 聚合。
+/// - `skills_pool`：active target 的技能库池（`skills` /
+///   `agent_skill_observations` / `skill_installations`）。local target 下
+///   两池相同；远程 target 下是 `TargetRegistry::db_for_target` 解析出的
+///   缓存池。
+///
+/// Central 维度按 `skill_usage_metadata.resolved_skill_id` 归属调用；平台维度
+/// 以 `agent_skill_observations` 为权威安装表（每次 agent 扫描落盘、含平台
+/// 散件与插件源），按 normalized name（`enrichment::normalize_identity` 同一
+/// 规则）直查 `skill_calls`。
+pub async fn build_unused_report(
+    usage_pool: &DbPool,
+    skills_pool: &DbPool,
+    target_id: &str,
+    source: Option<&str>,
+    threshold_days: u32,
+) -> Result<aggregate::UnusedSkillsReport, UsageError> {
+    let now_ms = Utc::now().timestamp_millis();
+
+    // ── Central 维度：skills(is_central=1) × 按 resolved_skill_id 聚合的调用事实
+    let central_skills = db::get_central_skills(skills_pool).await?;
+    let resolved_aggregates: HashMap<String, db::ResolvedCallAggregateRow> =
+        db::list_resolved_call_aggregates(usage_pool, target_id, source)
+            .await?
+            .into_iter()
+            .map(|row| (row.resolved_skill_id.clone(), row))
+            .collect();
+    let central_ids = central_skills
+        .iter()
+        .map(|skill| skill.id.clone())
+        .collect::<Vec<_>>();
+    let mut installations_by_skill =
+        db::get_skill_installations_for_skills(skills_pool, &central_ids).await?;
+
+    let mut central = Vec::new();
+    for skill in central_skills {
+        let stats = resolved_aggregates.get(&skill.id);
+        let call_count = stats.map(|row| row.call_count).unwrap_or(0);
+        let last_used_ms = stats.and_then(|row| row.last_used_ms);
+        let Some(status) =
+            aggregate::unused_skill_status(call_count, last_used_ms, now_ms, threshold_days)
+        else {
+            continue;
+        };
+        let mut agents = installations_by_skill
+            .remove(&skill.id)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|installation| installation.agent_id)
+            .collect::<Vec<_>>();
+        agents.sort();
+        agents.dedup();
+        central.push(aggregate::UnusedSkillEntry {
+            skill_id: Some(skill.id.clone()),
+            name: skill.name.clone(),
+            // 有归属聚合行 ⟺ 存在 matched metadata 行（只有 matched 才有 resolved id）
+            match_status: if stats.is_some() {
+                UsageSkillMatchStatus::Matched
+            } else {
+                UsageSkillMatchStatus::Unmatched
+            },
+            origin: aggregate::UnusedSkillOrigin::Central,
+            agents,
+            installed_path: skill.canonical_path.clone(),
+            call_count,
+            last_used_ms,
+            static_token_estimate: stats.and_then(|row| row.static_token_estimate),
+            static_byte_count: stats.and_then(|row| row.static_byte_count),
+            status,
+        });
+    }
+
+    // ── 平台维度：agent_skill_observations 按 normalized name 直查 skill_calls
+    let observations = db::list_platform_skill_observations(skills_pool).await?;
+    let call_aggregates: HashMap<String, db::NormalizedCallAggregateRow> =
+        db::list_normalized_call_aggregates(usage_pool, target_id, source)
+            .await?
+            .into_iter()
+            .map(|row| (row.normalized_skill.clone(), row))
+            .collect();
+    // metadata 以日志里的原始调用名为键；平台名 normalize 后对齐取身份与静态体量。
+    // 同一 normalized 名可能有多个原始名变体，matched 行身份最强，优先保留。
+    let mut metadata_by_normalized: HashMap<String, db::SkillUsageMetadataRow> = HashMap::new();
+    for row in db::list_usage_metadata(usage_pool, target_id).await? {
+        let key = enrichment::normalize_identity(&row.skill);
+        let replace = metadata_by_normalized
+            .get(&key)
+            .map(|existing| row.match_status == "matched" && existing.match_status != "matched")
+            .unwrap_or(true);
+        if replace {
+            metadata_by_normalized.insert(key, row);
+        }
+    }
+
+    struct PlatformGroup {
+        name: String,
+        dir_path: String,
+        agents: Vec<String>,
+    }
+    let mut groups: HashMap<String, PlatformGroup> = HashMap::new();
+    for observation in observations {
+        let key = enrichment::normalize_identity(&observation.name);
+        let group = groups.entry(key).or_insert_with(|| PlatformGroup {
+            name: observation.name.clone(),
+            dir_path: observation.dir_path.clone(),
+            agents: Vec::new(),
+        });
+        if !group.agents.contains(&observation.agent_id) {
+            group.agents.push(observation.agent_id.clone());
+        }
+    }
+
+    let mut platforms = Vec::new();
+    for (normalized, group) in groups {
+        let stats = call_aggregates.get(&normalized);
+        let call_count = stats.map(|row| row.call_count).unwrap_or(0);
+        let last_used_ms = stats.and_then(|row| row.last_used_ms);
+        let Some(status) =
+            aggregate::unused_skill_status(call_count, last_used_ms, now_ms, threshold_days)
+        else {
+            continue;
+        };
+        let metadata = metadata_by_normalized.get(&normalized);
+        platforms.push(aggregate::UnusedSkillEntry {
+            skill_id: metadata.and_then(|row| row.resolved_skill_id.clone()),
+            name: group.name,
+            match_status: metadata
+                .map(|row| UsageSkillMatchStatus::from_db(&row.match_status))
+                .unwrap_or(UsageSkillMatchStatus::Unmatched),
+            origin: aggregate::UnusedSkillOrigin::Platform,
+            agents: group.agents,
+            installed_path: Some(group.dir_path),
+            call_count,
+            last_used_ms,
+            static_token_estimate: metadata.and_then(|row| row.static_token_estimate),
+            static_byte_count: metadata.and_then(|row| row.static_byte_count),
+            status,
+        });
+    }
+
+    // 输出排序固定（名称升序），阈值/排序/筛选的交互全部留给前端视图层。
+    let by_name = |a: &aggregate::UnusedSkillEntry, b: &aggregate::UnusedSkillEntry| {
+        a.name
+            .to_lowercase()
+            .cmp(&b.name.to_lowercase())
+            .then_with(|| a.name.cmp(&b.name))
+    };
+    central.sort_by(by_name);
+    platforms.sort_by(by_name);
+
+    Ok(aggregate::UnusedSkillsReport { central, platforms })
+}
+
 /// 把 DB 行投影成可序列化给前端的 [`SkillCall`] 列表。
 pub fn rows_to_skill_calls(rows: Vec<SkillCallRow>) -> Vec<SkillCall> {
     rows.into_iter()

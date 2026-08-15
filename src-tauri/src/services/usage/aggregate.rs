@@ -397,3 +397,145 @@ mod tests {
         }
     }
 }
+
+// ─── 未使用技能报表（usage_get_unused_skills）─────────────────────────────────
+
+/// 未使用技能的来源维度：Central 库 / 平台安装。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UnusedSkillOrigin {
+    Central,
+    Platform,
+}
+
+/// 未使用状态：零调用为 `NeverUsed`；最后使用早于阈值窗口为 `Stale`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UnusedSkillStatus {
+    NeverUsed,
+    Stale,
+}
+
+/// `usage_get_unused_skills` 的单条未使用候选（Central 或平台维度）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnusedSkillEntry {
+    /// Central skill id；平台散件为 None。
+    pub skill_id: Option<String>,
+    pub name: String,
+    pub match_status: UsageSkillMatchStatus,
+    pub origin: UnusedSkillOrigin,
+    /// 安装/链接的平台 agent id 列表（升序去重）。
+    pub agents: Vec<String>,
+    /// 平台维度为观察到的 dir_path；Central 维度为 canonical_path。
+    pub installed_path: Option<String>,
+    pub call_count: i64,
+    pub last_used_ms: Option<i64>,
+    pub static_token_estimate: Option<i64>,
+    pub static_byte_count: Option<i64>,
+    pub status: UnusedSkillStatus,
+}
+
+/// `usage_get_unused_skills` 的返回包：Central 库与平台安装两个分组。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnusedSkillsReport {
+    pub central: Vec<UnusedSkillEntry>,
+    pub platforms: Vec<UnusedSkillEntry>,
+}
+
+/// 分类规则（design.md）：`call_count == 0` → `NeverUsed`；有调用但
+/// `last_used_ms < now - threshold_days` → `Stale`；其余返回 None（不进入
+/// 未使用清单）。正好落在阈值边界上的不算 stale。
+pub fn unused_skill_status(
+    call_count: i64,
+    last_used_ms: Option<i64>,
+    now_ms: i64,
+    threshold_days: u32,
+) -> Option<UnusedSkillStatus> {
+    if call_count <= 0 {
+        return Some(UnusedSkillStatus::NeverUsed);
+    }
+    let cutoff_ms = now_ms - threshold_days as i64 * 86_400_000;
+    match last_used_ms {
+        Some(last_used_ms) if last_used_ms < cutoff_ms => Some(UnusedSkillStatus::Stale),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod unused_tests {
+    use super::*;
+
+    #[test]
+    fn unused_status_classifies_never_used_stale_and_recent() {
+        let day = 86_400_000_i64;
+        let now_ms = 1_000 * day;
+        // 零调用 → never_used（无论 last_used 是否缺失）
+        assert_eq!(
+            unused_skill_status(0, None, now_ms, 90),
+            Some(UnusedSkillStatus::NeverUsed)
+        );
+        // 阈值边界：last_used 正好等于 cutoff → 不算 stale，被排除
+        let cutoff_ms = now_ms - 90 * day;
+        assert_eq!(unused_skill_status(1, Some(cutoff_ms), now_ms, 90), None);
+        // 边界再老 1ms → stale
+        assert_eq!(
+            unused_skill_status(1, Some(cutoff_ms - 1), now_ms, 90),
+            Some(UnusedSkillStatus::Stale)
+        );
+        // 阈值内最近使用 → 排除
+        assert_eq!(unused_skill_status(3, Some(now_ms - day), now_ms, 90), None);
+    }
+
+    #[test]
+    fn unused_report_serializes_to_camel_case() {
+        let report = UnusedSkillsReport {
+            central: vec![UnusedSkillEntry {
+                skill_id: Some("review".to_string()),
+                name: "Review".to_string(),
+                match_status: UsageSkillMatchStatus::Matched,
+                origin: UnusedSkillOrigin::Central,
+                agents: vec!["claude-code".to_string()],
+                installed_path: Some("/central/review".to_string()),
+                call_count: 0,
+                last_used_ms: None,
+                static_token_estimate: Some(12),
+                static_byte_count: Some(42),
+                status: UnusedSkillStatus::NeverUsed,
+            }],
+            platforms: vec![UnusedSkillEntry {
+                skill_id: None,
+                name: "loose-skill".to_string(),
+                match_status: UsageSkillMatchStatus::Unmatched,
+                origin: UnusedSkillOrigin::Platform,
+                agents: vec!["codex".to_string()],
+                installed_path: Some("/home/u/.codex/skills/loose-skill".to_string()),
+                call_count: 2,
+                last_used_ms: Some(1_700_000_000_000),
+                static_token_estimate: None,
+                static_byte_count: None,
+                status: UnusedSkillStatus::Stale,
+            }],
+        };
+        let json = serde_json::to_value(&report).unwrap();
+        let central = &json["central"][0];
+        assert_eq!(central["skillId"], "review");
+        assert_eq!(central["matchStatus"], "matched");
+        assert_eq!(central["origin"], "central");
+        assert_eq!(central["installedPath"], "/central/review");
+        assert_eq!(central["callCount"], 0);
+        assert!(central["lastUsedMs"].is_null());
+        assert_eq!(central["staticTokenEstimate"], 12);
+        assert_eq!(central["staticByteCount"], 42);
+        assert_eq!(central["status"], "never_used");
+        assert!(central.get("skill_id").is_none());
+        assert!(central.get("call_count").is_none());
+
+        let platform = &json["platforms"][0];
+        assert!(platform["skillId"].is_null());
+        assert_eq!(platform["origin"], "platform");
+        assert_eq!(platform["status"], "stale");
+        assert_eq!(platform["agents"], serde_json::json!(["codex"]));
+    }
+}

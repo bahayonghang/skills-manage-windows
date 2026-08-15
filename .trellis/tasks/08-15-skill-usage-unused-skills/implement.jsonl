@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/frontend/skill-usage-state.md", "reason": "Skill Usage 页面前端绑定契约：store/ipc 边界、视图本地过滤、序列号与 target 失效规则"}
+{"file": ".trellis/spec/backend/skill-usage-analytics.md", "reason": "usage 后端契约：skill_calls 只存事实、metadata 匹配规则、固定时间口径、source 过滤一致性"}
+{"file": ".trellis/tasks/08-15-skill-usage-unused-skills/design.md", "reason": "本任务技术设计：双清单差集查询、命令与类型定义、面板结构"}

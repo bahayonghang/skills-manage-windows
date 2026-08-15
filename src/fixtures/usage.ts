@@ -4,6 +4,8 @@ import type {
   RecentSkillCall,
   SkillUsageDetail,
   SkillUsageSummary,
+  UnusedSkillEntry,
+  UnusedSkillsReport,
   UsageOverview,
   UsageScopeInfo,
 } from "@/types/usage";
@@ -113,6 +115,77 @@ const BROWSER_FIXTURE_PROVIDERS: ProviderHealth[] = [
   scannedAtMs: now - 5 * 60_000,
 }));
 
+// 未使用报告 fixture：覆盖 matched/ambiguous/unmatched、缺失静态估算、
+// never_used 与不同未用时长，供阈值切换的视图本地重分类演示。
+const UNUSED_FIXTURE_ENTRIES: UnusedSkillEntry[] = [
+  {
+    skillId: "legacy-cleanup",
+    name: "legacy-cleanup",
+    matchStatus: "matched",
+    origin: "central",
+    agents: ["claude-code"],
+    installedPath: "C:/Users/demo/.skillport/skills/legacy-cleanup",
+    callCount: 0,
+    lastUsedMs: null,
+    staticTokenEstimate: 960,
+    staticByteCount: 3_840,
+    status: "never_used",
+  },
+  {
+    skillId: "trellis-check",
+    name: "trellis-check",
+    matchStatus: "matched",
+    origin: "central",
+    agents: ["claude-code", "codex"],
+    installedPath: "C:/Users/demo/.skillport/skills/trellis-check",
+    callCount: 17,
+    lastUsedMs: now - 45 * 86_400_000,
+    staticTokenEstimate: null,
+    staticByteCount: null,
+    status: "stale",
+  },
+  {
+    skillId: null,
+    name: "prompt-helper",
+    matchStatus: "ambiguous",
+    origin: "platform",
+    agents: ["codex"],
+    installedPath: "C:/Users/demo/.codex/skills/prompt-helper",
+    callCount: 3,
+    lastUsedMs: now - 120 * 86_400_000,
+    staticTokenEstimate: null,
+    staticByteCount: null,
+    status: "stale",
+  },
+  {
+    skillId: null,
+    name: "local-notes",
+    matchStatus: "unmatched",
+    origin: "platform",
+    agents: ["claude-code", "zed"],
+    installedPath: "C:/Users/demo/.claude/skills/local-notes",
+    callCount: 0,
+    lastUsedMs: null,
+    staticTokenEstimate: null,
+    staticByteCount: null,
+    status: "never_used",
+  },
+];
+
+function unusedReportFor(thresholdDays: number | null): UnusedSkillsReport {
+  const threshold = (thresholdDays ?? 90) * 86_400_000;
+  const visible = UNUSED_FIXTURE_ENTRIES.filter(
+    (entry) =>
+      entry.callCount === 0 ||
+      entry.lastUsedMs === null ||
+      now - entry.lastUsedMs >= threshold,
+  );
+  return {
+    central: visible.filter((entry) => entry.origin === "central"),
+    platforms: visible.filter((entry) => entry.origin === "platform"),
+  };
+}
+
 function detailFor(skill: string): SkillUsageDetail {
   const summary =
     BROWSER_FIXTURE_SKILLS.find((item) => item.skill === skill) ??
@@ -206,6 +279,8 @@ export function registerUsageFixtures(): void {
         : BROWSER_FIXTURE_RECENT,
     usage_get_providers: () => BROWSER_FIXTURE_PROVIDERS,
     usage_get_skill_detail: ({ skill }) => detailFor(skill),
+    usage_get_unused_skills: ({ thresholdDays }) =>
+      unusedReportFor(thresholdDays),
     usage_get_scope_info: () => BROWSER_FIXTURE_SCOPE,
     usage_resolve_skill_id: () => null,
     usage_get_skill_counts: () => ({}),

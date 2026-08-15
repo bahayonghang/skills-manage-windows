@@ -393,6 +393,47 @@
       "countShort": "{{count}} 次",
       "periodShort": "近 {{days}} 天",
       "tooltip": "最近 {{days}} 天调用 {{count}} 次"
+    },
+    "unused": {
+      "title": "未使用技能",
+      "loading": "正在扫描已安装技能…",
+      "summary": "{{count}} 个未使用",
+      "summaryFiltered": "{{count}} / {{total}} 个未使用",
+      "empty": "当前阈值下没有未使用技能。",
+      "never": "从未",
+      "noAgents": "无关联平台",
+      "groups": {
+        "central": "中央技能库",
+        "agentSection": "平台 · {{agent}}"
+      },
+      "statusFilter": {
+        "label": "按未使用状态筛选",
+        "all": "全部",
+        "never_used": "从未使用",
+        "stale": "长期未用"
+      },
+      "threshold": {
+        "label": "长期未用阈值",
+        "days": "{{count}} 天"
+      },
+      "sort": {
+        "label": "未使用技能排序",
+        "idle": "按未用时长",
+        "size": "按体积",
+        "name": "按名称"
+      },
+      "status": {
+        "never_used": "从未使用",
+        "stale": "长期未用"
+      },
+      "columns": {
+        "skill": "技能",
+        "match": "中央库匹配",
+        "calls": "调用",
+        "estimate": "Skill.md 估算",
+        "lastUsed": "最近使用",
+        "status": "状态"
+      }
     }
   },
   "dashboard": {

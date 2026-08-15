@@ -195,6 +195,7 @@ macro_rules! __skillport_runtime_commands {
             usage_get_skill_counts => commands::usage::usage_get_skill_counts,
             usage_resolve_skill_id => commands::usage::usage_resolve_skill_id,
             usage_get_scope_info => commands::usage::usage_get_scope_info,
+            usage_get_unused_skills => commands::usage::usage_get_unused_skills,
         }
     };
 }

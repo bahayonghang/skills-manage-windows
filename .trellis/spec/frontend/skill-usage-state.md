@@ -36,13 +36,18 @@ invoke("usage_get_skill_detail", { skill, source });
   in one `set`. Keep the previous source/data visible until the new pair succeeds.
 - Page, refresh, and detail requests each have a sequence. A response commits only
   when sequence, active target id, source, and selected skill still match.
+- The unused-skills slice (`unused`, `refreshUnused`) has its own sequence and
+  fetches once per refresh at the strictest threshold (30d); the 30/60/90 chips,
+  status filter, and sort are view-local reclassification on `callCount` +
+  `lastUsedMs` and must not enter the store or change backend requests.
 - `overview === null` is the first-load authority even before the bootstrap effect
   sets `refreshing`. Render the final-layout scanning skeleton and withhold numeric
   KPI output until an overview exists or a page-level error is available.
-- Target changes invalidate all three request sequences and immediately reset
-  `overview`, `recent`, `providers`, `loading`, detail state, and source selection
-  before starting a forced refresh. Never leave an old source request loading or
-  render panels from the previous target during the rescan.
+- Target changes invalidate all request sequences and immediately reset
+  `overview`, `recent`, `providers`, `loading`, detail state, the unused slice,
+  and source selection before starting a forced refresh. Never leave an old
+  source request loading or render panels from the previous target during the
+  rescan.
 - A filtered refresh must not briefly publish the unfiltered refresh payload.
   Update provider/scope/freshness first, retain the filtered page, then refetch it.
 - Ranking install-state filtering is view-local: `installed` keeps only `matched`,

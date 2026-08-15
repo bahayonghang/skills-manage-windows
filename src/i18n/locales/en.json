@@ -393,6 +393,47 @@
       "countShort": "{{count}}×",
       "periodShort": "{{days}}d",
       "tooltip": "{{count}} calls in the last {{days}} days"
+    },
+    "unused": {
+      "title": "Unused skills",
+      "loading": "Scanning installed skills…",
+      "summary": "{{count}} unused",
+      "summaryFiltered": "{{count}} / {{total}} unused",
+      "empty": "No unused skills at this threshold.",
+      "never": "Never",
+      "noAgents": "No linked platforms",
+      "groups": {
+        "central": "Central library",
+        "agentSection": "Platform · {{agent}}"
+      },
+      "statusFilter": {
+        "label": "Filter by unused state",
+        "all": "All",
+        "never_used": "Never used",
+        "stale": "Stale"
+      },
+      "threshold": {
+        "label": "Staleness threshold",
+        "days": "{{count}}d"
+      },
+      "sort": {
+        "label": "Sort unused skills",
+        "idle": "longest unused",
+        "size": "largest",
+        "name": "name"
+      },
+      "status": {
+        "never_used": "Never used",
+        "stale": "Stale"
+      },
+      "columns": {
+        "skill": "Skill",
+        "match": "Central match",
+        "calls": "Calls",
+        "estimate": "Skill.md estimate",
+        "lastUsed": "Last used",
+        "status": "State"
+      }
     }
   },
   "dashboard": {

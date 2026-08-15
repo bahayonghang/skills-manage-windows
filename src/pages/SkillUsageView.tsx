@@ -17,6 +17,7 @@ import { ProviderHealthList } from "@/components/usage/ProviderHealthList";
 import { RecentCallsFeed } from "@/components/usage/RecentCallsFeed";
 import { SkillUsageDetailPanel } from "@/components/usage/SkillUsageDetailPanel";
 import { SkillUsageTable } from "@/components/usage/SkillUsageTable";
+import { UnusedSkillsPanel } from "@/components/usage/UnusedSkillsPanel";
 import { UsageMetricStrip } from "@/components/usage/UsageMetricStrip";
 import { formatUsageRelativeTime } from "@/components/usage/usageFormat";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,9 @@ export function SkillUsageView() {
     providers,
     recent,
     detail,
+    unused,
+    unusedLoading,
+    unusedError,
     scope,
     selectedSource,
     selectedSkill,
@@ -217,6 +221,19 @@ export function SkillUsageView() {
                 </div>
               </UsageSection>
             )}
+
+            <UsageSection
+              title={t("skillUsage.unused.title")}
+              className="xl:col-span-2"
+            >
+              <UnusedSkillsPanel
+                report={unused}
+                loading={unusedLoading}
+                error={unusedError}
+                selectedSkill={selectedSkill}
+                onSelect={selectSkill}
+              />
+            </UsageSection>
           </div>
         )}
 

@@ -1,0 +1,32 @@
+{
+  "id": "skill-usage-unused-skills",
+  "name": "skill-usage-unused-skills",
+  "title": "Skill Usage 未使用技能视图",
+  "description": "Skill Usage 页新增未使用/长期未用 skills 视图（Central 库 + 各平台安装），默认 90 天阈值可切换 30/60/90，仅识别不做删除。",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-08-15",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "src/pages/SkillUsageView.tsx",
+    "src/stores/usageStore.ts",
+    "src-tauri/src/commands/usage.rs",
+    "src-tauri/src/db/repos/usage_repo.rs",
+    "src-tauri/src/services/usage/mod.rs"
+  ],
+  "notes": "",
+  "meta": {}
+}
