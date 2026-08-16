@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 97
+- **Total Sessions**: 98
 - **Last Active**: 2026-08-16
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1254 | Active |
+| `journal-2.md` | ~1275 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 98 | 2026-08-16 | 未使用技能 unlink 弹窗化:行右统一入口支持全选/单选 | `fc648790` | `dev` |
 | 97 | 2026-08-16 | 未使用技能面板 unlink 操作与徽章优化 | `779aa340` | `dev` |
 | 96 | 2026-08-15 | Usage 页加载性能优化 | `276ad607` | `dev` |
 | 95 | 2026-08-15 | Skill Usage 未使用技能视图 | `bb7f42587b4b053e968b5a2958ab4d2a6aa64046` | `dev` |

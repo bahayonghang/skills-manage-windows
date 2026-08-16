@@ -1252,3 +1252,24 @@ Usage 扫描性能：子串预过滤+流式解析+spawn_blocking+批量写入；
 ### Status
 
 [OK] **Completed**
+
+
+## Session 98: 未使用技能 unlink 弹窗化:行右统一入口支持全选/单选
+
+**Date**: 2026-08-16
+**Task**: 未使用技能 unlink 弹窗化:行右统一入口支持全选/单选
+**Branch**: `dev`
+
+### Summary
+
+按用户反馈重新设计 Unused skills 面板 unlink 交互:撤销行内散点入口,改为每行最右统一 Unlink 触发按钮 + UnusedSkillUnlinkDialog 弹窗(全选不含禁用项/单选 Agent/五种禁用原因/部分失败重试);store 新增 unlinkUnusedSkillFromAgents 顺序批量执行、批后单次刷新,删除旧 unlinkUnusedSkill;后端零改动。同步更新 skill-usage-state.md unlink 契约。just ci 全绿(frontend 1687 passed, Rust 1235 passed)。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fc648790` | (see git log) |
+
+### Status
+
+[OK] **Completed**
