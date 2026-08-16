@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { toast } from "sonner";
 
 import i18n from "@/i18n";
+import { formatBackendError } from "@/lib/backendError";
 import { invoke, listen } from "@/lib/ipc";
 import { useTargetStore } from "@/stores/targetStore";
 import type {
@@ -22,6 +23,8 @@ interface UsageState {
   unused: UnusedSkillsReport | null;
   unusedLoading: boolean;
   unusedError: string | null;
+  /** 进行中的 unlink 动作（key = rowId ?? `${agentId}::${skillId}`），驱动按钮 spinner */
+  pendingUnlinkKeys: Record<string, boolean>;
   scope: UsageScopeInfo | null;
   selectedSource: string | null;
   selectedSkill: string | null;
@@ -40,6 +43,11 @@ interface UsageState {
   loadDetail: (skill: string) => Promise<void>;
   clearDetail: () => void;
   refreshUnused: () => Promise<void>;
+  unlinkUnusedSkill: (
+    skillId: string,
+    agentId: string,
+    rowId?: string | null,
+  ) => Promise<void>;
   loadScope: () => Promise<UsageScopeInfo | null>;
   subscribeTargetChanged: () => Promise<() => void>;
   subscribeScanCompleted: () => Promise<() => void>;
@@ -69,6 +77,15 @@ function pageRequestMatches(request: number, targetId: string): boolean {
   return request === pageSequence && targetId === activeUsageTargetId();
 }
 
+/** 与 skillStore 的 skillActionKey 同一约定：rowId 唯一标识 observation 行。 */
+export function unlinkActionKey(
+  agentId: string,
+  skillId: string,
+  rowId?: string | null,
+): string {
+  return rowId ?? `${agentId}::${skillId}`;
+}
+
 export const useUsageStore = create<UsageState>((set, get) => ({
   overview: null,
   recent: [],
@@ -77,6 +94,7 @@ export const useUsageStore = create<UsageState>((set, get) => ({
   unused: null,
   unusedLoading: false,
   unusedError: null,
+  pendingUnlinkKeys: {},
   scope: null,
   selectedSource: null,
   selectedSkill: null,
@@ -286,6 +304,34 @@ export const useUsageStore = create<UsageState>((set, get) => ({
     }
   },
 
+  async unlinkUnusedSkill(skillId, agentId, rowId) {
+    const actionKey = unlinkActionKey(agentId, skillId, rowId);
+    set((state) => ({
+      pendingUnlinkKeys: { ...state.pendingUnlinkKeys, [actionKey]: true },
+    }));
+    try {
+      await invoke("uninstall_skill_from_agent", {
+        skillId,
+        agentId,
+        ...(rowId ? { rowId } : {}),
+      });
+      // observation/installations 行已随后端 unlink 清除，重取后面板行自然消失
+      await get().refreshUnused();
+    } catch (error) {
+      toast.error(
+        i18n.t("skillUsage.unused.unlink.error", {
+          error: formatBackendError(error, i18n.t),
+        }),
+      );
+    } finally {
+      set((state) => {
+        const next = { ...state.pendingUnlinkKeys };
+        delete next[actionKey];
+        return { pendingUnlinkKeys: next };
+      });
+    }
+  },
+
   async loadScope() {
     try {
       const scope = await invoke("usage_get_scope_info");
@@ -315,6 +361,7 @@ export const useUsageStore = create<UsageState>((set, get) => ({
           unused: null,
           unusedLoading: false,
           unusedError: null,
+          pendingUnlinkKeys: {},
           scope: null,
           lastRefreshMs: null,
           error: null,

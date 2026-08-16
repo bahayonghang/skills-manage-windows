@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/skill-deletion-integrity.md", "reason": "删除路径完整性与守卫契约（unlink 真目录删除必读）"}
+{"file": ".trellis/spec/backend/central-mutation-lock.md", "reason": "unlink 走 central mutation lock 的既有约定"}
+{"file": ".trellis/spec/frontend/skill-usage-state.md", "reason": "store/ipc 边界与 unused slice 刷新契约"}
+{"file": ".trellis/spec/frontend/icon-control-hit-area.md", "reason": "行内图标按钮热区与焦点可见性规范"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "unlink 失败 toast 与 formatBackendError 约定"}
+{"file": ".trellis/tasks/08-15-unused-skills-unlink-actions/design.md", "reason": "本任务技术设计"}

@@ -55,6 +55,32 @@ pub async fn delete_skill_installation(
         .map(|_| ())
 }
 
+/// Atomically remove one agent installation plus the observation rows for the
+/// same on-disk entry. The caller resolves path equivalence before entering the
+/// transaction because SQLite string equality is not a safe Windows path
+/// comparison (8.3 aliases and case differences may identify the same path).
+pub async fn delete_skill_installation_with_observations(
+    pool: &DbPool,
+    skill_id: &str,
+    agent_id: &str,
+    observation_row_ids: &[String],
+) -> Result<(), sqlx::Error> {
+    let mut transaction = pool.begin().await?;
+    for row_id in observation_row_ids {
+        sqlx::query("DELETE FROM agent_skill_observations WHERE row_id = ? AND agent_id = ?")
+            .bind(row_id)
+            .bind(agent_id)
+            .execute(&mut *transaction)
+            .await?;
+    }
+    sqlx::query("DELETE FROM skill_installations WHERE skill_id = ? AND agent_id = ?")
+        .bind(skill_id)
+        .bind(agent_id)
+        .execute(&mut *transaction)
+        .await?;
+    transaction.commit().await
+}
+
 /// Remove installation records for a given agent where the skill ID is NOT in
 /// `found_skill_ids`. Pass an empty slice to remove ALL installations for the
 /// agent (used when the agent's skills directory no longer exists).

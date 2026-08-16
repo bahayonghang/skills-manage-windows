@@ -98,6 +98,7 @@ export function useUsageBindings() {
   const unused = useUsageStore((s) => s.unused);
   const unusedLoading = useUsageStore((s) => s.unusedLoading);
   const unusedError = useUsageStore((s) => s.unusedError);
+  const pendingUnlinkKeys = useUsageStore((s) => s.pendingUnlinkKeys);
   const scope = useUsageStore((s) => s.scope);
   const selectedSource = useUsageStore((s) => s.selectedSource);
   const selectedSkill = useUsageStore((s) => s.selectedSkill);
@@ -114,6 +115,7 @@ export function useUsageBindings() {
   const loadDetail = useUsageStore((s) => s.loadDetail);
   const clearDetail = useUsageStore((s) => s.clearDetail);
   const refreshUnused = useUsageStore((s) => s.refreshUnused);
+  const unlinkUnusedSkill = useUsageStore((s) => s.unlinkUnusedSkill);
 
   return {
     overview,
@@ -123,6 +125,7 @@ export function useUsageBindings() {
     unused,
     unusedLoading,
     unusedError,
+    pendingUnlinkKeys,
     scope,
     selectedSource,
     selectedSkill,
@@ -139,5 +142,6 @@ export function useUsageBindings() {
     loadDetail,
     clearDetail,
     refreshUnused,
+    unlinkUnusedSkill,
   };
 }

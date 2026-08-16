@@ -42,7 +42,7 @@ hook 是**复合动作**（plan/execute 切分），不是 FS 原语。远程侧
 | method=symlink | 直接执行 | 需 `symlink_allowed()`，否则 `RemoteSymlinkDisabled` |
 | 同根判定 | 文件系统等价（`paths_equivalent`） | POSIX 字符串字面相等 |
 | 卸载 | 按记录 link_type 分类，拒删无记录真目录 | 无条件 `rm -rf` 安装槽 |
-| row_id（claude 观测行） | 支持 | 忽略 |
+| row_id（本地 user observation） | 支持 | 忽略 |
 
 ## targets 层：CommandRunner 可注入执行缝
 
@@ -88,3 +88,89 @@ installation::install_skill(context.db(), &transport, &skill_id, &agent_id, meth
 试点仅覆盖 install/uninstall 家族。其他域收敛前先读试点结论（`.trellis/tasks/archive/**/07-04-transport-seam/notes.md`）：central_skills delete/preview 族值得收；scanner/agents/github_import/usage 观望；local_remote_sync（remote-only）与 obsidian（守卫非分发）不收。
 
 > 来源任务：07-04-transport-seam（2026-07-06）
+
+## Scenario: Local observation unlink
+
+### 1. Scope / Trigger
+
+修改 `uninstall_skill(..., row_id=Some(...))`、scanner observation 身份、未使用技能
+unlink，或本地 native 技能目录删除时适用。该路径删除真实目录，必须比普通 symlink/copy
+卸载更严格。
+
+### 2. Signatures
+
+```rust
+pub async fn uninstall_skill(
+    pool: &DbPool,
+    transport: &InstallTransport,
+    skill_id: &str,
+    agent_id: &str,
+    row_id: Option<&str>,
+) -> Result<(), InstallationError>;
+
+pub async fn delete_skill_installation_with_observations(
+    pool: &DbPool,
+    skill_id: &str,
+    agent_id: &str,
+    observation_row_ids: &[String],
+) -> Result<(), sqlx::Error>;
+```
+
+### 3. Contracts
+
+- 顶层 target mutation guard 与 `reject_pending_recovery` 先于任何文件系统/DB 修改；
+  helper 不重复取锁。
+- `row_id` 仅在 Local 生效。按 row 取 observation 后，必须验证 agent、skill、
+  `source_kind=user`、`is_read_only=false` 与 scanner row identity；Central agent 和与
+  Central 共根的 agent 一律拒绝。
+- scanner 只观察 skills 根的直接子目录。删除前目标父目录必须与配置的 agent skills
+  根路径等价；仅仅 `starts_with(root)` 不够，根内嵌套目录也必须拒绝。
+- row-aware 路径可删除该 observation 证明的 native 真目录；普通卸载仍只允许受管
+  symlink/copy，不得把 `allow_native_dir` 推广到 generic path。
+- 文件删除成功后，在一个 SQLite transaction 内删除准确 observation row 与该
+  agent/skill installation。普通卸载也应在成功移除后按路径等价清理匹配 observation，
+  避免 unused report 留陈旧行。
+- Claude 可有不同目录映射到同一逻辑 skill，目录身份以 scanner 生成的 `row_id` 区分；
+  非 Claude observation 还必须满足目录名归一化后等于 `skill_id`。
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+| --- | --- |
+| pending target/skill recovery | fail before filesystem mutation |
+| row belongs to another agent/skill | typed mismatch error; keep FS and DB rows |
+| plugin/read-only/non-user row | reject; keep FS and DB rows |
+| target is Central/shared-root | `SharedCentralUninstall`; never touch Central storage |
+| target equals root, is outside root, or is nested below a direct child | reject before delete |
+| native direct-child user row | remove directory, then atomically remove observation + installation |
+| filesystem removal fails | preserve observation and installation rows |
+| DB cleanup fails after removal | return error; never report success |
+
+### 5. Good / Base / Bad Cases
+
+- Good: Codex user observation points to an immediate native skill directory; unlink removes the
+  directory and both DB facts under the existing mutation guard.
+- Base: generic symlink/copy uninstall succeeds and removes only observations whose `dir_path` is
+  path-equivalent to the recorded installation path.
+- Bad: accept any descendant under the skills root or infer a delete target from `skill_id` without
+  fetching the observation row.
+
+### 6. Tests Required
+
+- Native observation unlink for Claude and a non-Claude agent; observation and installation rows
+  disappear only after disk removal succeeds.
+- Agent/skill mismatch, missing row, read-only/plugin source, Central/shared-root, root deletion,
+  outside-root, nested-root, and inconsistent non-Claude directory identity all preserve disk/DB.
+- Generic symlink/copy success removes the matching observation; a failed real-directory generic
+  uninstall keeps it. Batch uninstall retains row identity and partial-failure semantics.
+- Run focused installation tests, then final `just ci`.
+
+### 7. Wrong vs Correct
+
+```rust
+// Wrong: any descendant passes, so a corrupted row can widen deletion scope.
+child_parent.canonicalize()?.starts_with(root.canonicalize()?);
+
+// Correct: scanner observations are immediate children only.
+paths_equivalent(root, child_parent);
+```

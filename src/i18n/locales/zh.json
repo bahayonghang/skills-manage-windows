@@ -427,13 +427,24 @@
         "never_used": "从未使用",
         "stale": "长期未用"
       },
+      "unlink": {
+        "actionLabel": "仅从 {{agent}} 移除，保留 Central 副本",
+        "confirm": "确认移除",
+        "error": "无法移除此技能：{{error}}",
+        "disabledSharedRoot": "此平台与 Central 共用技能目录，不能单独移除。",
+        "disabledPendingRecovery": "请先处理待恢复的 Central 操作，再修改此安装。",
+        "disabledReadOnly": "此技能来自只读插件源，不能在这里移除。",
+        "disabledSourceKind": "这里只能移除用户管理的技能来源。",
+        "disabledNoRow": "请先刷新扫描结果，再移除此技能。"
+      },
       "columns": {
         "skill": "技能",
         "match": "中央库匹配",
         "calls": "调用",
         "estimate": "Skill.md 估算",
         "lastUsed": "最近使用",
-        "status": "状态"
+        "status": "状态",
+        "actions": "操作"
       }
     }
   },

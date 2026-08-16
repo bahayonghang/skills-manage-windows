@@ -1,5 +1,5 @@
 //! Local execution half of skill install / uninstall: symlink, copy, auto
-//! fallback, native records, and Claude observation-row uninstall. The
+//! fallback, native records, and observation-row uninstall. The
 //! business orchestration lives in `install.rs`; this module only implements
 //! the Local arms of the [`super::transport::InstallTransport`] hooks.
 
@@ -194,13 +194,13 @@ fn remove_install_path(
     Ok(())
 }
 
-fn ensure_claude_user_observation(
+fn ensure_user_observation(
     observation: &AgentSkillObservation,
     skill_id: &str,
     agent_id: &str,
 ) -> Result<(), InstallationError> {
     if observation.agent_id != agent_id {
-        return Err(InstallationError::ClaudeRowAgentMismatch {
+        return Err(InstallationError::ObservationRowAgentMismatch {
             row_id: observation.row_id.clone(),
             actual: observation.agent_id.clone(),
             expected: agent_id.to_string(),
@@ -208,15 +208,17 @@ fn ensure_claude_user_observation(
     }
 
     if observation.skill_id != skill_id {
-        return Err(InstallationError::ClaudeRowSkillMismatch {
+        return Err(InstallationError::ObservationRowSkillMismatch {
             row_id: observation.row_id.clone(),
             actual: observation.skill_id.clone(),
             expected: skill_id.to_string(),
         });
     }
 
+    // Only user-managed sources are unlinkable; plugin copies are read-only.
+    // The scanner writes exactly "user" / "plugin" (see scanner SourceKind).
     if observation.source_kind != "user" || observation.is_read_only {
-        return Err(InstallationError::ClaudeRowReadOnly(
+        return Err(InstallationError::ObservationRowReadOnly(
             observation.row_id.clone(),
         ));
     }
@@ -226,21 +228,20 @@ fn ensure_claude_user_observation(
 
 fn ensure_child_path(root: &Path, child: &Path) -> Result<(), InstallationError> {
     if crate::paths::paths_equivalent(root, child) {
-        return Err(InstallationError::ClaudeRootDeletion(
+        return Err(InstallationError::ObservationRootDeletion(
             root.display().to_string(),
         ));
     }
 
-    let root_cmp = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
     let child_parent = child
         .parent()
         .ok_or_else(|| InstallationError::PathHasNoParent(child.display().to_string()))?;
-    let child_parent_cmp = child_parent
-        .canonicalize()
-        .unwrap_or_else(|_| child_parent.to_path_buf());
 
-    if !child_parent_cmp.starts_with(&root_cmp) {
-        return Err(InstallationError::OutsideClaudeRoot {
+    // Scanner observations always represent immediate children of the
+    // configured skills root. Accepting deeper descendants would let a stale
+    // or corrupted observation widen the deletion target beyond that contract.
+    if !crate::paths::paths_equivalent(root, child_parent) {
+        return Err(InstallationError::OutsideObservationRoot {
             child: child.display().to_string(),
             root: root.display().to_string(),
         });
@@ -249,23 +250,61 @@ fn ensure_child_path(root: &Path, child: &Path) -> Result<(), InstallationError>
     Ok(())
 }
 
-pub(crate) async fn uninstall_claude_observation_from_agent_impl(
+fn ensure_observation_path_identity(
+    observation: &AgentSkillObservation,
+) -> Result<(), InstallationError> {
+    let expected_row_id = format!("{}::{}", observation.agent_id, observation.dir_path);
+    let observed_skill_id = Path::new(&observation.dir_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.to_lowercase().replace(' ', "-"));
+    // Claude observations historically use row_id, not the directory name, to
+    // distinguish multiple paths that resolve to the same logical skill.
+    let skill_path_matches = observation.agent_id == "claude-code"
+        || observed_skill_id.as_deref() == Some(observation.skill_id.as_str());
+
+    if observation.row_id != expected_row_id || !skill_path_matches {
+        return Err(InstallationError::ObservationRowPathMismatch(
+            observation.row_id.clone(),
+        ));
+    }
+
+    Ok(())
+}
+
+/// Observation-row uninstall, generalized to every local agent (D1): verify
+/// the `(agent_id, row_id)` observation row, refuse Central storage and
+/// read-only / non-user sources, check the recorded `dir_path` stays inside
+/// the agent skills root *before* any on-disk delete, then remove the entry
+/// (native real directories are allowed here, unlike the generic path) and
+/// delete both the observation row and the matching installation record.
+pub(crate) async fn uninstall_observation_from_agent_impl(
     pool: &DbPool,
     skill_id: &str,
     agent_id: &str,
     row_id: &str,
 ) -> Result<(), InstallationError> {
-    if agent_id != "claude-code" {
-        return Err(InstallationError::RowUninstallUnsupported);
-    }
-
     let agent = db::get_agent_by_id(pool, agent_id)
         .await?
         .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
+    let central = db::get_agent_by_id(pool, "central")
+        .await?
+        .ok_or(InstallationError::CentralAgentMissing)?;
+
+    // Observation unlink never touches Central storage: `central` itself and
+    // agents sharing the Central skills directory must go through the
+    // journaled Central delete paths instead (skill-deletion-integrity.md).
+    if agent_id == "central" || super::centralize::agents_share_skills_dir(&agent, &central) {
+        return Err(InstallationError::SharedCentralUninstall {
+            display_name: agent.display_name,
+        });
+    }
+
     let observation = db::get_agent_skill_observation_by_row_id(pool, row_id)
         .await?
-        .ok_or_else(|| InstallationError::ClaudeRowNotFound(row_id.to_string()))?;
-    ensure_claude_user_observation(&observation, skill_id, agent_id)?;
+        .ok_or_else(|| InstallationError::ObservationRowNotFound(row_id.to_string()))?;
+    ensure_user_observation(&observation, skill_id, agent_id)?;
+    ensure_observation_path_identity(&observation)?;
 
     let user_root = PathBuf::from(&agent.global_skills_dir);
     let install_path = PathBuf::from(&observation.dir_path);
@@ -273,12 +312,17 @@ pub(crate) async fn uninstall_claude_observation_from_agent_impl(
 
     let install_path_for_remove = install_path.clone();
     let link_type = observation.link_type.clone();
-    run_blocking_fs("Claude observation uninstall", move || {
+    run_blocking_fs("observation uninstall", move || {
         remove_install_path(&install_path_for_remove, &link_type, true)
     })
     .await?;
-    db::delete_agent_skill_observation(pool, row_id).await?;
-    db::delete_skill_installation(pool, skill_id, agent_id).await?;
+    db::delete_skill_installation_with_observations(
+        pool,
+        skill_id,
+        agent_id,
+        &[row_id.to_string()],
+    )
+    .await?;
 
     Ok(())
 }

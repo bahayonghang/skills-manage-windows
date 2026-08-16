@@ -11,19 +11,27 @@ use crate::db::types::DbPool;
 /// 权威来源是 `agent_skill_observations`（每次 agent 扫描落盘的事实表，覆盖
 /// 插件源与未入 Central 的平台散件，且自带 name/dir_path）；`skill_installations`
 /// 只覆盖可管理来源且无 name 列，不适合做平台维度的名称匹配。
+///
+/// 行级字段（row_id / skill_id / link_type / source_kind / is_read_only）让
+/// 未使用面板可以按 agent 直接调 `uninstall_skill_from_agent` 做 unlink。
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PlatformSkillObservationRow {
+    pub row_id: String,
     pub agent_id: String,
+    pub skill_id: String,
     pub name: String,
     pub dir_path: String,
+    pub source_kind: String,
+    pub link_type: String,
+    pub is_read_only: bool,
 }
 
 pub async fn list_platform_skill_observations(
     pool: &DbPool,
 ) -> Result<Vec<PlatformSkillObservationRow>, sqlx::Error> {
     sqlx::query_as::<_, PlatformSkillObservationRow>(
-        "SELECT agent_id, name, dir_path
+        "SELECT row_id, agent_id, skill_id, name, dir_path, source_kind, link_type, is_read_only
          FROM agent_skill_observations
          ORDER BY agent_id ASC, name ASC, dir_path ASC",
     )
@@ -132,6 +140,70 @@ mod tests {
             static_token_estimate: Some(12),
             static_byte_count: Some(42),
         }
+    }
+
+    #[tokio::test]
+    async fn platform_skill_observations_carry_row_level_unlink_fields() {
+        let pool = mem_pool().await;
+        crate::db::upsert_agent_skill_observation(
+            &pool,
+            &crate::db::AgentSkillObservation {
+                row_id: "claude-code::/agent/claude-code/loose".to_string(),
+                agent_id: "claude-code".to_string(),
+                skill_id: "loose".to_string(),
+                name: "Loose".to_string(),
+                description: None,
+                file_path: "/agent/claude-code/loose/SKILL.md".to_string(),
+                dir_path: "/agent/claude-code/loose".to_string(),
+                source_kind: "user".to_string(),
+                source_root: "/agent/claude-code".to_string(),
+                link_type: "native".to_string(),
+                symlink_target: None,
+                is_read_only: false,
+                scanned_at: "2024-01-01T00:00:00Z".to_string(),
+                fs_created_at: None,
+                fs_updated_at: None,
+            },
+        )
+        .await
+        .unwrap();
+        crate::db::upsert_agent_skill_observation(
+            &pool,
+            &crate::db::AgentSkillObservation {
+                row_id: "codex::/agent/codex/plugin-x".to_string(),
+                agent_id: "codex".to_string(),
+                skill_id: "plugin-x".to_string(),
+                name: "Plugin X".to_string(),
+                description: None,
+                file_path: "/agent/codex/plugin-x/SKILL.md".to_string(),
+                dir_path: "/agent/codex/plugin-x".to_string(),
+                source_kind: "plugin".to_string(),
+                source_root: "/agent/codex".to_string(),
+                link_type: "copy".to_string(),
+                symlink_target: None,
+                is_read_only: true,
+                scanned_at: "2024-01-01T00:00:00Z".to_string(),
+                fs_created_at: None,
+                fs_updated_at: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let rows = list_platform_skill_observations(&pool).await.unwrap();
+        assert_eq!(rows.len(), 2);
+        // 排序保持 agent_id ASC → claude-code 在前
+        assert_eq!(rows[0].row_id, "claude-code::/agent/claude-code/loose");
+        assert_eq!(rows[0].agent_id, "claude-code");
+        assert_eq!(rows[0].skill_id, "loose");
+        assert_eq!(rows[0].name, "Loose");
+        assert_eq!(rows[0].dir_path, "/agent/claude-code/loose");
+        assert_eq!(rows[0].source_kind, "user");
+        assert_eq!(rows[0].link_type, "native");
+        assert!(!rows[0].is_read_only);
+        assert_eq!(rows[1].agent_id, "codex");
+        assert_eq!(rows[1].source_kind, "plugin");
+        assert!(rows[1].is_read_only);
     }
 
     #[tokio::test]

@@ -31,6 +31,7 @@ vi.mock("sonner", () => ({
 import { toast } from "sonner";
 
 const toastInfoMock = vi.mocked(toast.info);
+const toastErrorMock = vi.mocked(toast.error);
 const initialActions = {
   refresh: useUsageStore.getState().refresh,
   subscribeTargetChanged: useUsageStore.getState().subscribeTargetChanged,
@@ -86,6 +87,7 @@ function deferred<T>() {
 
 beforeEach(() => {
   toastInfoMock.mockReset();
+  toastErrorMock.mockReset();
   mockTauriListen.mockReset();
   mockTauriListen.mockResolvedValue(() => undefined);
   useUsageStore.setState({
@@ -96,6 +98,7 @@ beforeEach(() => {
     unused: null,
     unusedLoading: false,
     unusedError: null,
+    pendingUnlinkKeys: {},
     scope: null,
     selectedSkill: null,
     loading: false,
@@ -121,6 +124,68 @@ beforeEach(() => {
 });
 
 describe("usageStore", () => {
+  it("unlinks an unused observation, tracks pending state, then refetches the report", async () => {
+    const uninstall = deferred<void>();
+    mockIpcCommands({
+      uninstall_skill_from_agent: () => uninstall.promise,
+      usage_get_unused_skills: { central: [], platforms: [] },
+    });
+
+    const unlink = useUsageStore
+      .getState()
+      .unlinkUnusedSkill("loose-skill", "codex", "codex::/skills/loose-skill");
+
+    expect(
+      useUsageStore.getState().pendingUnlinkKeys[
+        "codex::/skills/loose-skill"
+      ],
+    ).toBe(true);
+    expect(ipcInvokeCalls("uninstall_skill_from_agent")[0].args).toEqual({
+      skillId: "loose-skill",
+      agentId: "codex",
+      rowId: "codex::/skills/loose-skill",
+    });
+
+    uninstall.resolve();
+    await unlink;
+
+    expect(ipcInvokedCommands()).toEqual([
+      "uninstall_skill_from_agent",
+      "usage_get_unused_skills",
+    ]);
+    expect(ipcInvokeCalls("usage_get_unused_skills")[0].args).toEqual({
+      source: null,
+      thresholdDays: UNUSED_REQUEST_THRESHOLD_DAYS,
+    });
+    expect(useUsageStore.getState().unused).toEqual({
+      central: [],
+      platforms: [],
+    });
+    expect(useUsageStore.getState().pendingUnlinkKeys).toEqual({});
+  });
+
+  it("formats unlink failures for the toast and does not refresh stale data", async () => {
+    mockIpcCommand("uninstall_skill_from_agent", () =>
+      Promise.reject(
+        ipcFixtureError(
+          "installation.pending_central_recovery",
+          "unsafe C:/private/path should not be rendered",
+        ),
+      ),
+    );
+
+    await useUsageStore
+      .getState()
+      .unlinkUnusedSkill("blocked-skill", "claude-code");
+
+    expect(ipcInvokedCommands()).toEqual(["uninstall_skill_from_agent"]);
+    expect(toastErrorMock).toHaveBeenCalledTimes(1);
+    const message = String(toastErrorMock.mock.calls[0][0]);
+    expect(message).toMatch(/待恢复|pending Central recovery/i);
+    expect(message).not.toContain("C:/private/path");
+    expect(useUsageStore.getState().pendingUnlinkKeys).toEqual({});
+  });
+
   it("refresh uses the single usage_refresh payload and stores all returned panels", async () => {
     mockIpcCommands({
       usage_refresh: refreshPayload(),
@@ -580,7 +645,15 @@ describe("usageStore", () => {
             name: "legacy-cleanup",
             matchStatus: "matched" as const,
             origin: "central" as const,
-            agents: ["claude-code"],
+            agents: [
+              {
+                agentId: "claude-code",
+                linkType: "symlink",
+                installedPath: "C:/agents/claude/legacy-cleanup",
+                hasPendingRecovery: false,
+              },
+            ],
+            installs: [],
             installedPath: null,
             callCount: 0,
             lastUsedMs: null,
@@ -621,7 +694,15 @@ describe("usageStore", () => {
           name: "legacy-cleanup",
           matchStatus: "matched",
           origin: "central",
-          agents: ["claude-code"],
+          agents: [
+            {
+              agentId: "claude-code",
+              linkType: "symlink",
+              installedPath: "C:/agents/claude/legacy-cleanup",
+              hasPendingRecovery: false,
+            },
+          ],
+          installs: [],
           installedPath: null,
           callCount: 0,
           lastUsedMs: null,

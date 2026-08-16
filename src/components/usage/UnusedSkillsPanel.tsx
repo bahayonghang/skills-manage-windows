@@ -1,14 +1,19 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Unlink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
 import { UsageMatchStatus } from "@/components/usage/SkillUsageTable";
 import { formatUsageRelativeTime } from "@/components/usage/usageFormat";
-import { statusFillClass } from "@/lib/statusTone";
+import { statusChipClass, statusFillClass } from "@/lib/statusTone";
+import type { StatusTone } from "@/lib/statusTone";
 import { cn } from "@/lib/utils";
+import { unlinkActionKey } from "@/stores/usageStore";
 import type {
+  UnusedAgentInstall,
+  UnusedPlatformInstall,
   UnusedSkillEntry,
   UnusedSkillsReport,
   UnusedSkillStatus,
@@ -21,12 +26,27 @@ type SortMode = "idle" | "size" | "name";
 const DAY_MS = 86_400_000;
 const THRESHOLD_OPTIONS: ThresholdDays[] = [30, 60, 90];
 
+/**
+ * <40px 图标按钮的 40px 热区扩展（icon-control-hit-area.md 基准模式）；
+ * 行操作区按钮相邻排列时配合 gap-2 保证中心距 ≥40px。
+ */
+const HIT_AREA_CLASS =
+  "relative after:absolute after:left-1/2 after:top-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']";
+
 interface UnusedSkillsPanelProps {
   report: UnusedSkillsReport | null;
   loading?: boolean;
   error?: string | null;
   selectedSkill?: string | null;
   onSelect: (skill: string, trigger: HTMLButtonElement) => void;
+  /** store 的 unlinkUnusedSkill（组件不直接 invoke） */
+  onUnlink: (
+    skillId: string,
+    agentId: string,
+    rowId?: string | null,
+  ) => Promise<void>;
+  /** 进行中的 unlink 动作 key 集合，驱动按钮 spinner */
+  pendingUnlinkKeys?: Record<string, boolean>;
   className?: string;
 }
 
@@ -47,6 +67,8 @@ export function UnusedSkillsPanel({
   error = null,
   selectedSkill,
   onSelect,
+  onUnlink,
+  pendingUnlinkKeys = {},
   className,
 }: UnusedSkillsPanelProps) {
   const { t, i18n } = useTranslation();
@@ -65,10 +87,12 @@ export function UnusedSkillsPanel({
     const platformAll = classify(report?.platforms ?? []);
     const byAgent = new Map<string, VisibleEntry[]>();
     for (const item of platformAll) {
-      for (const agent of item.entry.agents) {
-        const list = byAgent.get(agent);
+      for (const agentId of new Set(
+        item.entry.installs.map((install) => install.agentId),
+      )) {
+        const list = byAgent.get(agentId);
         if (list) list.push(item);
-        else byAgent.set(agent, [item]);
+        else byAgent.set(agentId, [item]);
       }
     }
     const matchesFilter = (item: VisibleEntry) =>
@@ -176,6 +200,8 @@ export function UnusedSkillsPanel({
             items={central}
             selectedSkill={selectedSkill}
             onSelect={onSelect}
+            onUnlink={onUnlink}
+            pendingUnlinkKeys={pendingUnlinkKeys}
             locale={i18n.language}
           />
           {[...platformByAgent.entries()].map(([agent, items]) =>
@@ -183,9 +209,12 @@ export function UnusedSkillsPanel({
               <UnusedSection
                 key={agent}
                 title={t("skillUsage.unused.groups.agentSection", { agent })}
+                sectionAgent={agent}
                 items={items}
                 selectedSkill={selectedSkill}
                 onSelect={onSelect}
+                onUnlink={onUnlink}
+                pendingUnlinkKeys={pendingUnlinkKeys}
                 locale={i18n.language}
               />
             ),
@@ -196,17 +225,33 @@ export function UnusedSkillsPanel({
   );
 }
 
+// 行/表头共用网格：State 列加宽到 6.5rem 保证徽章全文可读，操作列 6.5rem
+// 稳定容纳 32px 打开按钮、gap-2 与展开后的确认按钮。
+const ROW_GRID =
+  "grid grid-cols-[minmax(8rem,1fr)_3.5rem_4.5rem_6.5rem] gap-2 md:grid-cols-[minmax(9rem,1fr)_5.5rem_4rem_6rem_5rem_6.5rem_6.5rem]";
+
 function UnusedSection({
   title,
   items,
+  sectionAgent,
   selectedSkill,
   onSelect,
+  onUnlink,
+  pendingUnlinkKeys,
   locale,
 }: {
   title: string;
   items: VisibleEntry[];
+  /** 平台小节的 agent id；Central 小节为 undefined */
+  sectionAgent?: string;
   selectedSkill?: string | null;
   onSelect: (skill: string, trigger: HTMLButtonElement) => void;
+  onUnlink: (
+    skillId: string,
+    agentId: string,
+    rowId?: string | null,
+  ) => Promise<void>;
+  pendingUnlinkKeys: Record<string, boolean>;
   locale: string;
 }) {
   const { t } = useTranslation();
@@ -217,7 +262,12 @@ function UnusedSection({
       <h3 className="border-b border-border bg-muted/20 px-3 py-1.5 text-xs font-medium text-muted-foreground">
         {title} · {items.length}
       </h3>
-      <div className="grid grid-cols-[minmax(8rem,1fr)_3.5rem_4.5rem_2rem] gap-2 border-b border-border px-3 py-2 text-ui-meta text-muted-foreground md:grid-cols-[minmax(9rem,1fr)_5.5rem_4rem_6rem_5rem_5rem_2rem]">
+      <div
+        className={cn(
+          ROW_GRID,
+          "border-b border-border px-3 py-2 text-ui-meta text-muted-foreground",
+        )}
+      >
         <span>{t("skillUsage.unused.columns.skill")}</span>
         <span className="hidden md:block">
           {t("skillUsage.unused.columns.match")}
@@ -234,83 +284,129 @@ function UnusedSection({
         <span className="hidden md:block">
           {t("skillUsage.unused.columns.status")}
         </span>
-        <span className="sr-only">{t("skillUsage.openSkill")}</span>
+        <span className="sr-only">{t("skillUsage.unused.columns.actions")}</span>
       </div>
       <ul className="divide-y divide-border/70">
         {items.map(({ entry, status }) => {
           const selected = entry.name === selectedSkill;
+          const sectionInstall = sectionAgent
+            ? preferredPlatformInstall(entry.installs, sectionAgent)
+            : undefined;
           return (
             <li
               key={`${entry.origin}-${entry.name}`}
               data-testid={`unused-row-${entry.origin}-${entry.name}`}
-              className={cn(
-                "grid grid-cols-[minmax(8rem,1fr)_3.5rem_4.5rem_2rem] items-stretch gap-2 px-3 md:grid-cols-[minmax(9rem,1fr)_5.5rem_4rem_6rem_5rem_5rem_2rem]",
-                selected && "bg-primary/7",
-              )}
+              className={cn("group/row", selected && "bg-primary/7")}
             >
-              <button
-                type="button"
-                aria-pressed={selected}
-                onClick={(event) => onSelect(entry.name, event.currentTarget)}
-                className="col-span-3 grid min-w-0 grid-cols-subgrid items-center py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:col-span-6"
-              >
-                <span className="min-w-0 pr-2">
-                  <span className="block truncate text-sm font-medium text-foreground">
-                    {entry.name}
-                  </span>
-                  <span className="mt-0.5 block truncate text-ui-meta text-muted-foreground">
-                    {entry.agents.length > 0
-                      ? entry.agents.join(" · ")
-                      : t("skillUsage.unused.noAgents")}
-                  </span>
-                </span>
-                <UsageMatchStatus
-                  status={entry.matchStatus}
-                  className="hidden md:flex"
-                />
-                <span className="text-right text-sm font-medium tabular-nums">
-                  {entry.callCount.toLocaleString()}
-                </span>
-                <span
-                  className="hidden text-right text-xs tabular-nums text-muted-foreground md:block"
-                  title={
-                    entry.staticTokenEstimate === null
-                      ? t("skillUsage.staticEstimateUnavailable")
-                      : t("skillUsage.staticEstimateTooltip", {
-                          bytes:
-                            entry.staticByteCount?.toLocaleString() ?? "—",
-                        })
+              <div className={cn(ROW_GRID, "items-stretch px-3")}>
+                <button
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={(event) =>
+                    onSelect(entry.name, event.currentTarget)
                   }
+                  className="col-span-3 grid min-w-0 grid-cols-subgrid items-center py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:col-span-6"
                 >
-                  {entry.staticTokenEstimate === null
-                    ? "—"
-                    : `~${entry.staticTokenEstimate.toLocaleString()}`}
-                </span>
-                <span className="text-right text-xs tabular-nums text-muted-foreground">
-                  {entry.lastUsedMs === null
-                    ? t("skillUsage.unused.never")
-                    : formatUsageRelativeTime(entry.lastUsedMs, locale)}
-                </span>
-                <UnusedStatusBadge status={status} className="hidden md:flex" />
-              </button>
-              <div className="flex items-center justify-end">
-                {entry.skillId && (
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    title={t("skillUsage.openSkill")}
-                    aria-label={t("skillUsage.openSkillNamed", {
-                      skill: entry.name,
-                    })}
-                    onClick={() =>
-                      navigate(`/skill/${encodeURIComponent(entry.skillId!)}`)
+                  <span className="min-w-0 pr-2">
+                    <span className="block truncate text-sm font-medium text-foreground">
+                      {entry.name}
+                    </span>
+                    {entry.origin === "platform" && (
+                      <span className="mt-0.5 block truncate text-ui-meta text-muted-foreground">
+                        {entryAgentIds(entry).length > 0
+                          ? entryAgentIds(entry).join(" · ")
+                          : t("skillUsage.unused.noAgents")}
+                      </span>
+                    )}
+                  </span>
+                  <UsageMatchStatus
+                    status={entry.matchStatus}
+                    className="hidden md:flex"
+                  />
+                  <span className="text-right text-sm font-medium tabular-nums">
+                    {entry.callCount.toLocaleString()}
+                  </span>
+                  <span
+                    className="hidden text-right text-xs tabular-nums text-muted-foreground md:block"
+                    title={
+                      entry.staticTokenEstimate === null
+                        ? t("skillUsage.staticEstimateUnavailable")
+                        : t("skillUsage.staticEstimateTooltip", {
+                            bytes:
+                              entry.staticByteCount?.toLocaleString() ?? "—",
+                          })
                     }
                   >
-                    <ArrowUpRight className="size-3.5" />
-                  </Button>
-                )}
+                    {entry.staticTokenEstimate === null
+                      ? "—"
+                      : `~${entry.staticTokenEstimate.toLocaleString()}`}
+                  </span>
+                  <span className="text-right text-xs tabular-nums text-muted-foreground">
+                    {entry.lastUsedMs === null
+                      ? t("skillUsage.unused.never")
+                      : formatUsageRelativeTime(entry.lastUsedMs, locale)}
+                  </span>
+                  <UnusedStatusBadge
+                    status={status}
+                    className="hidden md:flex"
+                  />
+                </button>
+                {/* 操作区：默认低透明度，行 hover / 内部聚焦时全显（focus-within
+                    是 focus-visible 的等价键盘路径，容器级避免子控件不可见聚焦） */}
+                <div className="flex items-center justify-end gap-2 opacity-50 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100">
+                  {entry.skillId && (
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      title={t("skillUsage.openSkill")}
+                      aria-label={t("skillUsage.openSkillNamed", {
+                        skill: entry.name,
+                      })}
+                      className={HIT_AREA_CLASS}
+                      onClick={() =>
+                        navigate(
+                          `/skill/${encodeURIComponent(entry.skillId!)}`,
+                        )
+                      }
+                    >
+                      <ArrowUpRight className="size-3.5" />
+                    </Button>
+                  )}
+                  {sectionInstall && (
+                    <PlatformUnlinkAction
+                      install={sectionInstall}
+                      pending={
+                        pendingUnlinkKeys[
+                          unlinkActionKey(
+                            sectionInstall.agentId,
+                            sectionInstall.skillId,
+                            sectionInstall.rowId,
+                          )
+                        ] ?? false
+                      }
+                      onUnlink={onUnlink}
+                    />
+                  )}
+                </div>
               </div>
+              {entry.origin === "central" && entry.agents.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 px-3 pb-2.5">
+                  {entry.agents.map((install) => (
+                    <CentralAgentChip
+                      key={install.agentId}
+                      entry={entry}
+                      install={install}
+                      pending={
+                        pendingUnlinkKeys[
+                          unlinkActionKey(install.agentId, entry.skillId ?? "")
+                        ] ?? false
+                      }
+                      onUnlink={onUnlink}
+                    />
+                  ))}
+                </div>
+              )}
             </li>
           );
         })}
@@ -319,7 +415,142 @@ function UnusedSection({
   );
 }
 
-/** 未使用状态文本 + 语义色状态点：无色彩场景下凭文字可读。 */
+/**
+ * Central 条目的 per-agent 安装 chip：可 unlink 的附带两段式确认按钮；
+ * shared-root（后端记为 linkType "native"）或 central 自身的安装禁用并给原因。
+ */
+function CentralAgentChip({
+  entry,
+  install,
+  pending,
+  onUnlink,
+}: {
+  entry: UnusedSkillEntry;
+  install: UnusedAgentInstall;
+  pending: boolean;
+  onUnlink: (
+    skillId: string,
+    agentId: string,
+    rowId?: string | null,
+  ) => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const disabledReason = install.hasPendingRecovery
+    ? "disabledPendingRecovery"
+    : install.agentId === "central" || install.linkType === "native"
+      ? "disabledSharedRoot"
+      : null;
+  if (disabledReason !== null) {
+    return (
+      <span
+        data-testid={`unlink-chip-disabled-${install.agentId}`}
+        title={t(`skillUsage.unused.unlink.${disabledReason}`)}
+        className="inline-flex h-8 items-center whitespace-nowrap rounded-md border border-border bg-muted/30 px-2.5 text-xs text-muted-foreground"
+      >
+        {install.agentId}
+      </span>
+    );
+  }
+  return (
+    <span
+      data-testid={`unlink-chip-${install.agentId}`}
+      className="inline-flex h-8 items-center gap-1 whitespace-nowrap rounded-md border border-border bg-muted/30 pl-2.5 pr-0.5 text-xs text-muted-foreground"
+    >
+      {install.agentId}
+      <InlineConfirmAction
+        idleAriaLabel={t("skillUsage.unused.unlink.actionLabel", {
+          agent: install.agentId,
+        })}
+        idleTitle={t("skillUsage.unused.unlink.actionLabel", {
+          agent: install.agentId,
+        })}
+        confirmLabel={t("skillUsage.unused.unlink.confirm")}
+        icon={<Unlink className="size-3.5" />}
+        isLoading={pending}
+        onConfirm={() => onUnlink(entry.skillId ?? "", install.agentId)}
+        className={HIT_AREA_CLASS}
+      />
+    </span>
+  );
+}
+
+/** 平台散件 install 的行内 unlink：read-only / 非 user 来源 / 缺 rowId 时禁用。 */
+function PlatformUnlinkAction({
+  install,
+  pending,
+  onUnlink,
+}: {
+  install: UnusedPlatformInstall;
+  pending: boolean;
+  onUnlink: (
+    skillId: string,
+    agentId: string,
+    rowId?: string | null,
+  ) => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const disabledReason = platformUnlinkDisabledReason(install);
+  return (
+    <span data-testid={`unlink-action-${install.agentId}-${install.skillId}`}>
+      <InlineConfirmAction
+        idleAriaLabel={t("skillUsage.unused.unlink.actionLabel", {
+          agent: install.agentId,
+        })}
+        idleTitle={
+          disabledReason === null
+            ? t("skillUsage.unused.unlink.actionLabel", {
+                agent: install.agentId,
+              })
+            : t(`skillUsage.unused.unlink.${disabledReason}`)
+        }
+        confirmLabel={t("skillUsage.unused.unlink.confirm")}
+        icon={<Unlink className="size-4" />}
+        disabled={disabledReason !== null}
+        isLoading={pending}
+        onConfirm={() =>
+          onUnlink(install.skillId, install.agentId, install.rowId)
+        }
+        className={HIT_AREA_CLASS}
+      />
+    </span>
+  );
+}
+
+function platformUnlinkDisabledReason(
+  install: UnusedPlatformInstall,
+):
+  | "disabledPendingRecovery"
+  | "disabledReadOnly"
+  | "disabledSourceKind"
+  | "disabledNoRow"
+  | null {
+  if (install.hasPendingRecovery) return "disabledPendingRecovery";
+  if (install.isReadOnly) return "disabledReadOnly";
+  if (install.sourceKind !== "user") return "disabledSourceKind";
+  if (install.rowId === null) return "disabledNoRow";
+  return null;
+}
+
+function preferredPlatformInstall(
+  installs: UnusedPlatformInstall[],
+  agentId: string,
+): UnusedPlatformInstall | undefined {
+  const agentInstalls = installs.filter(
+    (install) => install.agentId === agentId,
+  );
+  return (
+    agentInstalls.find(
+      (install) => platformUnlinkDisabledReason(install) === null,
+    ) ?? agentInstalls[0]
+  );
+}
+
+const statusBadgeTone: Record<UnusedSkillStatus, StatusTone> = {
+  never_used: "warning",
+  stale: "info",
+};
+
+/** 未使用状态徽章：紧凑 chip 全文可读（不截断），语义色点 + 文本保持无色可读。 */
 function UnusedStatusBadge({
   status,
   className,
@@ -328,23 +559,20 @@ function UnusedStatusBadge({
   className?: string;
 }) {
   const { t } = useTranslation();
+  const tone = statusBadgeTone[status];
   return (
     <span
       className={cn(
-        "flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground",
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs",
+        statusChipClass[tone],
         className,
       )}
     >
       <span
         aria-hidden
-        className={cn(
-          "size-1.5 shrink-0 rounded-full",
-          status === "never_used"
-            ? statusFillClass.warning
-            : statusFillClass.info,
-        )}
+        className={cn("size-1.5 shrink-0 rounded-full", statusFillClass[tone])}
       />
-      <span className="truncate">{t(`skillUsage.unused.status.${status}`)}</span>
+      {t(`skillUsage.unused.status.${status}`)}
     </span>
   );
 }
@@ -391,6 +619,14 @@ function Chip({
       {children}
     </button>
   );
+}
+
+/** Central 条目取 agents，平台条目取 installs 的去重 agentId 列表（展示用）。 */
+function entryAgentIds(entry: UnusedSkillEntry): string[] {
+  if (entry.origin === "central") {
+    return entry.agents.map((install) => install.agentId);
+  }
+  return [...new Set(entry.installs.map((install) => install.agentId))];
 }
 
 /**

@@ -192,9 +192,30 @@ fn claude_observation(
     source_kind: &str,
     is_read_only: bool,
 ) -> AgentSkillObservation {
+    observation_for(
+        "claude-code",
+        agent_dir,
+        skill_id,
+        dir_path,
+        source_kind,
+        is_read_only,
+        "native",
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn observation_for(
+    agent_id: &str,
+    agent_dir: &Path,
+    skill_id: &str,
+    dir_path: &Path,
+    source_kind: &str,
+    is_read_only: bool,
+    link_type: &str,
+) -> AgentSkillObservation {
     AgentSkillObservation {
-        row_id: format!("claude-code::{}", dir_path.to_string_lossy()),
-        agent_id: "claude-code".to_string(),
+        row_id: format!("{agent_id}::{}", dir_path.to_string_lossy()),
+        agent_id: agent_id.to_string(),
         skill_id: skill_id.to_string(),
         name: skill_id.to_string(),
         description: Some("Observed skill".to_string()),
@@ -210,7 +231,7 @@ fn claude_observation(
                 .to_string_lossy()
                 .into_owned()
         },
-        link_type: "native".to_string(),
+        link_type: link_type.to_string(),
         symlink_target: None,
         is_read_only,
         scanned_at: chrono::Utc::now().to_rfc3339(),
@@ -981,6 +1002,479 @@ async fn test_uninstall_claude_row_rejects_skill_id_mismatch() {
     assert!(
         skill_dir.join("SKILL.md").exists(),
         "mismatched row should not delete the observed path"
+    );
+}
+
+// ── observation-row uninstall generalized to all local agents (D1) ───────
+
+#[tokio::test]
+async fn test_uninstall_observation_row_supports_non_claude_native_dir() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_dir = tmp.path().join("claude");
+    let codex_dir = tmp.path().join("codex");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&codex_dir).unwrap();
+
+    let pool = setup_db_with_codex(&central_dir, &claude_dir, &codex_dir).await;
+    let skill_dir = create_user_skill(&codex_dir, "codex-loose-skill");
+    seed_source_skill(&pool, "codex-loose-skill", &skill_dir.to_string_lossy()).await;
+    let observation = observation_for(
+        "codex",
+        &codex_dir,
+        "codex-loose-skill",
+        &skill_dir,
+        "user",
+        false,
+        "native",
+    );
+    let row_id = observation.row_id.clone();
+    db::upsert_agent_skill_observation(&pool, &observation)
+        .await
+        .unwrap();
+    db::upsert_skill_installation(
+        &pool,
+        &SkillInstallation {
+            skill_id: "codex-loose-skill".to_string(),
+            agent_id: "codex".to_string(),
+            installed_path: skill_dir.to_string_lossy().into_owned(),
+            link_type: "native".to_string(),
+            symlink_target: None,
+            created_at: chrono::Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+
+    uninstall_local_with_row(&pool, "codex-loose-skill", "codex", Some(&row_id))
+        .await
+        .unwrap();
+
+    assert!(
+        fs::symlink_metadata(&skill_dir).is_err(),
+        "non-Claude native real directory should be deleted"
+    );
+    assert!(
+        db::get_agent_skill_observation_by_row_id(&pool, &row_id)
+            .await
+            .unwrap()
+            .is_none(),
+        "observation row should be deleted"
+    );
+    assert!(
+        db::get_skill_installations(&pool, "codex-loose-skill")
+            .await
+            .unwrap()
+            .is_empty(),
+        "installation record should be cleaned up"
+    );
+}
+
+#[tokio::test]
+async fn test_uninstall_observation_row_rejects_dir_outside_agent_root() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_dir = tmp.path().join("claude");
+    let codex_dir = tmp.path().join("codex");
+    let outside_dir = tmp.path().join("elsewhere").join("outside-skill");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&codex_dir).unwrap();
+    fs::create_dir_all(&outside_dir).unwrap();
+    fs::write(
+        outside_dir.join("SKILL.md"),
+        "---\nname: outside-skill\n---\n\n# outside\n",
+    )
+    .unwrap();
+
+    let pool = setup_db_with_codex(&central_dir, &claude_dir, &codex_dir).await;
+    seed_source_skill(&pool, "outside-skill", &outside_dir.to_string_lossy()).await;
+    // dir_path 落在 agent skills 根之外：必须先拒绝，不能删盘
+    let observation = observation_for(
+        "codex",
+        &codex_dir,
+        "outside-skill",
+        &outside_dir,
+        "user",
+        false,
+        "native",
+    );
+    let row_id = observation.row_id.clone();
+    db::upsert_agent_skill_observation(&pool, &observation)
+        .await
+        .unwrap();
+
+    let result = uninstall_local_with_row(&pool, "outside-skill", "codex", Some(&row_id)).await;
+
+    assert!(
+        result
+            .as_ref()
+            .is_err_and(|error| error.to_string().contains("outside")),
+        "dir_path outside the agent root should be rejected: {:?}",
+        result
+    );
+    assert!(
+        outside_dir.join("SKILL.md").exists(),
+        "out-of-root directory must not be deleted"
+    );
+    assert!(
+        db::get_agent_skill_observation_by_row_id(&pool, &row_id)
+            .await
+            .unwrap()
+            .is_some(),
+        "rejected unlink must keep the observation row"
+    );
+}
+
+#[tokio::test]
+async fn test_uninstall_observation_row_rejects_nested_dir_inside_agent_root() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_dir = tmp.path().join("claude");
+    let codex_dir = tmp.path().join("codex");
+    let nested_root = codex_dir.join("nested");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&nested_root).unwrap();
+
+    let pool = setup_db_with_codex(&central_dir, &claude_dir, &codex_dir).await;
+    let nested_dir = create_user_skill(&nested_root, "nested-skill");
+    seed_source_skill(&pool, "nested-skill", &nested_dir.to_string_lossy()).await;
+    let observation = observation_for(
+        "codex",
+        &codex_dir,
+        "nested-skill",
+        &nested_dir,
+        "user",
+        false,
+        "native",
+    );
+    let row_id = observation.row_id.clone();
+    db::upsert_agent_skill_observation(&pool, &observation)
+        .await
+        .unwrap();
+
+    let result = uninstall_local_with_row(&pool, "nested-skill", "codex", Some(&row_id)).await;
+
+    assert!(matches!(
+        result,
+        Err(InstallationError::OutsideObservationRoot { .. })
+    ));
+    assert!(
+        nested_dir.join("SKILL.md").exists(),
+        "a nested directory outside the scanner's one-level contract must not be deleted"
+    );
+    assert!(
+        db::get_agent_skill_observation_by_row_id(&pool, &row_id)
+            .await
+            .unwrap()
+            .is_some(),
+        "rejected unlink must keep the observation row"
+    );
+}
+
+#[tokio::test]
+async fn test_uninstall_observation_row_rejects_inconsistent_dir_path_identity() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_dir = tmp.path().join("claude");
+    let codex_dir = tmp.path().join("codex");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&codex_dir).unwrap();
+
+    let pool = setup_db_with_codex(&central_dir, &claude_dir, &codex_dir).await;
+    let wrong_dir = create_user_skill(&codex_dir, "different-directory");
+    seed_source_skill(&pool, "expected-skill", &wrong_dir.to_string_lossy()).await;
+    let observation = observation_for(
+        "codex",
+        &codex_dir,
+        "expected-skill",
+        &wrong_dir,
+        "user",
+        false,
+        "native",
+    );
+    let row_id = observation.row_id.clone();
+    db::upsert_agent_skill_observation(&pool, &observation)
+        .await
+        .unwrap();
+
+    let result = uninstall_local_with_row(&pool, "expected-skill", "codex", Some(&row_id)).await;
+
+    assert!(matches!(
+        result,
+        Err(InstallationError::ObservationRowPathMismatch(_))
+    ));
+    assert!(
+        wrong_dir.join("SKILL.md").exists(),
+        "a row whose path identity disagrees with its skill id must not delete the directory"
+    );
+    assert!(
+        db::get_agent_skill_observation_by_row_id(&pool, &row_id)
+            .await
+            .unwrap()
+            .is_some(),
+        "rejected unlink must preserve the observation row"
+    );
+}
+
+#[tokio::test]
+async fn test_uninstall_observation_row_rejects_read_only_non_claude() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_dir = tmp.path().join("claude");
+    let codex_dir = tmp.path().join("codex");
+    let plugin_dir = codex_dir.join("plugin-cache-skill");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&plugin_dir).unwrap();
+    fs::write(
+        plugin_dir.join("SKILL.md"),
+        "---\nname: plugin-cache-skill\n---\n\n# plugin\n",
+    )
+    .unwrap();
+
+    let pool = setup_db_with_codex(&central_dir, &claude_dir, &codex_dir).await;
+    let observation = observation_for(
+        "codex",
+        &codex_dir,
+        "plugin-cache-skill",
+        &plugin_dir,
+        "plugin",
+        true,
+        "native",
+    );
+    let row_id = observation.row_id.clone();
+    db::upsert_agent_skill_observation(&pool, &observation)
+        .await
+        .unwrap();
+
+    let result =
+        uninstall_local_with_row(&pool, "plugin-cache-skill", "codex", Some(&row_id)).await;
+
+    assert!(
+        result
+            .as_ref()
+            .is_err_and(|error| error.to_string().contains("read-only")),
+        "read-only plugin rows should be rejected: {:?}",
+        result
+    );
+    assert!(plugin_dir.join("SKILL.md").exists());
+}
+
+#[tokio::test]
+async fn test_uninstall_observation_row_rejects_non_user_source_kind() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_dir = tmp.path().join("claude");
+    let codex_dir = tmp.path().join("codex");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db_with_codex(&central_dir, &claude_dir, &codex_dir).await;
+    let skill_dir = create_user_skill(&codex_dir, "odd-source-skill");
+    // source_kind 非 user 即拒绝，即使 is_read_only 标记为 false
+    let observation = observation_for(
+        "codex",
+        &codex_dir,
+        "odd-source-skill",
+        &skill_dir,
+        "plugin",
+        false,
+        "native",
+    );
+    let row_id = observation.row_id.clone();
+    db::upsert_agent_skill_observation(&pool, &observation)
+        .await
+        .unwrap();
+
+    let result = uninstall_local_with_row(&pool, "odd-source-skill", "codex", Some(&row_id)).await;
+
+    assert!(
+        result
+            .as_ref()
+            .is_err_and(|error| error.to_string().contains("read-only")),
+        "non-user source rows should be rejected: {:?}",
+        result
+    );
+    assert!(skill_dir.join("SKILL.md").exists());
+}
+
+#[tokio::test]
+async fn test_uninstall_observation_row_refuses_shared_root_agent() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &claude_dir).await;
+    point_codex_to_dir(&pool, &central_dir).await;
+    let skill_dir = create_central_skill(&pool, &central_dir, "shared-row-skill").await;
+    let observation = observation_for(
+        "codex",
+        &central_dir,
+        "shared-row-skill",
+        &skill_dir,
+        "user",
+        false,
+        "native",
+    );
+    let row_id = observation.row_id.clone();
+    db::upsert_agent_skill_observation(&pool, &observation)
+        .await
+        .unwrap();
+
+    let result = uninstall_local_with_row(&pool, "shared-row-skill", "codex", Some(&row_id)).await;
+
+    assert!(
+        result.as_ref().is_err_and(|error| error
+            .to_string()
+            .contains("cannot be uninstalled independently")),
+        "shared-root agents must be refused before any delete: {:?}",
+        result
+    );
+    assert!(
+        skill_dir.join("SKILL.md").exists(),
+        "Central skill directory must not be deleted"
+    );
+    assert!(db::get_agent_skill_observation_by_row_id(&pool, &row_id)
+        .await
+        .unwrap()
+        .is_some());
+}
+
+#[tokio::test]
+async fn test_uninstall_observation_row_refuses_central_agent() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let claude_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &claude_dir).await;
+    let skill_dir = create_central_skill(&pool, &central_dir, "central-row-skill").await;
+    let observation = observation_for(
+        "central",
+        &central_dir,
+        "central-row-skill",
+        &skill_dir,
+        "user",
+        false,
+        "native",
+    );
+    let row_id = observation.row_id.clone();
+    db::upsert_agent_skill_observation(&pool, &observation)
+        .await
+        .unwrap();
+
+    let result =
+        uninstall_local_with_row(&pool, "central-row-skill", "central", Some(&row_id)).await;
+
+    assert!(
+        result.as_ref().is_err_and(|error| error
+            .to_string()
+            .contains("cannot be uninstalled independently")),
+        "the central agent itself must be refused: {:?}",
+        result
+    );
+    assert!(skill_dir.join("SKILL.md").exists());
+}
+
+// ── generic (non-row) unlink also clears the observation row (R4/D2) ─────
+
+#[tokio::test]
+async fn test_uninstall_generic_symlink_removes_matching_observation_row() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&pool, &central_dir, "linked-skill").await;
+    install_symlink_local(&pool, "linked-skill", "claude-code")
+        .await
+        .unwrap();
+
+    let link_path = agent_dir.join("linked-skill");
+    let observation = observation_for(
+        "claude-code",
+        &agent_dir,
+        "linked-skill",
+        &link_path,
+        "user",
+        false,
+        "symlink",
+    );
+    let row_id = observation.row_id.clone();
+    db::upsert_agent_skill_observation(&pool, &observation)
+        .await
+        .unwrap();
+    // 同 skill 的另一处散件观察行（不同 dir_path）必须保留
+    let other_dir = create_user_skill(&agent_dir, "linked-skill-copy");
+    let other_observation = observation_for(
+        "claude-code",
+        &agent_dir,
+        "linked-skill",
+        &other_dir,
+        "user",
+        false,
+        "native",
+    );
+    let other_row_id = other_observation.row_id.clone();
+    db::upsert_agent_skill_observation(&pool, &other_observation)
+        .await
+        .unwrap();
+
+    uninstall_local(&pool, "linked-skill", "claude-code")
+        .await
+        .unwrap();
+
+    assert!(fs::symlink_metadata(&link_path).is_err());
+    assert!(
+        db::get_agent_skill_observation_by_row_id(&pool, &row_id)
+            .await
+            .unwrap()
+            .is_none(),
+        "generic unlink should delete the observation row for the removed path"
+    );
+    assert!(
+        db::get_agent_skill_observation_by_row_id(&pool, &other_row_id)
+            .await
+            .unwrap()
+            .is_some(),
+        "observation rows for other paths of the same skill must survive"
+    );
+}
+
+#[tokio::test]
+async fn test_uninstall_generic_failure_keeps_observation_row() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = tmp.path().join("claude");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&agent_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    // 无安装记录的真目录：generic 路径拒绝删除（NotASymlink）
+    let skill_dir = create_user_skill(&agent_dir, "untracked-real-skill");
+    seed_source_skill(&pool, "untracked-real-skill", &skill_dir.to_string_lossy()).await;
+    let observation = claude_observation(
+        &agent_dir,
+        "untracked-real-skill",
+        &skill_dir,
+        "user",
+        false,
+    );
+    let row_id = observation.row_id.clone();
+    db::upsert_agent_skill_observation(&pool, &observation)
+        .await
+        .unwrap();
+
+    let result = uninstall_local(&pool, "untracked-real-skill", "claude-code").await;
+
+    assert!(result.is_err(), "untracked real dir should be refused");
+    assert!(skill_dir.join("SKILL.md").exists());
+    assert!(
+        db::get_agent_skill_observation_by_row_id(&pool, &row_id)
+            .await
+            .unwrap()
+            .is_some(),
+        "failed unlink must not delete the observation row"
     );
 }
 

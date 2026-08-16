@@ -39,6 +39,7 @@ export function SkillUsageView() {
     unused,
     unusedLoading,
     unusedError,
+    pendingUnlinkKeys,
     scope,
     selectedSource,
     selectedSkill,
@@ -54,6 +55,7 @@ export function SkillUsageView() {
     selectSource,
     loadDetail,
     clearDetail,
+    unlinkUnusedSkill,
   } = useUsageBindings();
 
   const kpis = overview?.kpis ?? {
@@ -245,6 +247,8 @@ export function SkillUsageView() {
                 error={unusedError}
                 selectedSkill={selectedSkill}
                 onSelect={selectSkill}
+                onUnlink={unlinkUnusedSkill}
+                pendingUnlinkKeys={pendingUnlinkKeys}
               />
             </UsageSection>
           </div>

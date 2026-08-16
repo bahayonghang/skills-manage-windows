@@ -131,13 +131,11 @@ pub(crate) async fn uninstall_skill_under_guard(
     agent_id: &str,
     row_id: Option<&str>,
 ) -> Result<(), InstallationError> {
-    // Claude observation-row uninstall is a local-only surface; the remote
-    // command path has always ignored row_id.
+    // Observation-row uninstall is a local-only surface; the remote command
+    // path has always ignored row_id.
     if let (InstallTransport::Local, Some(row_id)) = (transport, row_id) {
-        return native::uninstall_claude_observation_from_agent_impl(
-            pool, skill_id, agent_id, row_id,
-        )
-        .await;
+        return native::uninstall_observation_from_agent_impl(pool, skill_id, agent_id, row_id)
+            .await;
     }
 
     let agent = db::get_agent_by_id(pool, agent_id)
@@ -153,8 +151,36 @@ pub(crate) async fn uninstall_skill_under_guard(
         });
     }
 
+    // Capture the recorded install path up front: after a successful removal
+    // the matching scanner observation row is deleted too, so the
+    // unused-skills report does not keep showing a stale platform entry
+    // until the next scan (R4/D2).
+    let installed_path = db::get_skill_installations(pool, skill_id)
+        .await?
+        .into_iter()
+        .find(|record| record.agent_id == agent_id)
+        .map(|record| record.installed_path);
+
+    let observation_row_ids = if let Some(installed_path) = installed_path.as_deref() {
+        db::get_agent_skill_observations(pool, agent_id)
+            .await?
+            .into_iter()
+            .filter(|observation| {
+                crate::paths::paths_equivalent(
+                    std::path::Path::new(&observation.dir_path),
+                    std::path::Path::new(installed_path),
+                )
+            })
+            .map(|observation| observation.row_id)
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+
     transport.remove_install(pool, &agent, skill_id).await?;
-    Ok(db::delete_skill_installation(pool, skill_id, agent_id).await?)
+    db::delete_skill_installation_with_observations(pool, skill_id, agent_id, &observation_row_ids)
+        .await?;
+    Ok(())
 }
 
 pub(crate) async fn reject_pending_recovery(

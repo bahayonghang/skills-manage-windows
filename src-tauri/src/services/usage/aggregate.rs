@@ -416,6 +416,35 @@ pub enum UnusedSkillStatus {
     Stale,
 }
 
+/// Central 条目的 per-agent 安装行：`link_type` 供前端判定 shared-root
+/// 不可独立 unlink（shared-root 安装记为 `native`，且 `installed_path`
+/// 指向 Central 目录）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UnusedAgentInstall {
+    pub agent_id: String,
+    pub link_type: String,
+    pub installed_path: String,
+    pub has_pending_recovery: bool,
+}
+
+/// 平台条目的 per-agent 安装行：一行对应一条 `agent_skill_observations`
+/// 记录，`row_id` 可直接传给 `uninstall_skill_from_agent` 做行级 unlink。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UnusedPlatformInstall {
+    pub agent_id: String,
+    /// `agent_skill_observations.row_id`；平台行均来自观察表，当前恒为 Some。
+    pub row_id: Option<String>,
+    /// 扫描器持久化的 skills 行 id（散件）或 Central id。
+    pub skill_id: String,
+    pub link_type: String,
+    pub source_kind: Option<String>,
+    pub is_read_only: bool,
+    pub installed_path: String,
+    pub has_pending_recovery: bool,
+}
+
 /// `usage_get_unused_skills` 的单条未使用候选（Central 或平台维度）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -425,8 +454,10 @@ pub struct UnusedSkillEntry {
     pub name: String,
     pub match_status: UsageSkillMatchStatus,
     pub origin: UnusedSkillOrigin,
-    /// 安装/链接的平台 agent id 列表（升序去重）。
-    pub agents: Vec<String>,
+    /// Central 维度：per-agent 安装行（按 agent_id 升序）；平台维度为空。
+    pub agents: Vec<UnusedAgentInstall>,
+    /// 平台维度：per-agent observation 安装行；Central 维度为空。
+    pub installs: Vec<UnusedPlatformInstall>,
     /// 平台维度为观察到的 dir_path；Central 维度为 canonical_path。
     pub installed_path: Option<String>,
     pub call_count: i64,
@@ -496,7 +527,13 @@ mod unused_tests {
                 name: "Review".to_string(),
                 match_status: UsageSkillMatchStatus::Matched,
                 origin: UnusedSkillOrigin::Central,
-                agents: vec!["claude-code".to_string()],
+                agents: vec![UnusedAgentInstall {
+                    agent_id: "claude-code".to_string(),
+                    link_type: "symlink".to_string(),
+                    installed_path: "/agent/claude-code/review".to_string(),
+                    has_pending_recovery: false,
+                }],
+                installs: Vec::new(),
                 installed_path: Some("/central/review".to_string()),
                 call_count: 0,
                 last_used_ms: None,
@@ -509,7 +546,17 @@ mod unused_tests {
                 name: "loose-skill".to_string(),
                 match_status: UsageSkillMatchStatus::Unmatched,
                 origin: UnusedSkillOrigin::Platform,
-                agents: vec!["codex".to_string()],
+                agents: Vec::new(),
+                installs: vec![UnusedPlatformInstall {
+                    agent_id: "codex".to_string(),
+                    row_id: Some("codex::/home/u/.codex/skills/loose-skill".to_string()),
+                    skill_id: "loose-skill".to_string(),
+                    link_type: "native".to_string(),
+                    source_kind: Some("user".to_string()),
+                    is_read_only: false,
+                    installed_path: "/home/u/.codex/skills/loose-skill".to_string(),
+                    has_pending_recovery: false,
+                }],
                 installed_path: Some("/home/u/.codex/skills/loose-skill".to_string()),
                 call_count: 2,
                 last_used_ms: Some(1_700_000_000_000),
@@ -531,11 +578,36 @@ mod unused_tests {
         assert_eq!(central["status"], "never_used");
         assert!(central.get("skill_id").is_none());
         assert!(central.get("call_count").is_none());
+        // Central 条目：per-agent 安装行携带 linkType（camelCase）
+        assert_eq!(
+            central["agents"],
+            serde_json::json!([{
+                "agentId": "claude-code",
+                "linkType": "symlink",
+                "installedPath": "/agent/claude-code/review",
+                "hasPendingRecovery": false,
+            }])
+        );
+        assert_eq!(central["installs"], serde_json::json!([]));
 
         let platform = &json["platforms"][0];
         assert!(platform["skillId"].is_null());
         assert_eq!(platform["origin"], "platform");
         assert_eq!(platform["status"], "stale");
-        assert_eq!(platform["agents"], serde_json::json!(["codex"]));
+        assert_eq!(platform["agents"], serde_json::json!([]));
+        // 平台条目：per-agent installs 行（camelCase，含 rowId/sourceKind）
+        assert_eq!(
+            platform["installs"],
+            serde_json::json!([{
+                "agentId": "codex",
+                "rowId": "codex::/home/u/.codex/skills/loose-skill",
+                "skillId": "loose-skill",
+                "linkType": "native",
+                "sourceKind": "user",
+                "isReadOnly": false,
+                "installedPath": "/home/u/.codex/skills/loose-skill",
+                "hasPendingRecovery": false,
+            }])
+        );
     }
 }

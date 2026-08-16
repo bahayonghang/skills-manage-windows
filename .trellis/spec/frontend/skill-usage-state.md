@@ -11,6 +11,17 @@
 type UsageSkillMatchStatus = "matched" | "ambiguous" | "unmatched";
 type UsageMatchFilter = "all" | "installed" | "unlinked";
 
+type UnusedPlatformInstall = {
+  agentId: string;
+  rowId: string | null;
+  skillId: string;
+  linkType: string;
+  sourceKind: string | null;
+  isReadOnly: boolean;
+  installedPath: string;
+  hasPendingRecovery: boolean;
+};
+
 type SkillUsageSummary = {
   skill: string;
   count: number;
@@ -24,6 +35,7 @@ type SkillUsageSummary = {
 };
 
 invoke("usage_get_skill_detail", { skill, source });
+invoke("uninstall_skill_from_agent", { skillId, agentId, rowId? });
 ```
 
 `usageStore` owns `selectedSource`, `selectedSkill`, `usedCachedData`,
@@ -70,6 +82,19 @@ invoke("usage_get_skill_detail", { skill, source });
   Provider health stays in a secondary disclosure.
 - Browser fixtures run the real store and include matched, ambiguous, unmatched,
   missing static metrics, filtered sources, and non-empty heatmap data.
+- `usageStore.unlinkUnusedSkill` owns typed IPC, per-action pending state, backend-error
+  formatting/toast, and `refreshUnused()` after success. Components receive the action as a
+  prop and never invoke directly.
+- Central unlink renders per-agent controls. Pending recovery, `central`, and shared-root/native
+  installs are disabled with a translated reason. Platform unlink additionally requires a
+  non-null row id, `sourceKind=user`, and `isReadOnly=false`.
+- Group platform entries once per skill/agent even when that agent has several observations.
+  Prefer an actionable user observation over a read-only/plugin observation; after removal and
+  refresh, any remaining plugin observation becomes the visible disabled state. Never let map
+  insertion order decide whether an available unlink action is reachable.
+- Unlink uses `InlineConfirmAction`; its idle label/title must state that only the Agent copy is
+  removed and Central remains. Small icon buttons keep the 40px pseudo hit area and hover-revealed
+  actions retain a keyboard-visible focus path.
 
 ## 4. Validation & Error Matrix
 
@@ -85,6 +110,9 @@ invoke("usage_get_skill_detail", { skill, source });
 | ambiguous/unmatched row | inline detail works; no open-skill button |
 | installed/unlinked ranking filter | filter only ranking rows; show filtered/total count and a distinct empty state |
 | static estimate `null` | explicit unavailable state, never numeric zero |
+| unlink command rejects | localized `formatBackendError` toast; pending state clears |
+| same agent has user + plugin observations | one skill row; actionable user row wins deterministically |
+| only read-only/plugin observation remains | disabled unlink control with translated reason |
 
 ## 5. Good / Base / Bad Cases
 
@@ -95,6 +123,10 @@ invoke("usage_get_skill_detail", { skill, source });
 - Base: an unmatched historical call still opens its project/activity detail.
 - Base: selecting `unlinked` shows ambiguous and unmatched ranking rows while
   recent calls remain unchanged.
+- Good: Codex has user and plugin copies of one skill; the panel renders one Codex row and sends
+  the user observation's exact `rowId` after two-step confirmation.
+- Bad: push the same `UnusedSkillEntry` into an agent section once per observation and select the
+  first install; duplicate React keys and repository sort order can hide the writable action.
 - Bad: publish `selectedSource = Codex` while the visible overview is still
   Claude, or resolve a Central id lazily when the row is clicked.
 
@@ -110,6 +142,9 @@ invoke("usage_get_skill_detail", { skill, source });
   month labels, legend, and empty state.
 - Browser: 1440x900 and 1280x720 dark, 1024x768 light, narrow desktop, Chinese
   and English, with page `scrollWidth === clientWidth` and no console errors.
+- Unused unlink: Central per-agent action/disabled reasons, platform two-step confirmation,
+  pending spinner, success refresh, formatted failure toast, user+plugin same-agent precedence,
+  full status text, and 40px hit-area classes.
 
 ## 7. Wrong vs Correct
 

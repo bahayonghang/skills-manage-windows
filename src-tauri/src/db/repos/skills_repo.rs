@@ -264,11 +264,27 @@ pub async fn get_skills_for_agent(
     .fetch_all(pool)
     .await?;
 
+    // Codex now records its writable user root as observations as well as
+    // installation state. Keep the installation-backed presentation row and
+    // append only observations for distinct paths (for example plugin roots),
+    // otherwise the same user skill would render twice in Platform view.
+    let distinct_observations = observations
+        .into_iter()
+        .filter(|observation| {
+            !rows.iter().any(|row| {
+                row.id == observation.skill_id
+                    && crate::paths::paths_equivalent(
+                        std::path::Path::new(&row.dir_path),
+                        std::path::Path::new(&observation.dir_path),
+                    )
+            })
+        })
+        .collect();
     let mut skills = rows
         .into_iter()
         .map(installed_row_to_skill_for_agent)
         .collect::<Result<Vec<_>, _>>()?;
-    skills.extend(observations_to_skills_for_agent(pool, observations).await?);
+    skills.extend(observations_to_skills_for_agent(pool, distinct_observations).await?);
     apply_conflict_metadata(agent_id, &mut skills);
     Ok(skills)
 }

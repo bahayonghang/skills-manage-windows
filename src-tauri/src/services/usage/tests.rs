@@ -391,6 +391,23 @@ async fn build_unused_report_classifies_central_skills() {
     .execute(&pool)
     .await
     .unwrap();
+    db::insert_fs_db_operation(
+        &pool,
+        db::NewFsDbOperation {
+            id: "pending-never-skill",
+            batch_id: None,
+            target_id: "local",
+            target_kind: "local",
+            operation_kind: "central_update",
+            skill_id: "never-skill",
+            manifest_version: 1,
+            manifest_json: "{}",
+            old_fingerprint: None,
+            new_fingerprint: None,
+        },
+    )
+    .await
+    .unwrap();
 
     let now = Utc::now().timestamp_millis();
     let old = now - 200 * 86_400_000;
@@ -427,7 +444,17 @@ async fn build_unused_report_classifies_central_skills() {
     assert_eq!(never.last_used_ms, None);
     assert_eq!(never.match_status, UsageSkillMatchStatus::Unmatched);
     assert_eq!(never.origin, aggregate::UnusedSkillOrigin::Central);
-    assert_eq!(never.agents, vec!["claude-code".to_string()]);
+    // Central 条目：per-agent 安装行携带 link_type / installed_path
+    assert_eq!(
+        never.agents,
+        vec![aggregate::UnusedAgentInstall {
+            agent_id: "claude-code".to_string(),
+            link_type: "native".to_string(),
+            installed_path: "/agent/claude-code/never-skill".to_string(),
+            has_pending_recovery: true,
+        }]
+    );
+    assert!(never.installs.is_empty());
     assert_eq!(never.static_token_estimate, None);
 
     let stale = by_id.get("stale-skill").unwrap();
@@ -486,7 +513,21 @@ async fn build_unused_report_covers_platform_observations_with_match_statuses() 
     assert_eq!(loose.match_status, UsageSkillMatchStatus::Unmatched);
     assert_eq!(loose.skill_id, None);
     assert_eq!(loose.origin, aggregate::UnusedSkillOrigin::Platform);
-    assert_eq!(loose.agents, vec!["claude-code".to_string()]);
+    assert!(loose.agents.is_empty());
+    // 平台条目：per-agent observation 安装行（row_id 可直接用于 unlink）
+    assert_eq!(
+        loose.installs,
+        vec![aggregate::UnusedPlatformInstall {
+            agent_id: "claude-code".to_string(),
+            row_id: Some("row-loose".to_string()),
+            skill_id: "row-loose".to_string(),
+            link_type: "native".to_string(),
+            source_kind: Some("global".to_string()),
+            is_read_only: false,
+            installed_path: "/agent/claude-code/Loose Skill".to_string(),
+            has_pending_recovery: false,
+        }]
+    );
     assert_eq!(
         loose.installed_path.as_deref(),
         Some("/agent/claude-code/Loose Skill")
@@ -499,8 +540,18 @@ async fn build_unused_report_covers_platform_observations_with_match_statuses() 
     assert_eq!(dup.call_count, 1);
     assert_eq!(dup.last_used_ms, Some(old));
     assert_eq!(
-        dup.agents,
-        vec!["claude-code".to_string(), "codex".to_string()]
+        dup.installs
+            .iter()
+            .map(|install| install.agent_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["claude-code", "codex"]
+    );
+    assert_eq!(
+        dup.installs
+            .iter()
+            .map(|install| install.row_id.as_deref())
+            .collect::<Vec<_>>(),
+        vec![Some("row-dup"), Some("row-dup-2")]
     );
 }
 

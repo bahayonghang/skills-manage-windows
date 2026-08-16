@@ -262,8 +262,8 @@ pub(super) fn scan_roots_for_agent(agent: &crate::db::Agent) -> Vec<AgentScanRoo
 
     let mut roots = vec![AgentScanRoot {
         path: primary_root.clone(),
-        source_root: None,
-        source_kind: None,
+        source_root: (agent.id == "codex").then(|| primary_root.clone()),
+        source_kind: (agent.id == "codex").then_some(SourceKind::User),
     }];
 
     if agent.id == "codex" {

@@ -427,13 +427,24 @@
         "never_used": "Never used",
         "stale": "Stale"
       },
+      "unlink": {
+        "actionLabel": "Remove only from {{agent}}; keep the Central copy",
+        "confirm": "Remove",
+        "error": "Could not remove this skill: {{error}}",
+        "disabledSharedRoot": "This platform shares the Central directory and cannot be unlinked separately.",
+        "disabledPendingRecovery": "Resolve the pending Central recovery before changing this installation.",
+        "disabledReadOnly": "This skill comes from a read-only plugin source.",
+        "disabledSourceKind": "Only user-managed skill sources can be removed here.",
+        "disabledNoRow": "Refresh the scan before removing this skill."
+      },
       "columns": {
         "skill": "Skill",
         "match": "Central match",
         "calls": "Calls",
         "estimate": "Skill.md estimate",
         "lastUsed": "Last used",
-        "status": "State"
+        "status": "State",
+        "actions": "Actions"
       }
     }
   },

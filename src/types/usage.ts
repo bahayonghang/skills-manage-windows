@@ -114,14 +114,43 @@ export type UnusedSkillOrigin = "central" | "platform";
 
 export type UnusedSkillStatus = "never_used" | "stale";
 
+/**
+ * Central 条目的 per-agent 安装行。`linkType === "native"` 且
+ * `installedPath` 指向 Central 目录即 shared-root 安装，不可独立 unlink。
+ */
+export interface UnusedAgentInstall {
+  agentId: string;
+  linkType: string;
+  installedPath: string;
+  hasPendingRecovery: boolean;
+}
+
+/**
+ * 平台条目的 per-agent 安装行（对应一条 agent_skill_observations 记录）。
+ * `rowId` 可直接传给 `uninstall_skill_from_agent` 做行级 unlink。
+ */
+export interface UnusedPlatformInstall {
+  agentId: string;
+  rowId: string | null;
+  /** 扫描器持久化的 skills 行 id（散件）或 Central id */
+  skillId: string;
+  linkType: string;
+  sourceKind: string | null;
+  isReadOnly: boolean;
+  installedPath: string;
+  hasPendingRecovery: boolean;
+}
+
 export interface UnusedSkillEntry {
   /** Central skill id；平台散件为 null */
   skillId: string | null;
   name: string;
   matchStatus: UsageSkillMatchStatus;
   origin: UnusedSkillOrigin;
-  /** 安装/链接的平台 agent id（升序去重） */
-  agents: string[];
+  /** Central 条目：per-agent 安装行（按 agentId 升序）；平台条目为 [] */
+  agents: UnusedAgentInstall[];
+  /** 平台条目：per-agent observation 安装行；Central 条目为 [] */
+  installs: UnusedPlatformInstall[];
   /** 平台维度为观察到的 dir_path；Central 维度为 canonical_path */
   installedPath: string | null;
   /** 0 = 从未使用 */
