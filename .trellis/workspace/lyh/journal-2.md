@@ -1231,3 +1231,24 @@ Usage 扫描性能：子串预过滤+流式解析+spawn_blocking+批量写入；
 ### Status
 
 [OK] **Completed**
+
+
+## Session 97: 未使用技能面板 unlink 操作与徽章优化
+
+**Date**: 2026-08-16
+**Task**: 未使用技能面板 unlink 操作与徽章优化
+**Branch**: `dev`
+
+### Summary
+
+完成未使用技能按 Agent unlink、删除守卫、同 Agent 多来源处理与徽章交互优化；just ci 通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `779aa340` | (see git log) |
+
+### Status
+
+[OK] **Completed**
