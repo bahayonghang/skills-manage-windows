@@ -189,7 +189,7 @@ export function SkillUsageView() {
           >
             <UsageSection
               title={t("skillUsage.panels.topSkills")}
-              className="min-h-[32rem] xl:row-span-3"
+              className="min-h-[32rem] contain-layout"
               fill
             >
               <SkillUsageTable
@@ -200,42 +200,45 @@ export function SkillUsageView() {
               />
             </UsageSection>
 
-            {selectedSkill ? (
-              <UsageSection title={t("skillUsage.panels.detail")}>
-                <SkillUsageDetailPanel
-                  detail={detail}
-                  loading={detailLoading}
-                  onClose={closeDetail}
-                />
-              </UsageSection>
-            ) : (
-              <UsageSection
-                title={t("skillUsage.panels.recent")}
-                range={t("skillUsage.range.latestCalls", { count: 20 })}
-              >
-                <div className="scrollbar-subtle max-h-[26rem] overflow-y-auto">
-                  <RecentCallsFeed calls={recent} onSelect={selectSkill} />
-                </div>
-              </UsageSection>
-            )}
+            <div className="flex min-w-0 flex-col gap-4">
+              {selectedSkill ? (
+                <UsageSection title={t("skillUsage.panels.detail")}>
+                  <SkillUsageDetailPanel
+                    detail={detail}
+                    loading={detailLoading}
+                    onClose={closeDetail}
+                  />
+                </UsageSection>
+              ) : (
+                <UsageSection
+                  title={t("skillUsage.panels.recent")}
+                  range={t("skillUsage.range.latestCalls", { count: 20 })}
+                >
+                  <div className="scrollbar-subtle max-h-[26rem] overflow-y-auto">
+                    <RecentCallsFeed calls={recent} onSelect={selectSkill} />
+                  </div>
+                </UsageSection>
+              )}
 
-            <UsageSection
-              title={t("skillUsage.panels.heatmap")}
-              range={t("skillUsage.range.lastWeeks", { count: 16 })}
-            >
-              <ActivityHeatmap days={overview?.heatmap ?? []} />
-            </UsageSection>
-
-            {selectedSkill && (
               <UsageSection
-                title={t("skillUsage.panels.recent")}
-                range={t("skillUsage.range.latestCalls", { count: 20 })}
+                title={t("skillUsage.panels.heatmap")}
+                range={t("skillUsage.range.lastWeeks", { count: 16 })}
+                className="contain-layout"
               >
-                <div className="scrollbar-subtle max-h-[26rem] overflow-y-auto">
-                  <RecentCallsFeed calls={recent} onSelect={selectSkill} />
-                </div>
+                <ActivityHeatmap days={overview?.heatmap ?? []} />
               </UsageSection>
-            )}
+
+              {selectedSkill && (
+                <UsageSection
+                  title={t("skillUsage.panels.recent")}
+                  range={t("skillUsage.range.latestCalls", { count: 20 })}
+                >
+                  <div className="scrollbar-subtle max-h-[26rem] overflow-y-auto">
+                    <RecentCallsFeed calls={recent} onSelect={selectSkill} />
+                  </div>
+                </UsageSection>
+              )}
+            </div>
 
             <UsageSection
               title={t("skillUsage.unused.title")}
@@ -373,9 +376,11 @@ function UsageSkeleton() {
           ))}
         </div>
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(22rem,0.85fr)]">
-          <div className="h-[34rem] rounded-md border border-border bg-muted/30 xl:row-span-2" />
-          <div className="h-56 rounded-md border border-border bg-muted/25" />
-          <div className="h-64 rounded-md border border-border bg-muted/20" />
+          <div className="h-[34rem] rounded-md border border-border bg-muted/30" />
+          <div className="flex min-w-0 flex-col gap-4">
+            <div className="h-56 rounded-md border border-border bg-muted/25" />
+            <div className="h-64 rounded-md border border-border bg-muted/20" />
+          </div>
         </div>
       </div>
       <div

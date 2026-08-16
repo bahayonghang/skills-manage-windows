@@ -84,6 +84,11 @@ type UnusedUnlinkResult = { skillId: string; agentId: string; rowId: string | nu
   tool arguments, credentials, and full paths are not rendered.
 - Fixed ranges are visible in UI: all history, last 16 weeks, and latest 20.
   Provider health stays in a secondary disclosure.
+- Heatmap cells use a fixed track size (`size-*` + `auto-cols-[…rem]`). Do not
+  pair `aspect-square` with `1fr` / `auto-cols-fr`: cell height must not follow
+  container width. The `xl` two-column page must not use `row-span` to bind the
+  Top skills card height to the heatmap. Top skills and heatmap cards use
+  `contain-layout`; Unused does not (unlink dialog + hit-area).
 - Browser fixtures run the real store and include matched, ambiguous, unmatched,
   missing static metrics, filtered sources, and non-empty heatmap data.
 - `usageStore.unlinkUnusedSkillFromAgents` owns typed IPC for the whole batch: sequential

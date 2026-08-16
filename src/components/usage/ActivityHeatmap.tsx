@@ -12,6 +12,16 @@ interface ActivityHeatmapProps {
 
 const LABELED_WEEKDAY_ROWS = new Set([0, 2, 4]);
 
+/** 固定轨道：格子边长不随容器宽度变化，避免 maximize 时 aspect-ratio 回传高度。 */
+const CELL_TRACK_CLASS = {
+  default: "auto-cols-[0.75rem]",
+  compact: "auto-cols-[0.625rem]",
+} as const;
+const CELL_SIZE_CLASS = {
+  default: "size-3",
+  compact: "size-2.5",
+} as const;
+
 export function ActivityHeatmap({
   days,
   compact = false,
@@ -40,6 +50,9 @@ export function ActivityHeatmap({
     () => buildMonthLabels(days, i18n.language),
     [days, i18n.language],
   );
+  const trackSize = compact ? "compact" : "default";
+  const cellTrackClass = CELL_TRACK_CLASS[trackSize];
+  const cellSizeClass = CELL_SIZE_CLASS[trackSize];
 
   if (days.length === 0) {
     return (
@@ -67,7 +80,12 @@ export function ActivityHeatmap({
     >
       <div className="overflow-x-auto pb-1">
         <div className={cn("min-w-[22rem]", !compact && "px-1")}>
-          <div className="ml-9 grid grid-cols-16 gap-1 text-ui-micro text-muted-foreground">
+          <div
+            className={cn(
+              "ml-9 grid grid-flow-col gap-1 text-ui-micro text-muted-foreground",
+              cellTrackClass,
+            )}
+          >
             {monthLabels.map((label, index) => (
               <span
                 key={`${label}-${index}`}
@@ -87,7 +105,10 @@ export function ActivityHeatmap({
               data-testid="heatmap-grid"
               role="grid"
               aria-label={t("skillUsage.heatmap.ariaLabel")}
-              className="grid flex-1 auto-cols-fr grid-flow-col grid-rows-7 gap-1"
+              className={cn(
+                "grid grid-flow-col grid-rows-7 gap-1",
+                cellTrackClass,
+              )}
             >
               {days.map((day, index) => {
                 const level = heatLevelFor(day.count, nonZeroCounts);
@@ -126,7 +147,8 @@ export function ActivityHeatmap({
                       }
                     }}
                     className={cn(
-                      "block aspect-square w-full rounded-[3px] border border-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                      "block shrink-0 rounded-[3px] border border-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                      cellSizeClass,
                       CELL_LEVEL_CLASS[level],
                     )}
                   />
