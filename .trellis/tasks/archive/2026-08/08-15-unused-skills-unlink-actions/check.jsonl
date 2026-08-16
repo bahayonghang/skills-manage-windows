@@ -1,3 +1,3 @@
-{"file": ".trellis/tasks/08-15-unused-skills-unlink-actions/prd.md", "reason": "AC1–AC5 验收标准与范围决策（全部可 unlink）"}
+{"file": ".trellis/tasks/archive/2026-08/08-15-unused-skills-unlink-actions/prd.md", "reason": "AC1–AC5 验收标准与范围决策（全部可 unlink）"}
 {"file": ".trellis/spec/backend/skill-deletion-integrity.md", "reason": "验收核对：删除路径守卫、行清除完整性"}
 {"file": ".trellis/spec/frontend/icon-control-hit-area.md", "reason": "验收核对：热区与 focus-visible"}

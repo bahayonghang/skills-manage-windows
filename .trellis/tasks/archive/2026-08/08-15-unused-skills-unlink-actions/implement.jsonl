@@ -3,4 +3,4 @@
 {"file": ".trellis/spec/frontend/skill-usage-state.md", "reason": "store/ipc 边界与 unused slice 刷新契约"}
 {"file": ".trellis/spec/frontend/icon-control-hit-area.md", "reason": "行内图标按钮热区与焦点可见性规范"}
 {"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "unlink 失败 toast 与 formatBackendError 约定"}
-{"file": ".trellis/tasks/08-15-unused-skills-unlink-actions/design.md", "reason": "本任务技术设计"}
+{"file": ".trellis/tasks/archive/2026-08/08-15-unused-skills-unlink-actions/design.md", "reason": "本任务技术设计"}
