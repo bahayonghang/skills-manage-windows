@@ -165,3 +165,19 @@ export interface UnusedSkillsReport {
   central: UnusedSkillEntry[];
   platforms: UnusedSkillEntry[];
 }
+
+/** 批量 unlink 的单个目标（Central 条目 rowId 缺省；平台条目带 observation rowId）。 */
+export interface UnusedUnlinkRequest {
+  skillId: string;
+  agentId: string;
+  rowId?: string | null;
+}
+
+/** 批量 unlink 的逐项结果：error 为格式化后的失败原因（成功为 null）。 */
+export interface UnusedUnlinkResult {
+  skillId: string;
+  agentId: string;
+  rowId: string | null;
+  ok: boolean;
+  error: string | null;
+}

@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端层 Quality Check 清单,收尾校验入口"}
+{"file": ".trellis/spec/frontend/skill-usage-state.md", "reason": "核对 unlink 契约迁移:批量方法 pending 生命周期、refreshUnused 单次、组件无直接 invoke"}
+{"file": ".trellis/spec/frontend/async-ui-test-stability.md", "reason": "弹窗/批量异步用例的测试稳定性约定(等待与断言方式)"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "部分失败/整体失败的 toast 与错误呈现需符合异步错误反馈规范"}

@@ -4,19 +4,22 @@ import { useNavigate } from "react-router-dom";
 import { ArrowUpRight, Unlink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
-import { UsageMatchStatus } from "@/components/usage/SkillUsageTable";
+import { UnusedSkillUnlinkDialog } from "@/components/usage/UnusedSkillUnlinkDialog";
 import { formatUsageRelativeTime } from "@/components/usage/usageFormat";
+import { UsageMatchStatus } from "@/components/usage/SkillUsageTable";
+import {
+  centralTargets,
+  platformTargets,
+} from "@/components/usage/unusedUnlinkTargets";
 import { statusChipClass, statusFillClass } from "@/lib/statusTone";
 import type { StatusTone } from "@/lib/statusTone";
 import { cn } from "@/lib/utils";
-import { unlinkActionKey } from "@/stores/usageStore";
 import type {
-  UnusedAgentInstall,
-  UnusedPlatformInstall,
   UnusedSkillEntry,
   UnusedSkillsReport,
   UnusedSkillStatus,
+  UnusedUnlinkRequest,
+  UnusedUnlinkResult,
 } from "@/types/usage";
 
 type StatusFilter = "all" | UnusedSkillStatus;
@@ -39,13 +42,11 @@ interface UnusedSkillsPanelProps {
   error?: string | null;
   selectedSkill?: string | null;
   onSelect: (skill: string, trigger: HTMLButtonElement) => void;
-  /** store 的 unlinkUnusedSkill（组件不直接 invoke） */
-  onUnlink: (
-    skillId: string,
-    agentId: string,
-    rowId?: string | null,
-  ) => Promise<void>;
-  /** 进行中的 unlink 动作 key 集合，驱动按钮 spinner */
+  /** store 的 unlinkUnusedSkillFromAgents（组件不直接 invoke） */
+  onUnlinkAgents: (
+    targets: UnusedUnlinkRequest[],
+  ) => Promise<UnusedUnlinkResult[]>;
+  /** 进行中的 unlink 动作 key 集合，驱动弹窗内逐行 spinner */
   pendingUnlinkKeys?: Record<string, boolean>;
   className?: string;
 }
@@ -67,7 +68,7 @@ export function UnusedSkillsPanel({
   error = null,
   selectedSkill,
   onSelect,
-  onUnlink,
+  onUnlinkAgents,
   pendingUnlinkKeys = {},
   className,
 }: UnusedSkillsPanelProps) {
@@ -75,6 +76,7 @@ export function UnusedSkillsPanel({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [thresholdDays, setThresholdDays] = useState<ThresholdDays>(90);
   const [sortMode, setSortMode] = useState<SortMode>("idle");
+  const [dialogEntry, setDialogEntry] = useState<UnusedSkillEntry | null>(null);
 
   const { central, platformByAgent, thresholdTotal } = useMemo(() => {
     const nowMs = Date.now();
@@ -115,6 +117,13 @@ export function UnusedSkillsPanel({
 
   // 同一技能装在多个平台时会在每个 agent 小节各出现一次，汇总计数按条目去重
   const visibleUnique = countUniqueVisible(central, platformByAgent);
+
+  // 弹窗条目始终从当前报告实时查找：批量 unlink 后报告刷新，成功项自动收敛消失、
+  // 失败项保留在原条目内；条目完全消失时弹窗随之关闭。
+  const liveDialogEntry = useMemo(
+    () => findLiveEntry(report, dialogEntry),
+    [report, dialogEntry],
+  );
 
   if (report === null && loading) {
     return (
@@ -200,59 +209,59 @@ export function UnusedSkillsPanel({
             items={central}
             selectedSkill={selectedSkill}
             onSelect={onSelect}
-            onUnlink={onUnlink}
-            pendingUnlinkKeys={pendingUnlinkKeys}
             locale={i18n.language}
+            onOpenUnlink={setDialogEntry}
           />
           {[...platformByAgent.entries()].map(([agent, items]) =>
             items.length === 0 ? null : (
               <UnusedSection
                 key={agent}
                 title={t("skillUsage.unused.groups.agentSection", { agent })}
-                sectionAgent={agent}
                 items={items}
                 selectedSkill={selectedSkill}
                 onSelect={onSelect}
-                onUnlink={onUnlink}
-                pendingUnlinkKeys={pendingUnlinkKeys}
                 locale={i18n.language}
+                onOpenUnlink={setDialogEntry}
               />
             ),
           )}
         </div>
+      )}
+
+      {liveDialogEntry && (
+        <UnusedSkillUnlinkDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setDialogEntry(null);
+          }}
+          entry={liveDialogEntry}
+          onUnlinkAgents={onUnlinkAgents}
+          pendingUnlinkKeys={pendingUnlinkKeys}
+        />
       )}
     </div>
   );
 }
 
 // 行/表头共用网格：State 列加宽到 6.5rem 保证徽章全文可读，操作列 6.5rem
-// 稳定容纳 32px 打开按钮、gap-2 与展开后的确认按钮。
+// 稳定容纳 32px 打开按钮、gap-2 与 unlink 入口按钮。
 const ROW_GRID =
   "grid grid-cols-[minmax(8rem,1fr)_3.5rem_4.5rem_6.5rem] gap-2 md:grid-cols-[minmax(9rem,1fr)_5.5rem_4rem_6rem_5rem_6.5rem_6.5rem]";
 
 function UnusedSection({
   title,
   items,
-  sectionAgent,
   selectedSkill,
   onSelect,
-  onUnlink,
-  pendingUnlinkKeys,
   locale,
+  onOpenUnlink,
 }: {
   title: string;
   items: VisibleEntry[];
-  /** 平台小节的 agent id；Central 小节为 undefined */
-  sectionAgent?: string;
   selectedSkill?: string | null;
   onSelect: (skill: string, trigger: HTMLButtonElement) => void;
-  onUnlink: (
-    skillId: string,
-    agentId: string,
-    rowId?: string | null,
-  ) => Promise<void>;
-  pendingUnlinkKeys: Record<string, boolean>;
   locale: string;
+  onOpenUnlink: (entry: UnusedSkillEntry) => void;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -289,9 +298,13 @@ function UnusedSection({
       <ul className="divide-y divide-border/70">
         {items.map(({ entry, status }) => {
           const selected = entry.name === selectedSkill;
-          const sectionInstall = sectionAgent
-            ? preferredPlatformInstall(entry.installs, sectionAgent)
-            : undefined;
+          const unlinkTargets =
+            entry.origin === "central"
+              ? centralTargets(entry)
+              : platformTargets(entry);
+          const hasActionableUnlink = unlinkTargets.some(
+            (target) => target.disabledReason === null,
+          );
           return (
             <li
               key={`${entry.origin}-${entry.name}`}
@@ -311,13 +324,12 @@ function UnusedSection({
                     <span className="block truncate text-sm font-medium text-foreground">
                       {entry.name}
                     </span>
-                    {entry.origin === "platform" && (
-                      <span className="mt-0.5 block truncate text-ui-meta text-muted-foreground">
-                        {entryAgentIds(entry).length > 0
-                          ? entryAgentIds(entry).join(" · ")
-                          : t("skillUsage.unused.noAgents")}
-                      </span>
-                    )}
+                    {/* Central 与平台条目的 agent 副标题统一为弱化文本行，无任何操作 */}
+                    <span className="mt-0.5 block truncate text-ui-meta text-muted-foreground">
+                      {entryAgentIds(entry).length > 0
+                        ? entryAgentIds(entry).join(" · ")
+                        : t("skillUsage.unused.noAgents")}
+                    </span>
                   </span>
                   <UsageMatchStatus
                     status={entry.matchStatus}
@@ -373,175 +385,36 @@ function UnusedSection({
                       <ArrowUpRight className="size-3.5" />
                     </Button>
                   )}
-                  {sectionInstall && (
-                    <PlatformUnlinkAction
-                      install={sectionInstall}
-                      pending={
-                        pendingUnlinkKeys[
-                          unlinkActionKey(
-                            sectionInstall.agentId,
-                            sectionInstall.skillId,
-                            sectionInstall.rowId,
-                          )
-                        ] ?? false
-                      }
-                      onUnlink={onUnlink}
-                    />
-                  )}
+                  {/* 行右统一 unlink 入口：整条目无可卸载项时禁用并给 title 原因 */}
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    data-testid={`unused-unlink-trigger-${entry.origin}-${entry.name}`}
+                    title={
+                      hasActionableUnlink
+                        ? t("skillUsage.unused.unlink.dialog.triggerLabel", {
+                            skill: entry.name,
+                          })
+                        : t("skillUsage.unused.unlink.dialog.allDisabledTitle")
+                    }
+                    aria-label={t(
+                      "skillUsage.unused.unlink.dialog.triggerLabel",
+                      { skill: entry.name },
+                    )}
+                    disabled={!hasActionableUnlink}
+                    className={HIT_AREA_CLASS}
+                    onClick={() => onOpenUnlink(entry)}
+                  >
+                    <Unlink className="size-3.5" />
+                  </Button>
                 </div>
               </div>
-              {entry.origin === "central" && entry.agents.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2 px-3 pb-2.5">
-                  {entry.agents.map((install) => (
-                    <CentralAgentChip
-                      key={install.agentId}
-                      entry={entry}
-                      install={install}
-                      pending={
-                        pendingUnlinkKeys[
-                          unlinkActionKey(install.agentId, entry.skillId ?? "")
-                        ] ?? false
-                      }
-                      onUnlink={onUnlink}
-                    />
-                  ))}
-                </div>
-              )}
             </li>
           );
         })}
       </ul>
     </section>
-  );
-}
-
-/**
- * Central 条目的 per-agent 安装 chip：可 unlink 的附带两段式确认按钮；
- * shared-root（后端记为 linkType "native"）或 central 自身的安装禁用并给原因。
- */
-function CentralAgentChip({
-  entry,
-  install,
-  pending,
-  onUnlink,
-}: {
-  entry: UnusedSkillEntry;
-  install: UnusedAgentInstall;
-  pending: boolean;
-  onUnlink: (
-    skillId: string,
-    agentId: string,
-    rowId?: string | null,
-  ) => Promise<void>;
-}) {
-  const { t } = useTranslation();
-  const disabledReason = install.hasPendingRecovery
-    ? "disabledPendingRecovery"
-    : install.agentId === "central" || install.linkType === "native"
-      ? "disabledSharedRoot"
-      : null;
-  if (disabledReason !== null) {
-    return (
-      <span
-        data-testid={`unlink-chip-disabled-${install.agentId}`}
-        title={t(`skillUsage.unused.unlink.${disabledReason}`)}
-        className="inline-flex h-8 items-center whitespace-nowrap rounded-md border border-border bg-muted/30 px-2.5 text-xs text-muted-foreground"
-      >
-        {install.agentId}
-      </span>
-    );
-  }
-  return (
-    <span
-      data-testid={`unlink-chip-${install.agentId}`}
-      className="inline-flex h-8 items-center gap-1 whitespace-nowrap rounded-md border border-border bg-muted/30 pl-2.5 pr-0.5 text-xs text-muted-foreground"
-    >
-      {install.agentId}
-      <InlineConfirmAction
-        idleAriaLabel={t("skillUsage.unused.unlink.actionLabel", {
-          agent: install.agentId,
-        })}
-        idleTitle={t("skillUsage.unused.unlink.actionLabel", {
-          agent: install.agentId,
-        })}
-        confirmLabel={t("skillUsage.unused.unlink.confirm")}
-        icon={<Unlink className="size-3.5" />}
-        isLoading={pending}
-        onConfirm={() => onUnlink(entry.skillId ?? "", install.agentId)}
-        className={HIT_AREA_CLASS}
-      />
-    </span>
-  );
-}
-
-/** 平台散件 install 的行内 unlink：read-only / 非 user 来源 / 缺 rowId 时禁用。 */
-function PlatformUnlinkAction({
-  install,
-  pending,
-  onUnlink,
-}: {
-  install: UnusedPlatformInstall;
-  pending: boolean;
-  onUnlink: (
-    skillId: string,
-    agentId: string,
-    rowId?: string | null,
-  ) => Promise<void>;
-}) {
-  const { t } = useTranslation();
-  const disabledReason = platformUnlinkDisabledReason(install);
-  return (
-    <span data-testid={`unlink-action-${install.agentId}-${install.skillId}`}>
-      <InlineConfirmAction
-        idleAriaLabel={t("skillUsage.unused.unlink.actionLabel", {
-          agent: install.agentId,
-        })}
-        idleTitle={
-          disabledReason === null
-            ? t("skillUsage.unused.unlink.actionLabel", {
-                agent: install.agentId,
-              })
-            : t(`skillUsage.unused.unlink.${disabledReason}`)
-        }
-        confirmLabel={t("skillUsage.unused.unlink.confirm")}
-        icon={<Unlink className="size-4" />}
-        disabled={disabledReason !== null}
-        isLoading={pending}
-        onConfirm={() =>
-          onUnlink(install.skillId, install.agentId, install.rowId)
-        }
-        className={HIT_AREA_CLASS}
-      />
-    </span>
-  );
-}
-
-function platformUnlinkDisabledReason(
-  install: UnusedPlatformInstall,
-):
-  | "disabledPendingRecovery"
-  | "disabledReadOnly"
-  | "disabledSourceKind"
-  | "disabledNoRow"
-  | null {
-  if (install.hasPendingRecovery) return "disabledPendingRecovery";
-  if (install.isReadOnly) return "disabledReadOnly";
-  if (install.sourceKind !== "user") return "disabledSourceKind";
-  if (install.rowId === null) return "disabledNoRow";
-  return null;
-}
-
-function preferredPlatformInstall(
-  installs: UnusedPlatformInstall[],
-  agentId: string,
-): UnusedPlatformInstall | undefined {
-  const agentInstalls = installs.filter(
-    (install) => install.agentId === agentId,
-  );
-  return (
-    agentInstalls.find(
-      (install) => platformUnlinkDisabledReason(install) === null,
-    ) ?? agentInstalls[0]
   );
 }
 
@@ -627,6 +500,25 @@ function entryAgentIds(entry: UnusedSkillEntry): string[] {
     return entry.agents.map((install) => install.agentId);
   }
   return [...new Set(entry.installs.map((install) => install.agentId))];
+}
+
+/**
+ * 从当前报告实时查找弹窗条目：Central 条目标识是 skillId，平台条目标识是
+ * 技能名（skillId 为 null）。找不到（刷新后条目已消失）返回 null。
+ */
+function findLiveEntry(
+  report: UnusedSkillsReport | null,
+  entry: UnusedSkillEntry | null,
+): UnusedSkillEntry | null {
+  if (report === null || entry === null) return null;
+  const source = entry.origin === "central" ? report.central : report.platforms;
+  return (
+    source.find((item) =>
+      entry.origin === "central"
+        ? item.skillId === entry.skillId
+        : item.name === entry.name,
+    ) ?? null
+  );
 }
 
 /**

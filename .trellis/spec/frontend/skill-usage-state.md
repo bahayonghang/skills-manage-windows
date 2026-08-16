@@ -36,6 +36,10 @@ type SkillUsageSummary = {
 
 invoke("usage_get_skill_detail", { skill, source });
 invoke("uninstall_skill_from_agent", { skillId, agentId, rowId? });
+
+// usageStore.unlinkUnusedSkillFromAgents — sequential batch over the same command
+type UnusedUnlinkRequest = { skillId: string; agentId: string; rowId?: string | null };
+type UnusedUnlinkResult = { skillId: string; agentId: string; rowId: string | null; ok: boolean; error: string | null };
 ```
 
 `usageStore` owns `selectedSource`, `selectedSkill`, `usedCachedData`,
@@ -82,19 +86,25 @@ invoke("uninstall_skill_from_agent", { skillId, agentId, rowId? });
   Provider health stays in a secondary disclosure.
 - Browser fixtures run the real store and include matched, ambiguous, unmatched,
   missing static metrics, filtered sources, and non-empty heatmap data.
-- `usageStore.unlinkUnusedSkill` owns typed IPC, per-action pending state, backend-error
-  formatting/toast, and `refreshUnused()` after success. Components receive the action as a
-  prop and never invoke directly.
-- Central unlink renders per-agent controls. Pending recovery, `central`, and shared-root/native
-  installs are disabled with a translated reason. Platform unlink additionally requires a
-  non-null row id, `sourceKind=user`, and `isReadOnly=false`.
-- Group platform entries once per skill/agent even when that agent has several observations.
-  Prefer an actionable user observation over a read-only/plugin observation; after removal and
-  refresh, any remaining plugin observation becomes the visible disabled state. Never let map
-  insertion order decide whether an available unlink action is reachable.
-- Unlink uses `InlineConfirmAction`; its idle label/title must state that only the Agent copy is
-  removed and Central remains. Small icon buttons keep the 40px pseudo hit area and hover-revealed
-  actions retain a keyboard-visible focus path.
+- `usageStore.unlinkUnusedSkillFromAgents` owns typed IPC for the whole batch: sequential
+  invokes (backend mutation lock serializes anyway; N is agent-count small), per-target pending
+  keys via `unlinkActionKey` cleared in `finally`, exactly one `refreshUnused()` after the batch,
+  a success/partial-failure summary toast, and per-target results returned to the caller.
+  Components receive the action as a prop and never invoke directly.
+- Unlink entry is one far-right icon trigger per row opening `UnusedSkillUnlinkDialog`; no inline
+  or second-row confirm buttons. `unusedUnlinkTargets.ts` normalizes both origins into
+  `UnlinkTarget[]`: central entries map `entry.agents` (rowId always null), platform entries map
+  the full cross-agent `entry.installs` (not just the section agent).
+- Disabled reasons are per option: pending recovery, `central`/native shared-root (central
+  origin), read-only / `sourceKind !== "user"` / null row id (platform origin). Listing every
+  observation replaces the old "prefer one actionable install" pick — a same-agent user+plugin
+  pair renders as two options where the plugin one is disabled, so reachability never depends on
+  insertion order.
+- Dialog selection: nothing preselected; select-all touches only enabled targets; the destructive
+  confirm shows the selected count and stays disabled below one or while busy. On partial failure
+  the dialog stays open, failed rows show their formatted reason and become the reselected set.
+  Central-origin descriptions state that only Agent copies are removed and Central remains. The
+  row trigger keeps the 40px pseudo hit area and a keyboard-visible focus path.
 
 ## 4. Validation & Error Matrix
 
@@ -110,9 +120,10 @@ invoke("uninstall_skill_from_agent", { skillId, agentId, rowId? });
 | ambiguous/unmatched row | inline detail works; no open-skill button |
 | installed/unlinked ranking filter | filter only ranking rows; show filtered/total count and a distinct empty state |
 | static estimate `null` | explicit unavailable state, never numeric zero |
-| unlink command rejects | localized `formatBackendError` toast; pending state clears |
-| same agent has user + plugin observations | one skill row; actionable user row wins deterministically |
-| only read-only/plugin observation remains | disabled unlink control with translated reason |
+| unlink target rejects | inline row reason in dialog + summary toast; that target's pending key clears |
+| batch partially fails | dialog stays open, failed rows show reason and are reselected; one refresh after the batch |
+| same agent has user + plugin observations | two dialog options; user one actionable, plugin one disabled with reason |
+| only read-only/plugin observation remains | disabled dialog option with translated reason |
 
 ## 5. Good / Base / Bad Cases
 
@@ -123,10 +134,10 @@ invoke("uninstall_skill_from_agent", { skillId, agentId, rowId? });
 - Base: an unmatched historical call still opens its project/activity detail.
 - Base: selecting `unlinked` shows ambiguous and unmatched ranking rows while
   recent calls remain unchanged.
-- Good: Codex has user and plugin copies of one skill; the panel renders one Codex row and sends
-  the user observation's exact `rowId` after two-step confirmation.
-- Bad: push the same `UnusedSkillEntry` into an agent section once per observation and select the
-  first install; duplicate React keys and repository sort order can hide the writable action.
+- Good: Codex has user and plugin copies of one skill; the dialog lists both — the user
+  observation is selectable with its exact `rowId`, the plugin one is disabled with a reason.
+- Bad: feed the dialog only the section agent's installs, or preselect all targets so a single
+  misclick unlinks every agent at once.
 - Bad: publish `selectedSource = Codex` while the visible overview is still
   Claude, or resolve a Central id lazily when the row is clicked.
 
@@ -142,9 +153,10 @@ invoke("uninstall_skill_from_agent", { skillId, agentId, rowId? });
   month labels, legend, and empty state.
 - Browser: 1440x900 and 1280x720 dark, 1024x768 light, narrow desktop, Chinese
   and English, with page `scrollWidth === clientWidth` and no console errors.
-- Unused unlink: Central per-agent action/disabled reasons, platform two-step confirmation,
-  pending spinner, success refresh, formatted failure toast, user+plugin same-agent precedence,
-  full status text, and 40px hit-area classes.
+- Unused unlink: dialog open/target normalization (central full agents, platform cross-agent),
+  disabled reasons, select-all excluding disabled, confirm args/count gating, per-target pending
+  lifecycle, single post-batch refresh, partial-failure reselect, formatted failure toast, and
+  the 40px hit-area trigger.
 
 ## 7. Wrong vs Correct
 

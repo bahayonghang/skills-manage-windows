@@ -10,6 +10,8 @@ import type {
   RecentSkillCall,
   SkillUsageDetail,
   UnusedSkillsReport,
+  UnusedUnlinkRequest,
+  UnusedUnlinkResult,
   UsageOverview,
   UsageRefreshResult,
   UsageScopeInfo,
@@ -43,11 +45,9 @@ interface UsageState {
   loadDetail: (skill: string) => Promise<void>;
   clearDetail: () => void;
   refreshUnused: () => Promise<void>;
-  unlinkUnusedSkill: (
-    skillId: string,
-    agentId: string,
-    rowId?: string | null,
-  ) => Promise<void>;
+  unlinkUnusedSkillFromAgents: (
+    targets: UnusedUnlinkRequest[],
+  ) => Promise<UnusedUnlinkResult[]>;
   loadScope: () => Promise<UsageScopeInfo | null>;
   subscribeTargetChanged: () => Promise<() => void>;
   subscribeScanCompleted: () => Promise<() => void>;
@@ -304,18 +304,45 @@ export const useUsageStore = create<UsageState>((set, get) => ({
     }
   },
 
-  async unlinkUnusedSkill(skillId, agentId, rowId) {
-    const actionKey = unlinkActionKey(agentId, skillId, rowId);
-    set((state) => ({
-      pendingUnlinkKeys: { ...state.pendingUnlinkKeys, [actionKey]: true },
-    }));
-    try {
-      await invoke("uninstall_skill_from_agent", {
-        skillId,
-        agentId,
-        ...(rowId ? { rowId } : {}),
+  async unlinkUnusedSkillFromAgents(targets) {
+    const results: UnusedUnlinkResult[] = [];
+    // 顺序执行：后端 Central mutation lock 本就串行化，N ≤ Agent 数，量级个位数。
+    for (const target of targets) {
+      const actionKey = unlinkActionKey(
+        target.agentId,
+        target.skillId,
+        target.rowId,
+      );
+      set((state) => ({
+        pendingUnlinkKeys: { ...state.pendingUnlinkKeys, [actionKey]: true },
+      }));
+      let error: string | null = null;
+      try {
+        await invoke("uninstall_skill_from_agent", {
+          skillId: target.skillId,
+          agentId: target.agentId,
+          ...(target.rowId ? { rowId: target.rowId } : {}),
+        });
+      } catch (err) {
+        error = formatBackendError(err, i18n.t);
+      } finally {
+        set((state) => {
+          const next = { ...state.pendingUnlinkKeys };
+          delete next[actionKey];
+          return { pendingUnlinkKeys: next };
+        });
+      }
+      results.push({
+        skillId: target.skillId,
+        agentId: target.agentId,
+        rowId: target.rowId ?? null,
+        ok: error === null,
+        error,
       });
-      // observation/installations 行已随后端 unlink 清除，重取后面板行自然消失
+    }
+    // observation/installations 行已随后端 unlink 清除，整批结束后只重取一次报告；
+    // 成功摘要/部分失败 toast 走既有通道，逐项失败明细由返回值交给弹窗呈现，不逐项 toast。
+    try {
       await get().refreshUnused();
     } catch (error) {
       toast.error(
@@ -323,13 +350,23 @@ export const useUsageStore = create<UsageState>((set, get) => ({
           error: formatBackendError(error, i18n.t),
         }),
       );
-    } finally {
-      set((state) => {
-        const next = { ...state.pendingUnlinkKeys };
-        delete next[actionKey];
-        return { pendingUnlinkKeys: next };
-      });
     }
+    const failedCount = results.filter((result) => !result.ok).length;
+    if (failedCount === 0) {
+      toast.success(
+        i18n.t("skillUsage.unused.unlink.dialog.success", {
+          count: results.length,
+        }),
+      );
+    } else {
+      toast.error(
+        i18n.t("skillUsage.unused.unlink.dialog.partialFailure", {
+          succeeded: results.length - failedCount,
+          failed: failedCount,
+        }),
+      );
+    }
+    return results;
   },
 
   async loadScope() {

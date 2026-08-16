@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 
 import { UnusedSkillsPanel } from "@/components/usage/UnusedSkillsPanel";
-import type { UnusedSkillsReport } from "@/types/usage";
+import {
+  centralTargets,
+  platformTargets,
+  platformUnlinkDisabledReason,
+} from "@/components/usage/unusedUnlinkTargets";
+import type { UnusedSkillEntry, UnusedSkillsReport } from "@/types/usage";
 
 const wrap = (ui: React.ReactNode) => <MemoryRouter>{ui}</MemoryRouter>;
 
@@ -134,7 +139,7 @@ describe("UnusedSkillsPanel", () => {
         <UnusedSkillsPanel
           report={buildReport()}
           onSelect={vi.fn()}
-          onUnlink={vi.fn()}
+          onUnlinkAgents={vi.fn()}
         />,
       ),
     );
@@ -160,7 +165,7 @@ describe("UnusedSkillsPanel", () => {
         <UnusedSkillsPanel
           report={buildReport()}
           onSelect={vi.fn()}
-          onUnlink={vi.fn()}
+          onUnlinkAgents={vi.fn()}
         />,
       ),
     );
@@ -191,7 +196,7 @@ describe("UnusedSkillsPanel", () => {
         <UnusedSkillsPanel
           report={buildReport()}
           onSelect={vi.fn()}
-          onUnlink={vi.fn()}
+          onUnlinkAgents={vi.fn()}
         />,
       ),
     );
@@ -223,7 +228,7 @@ describe("UnusedSkillsPanel", () => {
         <UnusedSkillsPanel
           report={buildReport()}
           onSelect={vi.fn()}
-          onUnlink={vi.fn()}
+          onUnlinkAgents={vi.fn()}
         />,
       ),
     );
@@ -259,7 +264,7 @@ describe("UnusedSkillsPanel", () => {
         <UnusedSkillsPanel
           report={buildReport()}
           onSelect={vi.fn()}
-          onUnlink={vi.fn()}
+          onUnlinkAgents={vi.fn()}
         />,
       ),
     );
@@ -307,7 +312,7 @@ describe("UnusedSkillsPanel", () => {
         <UnusedSkillsPanel
           report={buildReport()}
           onSelect={vi.fn()}
-          onUnlink={vi.fn()}
+          onUnlinkAgents={vi.fn()}
         />,
       ),
     );
@@ -341,7 +346,7 @@ describe("UnusedSkillsPanel", () => {
               <UnusedSkillsPanel
                 report={buildReport()}
                 onSelect={onSelect}
-                onUnlink={vi.fn()}
+                onUnlinkAgents={vi.fn()}
               />
             }
           />
@@ -373,7 +378,7 @@ describe("UnusedSkillsPanel", () => {
           report={null}
           loading
           onSelect={vi.fn()}
-          onUnlink={vi.fn()}
+          onUnlinkAgents={vi.fn()}
         />,
       ),
     );
@@ -414,7 +419,7 @@ describe("UnusedSkillsPanel", () => {
         <UnusedSkillsPanel
           report={report}
           onSelect={vi.fn()}
-          onUnlink={vi.fn()}
+          onUnlinkAgents={vi.fn()}
         />,
       ),
     );
@@ -424,108 +429,132 @@ describe("UnusedSkillsPanel", () => {
     ).toBeInTheDocument();
   });
 
-  it("requires a second click before unlinking a platform observation", () => {
-    const onUnlink = vi.fn(async () => undefined);
+  it("renders one unlink trigger at the row right with a 40px hit area", () => {
     render(
       wrap(
         <UnusedSkillsPanel
           report={buildReport()}
           onSelect={vi.fn()}
-          onUnlink={onUnlink}
+          onUnlinkAgents={vi.fn()}
         />,
       ),
     );
 
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: /仅从 codex 移除|Remove only from codex/i,
-      }),
+    const row = screen.getByTestId("unused-row-central-legacy-cleanup");
+    const trigger = within(row).getByTestId(
+      "unused-unlink-trigger-central-legacy-cleanup",
     );
-    expect(onUnlink).not.toHaveBeenCalled();
-    fireEvent.click(
-      screen.getByRole("button", { name: /确认移除|Remove/i }),
-    );
-
-    expect(onUnlink).toHaveBeenCalledWith(
-      "obs-codex-prompt-helper",
-      "codex",
-      "obs-codex-prompt-helper",
-    );
+    expect(trigger).toHaveClass("after:size-10");
+    // 行内不再出现任何内联 unlink 按钮（打开按钮之后只有 unlink 入口）
+    expect(
+      within(row).queryByTestId(/^unlink-chip-/),
+    ).not.toBeInTheDocument();
+    expect(
+      within(row).queryByTestId(/^unlink-action-/),
+    ).not.toBeInTheDocument();
+    // Central 条目第二排改为弱化 agent 文本行，不含操作
+    expect(row.textContent).toMatch(/claude-code/);
+    expect(
+      within(row).queryAllByRole("button", { name: /仅从|Remove only from/i }),
+    ).toHaveLength(0);
   });
 
-  it("prefers the writable observation when one agent has user and plugin copies", () => {
+  it("disables the trigger with a title when every install is locked", () => {
     const report = buildReport();
-    report.platforms[0].installs.unshift({
-      agentId: "codex",
-      rowId: "obs-codex-plugin-prompt-helper",
-      skillId: "obs-codex-prompt-helper",
-      linkType: "native",
-      sourceKind: "plugin",
-      isReadOnly: true,
-      installedPath: "C:/agents/codex/plugins/prompt-helper",
-      hasPendingRecovery: false,
+    report.central.push({
+      skillId: "locked-central",
+      name: "locked-central",
+      matchStatus: "matched",
+      origin: "central",
+      agents: [
+        {
+          agentId: "codex",
+          linkType: "native",
+          installedPath: "C:/central/locked-central",
+          hasPendingRecovery: false,
+        },
+      ],
+      installs: [],
+      installedPath: "C:/central/locked-central",
+      callCount: 0,
+      lastUsedMs: null,
+      staticTokenEstimate: null,
+      staticByteCount: null,
+      status: "never_used",
     });
-    const onUnlink = vi.fn(async () => undefined);
-
     render(
       wrap(
         <UnusedSkillsPanel
           report={report}
           onSelect={vi.fn()}
-          onUnlink={onUnlink}
+          onUnlinkAgents={vi.fn()}
         />,
       ),
     );
 
-    expect(
-      screen.getAllByTestId("unused-row-platform-prompt-helper"),
-    ).toHaveLength(1);
-    fireEvent.click(
-      within(
-        screen.getByTestId(
-          "unlink-action-codex-obs-codex-prompt-helper",
-        ),
-      ).getByRole("button"),
+    const trigger = screen.getByTestId(
+      "unused-unlink-trigger-central-locked-central",
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: /确认移除|Remove/i }),
-    );
-
-    expect(onUnlink).toHaveBeenCalledWith(
-      "obs-codex-prompt-helper",
-      "codex",
-      "obs-codex-prompt-helper",
+    expect(trigger).toBeDisabled();
+    expect(trigger).toHaveAttribute(
+      "title",
+      expect.stringMatching(/不可移除|locked/i),
     );
   });
 
-  it("unlinks a Central installation by agent without deleting Central", () => {
-    const onUnlink = vi.fn(async () => undefined);
+  it("opens the dialog and normalizes Central targets from entry.agents", () => {
     render(
       wrap(
         <UnusedSkillsPanel
           report={buildReport()}
           onSelect={vi.fn()}
-          onUnlink={onUnlink}
+          onUnlinkAgents={vi.fn()}
         />,
       ),
     );
+    fireEvent.click(
+      screen.getByTestId("unused-unlink-trigger-central-legacy-cleanup"),
+    );
 
-    fireEvent.click(
-      within(screen.getByTestId("unlink-chip-claude-code")).getByRole("button", {
-        name: /仅从 claude-code 移除|Remove only from claude-code/i,
-      }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: /确认移除|Remove/i }),
-    );
-    expect(onUnlink).toHaveBeenCalledWith(
-      "legacy-cleanup",
-      "claude-code",
-    );
+    const dialog = screen.getByTestId("unused-unlink-dialog");
+    expect(within(dialog).getByText(/legacy-cleanup/)).toBeInTheDocument();
+    // Central 条目弹窗列出全部 agents，含中央库副本保留说明
+    expect(
+      within(dialog).getByTestId("unused-unlink-option-claude-code"),
+    ).toBeInTheDocument();
+    expect(within(dialog).getAllByLabelText("claude-code")).toHaveLength(2);
+    expect(dialog.textContent).toMatch(/Central 库副本|Central library copy/);
   });
 
-  it("disables shared-root, pending-recovery, and read-only installs with reasons", () => {
+  it("lists every cross-agent platform install in the dialog with disabled reasons", () => {
+    render(
+      wrap(
+        <UnusedSkillsPanel
+          report={buildReport()}
+          onSelect={vi.fn()}
+          onUnlinkAgents={vi.fn()}
+        />,
+      ),
+    );
+    // 两个 agent 小节都指向同一散件，任一行触发都列出全部跨 Agent installs
+    fireEvent.click(
+      screen.getAllByTestId("unused-unlink-trigger-platform-local-notes")[0],
+    );
+
+    const dialog = screen.getByTestId("unused-unlink-dialog");
+    expect(
+      within(dialog).getByTestId("unused-unlink-option-claude-code"),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByTestId("unused-unlink-option-zed"),
+    ).toBeInTheDocument();
+    expect(dialog.textContent).toMatch(/已列出安装此技能的全部 Agent|across all agents/i);
+  });
+
+  it("shows disabled reasons and keeps disabled targets out of select-all", async () => {
     const report = buildReport();
+    // 给 legacy-cleanup 追加 shared-root + pending recovery 的 agent；保留一个可卸载项
+    // 保证行右触发器可用，验证禁用项不计入全选
     report.central[0].agents[0].hasPendingRecovery = true;
     report.central[0].agents.push({
       agentId: "codex",
@@ -533,65 +562,352 @@ describe("UnusedSkillsPanel", () => {
       installedPath: "C:/central/legacy-cleanup",
       hasPendingRecovery: false,
     });
-    report.platforms[0].installs[0].isReadOnly = true;
-
+    report.central[0].agents.push({
+      agentId: "zed",
+      linkType: "junction",
+      installedPath: "C:/agents/zed/legacy-cleanup",
+      hasPendingRecovery: false,
+    });
+    const onUnlinkAgents = vi.fn(async () => []);
     render(
       wrap(
         <UnusedSkillsPanel
           report={report}
           onSelect={vi.fn()}
-          onUnlink={vi.fn()}
+          onUnlinkAgents={onUnlinkAgents}
         />,
       ),
     );
+    fireEvent.click(
+      screen.getByTestId("unused-unlink-trigger-central-legacy-cleanup"),
+    );
 
-    expect(
-      screen.getByTestId("unlink-chip-disabled-claude-code"),
-    ).toHaveAttribute(
+    const recoveryRow = screen.getByTestId(
+      "unused-unlink-option-disabled-claude-code",
+    );
+    expect(recoveryRow).toHaveAttribute(
       "title",
       expect.stringMatching(/待恢复|pending Central recovery/i),
     );
-    expect(screen.getByTestId("unlink-chip-disabled-codex")).toHaveAttribute(
+    expect(
+      within(recoveryRow).getByRole("checkbox"),
+    ).toHaveAttribute("aria-disabled", "true");
+    const sharedRootRow = screen.getByTestId(
+      "unused-unlink-option-disabled-codex",
+    );
+    expect(sharedRootRow).toHaveAttribute(
       "title",
       expect.stringMatching(/共用技能目录|shares the Central directory/i),
     );
-    const readOnlyButton = within(
-      screen.getByTestId(
-        "unlink-action-codex-obs-codex-prompt-helper",
+    expect(
+      within(sharedRootRow).getByRole("checkbox"),
+    ).toHaveAttribute("aria-disabled", "true");
+
+    // 全选只勾选可卸载项：zed 被选中、禁用项不受影响
+    fireEvent.click(
+      within(screen.getByTestId("unused-unlink-select-all")).getByRole(
+        "checkbox",
       ),
-    ).getByRole("button");
-    expect(readOnlyButton).toBeDisabled();
-    expect(readOnlyButton).toHaveAttribute(
-      "title",
-      expect.stringMatching(/只读插件源|read-only plugin source/i),
+    );
+    expect(
+      within(recoveryRow).getByRole("checkbox"),
+    ).not.toBeChecked();
+    expect(
+      within(sharedRootRow).getByRole("checkbox"),
+    ).not.toBeChecked();
+    const confirm = screen.getByTestId("unused-unlink-confirm");
+    expect(confirm).toBeEnabled();
+    fireEvent.click(confirm);
+    await waitFor(() =>
+      expect(onUnlinkAgents).toHaveBeenCalledWith([
+        { skillId: "legacy-cleanup", agentId: "zed", rowId: null },
+      ]),
     );
   });
 
-  it("keeps state chips and agent chips untruncated and icon hit areas at 40px", () => {
+  it("selects writable targets and calls the store batch action once on confirm", async () => {
+    const onUnlinkAgents = vi.fn(async () => []);
     render(
       wrap(
         <UnusedSkillsPanel
           report={buildReport()}
           onSelect={vi.fn()}
-          onUnlink={vi.fn()}
+          onUnlinkAgents={onUnlinkAgents}
         />,
       ),
     );
-
-    const row = screen.getByTestId("unused-row-central-legacy-cleanup");
-    const stateChip = within(row).getByText(/从未使用|Never used/);
-    expect(stateChip).toHaveClass("whitespace-nowrap");
-    expect(stateChip).not.toHaveClass("truncate");
-    expect(screen.getByTestId("unlink-chip-claude-code")).toHaveClass(
-      "whitespace-nowrap",
+    fireEvent.click(
+      screen.getByTestId("unused-unlink-trigger-central-legacy-cleanup"),
     );
+
+    // 默认不勾选：确认按钮禁用
     expect(
-      within(screen.getByTestId("unlink-chip-claude-code")).getByRole(
-        "button",
-        {
-          name: /仅从 claude-code 移除|Remove only from claude-code/i,
-        },
+      screen.getByRole("button", { name: /移除 \(0\)|Unlink \(0\)/ }),
+    ).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: /claude-code/ }));
+    // 选中计数随勾选更新
+    expect(
+      screen.getByRole("button", { name: /移除 \(1\)|Unlink \(1\)/ }),
+    ).toBeEnabled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /移除 \(1\)|Unlink \(1\)/ }),
+    );
+    await waitFor(() =>
+      expect(onUnlinkAgents).toHaveBeenCalledWith([
+        { skillId: "legacy-cleanup", agentId: "claude-code", rowId: null },
+      ]),
+    );
+  });
+
+  it("calls the store batch action with the full selected set after select-all", async () => {
+    const onUnlinkAgents = vi.fn(async () => []);
+    render(
+      wrap(
+        <UnusedSkillsPanel
+          report={buildReport()}
+          onSelect={vi.fn()}
+          onUnlinkAgents={onUnlinkAgents}
+        />,
       ),
-    ).toHaveClass("after:size-10");
+    );
+    // 30 天阈值下 trellis-check 可见，弹窗列出两个可卸载 agent
+    fireEvent.click(
+      within(
+        screen.getByRole("group", {
+          name: /长期未用阈值|Staleness threshold/,
+        }),
+      ).getByRole("button", { name: /30 天|30d/ }),
+    );
+    fireEvent.click(
+      screen.getByTestId("unused-unlink-trigger-central-trellis-check"),
+    );
+
+    fireEvent.click(
+      within(screen.getByTestId("unused-unlink-select-all")).getByRole(
+        "checkbox",
+      ),
+    );
+    const confirm = screen.getByRole("button", { name: /移除 \(2\)|Unlink \(2\)/ });
+    fireEvent.click(confirm);
+    await waitFor(() =>
+      expect(onUnlinkAgents).toHaveBeenCalledWith([
+        { skillId: "trellis-check", agentId: "claude-code", rowId: null },
+        { skillId: "trellis-check", agentId: "codex", rowId: null },
+      ]),
+    );
+  });
+
+  it("keeps the dialog open on partial failure, shows the failed row, and resets selection for retry", async () => {
+    const onUnlinkAgents = vi
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          skillId: "trellis-check",
+          agentId: "claude-code",
+          rowId: null,
+          ok: false,
+          error: "installation.pending_central_recovery: blocked",
+        },
+        {
+          skillId: "trellis-check",
+          agentId: "codex",
+          rowId: null,
+          ok: true,
+          error: null,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          skillId: "trellis-check",
+          agentId: "claude-code",
+          rowId: null,
+          ok: true,
+          error: null,
+        },
+      ]);
+    render(
+      wrap(
+        <UnusedSkillsPanel
+          report={buildReport()}
+          onSelect={vi.fn()}
+          onUnlinkAgents={onUnlinkAgents}
+        />,
+      ),
+    );
+    fireEvent.click(
+      within(
+        screen.getByRole("group", {
+          name: /长期未用阈值|Staleness threshold/,
+        }),
+      ).getByRole("button", { name: /30 天|30d/ }),
+    );
+    fireEvent.click(
+      screen.getByTestId("unused-unlink-trigger-central-trellis-check"),
+    );
+    fireEvent.click(
+      within(screen.getByTestId("unused-unlink-select-all")).getByRole(
+        "checkbox",
+      ),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /移除 \(2\)|Unlink \(2\)/ }),
+    );
+
+    // 部分失败：弹窗保留、失败行呈现原因
+    await waitFor(() =>
+      expect(screen.getByTestId("unused-unlink-error-claude-code")).toHaveTextContent(
+        /blocked/,
+      ),
+    );
+    expect(screen.getByTestId("unused-unlink-dialog")).toBeInTheDocument();
+    // 勾选重置为仅失败项（claude-code），确认按钮计数回到 1
+    expect(
+      screen.getByRole("button", { name: /移除 \(1\)|Unlink \(1\)/ }),
+    ).toBeEnabled();
+
+    // 直接重试只提交失败项
+    fireEvent.click(
+      screen.getByRole("button", { name: /移除 \(1\)|Unlink \(1\)/ }),
+    );
+    await waitFor(() =>
+      expect(onUnlinkAgents).toHaveBeenCalledTimes(2),
+    );
+    expect(onUnlinkAgents).toHaveBeenLastCalledWith([
+      { skillId: "trellis-check", agentId: "claude-code", rowId: null },
+    ]);
+  });
+
+  it("closes the dialog after a fully successful batch", async () => {
+    const onUnlinkAgents = vi.fn().mockResolvedValueOnce([
+      {
+        skillId: "legacy-cleanup",
+        agentId: "claude-code",
+        rowId: null,
+        ok: true,
+        error: null,
+      },
+    ]);
+    render(
+      wrap(
+        <UnusedSkillsPanel
+          report={buildReport()}
+          onSelect={vi.fn()}
+          onUnlinkAgents={onUnlinkAgents}
+        />,
+      ),
+    );
+    fireEvent.click(
+      screen.getByTestId("unused-unlink-trigger-central-legacy-cleanup"),
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: /claude-code/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /移除 \(1\)|Unlink \(1\)/ }),
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("unused-unlink-dialog")).not.toBeInTheDocument(),
+    );
+  });
+});
+
+describe("unusedUnlinkTargets", () => {
+  function centralEntry(overrides: Partial<UnusedSkillEntry> = {}): UnusedSkillEntry {
+    return {
+      skillId: "legacy-cleanup",
+      name: "legacy-cleanup",
+      matchStatus: "matched",
+      origin: "central",
+      agents: [
+        {
+          agentId: "claude-code",
+          linkType: "symlink",
+          installedPath: "C:/agents/claude/legacy-cleanup",
+          hasPendingRecovery: false,
+        },
+        {
+          agentId: "codex",
+          linkType: "native",
+          installedPath: "C:/central/legacy-cleanup",
+          hasPendingRecovery: true,
+        },
+        {
+          agentId: "central",
+          linkType: "native",
+          installedPath: "C:/central/legacy-cleanup",
+          hasPendingRecovery: false,
+        },
+      ],
+      installs: [],
+      installedPath: "C:/central/legacy-cleanup",
+      callCount: 0,
+      lastUsedMs: null,
+      staticTokenEstimate: 960,
+      staticByteCount: 3_840,
+      status: "never_used",
+      ...overrides,
+    };
+  }
+
+  it("centralTargets normalizes agents with shared-root and recovery reasons", () => {
+    const targets = centralTargets(centralEntry());
+    expect(targets).toEqual([
+      {
+        skillId: "legacy-cleanup",
+        agentId: "claude-code",
+        rowId: null,
+        disabledReason: null,
+      },
+      {
+        skillId: "legacy-cleanup",
+        agentId: "codex",
+        rowId: null,
+        disabledReason: "disabledPendingRecovery",
+      },
+      {
+        skillId: "legacy-cleanup",
+        agentId: "central",
+        rowId: null,
+        disabledReason: "disabledSharedRoot",
+      },
+    ]);
+  });
+
+  it("platformTargets lists every cross-agent install with full disabled-reason mapping", () => {
+    const entry = buildReport().platforms[1]; // local-notes: claude-code + zed（均可卸载）
+    const targets = platformTargets(entry);
+    expect(targets).toHaveLength(2);
+    expect(targets[0]).toEqual({
+      skillId: "obs-claude-local-notes",
+      agentId: "claude-code",
+      rowId: "obs-claude-local-notes",
+      disabledReason: null,
+    });
+    expect(targets[1]).toEqual({
+      skillId: "obs-zed-local-notes",
+      agentId: "zed",
+      rowId: "obs-zed-local-notes",
+      disabledReason: null,
+    });
+
+    expect(platformUnlinkDisabledReason(entry.installs[0])).toBeNull();
+    expect(
+      platformUnlinkDisabledReason({ ...entry.installs[0], isReadOnly: true }),
+    ).toBe("disabledReadOnly");
+    expect(
+      platformUnlinkDisabledReason({
+        ...entry.installs[0],
+        sourceKind: "plugin",
+      }),
+    ).toBe("disabledSourceKind");
+    expect(
+      platformUnlinkDisabledReason({ ...entry.installs[0], rowId: null }),
+    ).toBe("disabledNoRow");
+    expect(
+      platformUnlinkDisabledReason({
+        ...entry.installs[0],
+        hasPendingRecovery: true,
+      }),
+    ).toBe("disabledPendingRecovery");
   });
 });

@@ -115,7 +115,9 @@ export function useUsageBindings() {
   const loadDetail = useUsageStore((s) => s.loadDetail);
   const clearDetail = useUsageStore((s) => s.clearDetail);
   const refreshUnused = useUsageStore((s) => s.refreshUnused);
-  const unlinkUnusedSkill = useUsageStore((s) => s.unlinkUnusedSkill);
+  const unlinkUnusedSkillFromAgents = useUsageStore(
+    (s) => s.unlinkUnusedSkillFromAgents,
+  );
 
   return {
     overview,
@@ -142,6 +144,6 @@ export function useUsageBindings() {
     loadDetail,
     clearDetail,
     refreshUnused,
-    unlinkUnusedSkill,
+    unlinkUnusedSkillFromAgents,
   };
 }

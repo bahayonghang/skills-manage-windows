@@ -428,14 +428,24 @@
         "stale": "Stale"
       },
       "unlink": {
-        "actionLabel": "Remove only from {{agent}}; keep the Central copy",
-        "confirm": "Remove",
         "error": "Could not remove this skill: {{error}}",
         "disabledSharedRoot": "This platform shares the Central directory and cannot be unlinked separately.",
         "disabledPendingRecovery": "Resolve the pending Central recovery before changing this installation.",
         "disabledReadOnly": "This skill comes from a read-only plugin source.",
         "disabledSourceKind": "Only user-managed skill sources can be removed here.",
-        "disabledNoRow": "Refresh the scan before removing this skill."
+        "disabledNoRow": "Refresh the scan before removing this skill.",
+        "dialog": {
+          "title": "Unlink “{{skill}}”",
+          "descriptionCentral": "Remove this skill from selected agents only; the Central library copy is kept.",
+          "descriptionPlatform": "Listed across all agents that have this skill; select the installations to remove.",
+          "selectAll": "Select all",
+          "confirm": "Unlink ({{count}})",
+          "cancel": "Cancel",
+          "success": "Unlinked {{count}} agent installations.",
+          "partialFailure": "Removed {{succeeded}} of {{failed}} agent installations; see the list for failures.",
+          "triggerLabel": "Unlink {{skill}} from agents",
+          "allDisabledTitle": "Every installation of this skill is locked and cannot be unlinked."
+        }
       },
       "columns": {
         "skill": "Skill",

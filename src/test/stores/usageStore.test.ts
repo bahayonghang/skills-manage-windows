@@ -79,10 +79,12 @@ function refreshPayload(overrides: Record<string, unknown> = {}) {
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 beforeEach(() => {
@@ -124,35 +126,38 @@ beforeEach(() => {
 });
 
 describe("usageStore", () => {
-  it("unlinks an unused observation, tracks pending state, then refetches the report", async () => {
+  it("unlinks selected agents sequentially, tracks pending state, then refetches once", async () => {
     const uninstall = deferred<void>();
     mockIpcCommands({
       uninstall_skill_from_agent: () => uninstall.promise,
       usage_get_unused_skills: { central: [], platforms: [] },
     });
 
-    const unlink = useUsageStore
-      .getState()
-      .unlinkUnusedSkill("loose-skill", "codex", "codex::/skills/loose-skill");
+    const unlink = useUsageStore.getState().unlinkUnusedSkillFromAgents([
+      { skillId: "loose-skill", agentId: "codex", rowId: "codex::/loose" },
+      { skillId: "loose-skill", agentId: "claude-code" },
+    ]);
 
+    // 第一项执行期间：pending key 存在，invoke 参数携带 rowId
     expect(
-      useUsageStore.getState().pendingUnlinkKeys[
-        "codex::/skills/loose-skill"
-      ],
+      useUsageStore.getState().pendingUnlinkKeys["codex::/loose"],
     ).toBe(true);
     expect(ipcInvokeCalls("uninstall_skill_from_agent")[0].args).toEqual({
       skillId: "loose-skill",
       agentId: "codex",
-      rowId: "codex::/skills/loose-skill",
+      rowId: "codex::/loose",
     });
 
     uninstall.resolve();
-    await unlink;
+    const results = await unlink;
 
-    expect(ipcInvokedCommands()).toEqual([
-      "uninstall_skill_from_agent",
-      "usage_get_unused_skills",
+    expect(ipcInvokeCalls("uninstall_skill_from_agent").map((c) => c.args)).toEqual([
+      { skillId: "loose-skill", agentId: "codex", rowId: "codex::/loose" },
+      // Central 条目不传 rowId
+      { skillId: "loose-skill", agentId: "claude-code" },
     ]);
+    // 整批结束后恰好一次报告重取
+    expect(ipcInvokeCalls("usage_get_unused_skills")).toHaveLength(1);
     expect(ipcInvokeCalls("usage_get_unused_skills")[0].args).toEqual({
       source: null,
       thresholdDays: UNUSED_REQUEST_THRESHOLD_DAYS,
@@ -162,28 +167,97 @@ describe("usageStore", () => {
       platforms: [],
     });
     expect(useUsageStore.getState().pendingUnlinkKeys).toEqual({});
+    expect(results).toEqual([
+      {
+        skillId: "loose-skill",
+        agentId: "codex",
+        rowId: "codex::/loose",
+        ok: true,
+        error: null,
+      },
+      {
+        skillId: "loose-skill",
+        agentId: "claude-code",
+        rowId: null,
+        ok: true,
+        error: null,
+      },
+    ]);
+    expect(toastErrorMock).not.toHaveBeenCalled();
+    expect(toastInfoMock).not.toHaveBeenCalled();
   });
 
-  it("formats unlink failures for the toast and does not refresh stale data", async () => {
-    mockIpcCommand("uninstall_skill_from_agent", () =>
-      Promise.reject(
-        ipcFixtureError(
-          "installation.pending_central_recovery",
-          "unsafe C:/private/path should not be rendered",
-        ),
-      ),
-    );
+  it("collects per-target failures, still refreshes once, and shows the partial toast", async () => {
+    mockIpcCommands({
+      uninstall_skill_from_agent: ({ agentId }: { agentId: string }) =>
+        agentId === "blocked"
+          ? Promise.reject(
+              ipcFixtureError(
+                "installation.pending_central_recovery",
+                "unsafe C:/private/path should not be rendered",
+              ),
+            )
+          : Promise.resolve(undefined),
+      usage_get_unused_skills: { central: [], platforms: [] },
+    });
 
-    await useUsageStore
+    const results = await useUsageStore
       .getState()
-      .unlinkUnusedSkill("blocked-skill", "claude-code");
+      .unlinkUnusedSkillFromAgents([
+        { skillId: "blocked-skill", agentId: "blocked", rowId: "obs-1" },
+        { skillId: "ok-skill", agentId: "fine", rowId: "obs-2" },
+      ]);
 
-    expect(ipcInvokedCommands()).toEqual(["uninstall_skill_from_agent"]);
+    expect(ipcInvokedCommands()).toEqual([
+      "uninstall_skill_from_agent",
+      "uninstall_skill_from_agent",
+      "usage_get_unused_skills",
+    ]);
+    expect(useUsageStore.getState().pendingUnlinkKeys).toEqual({});
+    // 逐项失败不弹逐项 toast；整批结束后只有一次部分失败 toast
     expect(toastErrorMock).toHaveBeenCalledTimes(1);
     const message = String(toastErrorMock.mock.calls[0][0]);
-    expect(message).toMatch(/待恢复|pending Central recovery/i);
+    expect(message).toMatch(/Removed 1 of 1|1 个失败/);
     expect(message).not.toContain("C:/private/path");
+    // 失败原因以逐项结果返回给弹窗呈现
+    expect(results).toEqual([
+      {
+        skillId: "blocked-skill",
+        agentId: "blocked",
+        rowId: "obs-1",
+        ok: false,
+        error: expect.stringMatching(/待恢复|pending Central recovery/i),
+      },
+      {
+        skillId: "ok-skill",
+        agentId: "fine",
+        rowId: "obs-2",
+        ok: true,
+        error: null,
+      },
+    ]);
+  });
+
+  it("clears pending keys via finally when an agent rejects mid-batch", async () => {
+    const first = deferred<void>();
+    mockIpcCommand("uninstall_skill_from_agent", ({ agentId }: { agentId: string }) =>
+      agentId === "first" ? first.promise : Promise.resolve(undefined),
+    );
+    mockIpcCommand("usage_get_unused_skills", { central: [], platforms: [] });
+
+    const unlink = useUsageStore
+      .getState()
+      .unlinkUnusedSkillFromAgents([
+        { skillId: "s", agentId: "first", rowId: "r1" },
+        { skillId: "s", agentId: "second", rowId: "r2" },
+      ]);
+
+    expect(useUsageStore.getState().pendingUnlinkKeys).toEqual({ r1: true });
+    first.reject(new Error("boom"));
+    await unlink;
+
     expect(useUsageStore.getState().pendingUnlinkKeys).toEqual({});
+    expect(ipcInvokeCalls("usage_get_unused_skills")).toHaveLength(1);
   });
 
   it("refresh uses the single usage_refresh payload and stores all returned panels", async () => {
