@@ -1273,3 +1273,24 @@ Usage 扫描性能：子串预过滤+流式解析+spawn_blocking+批量写入；
 ### Status
 
 [OK] **Completed**
+
+
+## Session 99: Skill Usage 最大化布局优化
+
+**Date**: 2026-08-16
+**Task**: Skill Usage 最大化布局优化
+**Branch**: `dev`
+
+### Summary
+
+切断 /usage 最大化卡顿的主因链：热力图改为固定格子边长，去掉 xl:row-span-3 高度耦合，Top skills/Heatmap 加 contain-layout。just ci 通过。用户确认最大化仍有轻微卡顿，本期不虚拟化表格。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `58be73df84ea6fe8b88ad906769921cb3b17065a` | (see git log) |
+
+### Status
+
+[OK] **Completed**
