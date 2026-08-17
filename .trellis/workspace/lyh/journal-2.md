@@ -1357,3 +1357,42 @@ Usage 扫描性能：子串预过滤+流式解析+spawn_blocking+批量写入；
 ### Status
 
 [OK] **Completed**
+
+
+## Session 103: 平台技能用量排序与来源区分
+
+**Date**: 2026-08-17
+**Task**: 平台技能用量排序与来源区分
+**Branch**: `dev`
+
+### Summary
+
+平台页按 Skill Usage 全历史用量默认降序，卡片右下角显示当前列表名次；插件与中央安装用短徽章和左侧竖条区分，有插件的 Universal 可筛来源。
+
+### Main Changes
+
+- 新增 usage_get_skill_usage_stats，days=None 为全历史
+- PlatformView 默认 callCount desc，右下角竞赛名次
+- 插件行合并为一枚 warning 徽章；中央 symlink 用短 chip 与 info 竖条
+- 有插件的非 Claude 页显示来源 Tab；默认 origin 仍是 All
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b5f4fc2cbdca636d0a5c3d04c9ce1a84661827ff` | (see git log) |
+
+### Testing
+
+- [OK] 定向 Vitest 101 通过
+- [OK] cargo test usage 64 通过
+- [OK] typecheck/lint/docs:gen:check 通过；实现阶段 just ci 通过
+- [OK] 桌面 Universal 实机未验证
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 在 Universal 实机确认默认排序、右下角名次和插件 Tab
