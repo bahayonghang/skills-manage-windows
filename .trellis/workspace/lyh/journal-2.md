@@ -1315,3 +1315,24 @@ Usage 扫描性能：子串预过滤+流式解析+spawn_blocking+批量写入；
 ### Status
 
 [OK] **Completed**
+
+
+## Session 101: 替换 SkillPort 应用图标为 B2 三仓枢纽
+
+**Date**: 2026-08-17
+**Task**: 替换 SkillPort 应用图标为 B2 三仓枢纽
+**Branch**: `dev`
+
+### Summary
+
+锁定 B2 三仓枢纽稿并写入 src-tauri/icons 全套平台图标；generate_icon.py 改为只核验主图、不再重绘 L 形色块。just ci 通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9daad5db` | (see git log) |
+
+### Status
+
+[OK] **Completed**
