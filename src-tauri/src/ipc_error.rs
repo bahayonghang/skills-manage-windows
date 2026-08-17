@@ -291,6 +291,22 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
         "github_import.no_importable_skills" => {
             Some("This GitHub repository does not contain an importable skill.")
         }
+        "github_import.selection_unavailable" => {
+            Some("The selected skill is no longer available in the repository preview.")
+        }
+        "github_import.invalid_candidate" => {
+            Some("The repository contains a skill that cannot be imported.")
+        }
+        "github_import.source_path_missing" => {
+            Some("The selected path no longer contains an importable skill.")
+        }
+        "github_import.target_exists" => {
+            Some("The Central target directory already exists and cannot be overwritten.")
+        }
+        "github_import.duplicate_selection" => {
+            Some("The same skill path was selected more than once in this import.")
+        }
+        "github_import.rename_conflict" => Some("The renamed skill id is not available."),
         "github_import.archive_redirect_rejected" => {
             Some("GitHub repository archive redirect was rejected.")
         }
@@ -455,6 +471,30 @@ mod tests {
             (
                 "github_import.no_importable_skills",
                 "This GitHub repository does not contain an importable skill.",
+            ),
+            (
+                "github_import.selection_unavailable",
+                "The selected skill is no longer available in the repository preview.",
+            ),
+            (
+                "github_import.invalid_candidate",
+                "The repository contains a skill that cannot be imported.",
+            ),
+            (
+                "github_import.source_path_missing",
+                "The selected path no longer contains an importable skill.",
+            ),
+            (
+                "github_import.target_exists",
+                "The Central target directory already exists and cannot be overwritten.",
+            ),
+            (
+                "github_import.duplicate_selection",
+                "The same skill path was selected more than once in this import.",
+            ),
+            (
+                "github_import.rename_conflict",
+                "The renamed skill id is not available.",
             ),
         ] {
             let error = IpcError::from(format!("{code}:private branch detail"));

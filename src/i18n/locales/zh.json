@@ -110,7 +110,13 @@
       "invalid_url": "该仓库的请求地址不被允许。",
       "budget_exceeded": "该仓库超出了安全下载上限。",
       "credential_unavailable": "无法读取已保存的 GitHub 令牌。请在设置中重新保存。",
-      "no_importable_skills": "该仓库没有可导入的技能。SkillPort 需要仓库根目录或受支持的 skills 目录中存在 SKILL.md。"
+      "no_importable_skills": "该仓库没有可导入的技能。SkillPort 需要仓库根目录或受支持的 skills 目录中存在 SKILL.md。",
+      "selection_unavailable": "选中的技能已不在仓库预览中。请重新预览后再选择。",
+      "invalid_candidate": "该仓库包含无法导入的技能清单。",
+      "source_path_missing": "选中路径不再包含可导入技能。请重新预览仓库。",
+      "target_exists": "中央库目标目录已存在，且不能覆盖。",
+      "duplicate_selection": "同一次导入重复选择了同一路径。",
+      "rename_conflict": "重命名后的技能 id 不可用。"
     },
     "central_updates": {
       "item_failed": "此更新项目无法应用。",
@@ -619,7 +625,8 @@
       "subject": "对象",
       "duration": "耗时",
       "batchId": "批次 ID",
-      "details": "详情 JSON"
+      "details": "详情 JSON",
+      "failures": "失败项"
     },
     "kpi": {
       "total": "总操作数",

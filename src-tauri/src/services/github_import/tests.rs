@@ -5473,11 +5473,15 @@ metadata:
                 }
             }
 
-            // Uncoded errors keep their historical Display text so existing
-            // toasts do not change.
             let other = GithubImportError::NoSelections;
             assert_eq!(other.preview_snapshot_code(), None);
-            assert_eq!(other.to_ipc_error(), other.to_string());
+            assert_eq!(
+                other.ipc_error_code(),
+                Some("github_import.no_importable_skills")
+            );
+            assert!(other
+                .to_ipc_error()
+                .starts_with("github_import.no_importable_skills:"));
         }
 
         #[test]

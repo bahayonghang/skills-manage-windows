@@ -594,10 +594,12 @@ pub(crate) async fn apply_skill_update_decisions_impl(
                         .push(imported.imported_skill_id.clone());
                 }
             }
-            Err(_error) => result.failures.push(SkillUpdateApplyFailure::new(
-                "import_addition",
-                repository.id,
-            )),
+            Err(error) => result
+                .failures
+                .push(SkillUpdateApplyFailure::from_github_import(
+                    repository.id,
+                    error,
+                )),
         }
     }
 

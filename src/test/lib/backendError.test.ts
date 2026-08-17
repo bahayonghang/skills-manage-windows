@@ -104,6 +104,12 @@ describe("backend error helpers", () => {
       "github_import.budget_exceeded",
       "github_import.credential_unavailable",
       "github_import.no_importable_skills",
+      "github_import.selection_unavailable",
+      "github_import.invalid_candidate",
+      "github_import.source_path_missing",
+      "github_import.target_exists",
+      "github_import.duplicate_selection",
+      "github_import.rename_conflict",
       "central_updates.repository_check_failed",
     ];
 

@@ -11,6 +11,8 @@ import {
   DialogPortal,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { formatLogAbsoluteTime } from "@/components/logs/logsUtils";
+import { formatBackendError } from "@/lib/backendError";
 import { OperationLogEntry } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -29,18 +31,60 @@ function formatJson(detailsJson?: string | null): string | null {
   }
 }
 
+interface ApplyFailureRow {
+  errorCode: string;
+  identifier?: string;
+}
+
+function readApplyFailureRows(
+  detailsJson?: string | null,
+): ApplyFailureRow[] | null {
+  if (!detailsJson) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(detailsJson);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return null;
+  }
+  const record = parsed as Record<string, unknown>;
+  if (Array.isArray(record.failureItems)) {
+    return record.failureItems.flatMap((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+      const row = item as Record<string, unknown>;
+      const errorCode = typeof row.errorCode === "string" ? row.errorCode : "";
+      const identifier =
+        typeof row.identifier === "string" ? row.identifier : undefined;
+      if (!errorCode && !identifier) return [];
+      return [{ errorCode, identifier }];
+    });
+  }
+  if (Array.isArray(record.failureCodes)) {
+    return record.failureCodes.flatMap((code) =>
+      typeof code === "string" && code ? [{ errorCode: code }] : [],
+    );
+  }
+  return [];
+}
+
 function DetailField({
   label,
   value,
+  title,
 }: {
   label: string;
   value?: string | number | null;
+  title?: string;
 }) {
   if (value === undefined || value === null || value === "") return null;
   return (
     <div>
       <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
-      <dd className="mt-1 break-words text-sm text-foreground">{value}</dd>
+      <dd className="mt-1 break-words text-sm text-foreground" title={title}>
+        {value}
+      </dd>
     </div>
   );
 }
@@ -53,6 +97,8 @@ export function OperationLogDetailDrawer({
   const { t } = useTranslation();
   const titleId = useId();
   const formattedDetails = formatJson(entry?.detailsJson);
+  const failureRows = readApplyFailureRows(entry?.detailsJson);
+  const fallbackFailureMessage = t("backendErrors.central_updates.item_failed");
 
   async function handleCopy(text: string) {
     try {
@@ -127,7 +173,11 @@ export function OperationLogDetailDrawer({
               </div>
 
               <dl className="mt-5 grid gap-4 sm:grid-cols-2">
-                <DetailField label={t("logs.fields.createdAt")} value={entry.createdAt} />
+                <DetailField
+                  label={t("logs.fields.createdAt")}
+                  value={formatLogAbsoluteTime(entry.createdAt, { withSeconds: true })}
+                  title={entry.createdAt}
+                />
                 <DetailField label={t("logs.fields.level")} value={entry.level} />
                 <DetailField label={t("logs.fields.status")} value={entry.status} />
                 <DetailField label={t("logs.fields.category")} value={entry.category} />
@@ -138,6 +188,40 @@ export function OperationLogDetailDrawer({
                 <DetailField label={t("logs.fields.duration")} value={entry.durationMs != null ? `${entry.durationMs} ms` : null} />
                 <DetailField label={t("logs.fields.batchId")} value={entry.batchId} />
               </dl>
+
+              {failureRows && failureRows.length > 0 && (
+                <div className="mt-5" data-testid="logs-detail-failures">
+                  <div className="mb-2 text-xs font-medium text-muted-foreground">
+                    {t("logs.fields.failures")}
+                  </div>
+                  <ul className="space-y-2">
+                    {failureRows.map((item, index) => (
+                      <li
+                        key={`${item.errorCode}-${item.identifier ?? index}`}
+                        className="rounded-md border border-border bg-muted/20 p-3 text-sm"
+                      >
+                        <div>
+                          {item.errorCode
+                            ? formatBackendError(
+                                {
+                                  code: item.errorCode,
+                                  message: fallbackFailureMessage,
+                                  retryable: false,
+                                },
+                                t,
+                              )
+                            : fallbackFailureMessage}
+                        </div>
+                        {item.identifier ? (
+                          <div className="mt-1 font-mono text-xs text-muted-foreground">
+                            {item.identifier}
+                          </div>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {formattedDetails && (
                 <div className="mt-5">

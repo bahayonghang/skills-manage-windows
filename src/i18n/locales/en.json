@@ -110,7 +110,13 @@
       "invalid_url": "The request address for this repository is not allowed.",
       "budget_exceeded": "The repository exceeds the safe download limits.",
       "credential_unavailable": "The stored GitHub token could not be read. Save it again in Settings.",
-      "no_importable_skills": "This repository has no importable skill. SkillPort needs a SKILL.md at the repository root or in a supported skills directory."
+      "no_importable_skills": "This repository has no importable skill. SkillPort needs a SKILL.md at the repository root or in a supported skills directory.",
+      "selection_unavailable": "The selected skill is no longer in the repository preview. Preview the repository again and reselect it.",
+      "invalid_candidate": "The repository contains a skill listing that cannot be imported.",
+      "source_path_missing": "The selected path no longer contains an importable skill. Preview the repository again.",
+      "target_exists": "The Central target directory already exists and cannot be overwritten.",
+      "duplicate_selection": "This import selected the same skill path more than once.",
+      "rename_conflict": "The renamed skill id is already in use or is required for this import."
     },
     "central_updates": {
       "item_failed": "This update item could not be applied.",
@@ -619,7 +625,8 @@
       "subject": "Subject",
       "duration": "Duration",
       "batchId": "Batch ID",
-      "details": "Details JSON"
+      "details": "Details JSON",
+      "failures": "Failures"
     },
     "kpi": {
       "total": "Total operations",

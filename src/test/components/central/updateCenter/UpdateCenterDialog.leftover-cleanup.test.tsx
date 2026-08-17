@@ -231,4 +231,37 @@ describe("UpdateCenterDialog platform leftover cleanup", () => {
     expect(messages).not.toContain("example.invalid");
     expect(messages).not.toContain("Users\\private");
   });
+
+  it("shows the localized GitHub import sentence for apply failures", async () => {
+    const apply = vi.fn().mockResolvedValue(
+      applyResult({
+        failures: [
+          {
+            step: "import_addition",
+            identifier: "github:emilkowalski-skill-main",
+            phase: "decision_apply",
+            error: "token=secret https://example.invalid C:\\Users\\private",
+            errorCode: "github_import.access_denied",
+            errorCategory: "github_import.access_denied",
+          },
+        ],
+      }),
+    );
+    renderOpenDialog(apply, inventoryWithUpdate(), "updatable");
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "应用已选项 (1)" }),
+    );
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "github:emilkowalski-skill-main：GitHub 拒绝访问该仓库。请确认令牌具备读取权限。",
+      ),
+    );
+    const messages = vi.mocked(toast.error).mock.calls.flat().join("\n");
+    expect(messages).not.toContain("secret");
+    expect(messages).not.toContain("example.invalid");
+    expect(messages).not.toContain("Users\\private");
+  });
 });

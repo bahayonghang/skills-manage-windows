@@ -10,38 +10,7 @@ pub(super) fn apply_operation_spec(
     let failure_details = request_details.clone();
     OperationSpec::new(
         target_context,
-        move |result, duration_ms| {
-            let success_count = apply_success_count(result);
-            let failure_count = result.failures.len();
-            let status = apply_operation_status(result);
-            if failure_count > 0 {
-                let diagnostics = apply_failure_diagnostics(result);
-                tracing::warn!(
-                    target: "skillport::update_center",
-                    action = "update_center.apply",
-                    status,
-                    success_count,
-                    failure_count,
-                    failure_codes = ?diagnostics.failure_codes,
-                    failure_categories = ?diagnostics.failure_categories,
-                    phase_counts = ?diagnostics.phase_counts,
-                    duration_ms,
-                    "Update Center apply completed with item failures"
-                );
-            }
-            let summary = match status {
-                "failed" => "Skill update decisions failed",
-                "partial" => "Skill update decisions partially applied",
-                _ => "Applied skill update decisions",
-            };
-            update_operation_event(
-                "update_center.apply",
-                status,
-                summary,
-                merge_details(request_details, apply_result_details(result)),
-                duration_ms,
-            )
-        },
+        move |result, duration_ms| apply_success_event(result, request_details, duration_ms),
         move |error: &UpdateCommandError, duration_ms| {
             tracing::error!(
                 target: "skillport::update_center",
@@ -61,6 +30,55 @@ pub(super) fn apply_operation_spec(
             )
         },
     )
+}
+
+const GENERIC_APPLY_ITEM_FAILURE: &str = "This update item could not be applied.";
+
+fn apply_success_event(
+    result: &SkillUpdateApplyResult,
+    request_details: Value,
+    duration_ms: i64,
+) -> OperationLogEvent {
+    let success_count = apply_success_count(result);
+    let failure_count = result.failures.len();
+    let status = apply_operation_status(result);
+    if failure_count > 0 {
+        let diagnostics = apply_failure_diagnostics(result);
+        tracing::warn!(
+            target: "skillport::update_center",
+            action = "update_center.apply",
+            status,
+            success_count,
+            failure_count,
+            failure_codes = ?diagnostics.failure_codes,
+            failure_categories = ?diagnostics.failure_categories,
+            phase_counts = ?diagnostics.phase_counts,
+            duration_ms,
+            "Update Center apply completed with item failures"
+        );
+    }
+    let summary = match status {
+        "failed" => "Skill update decisions failed",
+        "partial" => "Skill update decisions partially applied",
+        _ => "Applied skill update decisions",
+    };
+    let event = update_operation_event(
+        "update_center.apply",
+        status,
+        summary,
+        merge_details(request_details, apply_result_details(result)),
+        duration_ms,
+    );
+    if failure_count == 0 {
+        return event;
+    }
+    let message = result
+        .failures
+        .first()
+        .and_then(|failure| failure.error_code.as_deref())
+        .and_then(crate::ipc_error::public_message_for_code)
+        .unwrap_or(GENERIC_APPLY_ITEM_FAILURE);
+    event.error(message)
 }
 
 fn apply_result_details(result: &SkillUpdateApplyResult) -> Value {
@@ -217,6 +235,54 @@ mod tests {
         assert!(!serialized.contains("secret"));
         assert!(!serialized.contains("example.invalid"));
         assert!(!serialized.contains("Users/private"));
+        let event = apply_success_event(&failed, json!({}), 12);
+        assert_eq!(
+            event.error_summary.as_deref(),
+            Some("This update item could not be applied.")
+        );
+    }
+
+    #[test]
+    fn apply_import_addition_failure_records_github_code_and_public_error_summary() {
+        let seeds = "token=secret https://example.invalid C:/Users/private";
+        let failed = SkillUpdateApplyResult {
+            failures: vec![
+                crate::services::central_updates::inventory::SkillUpdateApplyFailure::from_github_import(
+                    "github:emilkowalski-skill-main",
+                    crate::services::github_import::GithubImportError::AccessDenied(
+                        seeds.to_string(),
+                    ),
+                ),
+            ],
+            ..SkillUpdateApplyResult::default()
+        };
+
+        let details = apply_result_details(&failed);
+        assert_eq!(
+            details["failureItems"][0],
+            json!({
+                "step": "import_addition",
+                "identifier": "github:emilkowalski-skill-main",
+                "phase": "decision_apply",
+                "errorCode": "github_import.access_denied",
+                "errorCategory": "github_import.access_denied",
+            })
+        );
+        let serialized = serde_json::to_string(&details).unwrap();
+        assert!(!serialized.contains("secret"));
+        assert!(!serialized.contains("example.invalid"));
+        assert!(!serialized.contains("Users/private"));
+
+        let event = apply_success_event(&failed, json!({}), 12);
+        assert_eq!(
+            event.error_summary.as_deref(),
+            crate::ipc_error::public_message_for_code("github_import.access_denied")
+        );
+        let summary = event.error_summary.as_deref().unwrap();
+        assert!(!summary.contains("secret"));
+        assert!(!summary.contains("example.invalid"));
+        assert!(!summary.contains("Users/private"));
+        assert!(!summary.contains("AccessDenied"));
     }
 
     #[test]

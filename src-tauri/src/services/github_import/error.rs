@@ -371,8 +371,16 @@ impl GithubImportError {
             Self::InvalidBranchSelection => "github_import.branch_invalid",
             Self::BranchSelectionConflict => "github_import.branch_conflict",
 
-            // ── Candidate discovery ─────────────────────────────────────────
-            Self::NoImportableSkills => "github_import.no_importable_skills",
+            // ── Candidate discovery / import apply ──────────────────────────
+            Self::NoImportableSkills | Self::NoSelections | Self::NoValidOperations => {
+                "github_import.no_importable_skills"
+            }
+            Self::SelectionUnavailable(_) => "github_import.selection_unavailable",
+            Self::InvalidCandidate(_) => "github_import.invalid_candidate",
+            Self::RepoPathGone(_) => "github_import.source_path_missing",
+            Self::TargetDirExists(_) => "github_import.target_exists",
+            Self::DuplicateSelection(_) => "github_import.duplicate_selection",
+            Self::RenameIdInUse(_) | Self::RenameIdRequired(_) => "github_import.rename_conflict",
 
             // ── Network / archive acquisition ───────────────────────────────
             Self::ArchiveRedirectRejected => "github_import.archive_redirect_rejected",
@@ -594,6 +602,85 @@ mod snapshot_failure_tests {
         ];
         for error in not_retryable {
             assert!(!error.is_snapshot_retryable(), "{error:?}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod ipc_error_code_tests {
+    use super::*;
+    use crate::ipc_error::public_message_for_code;
+
+    fn locale_github_import_keys(json: &str) -> serde_json::Value {
+        serde_json::from_str::<serde_json::Value>(json).unwrap()["backendErrors"]["github_import"]
+            .clone()
+    }
+
+    #[test]
+    fn apply_path_codes_align_across_ipc_public_message_and_i18n() {
+        let en = locale_github_import_keys(include_str!("../../../../src/i18n/locales/en.json"));
+        let zh = locale_github_import_keys(include_str!("../../../../src/i18n/locales/zh.json"));
+        let seeds = "token=secret https://example.invalid C:/Users/private";
+        let cases = [
+            (
+                GithubImportError::SelectionUnavailable(seeds.to_string()),
+                "github_import.selection_unavailable",
+            ),
+            (
+                GithubImportError::InvalidCandidate(seeds.to_string()),
+                "github_import.invalid_candidate",
+            ),
+            (
+                GithubImportError::RepoPathGone(seeds.to_string()),
+                "github_import.source_path_missing",
+            ),
+            (
+                GithubImportError::TargetDirExists(seeds.to_string()),
+                "github_import.target_exists",
+            ),
+            (
+                GithubImportError::DuplicateSelection(seeds.to_string()),
+                "github_import.duplicate_selection",
+            ),
+            (
+                GithubImportError::RenameIdInUse(seeds.to_string()),
+                "github_import.rename_conflict",
+            ),
+            (
+                GithubImportError::RenameIdRequired(seeds.to_string()),
+                "github_import.rename_conflict",
+            ),
+            (
+                GithubImportError::NoSelections,
+                "github_import.no_importable_skills",
+            ),
+            (
+                GithubImportError::NoValidOperations,
+                "github_import.no_importable_skills",
+            ),
+        ];
+
+        for (error, code) in cases {
+            assert_eq!(error.ipc_error_code(), Some(code), "{error:?}");
+            assert_eq!(error.diagnostic_category(), code, "{error:?}");
+            let message = public_message_for_code(code).unwrap_or_else(|| {
+                panic!("missing public_message_for_code for {code}");
+            });
+            assert!(!message.contains(seeds), "{code} leaked Display seeds");
+            assert!(!message.contains("token=secret"));
+            assert!(!message.contains("example.invalid"));
+            assert!(!message.contains("Users/private"));
+            assert_ne!(message, error.to_string(), "{code} used Display text");
+
+            let suffix = code.strip_prefix("github_import.").expect(code);
+            assert!(
+                en.get(suffix).and_then(|value| value.as_str()).is_some(),
+                "missing en backendErrors.github_import.{suffix}"
+            );
+            assert!(
+                zh.get(suffix).and_then(|value| value.as_str()).is_some(),
+                "missing zh backendErrors.github_import.{suffix}"
+            );
         }
     }
 }

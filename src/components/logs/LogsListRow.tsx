@@ -13,6 +13,8 @@ import { OperationLogEntry } from "@/types";
 import { cn } from "@/lib/utils";
 import {
   formatDurationMs,
+  formatLogAbsoluteTime,
+  formatLogIsoTime,
   formatRelativeTime,
 } from "@/components/logs/logsUtils";
 
@@ -23,23 +25,6 @@ interface LogsListRowProps {
   onOpen: (entry: OperationLogEntry) => void;
   density?: LogsListDensity;
   rowIndex?: number;
-}
-
-function formatAbsoluteTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
-
-function formatIsoTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toISOString();
 }
 
 interface IconVisual {
@@ -103,8 +88,8 @@ export function LogsListRow({
   const StatusIcon = status.icon;
   const LevelIcon = level.icon;
   const relative = formatRelativeTime(entry.createdAt, i18n.language);
-  const absolute = formatAbsoluteTime(entry.createdAt);
-  const iso = formatIsoTime(entry.createdAt);
+  const absolute = formatLogAbsoluteTime(entry.createdAt);
+  const iso = formatLogIsoTime(entry.createdAt);
 
   return (
     <button
