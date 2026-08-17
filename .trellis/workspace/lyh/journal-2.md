@@ -1336,3 +1336,24 @@ Usage 扫描性能：子串预过滤+流式解析+spawn_blocking+批量写入；
 ### Status
 
 [OK] **Completed**
+
+
+## Session 102: 更新中心 apply 日志公开错误与本地时间
+
+**Date**: 2026-08-17
+**Task**: 更新中心 apply 日志公开错误与本地时间
+**Branch**: `dev`
+
+### Summary
+
+将 import_addition 失败映射到 github_import 稳定公开码，操作日志详情按本机时区显示 Created at 并渲染本地化失败原因。just ci 已通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `702bda6389de2bf44aadcc35db76b16942057598` | (see git log) |
+
+### Status
+
+[OK] **Completed**
