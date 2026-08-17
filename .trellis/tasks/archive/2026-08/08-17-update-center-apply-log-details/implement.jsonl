@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "failureItems allowlist and ban on logging item error, paths, URLs"}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "GithubImportError codes and public Display vs IPC code split"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "formatBackendError on item errorCode; do not render raw item error"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "error code must stay aligned across import, apply log, i18n, and drawer"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "reuse LogsListRow time formatting and existing ipc_error_code table"}

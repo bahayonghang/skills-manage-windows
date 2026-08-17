@@ -1,0 +1,28 @@
+{
+  "id": "update-center-apply-log-details",
+  "name": "update-center-apply-log-details",
+  "title": "更新中心 apply 失败日志与操作日志详情时间",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": "update-center apply logs",
+  "package": null,
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-08-17",
+  "completedAt": "2026-08-17",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "description": "Surface reviewed GitHub import apply error codes in Operation Log details and show Created at in local time."
+  }
+}
