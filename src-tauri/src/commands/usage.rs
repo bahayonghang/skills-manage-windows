@@ -13,6 +13,8 @@
 //! - `usage_get_providers()` —— Provider 健康表（含 stub）
 //! - `usage_get_skill_counts(skills, days)` —— 给 PlatformView/CentralSkillsView
 //!   注入「近 N 天 K 次」徽章用，批量 name → count
+//! - `usage_get_skill_usage_stats(skills, days)` —— 全历史（或近 N 天）
+//!   name → `{ count, lastUsedMs }`；`days = None` 为全部已记录历史
 //! - `usage_resolve_skill_id(name)` —— 名称匹配中央库 skill_id，给柱图点击跳详情
 //! - `usage_get_skill_detail(skill)` —— 单技能详情（按项目分布 + 16w 稀疏图）
 //! - `usage_get_unused_skills(source, threshold_days)` —— 从未使用/长期未用
@@ -400,6 +402,66 @@ pub async fn usage_get_skill_counts(
     )
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillUsageStat {
+    pub count: i64,
+    pub last_used_ms: Option<i64>,
+}
+
+fn overlay_skill_usage_stats(
+    skills: &[String],
+    rows: Vec<crate::db::SkillUsageStatRow>,
+) -> HashMap<String, SkillUsageStat> {
+    let mut out: HashMap<String, SkillUsageStat> = HashMap::new();
+    for skill in skills {
+        out.insert(
+            skill.clone(),
+            SkillUsageStat {
+                count: 0,
+                last_used_ms: None,
+            },
+        );
+    }
+    for row in rows {
+        out.insert(
+            row.skill,
+            SkillUsageStat {
+                count: row.count,
+                last_used_ms: row.last_used_ms,
+            },
+        );
+    }
+    out
+}
+
+/// 给 PlatformView 排序 / 名次注入全历史（或近 N 天）次数与最近使用时间。
+/// 返回 `{ skill_name → { count, lastUsedMs } }`。空请求返回空 map。
+/// `days = None` 表示全部已记录历史；禁止调用方把 `0` 当成全历史。
+#[tauri::command]
+pub async fn usage_get_skill_usage_stats(
+    state: State<'_, AppState>,
+    skills: Vec<String>,
+    days: Option<u32>,
+) -> crate::ipc_error::IpcResult<HashMap<String, SkillUsageStat>> {
+    crate::ipc_boundary!(
+        async move {
+            if skills.is_empty() {
+                return Ok(HashMap::new());
+            }
+            let target = active_usage_target(&state).await?;
+            let cutoff_ms =
+                days.map(|n| (Utc::now() - chrono::Duration::days(n as i64)).timestamp_millis());
+            let rows =
+                crate::db::list_skill_usage_stats(&state.db, &target.target_id, &skills, cutoff_ms)
+                    .await
+                    .map_err(|e| e.to_string())?;
+            Ok(overlay_skill_usage_stats(&skills, rows))
+        }
+        .await
+    )
+}
+
 /// 名字匹配中央库 skill_id —— 给 SkillBarChart 点击跳 `/skill/:id`。
 /// 大小写不敏感，agent 无关；优先返回 `is_central=1` 的记录。匹配不到返回 None。
 #[tauri::command]
@@ -569,5 +631,36 @@ mod tests {
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["scanning"], serde_json::json!(true));
         assert_eq!(json["usedCachedData"], serde_json::json!(true));
+    }
+
+    #[test]
+    fn overlay_skill_usage_stats_prefills_zero_and_empty_list() {
+        let empty = overlay_skill_usage_stats(&[], vec![]);
+        assert!(empty.is_empty());
+
+        let prefilled = overlay_skill_usage_stats(
+            &["review".to_string(), "git-commit".to_string()],
+            vec![crate::db::SkillUsageStatRow {
+                skill: "review".to_string(),
+                count: 4,
+                last_used_ms: Some(9),
+            }],
+        );
+        assert_eq!(prefilled["review"].count, 4);
+        assert_eq!(prefilled["review"].last_used_ms, Some(9));
+        assert_eq!(prefilled["git-commit"].count, 0);
+        assert_eq!(prefilled["git-commit"].last_used_ms, None);
+    }
+
+    #[test]
+    fn skill_usage_stat_serializes_camel_case() {
+        let json = serde_json::to_value(&SkillUsageStat {
+            count: 3,
+            last_used_ms: Some(42),
+        })
+        .unwrap();
+        assert_eq!(json["count"], 3);
+        assert_eq!(json["lastUsedMs"], 42);
+        assert!(json.get("last_used_ms").is_none());
     }
 }

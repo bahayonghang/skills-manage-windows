@@ -112,6 +112,18 @@ const negativeCases: UnifiedSkillCardProps[] = [
     onInstall: noop,
   },
   {
+    variant: "central",
+    name: "bad-central-lifetime",
+    checkbox: { checked: false, onChange: noop },
+    onDetail: noop,
+    onInstallTo: noop,
+    onUninstallFromPlatforms: noop,
+    onUpdateCentral: noop,
+    onDeleteFromCentral: noop,
+    // @ts-expect-error 场景互斥：central 不接受 platform 专属的 lifetimeUsage
+    lifetimeUsage: { rank: 1, count: 4 },
+  },
+  {
     variant: "project",
     name: "bad-project",
     originBadge: { kind: "central", label: "中央" },
@@ -139,7 +151,7 @@ describe("UnifiedSkillCard 场景 interface", () => {
   });
 
   it("互斥负例仅存在于编译期（运行时对象可构造）", () => {
-    expect(negativeCases).toHaveLength(5);
+    expect(negativeCases).toHaveLength(6);
     expect(jsxNegativeCase).toHaveLength(1);
   });
 });

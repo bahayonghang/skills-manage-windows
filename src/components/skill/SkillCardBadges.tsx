@@ -1,8 +1,12 @@
 import { Folder, FolderOpen, Globe, Link2, Lock } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { statusChipClass } from "@/lib/statusTone";
 import { cn } from "@/lib/utils";
 import type { ClaudeSourceKind } from "@/types";
+
+const skillCardChipClassName =
+  "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium";
 
 export function SourceChip({ label }: { label: string }) {
   return (
@@ -28,10 +32,14 @@ export function SourceIndicator({ sourceType }: { sourceType: string }) {
       : t("platform.sourceCopyLabel");
 
   return (
-    <div
+    <span
+      title={`${primaryLabel} — ${secondaryLabel}`}
       className={cn(
-        "inline-flex items-center gap-1 text-xs font-medium",
-        isSymlink ? "text-primary-text" : "text-muted-foreground",
+        skillCardChipClassName,
+        "border",
+        isSymlink
+          ? statusChipClass.info
+          : "border-border bg-muted/40 text-muted-foreground",
       )}
     >
       {isSymlink ? (
@@ -39,16 +47,25 @@ export function SourceIndicator({ sourceType }: { sourceType: string }) {
       ) : (
         <FolderOpen className="size-3 shrink-0" />
       )}
-      <div className="inline-flex items-center gap-1">
-        <span>{primaryLabel}</span>
-        <span
-          aria-hidden="true"
-          className="h-px w-3 shrink-0 rounded-full bg-current opacity-40"
-        />
-        <span className="sr-only"> - </span>
-        <span>{secondaryLabel}</span>
-      </div>
-    </div>
+      {primaryLabel}
+    </span>
+  );
+}
+
+export function PluginSourceChip() {
+  const { t, i18n } = useTranslation();
+
+  return (
+    <span
+      className={cn(skillCardChipClassName, "border", statusChipClass.warning)}
+    >
+      <Lock className="size-3 shrink-0" />
+      {t("platform.originPlugin", {
+        defaultValue: i18n.language.startsWith("zh")
+          ? "插件来源"
+          : "Plugin source",
+      })}
+    </span>
   );
 }
 
@@ -88,7 +105,12 @@ export function ReadOnlyBadge() {
   const { t, i18n } = useTranslation();
 
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground ring-1 ring-border/70">
+    <span
+      className={cn(
+        skillCardChipClassName,
+        "border border-border bg-muted/40 text-muted-foreground",
+      )}
+    >
       <Lock className="size-3 shrink-0" />
       {t("platform.readOnly", {
         defaultValue: i18n.language.startsWith("zh") ? "只读" : "Read-only",

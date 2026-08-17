@@ -737,7 +737,7 @@
     "sourceSymlinkLabel": "symlink",
     "sourceCopyLabel": "copy",
     "notFound": "Platform not found",
-    "sourceFilterTabsLabel": "Claude source filters",
+    "sourceFilterTabsLabel": "Source filters",
     "sourceFilter": {
       "all": "All",
       "user": "User source",
@@ -784,7 +784,14 @@
       "name": "Name",
       "installedAt": "Installed",
       "updatedAt": "Updated",
-      "callCount": "Call count"
+      "callCount": "Call count · all recorded"
+    },
+    "usageRank": {
+      "noRecord": "No record",
+      "tooltip": "Rank {{rank}} in the current list · {{count}} calls in all recorded history",
+      "tooltipNoRecord": "No recorded usage in all recorded history",
+      "aria": "Rank {{rank}} in the current list, {{count}} calls in all recorded history",
+      "ariaNoRecord": "No recorded usage in all recorded history"
     },
     "sortDirections": {
       "asc": "Ascending",

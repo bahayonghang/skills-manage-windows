@@ -737,7 +737,7 @@
     "sourceSymlinkLabel": "符号链接",
     "sourceCopyLabel": "复制安装",
     "notFound": "未找到平台",
-    "sourceFilterTabsLabel": "Claude 来源筛选",
+    "sourceFilterTabsLabel": "来源筛选",
     "sourceFilter": {
       "all": "全部",
       "user": "用户来源",
@@ -784,7 +784,14 @@
       "name": "名称",
       "installedAt": "安装时间",
       "updatedAt": "更新时间",
-      "callCount": "调用次数"
+      "callCount": "调用次数 · 全部记录"
+    },
+    "usageRank": {
+      "noRecord": "无记录",
+      "tooltip": "当前列表第 {{rank}} · 全部已记录历史 {{count}} 次",
+      "tooltipNoRecord": "全部已记录历史中无调用记录",
+      "aria": "当前列表第 {{rank}} 名，全部已记录历史 {{count}} 次",
+      "ariaNoRecord": "全部已记录历史中无调用记录"
     },
     "sortDirections": {
       "asc": "升序",

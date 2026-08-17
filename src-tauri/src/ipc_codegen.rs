@@ -312,8 +312,8 @@ mod tests {
 
     #[test]
     fn registry_counts_and_subset_are_frozen() {
-        assert_eq!(crate::ipc_registry::RUNTIME_COMMAND_NAMES.len(), 184);
-        assert_eq!(crate::ipc_registry::GENERATED_COMMAND_NAMES.len(), 42);
+        assert_eq!(crate::ipc_registry::RUNTIME_COMMAND_NAMES.len(), 191);
+        assert_eq!(crate::ipc_registry::GENERATED_COMMAND_NAMES.len(), 43);
         for command in crate::ipc_registry::GENERATED_COMMAND_NAMES {
             assert!(crate::ipc_registry::RUNTIME_COMMAND_NAMES.contains(command));
         }

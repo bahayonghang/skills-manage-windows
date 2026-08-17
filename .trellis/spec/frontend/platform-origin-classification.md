@@ -31,9 +31,11 @@ export interface PlatformOriginNavModel {
 }
 export function derivePlatformOriginNav(skills: readonly ScannedSkill[]): PlatformOriginNavModel;
 
-// derivePlatformSkillRows 管线固定顺序：claude tab 过滤 → originFilter → 搜索 → 排序 → 分组；
+// derivePlatformSkillRows 管线固定顺序：source tab 过滤 → originFilter → 搜索 → 排序 → 分组；
 // sourceFilteredSkills = tab 后 origin 前（导航计数口径），originFilteredSkills = origin 后搜索前（空态判断）。
 ```
+
+轴 B（`source_kind === "plugin"`）与轴 A 正交。来源 Tab（全部 / 用户 / 插件）显示条件是 `isClaudePage || pluginCount > 0`。Claude 页始终显示。无插件的非 Claude 页不显示。`PlatformOriginNav` 只表达轴 A；默认 origin 仍是 `{ kind: "all" }`。禁止把插件筛并进 origin 导航或用 `installed_at` 补分类。
 
 **Wrong vs Correct**：
 

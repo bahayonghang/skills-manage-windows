@@ -71,6 +71,7 @@ import type {
   ProviderHealth,
   RecentSkillCall,
   SkillUsageDetail,
+  SkillUsageStat,
   UnusedSkillsReport,
   UsageOverview,
   UsageRefreshResult,
@@ -245,6 +246,10 @@ export const HANDWRITTEN_IPC_COMMANDS = {
   usage_get_skill_counts: command<
     { skills: string[]; days: number },
     Record<string, number>
+  >(),
+  usage_get_skill_usage_stats: command<
+    { skills: string[]; days: number | null },
+    Record<string, SkillUsageStat>
   >(),
   usage_get_unused_skills: command<
     { source: string | null; thresholdDays: number | null },

@@ -1,5 +1,7 @@
+import { getPlatformSkillRowKey } from "@/lib/platformDuplicateSkills";
 import { buildSearchText, normalizeSearchQuery } from "@/lib/search";
 import type { ScannedSkill } from "@/types";
+import type { SkillUsageStat } from "@/types/usage";
 
 export type PlatformSourceFilter = "all" | "user" | "plugin";
 export type PlatformOriginFilter =
@@ -38,7 +40,13 @@ export interface DerivePlatformSkillRowsInput {
   sort: PlatformSortState;
   groupBy: PlatformGroupBy;
   labels: PlatformSkillGroupLabels;
-  usageCounts?: Record<string, number>;
+  usageStats?: Record<string, SkillUsageStat>;
+  usageReady?: boolean;
+}
+
+export interface PlatformLifetimeUsage {
+  rank: number | null;
+  count: number;
 }
 
 export interface DerivePlatformSkillRowsOutput {
@@ -47,6 +55,7 @@ export interface DerivePlatformSkillRowsOutput {
   filteredSkills: ScannedSkill[];
   sortedSkills: ScannedSkill[];
   groups: PlatformSkillGroup[];
+  lifetimeUsageByRowKey: Record<string, PlatformLifetimeUsage>;
 }
 
 interface RepositoryGroupInfo {
@@ -78,12 +87,16 @@ function getUpdatedSortTimestamp(skill: ScannedSkill): number {
   return parseSortableTimestamp(skill.updated_at ?? skill.scanned_at);
 }
 
-function getSkillCallCount(
+function getSkillUsageStat(
   skill: ScannedSkill,
-  usageCounts?: Record<string, number>,
-): number {
-  const count = usageCounts?.[skill.name] ?? 0;
-  return Number.isFinite(count) ? count : 0;
+  usageStats?: Record<string, SkillUsageStat>,
+): { count: number; lastUsedMs: number } {
+  const stat = usageStats?.[skill.name];
+  const count = stat?.count;
+  return {
+    count: typeof count === "number" && Number.isFinite(count) ? count : 0,
+    lastUsedMs: stat?.lastUsedMs ?? 0,
+  };
 }
 
 function compareTimestamps(
@@ -267,7 +280,8 @@ export function comparePlatformSkills(
   b: ScannedSkill,
   sort: PlatformSortState,
   labels: PlatformSkillGroupLabels,
-  usageCounts?: Record<string, number>,
+  usageStats?: Record<string, SkillUsageStat>,
+  usageReady?: boolean,
 ): number {
   const dir = sort.direction === "asc" ? 1 : -1;
 
@@ -284,9 +298,15 @@ export function comparePlatformSkills(
   }
 
   if (sort.field === "callCount") {
-    const countComparison =
-      getSkillCallCount(a, usageCounts) - getSkillCallCount(b, usageCounts);
+    if (usageReady !== true) {
+      return compareSkillNames(a, b);
+    }
+    const aStat = getSkillUsageStat(a, usageStats);
+    const bStat = getSkillUsageStat(b, usageStats);
+    const countComparison = aStat.count - bStat.count;
     if (countComparison !== 0) return countComparison * dir;
+    const lastUsedComparison = aStat.lastUsedMs - bStat.lastUsedMs;
+    if (lastUsedComparison !== 0) return lastUsedComparison * dir;
     return compareSkillNames(a, b);
   }
 
@@ -355,6 +375,42 @@ function groupPlatformSkills(
   });
 }
 
+/** Competition ranks (1,2,2,4) by count desc, then lastUsedMs desc. Zero count → null. */
+export function assignUsageRanks(
+  skills: readonly ScannedSkill[],
+  stats: Record<string, SkillUsageStat>,
+): Record<string, PlatformLifetimeUsage> {
+  const items = skills.map((skill, index) => {
+    const usage = getSkillUsageStat(skill, stats);
+    return { skill, index, ...usage };
+  });
+  items.sort((a, b) => {
+    if (a.count !== b.count) return b.count - a.count;
+    if (a.lastUsedMs !== b.lastUsedMs) return b.lastUsedMs - a.lastUsedMs;
+    const nameComparison = compareSkillNames(a.skill, b.skill);
+    if (nameComparison !== 0) return nameComparison;
+    return a.index - b.index;
+  });
+
+  const out: Record<string, PlatformLifetimeUsage> = {};
+  let lastKey: string | null = null;
+  let lastRank = 0;
+  items.forEach((item, position) => {
+    const rowKey = getPlatformSkillRowKey(item.skill);
+    if (item.count === 0) {
+      out[rowKey] = { rank: null, count: 0 };
+      return;
+    }
+    const key = `${item.count}:${item.lastUsedMs}`;
+    if (key !== lastKey) {
+      lastRank = position + 1;
+      lastKey = key;
+    }
+    out[rowKey] = { rank: lastRank, count: item.count };
+  });
+  return out;
+}
+
 export function derivePlatformSkillRows(
   input: DerivePlatformSkillRowsInput,
 ): DerivePlatformSkillRowsOutput {
@@ -370,9 +426,23 @@ export function derivePlatformSkillRows(
     matchesSearch(skill, query),
   );
   const sortedSkills = [...filteredSkills].sort((a, b) =>
-    comparePlatformSkills(a, b, input.sort, input.labels, input.usageCounts),
+    comparePlatformSkills(
+      a,
+      b,
+      input.sort,
+      input.labels,
+      input.usageStats,
+      input.usageReady,
+    ),
   );
   const groups = groupPlatformSkills(sortedSkills, input.groupBy, input.labels);
+  const lifetimeUsageByRowKey: Record<string, PlatformLifetimeUsage> = {};
+  if (input.usageReady === true) {
+    const stats = input.usageStats ?? {};
+    for (const group of groups) {
+      Object.assign(lifetimeUsageByRowKey, assignUsageRanks(group.skills, stats));
+    }
+  }
 
   return {
     sourceFilteredSkills,
@@ -380,5 +450,6 @@ export function derivePlatformSkillRows(
     filteredSkills,
     sortedSkills,
     groups,
+    lifetimeUsageByRowKey,
   };
 }

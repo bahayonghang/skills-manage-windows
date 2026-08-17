@@ -419,5 +419,9 @@ export function registerUsageFixtures(): void {
     usage_get_scope_info: () => BROWSER_FIXTURE_SCOPE,
     usage_resolve_skill_id: () => null,
     usage_get_skill_counts: () => ({}),
+    usage_get_skill_usage_stats: ({ skills }) =>
+      Object.fromEntries(
+        skills.map((skill) => [skill, { count: 0, lastUsedMs: null }]),
+      ),
   });
 }

@@ -94,6 +94,8 @@ export interface PlatformSkillCardProps extends SkillCardCoreProps {
   publisher?: string;
   /** 「近 30 天调用 N 次」徽章；仅当数值 > 0 时渲染。 */
   usageBadge?: number;
+  /** 全历史名次。undefined = 未就绪不渲染；rank null = 无记录。 */
+  lifetimeUsage?: { rank: number | null; count: number };
   /** 只读行（native 等）不出现多选框。 */
   checkbox?: SkillCardCheckbox;
   isLoading?: boolean;

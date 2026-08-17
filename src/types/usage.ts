@@ -12,6 +12,12 @@ export interface RecentSkillCall {
   resolvedSkillId: string | null;
 }
 
+/** Per-skill lifetime (or windowed) count + last used, from `usage_get_skill_usage_stats`. */
+export interface SkillUsageStat {
+  count: number;
+  lastUsedMs: number | null;
+}
+
 export interface SkillUsageSummary {
   skill: string;
   count: number;

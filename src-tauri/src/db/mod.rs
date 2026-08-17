@@ -51,6 +51,7 @@ pub use repos::update_inventory_repo::*;
 pub use repos::update_states_repo::*;
 pub use repos::usage_file_cache_repo::*;
 pub use repos::usage_repo::*;
+pub use repos::usage_stats_repo::*;
 pub use repos::usage_unused_repo::*;
 pub use seed::*;
 pub use types::*;

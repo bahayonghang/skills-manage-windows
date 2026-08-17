@@ -28,4 +28,5 @@ pub(crate) mod update_inventory_repo;
 pub(crate) mod update_states_repo;
 pub(crate) mod usage_file_cache_repo;
 pub(crate) mod usage_repo;
+pub(crate) mod usage_stats_repo;
 pub(crate) mod usage_unused_repo;

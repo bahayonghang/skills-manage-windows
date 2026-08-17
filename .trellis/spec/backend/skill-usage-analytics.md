@@ -23,6 +23,8 @@ usage_get_recent(limit?, source?) -> RecentSkillCall[]
 usage_get_skill_detail(skill, source?) -> SkillUsageDetail
 usage_resolve_skill_id(skillName) -> string?
 usage_get_unused_skills(source?, thresholdDays?) -> UnusedSkillsReport
+usage_get_skill_counts(skills, days: u32) -> { skill -> count }
+usage_get_skill_usage_stats(skills, days: u32?) -> { skill -> { count, lastUsedMs } }
 
 UnusedAgentInstall {
   agentId, linkType, installedPath, hasPendingRecovery
@@ -55,8 +57,13 @@ transaction.
   independently with `Utc -> Local`; do not capture one fixed offset because DST
   may change inside the 16-week window. Invalid timestamps are skipped.
 - Fixed horizons: overview KPI/ranking = all recorded history; heatmap = 112
-  local calendar days arranged as 16 weeks; recent = latest 20; skill-card badges
-  remain the existing 30-day query.
+  local calendar days arranged as 16 weeks; recent = latest 20; skill-card 30-day
+  badges stay on `usage_get_skill_counts`. Platform list sort and corner rank use
+  `usage_get_skill_usage_stats` with `days = None` (all recorded history).
+- `usage_get_skill_usage_stats` prefills every requested name with
+  `{ count: 0, lastUsedMs: null }`, then overlays query rows. `days = None` omits
+  the time cutoff. `days = Some(0)` is "since now", not all history — callers must
+  pass `None`. Platform pages must not subscribe to `usageStore`.
 - `source` is optional but, when present, must filter overview, recent, detail
   summary, project distribution, and detail heatmap consistently.
 - The unused report reads usage facts from the always-local usage pool and inventory
@@ -87,6 +94,9 @@ transaction.
 | platform observation is read-only or plugin-owned | include it with row metadata; renderer disables unlink |
 | same agent has user and plugin observations for one normalized name | return both `installs`; do not duplicate or discard facts in the repository layer |
 | pending recovery exists for the target/skill | set `hasPendingRecovery=true`; mutation still fails closed in installation service |
+| `usage_get_skill_usage_stats` empty `skills` | empty map, no query |
+| `usage_get_skill_usage_stats` name has no calls | prefilled `{ count: 0, lastUsedMs: null }` |
+| `usage_get_skill_usage_stats` `days = Some(0)` | cutoff is now; do not treat as all history |
 
 ## 5. Good / Base / Bad Cases
 
@@ -114,15 +124,19 @@ transaction.
 - Unused report: target/source isolation, Central per-agent link metadata, platform
   `rowId`/source/read-only fields, pending-recovery flags, and same-agent user/plugin
   observations preserved in one normalized entry.
+- Skill usage stats: empty list, prefetch zeros, optional cutoff vs none, target
+  isolation, and `last_used_ms`.
 
 ## 7. Wrong vs Correct
 
 ```rust
-// Wrong: UTC SQL grouping and arbitrary Central navigation.
+// Wrong: UTC SQL grouping, days=0 as all-history, arbitrary Central navigation.
 strftime("%Y-%m-%d", timestamp_ms / 1000, "unixepoch");
+usage_get_skill_counts(skills, 0);
 SELECT id FROM skills WHERE LOWER(name) = LOWER(?) LIMIT 1;
 
 // Correct: raw facts -> per-event local resolver; unique metadata only.
+usage_get_skill_usage_stats(skills, None);
 let timestamps = db::list_timestamps_since(...).await?;
 let heatmap = heatmap_grid_16w_from_timestamps(
     &timestamps,

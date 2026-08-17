@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   UnifiedSkillCard,
   type CentralSkillCardProps,
+  type PlatformSkillCardProps,
 } from "@/components/skill/UnifiedSkillCard";
 import { useUpdateCenterStore } from "@/stores/updateCenterStore";
 
@@ -34,6 +35,16 @@ const centralBaseProps = {
   onUpdateCentral: noop,
   onDeleteFromCentral: noop,
 } satisfies CentralSkillCardProps;
+
+const platformBaseProps = {
+  variant: "platform",
+  name: "review",
+  sourceType: "symlink",
+  originKind: null,
+  isReadOnly: false,
+  onDetail: noop,
+  uninstallFromLabel: "卸载 review",
+} satisfies PlatformSkillCardProps;
 
 describe("UnifiedSkillCard", () => {
   beforeEach(() => {
@@ -215,5 +226,88 @@ describe("UnifiedSkillCard", () => {
   it("不传 footer 时不渲染 footer 区域", () => {
     const { container } = render(<UnifiedSkillCard {...centralBaseProps} />);
     expect(container.querySelector("[data-testid='card-footer']")).toBeNull();
+  });
+
+  it("hides usage rank until lifetimeUsage is ready", () => {
+    render(<UnifiedSkillCard {...platformBaseProps} />);
+    expect(screen.queryByTestId("usage-rank")).not.toBeInTheDocument();
+  });
+
+  it("renders no-record usage rank when rank is null or below 1", () => {
+    const { rerender } = render(
+      <UnifiedSkillCard
+        {...platformBaseProps}
+        lifetimeUsage={{ rank: null, count: 0 }}
+      />,
+    );
+    const rank = screen.getByTestId("usage-rank");
+    expect(rank).toHaveClass("absolute", "bottom-3.5", "right-3.5");
+    expect(rank).toHaveTextContent("无记录");
+    expect(rank).toHaveAttribute("aria-label", "全部已记录历史中无调用记录");
+
+    rerender(
+      <UnifiedSkillCard
+        {...platformBaseProps}
+        lifetimeUsage={{ rank: 0, count: 0 }}
+      />,
+    );
+    expect(screen.getByTestId("usage-rank")).toHaveTextContent("无记录");
+    expect(screen.queryByText("#0")).not.toBeInTheDocument();
+  });
+
+  it("renders #N · count usage rank in the card corner", () => {
+    render(
+      <UnifiedSkillCard
+        {...platformBaseProps}
+        lifetimeUsage={{ rank: 2, count: 14 }}
+      />,
+    );
+    const rank = screen.getByTestId("usage-rank");
+    expect(rank).toHaveClass("absolute", "bottom-3.5", "right-3.5");
+    expect(rank).toHaveTextContent("#2");
+    expect(rank).toHaveTextContent("14");
+    expect(rank).toHaveAttribute(
+      "aria-label",
+      "当前列表第 2 名，全部已记录历史 14 次",
+    );
+    expect(rank).toHaveAttribute(
+      "title",
+      "当前列表第 2 · 全部已记录历史 14 次",
+    );
+  });
+
+  it("merges plugin origin into one warning chip and skips read-only plus standalone", () => {
+    render(
+      <UnifiedSkillCard
+        {...platformBaseProps}
+        sourceType="copy"
+        originKind="plugin"
+        isReadOnly
+      />,
+    );
+    expect(screen.getByText("插件来源")).toBeInTheDocument();
+    expect(screen.queryByText("只读")).not.toBeInTheDocument();
+    expect(screen.queryByText("独立安装")).not.toBeInTheDocument();
+  });
+
+  it("renders a short Central Skills chip for symlink rows", () => {
+    const { container } = render(<UnifiedSkillCard {...platformBaseProps} />);
+    expect(screen.getByText("中央技能库")).toBeInTheDocument();
+    expect(screen.queryByText("符号链接")).not.toBeInTheDocument();
+    expect(container.querySelector(".bg-info")).not.toBeNull();
+    expect(container.querySelector(".bg-warning")).toBeNull();
+  });
+
+  it("paints a warning origin bar for plugin rows", () => {
+    const { container } = render(
+      <UnifiedSkillCard
+        {...platformBaseProps}
+        sourceType="copy"
+        originKind="plugin"
+        isReadOnly
+      />,
+    );
+    expect(container.querySelector(".bg-warning")).not.toBeNull();
+    expect(container.querySelector(".bg-info")).toBeNull();
   });
 });

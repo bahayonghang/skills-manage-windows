@@ -61,6 +61,8 @@ interface SkillCardModel {
   publisher?: string;
   installLabel?: string;
   usageBadge?: number;
+  lifetimeUsage?: { rank: number | null; count: number };
+  originSurface?: "plugin" | "central";
   onDetail?: MouseEventHandler<HTMLButtonElement>;
   onInstallTo?: () => void;
   onUninstallFromPlatforms?: () => void;
@@ -121,6 +123,13 @@ function toModel(props: SkillCardTypes.UnifiedSkillCardProps): SkillCardModel {
         isReadOnly: props.isReadOnly,
         publisher: props.publisher,
         usageBadge: props.usageBadge,
+        lifetimeUsage: props.lifetimeUsage,
+        originSurface:
+          props.originKind === "plugin"
+            ? "plugin"
+            : props.sourceType === "symlink"
+              ? "central"
+              : undefined,
         checkbox: props.checkbox,
         isLoading: props.isLoading,
         onDetail: props.onDetail,
@@ -195,6 +204,8 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
     publisher,
     installLabel,
     usageBadge,
+    lifetimeUsage,
+    originSurface,
     onDetail,
     onInstallTo,
     onUninstallFromPlatforms,
@@ -276,6 +287,10 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
     [targetAgents, linkedAgentSet]
   );
   const compactMoreMenuItems = isCompact && onDeleteFromCentral ? { onDeleteFromCentral } : null;
+  const hasLifetimeRank =
+    lifetimeUsage != null &&
+    lifetimeUsage.rank != null &&
+    lifetimeUsage.rank >= 1;
 
   return (
     <div
@@ -283,10 +298,58 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
         cardShellClass(checkbox?.checked),
         "group/skill-card relative overflow-hidden gap-2 p-3.5",
         isCompact ? "min-h-[168px]" : "min-h-[188px]",
+        originSurface === "plugin" && "bg-warning/5",
         isLoading && "opacity-50",
         className
       )}
     >
+      {originSurface && (
+        <div
+          aria-hidden
+          className={cn(
+            "absolute inset-y-0 left-0 w-[3px]",
+            originSurface === "plugin" ? "bg-warning" : "bg-info",
+          )}
+        />
+      )}
+      {lifetimeUsage && (
+        <div
+          data-testid="usage-rank"
+          className="absolute bottom-3.5 right-3.5 text-xs tabular-nums"
+          title={
+            hasLifetimeRank
+              ? t("platform.usageRank.tooltip", {
+                  rank: lifetimeUsage.rank,
+                  count: lifetimeUsage.count,
+                })
+              : t("platform.usageRank.tooltipNoRecord")
+          }
+          aria-label={
+            hasLifetimeRank
+              ? t("platform.usageRank.aria", {
+                  rank: lifetimeUsage.rank,
+                  count: lifetimeUsage.count,
+                })
+              : t("platform.usageRank.ariaNoRecord")
+          }
+        >
+          {hasLifetimeRank ? (
+            <>
+              <span className="font-medium text-foreground">
+                #{lifetimeUsage.rank}
+              </span>
+              <span className="text-muted-foreground">
+                {" "}
+                · {lifetimeUsage.count}
+              </span>
+            </>
+          ) : (
+            <span className="text-muted-foreground">
+              {t("platform.usageRank.noRecord")}
+            </span>
+          )}
+        </div>
+      )}
       <div className="flex min-h-0 flex-1 items-start gap-2.5">
         {/* Optional checkbox (central / platform) */}
         {hasCheckbox && checkbox && (

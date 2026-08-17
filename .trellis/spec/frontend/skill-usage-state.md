@@ -48,6 +48,9 @@ type UnusedUnlinkResult = { skillId: string; agentId: string; rowId: string | nu
 ## 3. Contracts
 
 - Components never call `invoke`; use typed `@/lib/ipc` only inside the store.
+- Platform list sort/rank uses `useSkillUsageStats` (`usage_get_skill_usage_stats`,
+  `days: null`). Do not subscribe `PlatformView` to `usageStore` source/skeleton
+  state. The 30-day card badge stays on `useSkillCallCounts(..., 30)`.
 - Source selection requests overview + recent with `Promise.all` and commits both
   in one `set`. Keep the previous source/data visible until the new pair succeeds.
 - Page, refresh, and detail requests each have a sequence. A response commits only
