@@ -1396,3 +1396,24 @@ Usage 扫描性能：子串预过滤+流式解析+spawn_blocking+批量写入；
 ### Next Steps
 
 - 在 Universal 实机确认默认排序、右下角名次和插件 Tab
+
+
+## Session 104: Optimize SSH leftover cleanup speed
+
+**Date**: 2026-08-17
+**Task**: Optimize SSH leftover cleanup speed
+**Branch**: `dev`
+
+### Summary
+
+SSH/WSL Platform leftover apply now validates paths, deletes unique POSIX paths in one remote script, and clears shared-root installation plus observation rows so leftover lists do not immediately reappear.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `156e54f9` | (see git log) |
+
+### Status
+
+[OK] **Completed**
