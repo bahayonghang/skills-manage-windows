@@ -1,0 +1,26 @@
+{
+  "id": "platform-usage-rank-origin",
+  "name": "platform-usage-rank-origin",
+  "title": "平台技能用量排序与来源区分",
+  "description": "平台技能页按 Skill Usage 用量排序并在卡片右下角展示名次；插件来源与 Central Skills 安装要能扫视区分。"
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-08-17",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

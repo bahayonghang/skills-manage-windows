@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/skill-usage-analytics.md", "reason": "All-history vs 30-day windows; do not guess skill id"}
+{"file": ".trellis/spec/frontend/skill-usage-state.md", "reason": "usageStore is /usage only; platform must not subscribe"}
+{"file": ".trellis/spec/frontend/skill-card-scenarios.md", "reason": "Add lifetimeUsage only on platform variant via toModel"}
+{"file": ".trellis/spec/frontend/platform-origin-classification.md", "reason": "Axis A symlink vs standalone; never installed_at"}
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "New command in commandMap + browser fixture"}
+{"file": ".trellis/spec/frontend/typography-tokens.md", "reason": "Badge text-xs; tabular-nums; no arbitrary text-[]"}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "Repo returns sqlx::Error; command is the string boundary"}
+{"file": ".trellis/tasks/08-17-platform-usage-rank-origin/design.md", "reason": "IPC, rank, badge, and tab contracts"}
+{"file": ".trellis/tasks/08-17-platform-usage-rank-origin/prd.md", "reason": "Locked Q1=B Q2=B acceptance"}
