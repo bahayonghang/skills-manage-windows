@@ -1,0 +1,4 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "Completion still goes through just ci"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse the existing tauri icon pipeline from 07-13"}
+{"file": ".trellis/tasks/08-17-skillport-icon-b2-hub/research/b2-lock.md", "reason": "Locked B2 composition and palette"}
