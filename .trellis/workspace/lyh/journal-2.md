@@ -1294,3 +1294,24 @@ Usage 扫描性能：子串预过滤+流式解析+spawn_blocking+批量写入；
 ### Status
 
 [OK] **Completed**
+
+
+## Session 100: Central 删除强制放弃陈旧 prepared journal
+
+**Date**: 2026-08-17
+**Task**: Central 删除强制放弃陈旧 prepared journal
+**Branch**: `dev`
+
+### Summary
+
+分析 yao-meta delete_restore_collision：2026-08-05 的 prepared journal 因平台路径 already gone 挡住删除。实现删除对话框强制删除：无 backup/marker 时先 rolled_back 再 journaled 删除当前 Central 副本，忽略指纹漂移。just ci 通过。未改本机 ~/.skillsmanage。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2a2abca0` | (see git log) |
+
+### Status
+
+[OK] **Completed**

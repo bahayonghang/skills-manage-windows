@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 99
-- **Last Active**: 2026-08-16
+- **Total Sessions**: 100
+- **Last Active**: 2026-08-17
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1296 | Active |
+| `journal-2.md` | ~1317 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 100 | 2026-08-17 | Central 删除强制放弃陈旧 prepared journal | `2a2abca0` | `dev` |
 | 99 | 2026-08-16 | Skill Usage 最大化布局优化 | `58be73df84ea6fe8b88ad906769921cb3b17065a` | `dev` |
 | 98 | 2026-08-16 | 未使用技能 unlink 弹窗化:行右统一入口支持全选/单选 | `fc648790` | `dev` |
 | 97 | 2026-08-16 | 未使用技能面板 unlink 操作与徽章优化 | `779aa340` | `dev` |
