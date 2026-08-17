@@ -49,6 +49,7 @@ fn build_repository_delete_requests(
 ) -> Result<Vec<BatchDeleteCentralSkillRequest>, CentralSkillsError> {
     let valid_skill_ids: HashSet<&str> = skill_ids.iter().map(String::as_str).collect();
     let mut remove_agents_by_skill: HashMap<String, Vec<String>> = HashMap::new();
+    let mut force_by_skill: HashMap<String, bool> = HashMap::new();
 
     for request in requests {
         if !valid_skill_ids.contains(request.skill_id.as_str()) {
@@ -66,6 +67,9 @@ fn build_repository_delete_requests(
                 entry.push(agent_id.clone());
             }
         }
+        if request.force {
+            force_by_skill.insert(request.skill_id.clone(), true);
+        }
     }
 
     Ok(skill_ids
@@ -76,6 +80,7 @@ fn build_repository_delete_requests(
                 .remove(skill_id)
                 .map(unique_agent_ids)
                 .unwrap_or_default(),
+            force: force_by_skill.remove(skill_id).unwrap_or(false),
         })
         .collect())
 }
@@ -96,11 +101,12 @@ pub async fn preview_delete_skill_repository_impl(
 
 pub async fn preview_delete_skill_repository_ssh_impl(
     pool: &DbPool,
+    target: &ActiveTarget,
     repository_id: &str,
 ) -> Result<DeleteSkillRepositoryPreview, CentralSkillsError> {
     let (repository, skill_ids) =
         get_deletable_repository_with_skill_ids(pool, repository_id).await?;
-    let delete_preview = preview_delete_central_skills_ssh_impl(pool, &skill_ids).await?;
+    let delete_preview = preview_delete_central_skills_ssh_impl(pool, target, &skill_ids).await?;
 
     Ok(DeleteSkillRepositoryPreview {
         repository: repository_with_stats(repository, skill_ids.len()),

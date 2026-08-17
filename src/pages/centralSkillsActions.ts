@@ -19,9 +19,9 @@ import type {
   BatchInstallResult,
   CentralBatchInstallResult,
   CentralSkillUpdateState,
+  DeleteCentralSkillPreview,
   DeleteSkillRepositoryPreview,
   SkillAiTagReview,
-  SkillDetail,
   SkillRepositoryWithStats,
   SkillWithLinks,
 } from "@/types";
@@ -45,7 +45,7 @@ export interface CentralSkillsActionsState {
 export interface CentralSkillsActionsSetters {
   setBatchDeletePreview: StateSetter<BatchDeleteCentralSkillPreviewResult | null>;
   setBatchDeletePreviewError: StateSetter<string | null>;
-  setDeletePreview: StateSetter<SkillDetail | null>;
+  setDeletePreview: StateSetter<DeleteCentralSkillPreview | null>;
   setDeletePreviewError: StateSetter<string | null>;
   setDeleteTargetSkill: StateSetter<SkillWithLinks | null>;
   setDrawerSkillId: StateSetter<string | null>;

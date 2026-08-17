@@ -23,6 +23,7 @@ mod tests;
 
 pub use error::CentralSkillsError;
 
+pub use crate::services::central_operation::PendingDeleteRecoveryPreview;
 pub use delete::{
     delete_central_skill_impl, delete_central_skill_remote_impl, delete_central_skill_ssh_impl,
     delete_central_skills_impl, delete_central_skills_remote_impl, delete_central_skills_ssh_impl,

@@ -32,8 +32,8 @@ pub use crate::services::central_skills::{
     BatchDeleteCentralSkillResult, BatchDeleteCentralSkillSuccess, CentralSkillsPage,
     CentralSkillsPageRequest, DeleteCentralSkillPreview, DeleteCentralSkillResult,
     DeleteSkillRepositoryPreview, DeleteSkillRepositoryResult, DirectoryTreeEntry,
-    FailedCentralSkillDelete, ResetUnknownSourceSkillsPreview, SkillDetail,
-    SkillInstallationDetail, SkillPathAccessContext, SkillWithLinks,
+    FailedCentralSkillDelete, PendingDeleteRecoveryPreview, ResetUnknownSourceSkillsPreview,
+    SkillDetail, SkillInstallationDetail, SkillPathAccessContext, SkillWithLinks,
 };
 
 /// Tauri command: return all skills installed for a given agent, including
@@ -100,7 +100,12 @@ pub async fn preview_delete_central_skills(
                     central_skills::preview_delete_central_skills_impl(&pool, &skill_ids).await
                 }
                 ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
-                    central_skills::preview_delete_central_skills_ssh_impl(&pool, &skill_ids).await
+                    central_skills::preview_delete_central_skills_ssh_impl(
+                        &pool,
+                        request_context.target(),
+                        &skill_ids,
+                    )
+                    .await
                 }
             }
             .map_err(|e| e.to_string())
@@ -115,9 +120,11 @@ pub async fn delete_central_skill(
     state: State<'_, AppState>,
     skill_id: String,
     remove_agent_ids: Vec<String>,
+    force: Option<bool>,
 ) -> crate::ipc_error::IpcResult<DeleteCentralSkillResult> {
     crate::ipc_boundary!(
         async move {
+            let force = force.unwrap_or(false);
             let request_context = state.resolve_target_context().await?;
             let active_target = request_context.target().clone();
             let target_context = target_context_from_active_target(&active_target);
@@ -125,8 +132,13 @@ pub async fn delete_central_skill(
             let started_at = Instant::now();
             let result = match &active_target {
                 ActiveTarget::Local => {
-                    central_skills::delete_central_skill_impl(&pool, &skill_id, &remove_agent_ids)
-                        .await
+                    central_skills::delete_central_skill_impl(
+                        &pool,
+                        &skill_id,
+                        &remove_agent_ids,
+                        force,
+                    )
+                    .await
                 }
                 ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
                     central_skills::delete_central_skill_remote_impl(
@@ -134,11 +146,12 @@ pub async fn delete_central_skill(
                         &active_target,
                         &skill_id,
                         &remove_agent_ids,
+                        force,
                     )
                     .await
                 }
             }
-            .map_err(|e| e.to_string());
+            .map_err(delete_command_error);
             let status = if result.is_ok() {
                 "succeeded"
             } else {
@@ -158,6 +171,7 @@ pub async fn delete_central_skill(
     .details(json!({
         "skillId": skill_id,
         "removeAgentIds": &remove_agent_ids,
+        "force": force,
         "removedAgentIds": result.as_ref().ok().map(|item| item.removed_agent_ids.clone()),
         "retainedAgentIds": result.as_ref().ok().map(|item| item.retained_agent_ids.clone()),
     }))
@@ -198,7 +212,7 @@ pub async fn delete_central_skills(
                     .await
                 }
             }
-            .map_err(|e| e.to_string());
+            .map_err(delete_command_error);
             match &result {
                 Ok(batch_result) => {
                     let status = match (batch_result.succeeded.len(), batch_result.failed.len()) {
@@ -385,8 +399,12 @@ pub async fn preview_delete_skill_repository(
                         .await
                 }
                 ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
-                    central_skills::preview_delete_skill_repository_ssh_impl(&pool, &repository_id)
-                        .await
+                    central_skills::preview_delete_skill_repository_ssh_impl(
+                        &pool,
+                        request_context.target(),
+                        &repository_id,
+                    )
+                    .await
                 }
             }
             .map_err(|e| e.to_string())
@@ -424,7 +442,7 @@ pub async fn delete_skill_repository(
                     .await
                 }
             }
-            .map_err(|e| e.to_string());
+            .map_err(delete_command_error);
             match &result {
                 Ok(delete_result) => {
                     let batch_result = &delete_result.delete_result;
@@ -608,6 +626,14 @@ pub async fn list_directory_tree(
             .map_err(|e| e.to_string())
         }
         .await
+    )
+}
+
+fn delete_command_error(error: central_skills::CentralSkillsError) -> String {
+    format!(
+        "{}:{}",
+        error.stable_delete_error_code(),
+        error.public_delete_message()
     )
 }
 

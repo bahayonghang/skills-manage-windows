@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::db::{Collection, SkillRepository, SkillRepositoryWithStats, SkillTag};
+use crate::services::central_operation::PendingDeleteRecoveryPreview;
 
 /// A Central Skill with a list of agent IDs that currently have this skill
 /// installed (via symlink or copy).
@@ -124,6 +125,8 @@ pub struct DeleteCentralSkillPreview {
     pub central_path: String,
     pub copy_installations: Vec<SkillInstallationDetail>,
     pub auto_removed_agent_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_recovery: Option<PendingDeleteRecoveryPreview>,
 }
 
 #[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
@@ -185,6 +188,8 @@ pub struct BatchDeleteCentralSkillPreviewResult {
 pub struct BatchDeleteCentralSkillRequest {
     pub skill_id: String,
     pub remove_agent_ids: Vec<String>,
+    #[serde(default)]
+    pub force: bool,
 }
 
 #[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]

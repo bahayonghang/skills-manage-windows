@@ -24,10 +24,10 @@ import type {
   BatchDeleteCentralSkillResult,
   CentralBatchInstallResult,
   CentralSkillUpdateState,
+  DeleteCentralSkillPreview,
   DeleteSkillRepositoryPreview,
   GitHubRepoPreview,
   GitHubRepoImportResult,
-  SkillDetail,
   SkillRepositoryWithStats,
   SkillWithLinks,
   SkillportStateImportPreview,
@@ -168,7 +168,7 @@ export function CentralSkillDialogs({
   availableInstallAgents: PlatformTarget[];
   batchDeletePreview: BatchDeleteCentralSkillPreviewResult | null;
   batchDeletePreviewError: string | null;
-  deletePreview: SkillDetail | null;
+  deletePreview: DeleteCentralSkillPreview | null;
   deletePreviewError: string | null;
   deleteTargetSkill: SkillWithLinks | null;
   detailButtonRefs: RefObject<Record<string, HTMLButtonElement | null>>;
@@ -327,7 +327,7 @@ export function CentralSkillDialogs({
         open={isDeleteDialogOpen}
         onOpenChange={onDeleteDialogOpenChange}
         skill={deleteTargetSkill}
-        detail={deletePreview}
+        preview={deletePreview}
         agents={agents}
         isPreviewLoading={isDeletePreviewLoading}
         isDeleting={isDeleting}

@@ -48,10 +48,12 @@ fn deduplicate_delete_requests(
                     existing.remove_agent_ids.push(agent_id.clone());
                 }
             }
+            existing.force |= request.force;
         } else {
             ordered_requests.push(BatchDeleteCentralSkillRequest {
                 skill_id: request.skill_id.clone(),
                 remove_agent_ids: unique_agent_ids(request.remove_agent_ids.clone()),
+                force: request.force,
             });
         }
     }
@@ -157,13 +159,53 @@ pub(super) async fn delete_central_skills_under_guard(
         .iter()
         .map(|request| request.skill_id.clone())
         .collect::<Vec<_>>();
+    let mut force_failures = HashMap::new();
+    let mut skip_recovery = HashSet::new();
+    for request in &ordered_requests {
+        if !request.force {
+            continue;
+        }
+        match crate::services::central_operation::force_abandon_prepared_delete_under_guard(
+            pool,
+            active_target,
+            &request.skill_id,
+            remote.map(Arc::as_ref),
+        )
+        .await
+        {
+            Ok(crate::services::central_operation::ForceAbandonDecision::Blocked) => {
+                skip_recovery.insert(request.skill_id.clone());
+                force_failures.insert(
+                    request.skill_id.clone(),
+                    CentralSkillDeleteItemError::new(
+                        "recovery",
+                        CentralSkillsError::ForceDeleteBlocked,
+                    ),
+                );
+            }
+            Ok(_) => {}
+            Err(error) => {
+                skip_recovery.insert(request.skill_id.clone());
+                force_failures.insert(
+                    request.skill_id.clone(),
+                    CentralSkillDeleteItemError::new("recovery", CentralSkillsError::from(error)),
+                );
+            }
+        }
+    }
+    let recover_skill_ids = selected_skill_ids
+        .iter()
+        .filter(|skill_id| !skip_recovery.contains(*skill_id))
+        .cloned()
+        .collect::<Vec<_>>();
     let mut recovery_failures = recover_selected_pending_operations_under_guard(
         pool,
         active_target,
         remote,
-        &selected_skill_ids,
+        &recover_skill_ids,
     )
     .await?;
+    recovery_failures.extend(force_failures);
 
     let mut outcomes = Vec::with_capacity(ordered_requests.len());
     for request in ordered_requests {

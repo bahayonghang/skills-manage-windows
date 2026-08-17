@@ -174,7 +174,11 @@
     "central_skills": {
       "mutation_lock_failed": "Central is busy with another change. Try again shortly.",
       "delete_preview_failed": "This Central skill could not be deleted.",
-      "delete_failed": "This Central skill could not be deleted."
+      "delete_failed": "This Central skill could not be deleted.",
+      "database_failed": "This Central skill could not be deleted.",
+      "remote_failed": "This Central skill could not be deleted.",
+      "budget_exceeded": "This Central skill could not be deleted.",
+      "force_delete_blocked": "Force delete is not available for this Central skill."
     }
   },
   "targets": {
@@ -972,6 +976,9 @@
     "batchDeleteSuccess": "{{count}} skill(s) deleted",
     "batchDeletePartialError": "{{succeeded}} deleted, {{failed}} failed",
     "confirmDeleteSkill": "Delete central skill",
+    "forceDeleteSkill": "Force delete",
+    "forceDeleteHint": "This abandons the pending recovery record and deletes the current Central copy. Linked installs are still cleaned. Independent copies stay unless selected.",
+    "forceDeleteBlocked": "Force delete is not available. Resolve this recovery in Operation Logs.",
     "deletingSkill": "Deleting...",
     "deleteSkillSuccess": "{{name}} deleted",
     "deleteSkillError": "Delete failed: {{error}}",

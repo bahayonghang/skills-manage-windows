@@ -224,54 +224,17 @@ export type {
   CentralStoreLocationSymlinkFailure,
 } from "./centralStoreLocation";
 
-export interface DeleteCentralSkillPreview {
-  skill_id: string;
-  skill_name: string;
-  central_path: string;
-  copy_installations: SkillInstallation[];
-  auto_removed_agent_ids: string[];
-}
-
-export interface FailedCentralSkillDelete {
-  skill_id: string;
-  phase?: string | null;
-  error_code?: string | null;
-  error_category?: string | null;
-  error: string;
-}
-
-export interface BatchDeleteCentralSkillPreviewResult {
-  previews: DeleteCentralSkillPreview[];
-  failed: FailedCentralSkillDelete[];
-}
-
-export interface BatchDeleteCentralSkillRequest {
-  skill_id: string;
-  remove_agent_ids: string[];
-}
-
-export interface BatchDeleteCentralSkillSuccess {
-  skill_id: string;
-  removed_central_path: string;
-  removed_agent_ids: string[];
-  retained_agent_ids: string[];
-}
-
-export interface BatchDeleteCentralSkillResult {
-  succeeded: BatchDeleteCentralSkillSuccess[];
-  failed: FailedCentralSkillDelete[];
-}
-
-export interface DeleteSkillRepositoryPreview {
-  repository: SkillRepositoryWithStats;
-  delete_preview: BatchDeleteCentralSkillPreviewResult;
-}
-
-export interface DeleteSkillRepositoryResult {
-  repository: SkillRepository;
-  deleted_repository: boolean;
-  delete_result: BatchDeleteCentralSkillResult;
-}
+export type {
+  BatchDeleteCentralSkillPreviewResult,
+  BatchDeleteCentralSkillRequest,
+  BatchDeleteCentralSkillResult,
+  BatchDeleteCentralSkillSuccess,
+  DeleteCentralSkillPreview,
+  DeleteSkillRepositoryPreview,
+  DeleteSkillRepositoryResult,
+  FailedCentralSkillDelete,
+  PendingDeleteRecoveryPreview,
+} from "./centralDelete";
 
 // ─── Collection Types ─────────────────────────────────────────────────────────
 

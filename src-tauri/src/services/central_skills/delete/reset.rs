@@ -46,7 +46,7 @@ pub async fn preview_reset_unknown_source_skills_impl(
     let preview = match active_target {
         ActiveTarget::Local => preview_delete_central_skills_impl(pool, &skill_ids).await?,
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
-            preview_delete_central_skills_ssh_impl(pool, &skill_ids).await?
+            preview_delete_central_skills_ssh_impl(pool, active_target, &skill_ids).await?
         }
     };
     Ok(ResetUnknownSourceSkillsPreview { skill_ids, preview })
@@ -170,7 +170,7 @@ async fn confirmed_unknown_source_preview_ids(
     let preview = match active_target {
         ActiveTarget::Local => preview_delete_central_skills_impl(pool, &candidates).await?,
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
-            preview_delete_central_skills_ssh_impl(pool, &candidates).await?
+            preview_delete_central_skills_ssh_impl(pool, active_target, &candidates).await?
         }
     };
     Ok(preview
@@ -205,6 +205,7 @@ async fn reset_delete_requests(
             BatchDeleteCentralSkillRequest {
                 skill_id: skill_id.clone(),
                 remove_agent_ids,
+                force: false,
             }
         })
         .collect())

@@ -5,6 +5,7 @@ import * as S from "./centralSkillsViewTestSupport";
 const {
   toast,
   mockRepositories,
+  mockDeleteCentralPreview,
   mockDeletePreview,
   mockBatchInstallSkills,
   mockAgents,
@@ -144,7 +145,7 @@ describe("CentralSkillsView repositories + installs（V2 markup）", () => {
     await waitFor(() => {
       expect(mockDeleteSkillRepository).toHaveBeenCalledWith(
         "github-openai-skills-main",
-        [{ skill_id: "frontend-design", remove_agent_ids: [] }]
+        [{ skill_id: "frontend-design", remove_agent_ids: [], force: false }]
       );
     });
     await waitFor(() => {
@@ -358,7 +359,7 @@ describe("CentralSkillsView repositories + installs（V2 markup）", () => {
 
 
   it("opens delete dialog and deletes selected platform copies", async () => {
-    mockLoadDeletePreview.mockResolvedValueOnce(mockDeletePreview);
+    mockLoadDeletePreview.mockResolvedValueOnce(mockDeleteCentralPreview);
     mockDeleteCentralSkill.mockResolvedValueOnce(undefined);
     renderCentralSkillsView();
 
@@ -377,7 +378,7 @@ describe("CentralSkillsView repositories + installs（V2 markup）", () => {
     fireEvent.click(screen.getByRole("button", { name: /\u5220\u9664\u4e2d\u592e\u6280\u80fd/i }));
 
     await waitFor(() => {
-      expect(mockDeleteCentralSkill).toHaveBeenCalledWith("frontend-design", ["cursor"]);
+      expect(mockDeleteCentralSkill).toHaveBeenCalledWith("frontend-design", ["cursor"], false);
     });
     expect(mockRescan).toHaveBeenCalled();
   });

@@ -21,7 +21,7 @@ export const GENERATED_IPC_COMMANDS = {
 	repositoryIds?: string[] | null,
 	agentIds?: string[] | null,
 } | null }, null>(),
-  delete_central_skill: command<{ skillId: string; removeAgentIds: string[] }, DeleteCentralSkillResult>(),
+  delete_central_skill: command<{ skillId: string; removeAgentIds: string[]; force: boolean | null }, DeleteCentralSkillResult>(),
   delete_central_skills: command<{ requests: BatchDeleteCentralSkillRequest[] }, BatchDeleteCentralSkillResult_Serialize>(),
   delete_collection: command<{ collectionId: string }, null>(),
   delete_skill_repository: command<{ repositoryId: string; requests: BatchDeleteCentralSkillRequest[] }, DeleteSkillRepositoryResult_Serialize>(),
@@ -147,6 +147,7 @@ export type AiConnectionTestResult_Serialize = {
 export type BatchDeleteCentralSkillRequest = {
 	skill_id: string,
 	remove_agent_ids: string[],
+	force?: boolean,
 };
 
 export type BatchDeleteCentralSkillResult = BatchDeleteCentralSkillResult_Serialize | BatchDeleteCentralSkillResult_Deserialize;

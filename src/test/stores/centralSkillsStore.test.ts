@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { AgentWithStatus, CentralSkillUpdateState, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "@/types";
+import { AgentWithStatus, CentralSkillUpdateState, DeleteCentralSkillPreview, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "@/types";
 import type {
   CentralRepositorySyncApplyResult,
   CentralRepositorySyncPreview,
@@ -122,18 +122,11 @@ const mockUpdateStates: CentralSkillUpdateState[] = [
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-const mockDeletePreview: SkillDetail = {
-  id: "frontend-design",
-  row_id: "frontend-design",
-  name: "frontend-design",
-  description: "Build distinctive frontend UIs",
-  file_path: "~/.skillsmanage/skills/frontend-design/SKILL.md",
-  dir_path: "~/.skillsmanage/skills/frontend-design",
-  canonical_path: "~/.skillsmanage/skills/frontend-design",
-  is_central: true,
-  source: "native",
-  scanned_at: "2026-04-09T00:00:00Z",
-  installations: [
+const mockDeletePreview: DeleteCentralSkillPreview = {
+  skill_id: "frontend-design",
+  skill_name: "frontend-design",
+  central_path: "~/.skillsmanage/skills/frontend-design",
+  copy_installations: [
     {
       skill_id: "frontend-design",
       agent_id: "cursor",
@@ -143,10 +136,7 @@ const mockDeletePreview: SkillDetail = {
       installed_at: "2026-04-10T00:00:00Z",
     },
   ],
-  collections: [],
-  repository: mockRepositories[0],
-  tags: mockTags,
-  is_source_unknown: false,
+  auto_removed_agent_ids: ["claude-code"],
 };
 
 describe("centralSkillsStore", () => {
@@ -421,16 +411,19 @@ describe("centralSkillsStore", () => {
 
   // ── installSkill ──────────────────────────────────────────────────────────
 
-  it("loads delete preview from skill detail", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce(mockDeletePreview);
+  it("loads delete preview from preview_delete_central_skills", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({
+      previews: [mockDeletePreview],
+      failed: [],
+    });
 
     const preview = await useCentralSkillsStore
       .getState()
       .loadDeletePreview("frontend-design");
 
     expect(preview).toEqual(mockDeletePreview);
-    expect(invoke).toHaveBeenCalledWith("get_skill_detail", {
-      skillId: "frontend-design",
+    expect(invoke).toHaveBeenCalledWith("preview_delete_central_skills", {
+      skillIds: ["frontend-design"],
     });
   });
 
@@ -449,6 +442,7 @@ describe("centralSkillsStore", () => {
     expect(invoke).toHaveBeenCalledWith("delete_central_skill", {
       skillId: "frontend-design",
       removeAgentIds: ["cursor"],
+      force: false,
     });
     expect(invoke).toHaveBeenCalledWith("get_central_skills");
     expect(invoke).toHaveBeenCalledWith("get_skill_repositories");
@@ -458,6 +452,25 @@ describe("centralSkillsStore", () => {
     expect(useCentralSkillsStore.getState().isDeleting).toBe(false);
   });
 
+  it("passes the force flag to delete_central_skill", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce([mockSkills[1]])
+      .mockResolvedValueOnce(mockRepositories)
+      .mockResolvedValueOnce(mockTags)
+      .mockResolvedValueOnce([]);
+
+    await useCentralSkillsStore
+      .getState()
+      .deleteCentralSkill("frontend-design", ["cursor"], true);
+
+    expect(invoke).toHaveBeenCalledWith("delete_central_skill", {
+      skillId: "frontend-design",
+      removeAgentIds: ["cursor"],
+      force: true,
+    });
+  });
+
   it("loads batch delete preview for selected central skills", async () => {
     const preview = {
       previews: [
@@ -465,7 +478,7 @@ describe("centralSkillsStore", () => {
           skill_id: "frontend-design",
           skill_name: "frontend-design",
           central_path: "~/.skillsmanage/skills/frontend-design",
-          copy_installations: mockDeletePreview.installations,
+          copy_installations: mockDeletePreview.copy_installations,
           auto_removed_agent_ids: ["claude-code"],
         },
       ],
@@ -622,7 +635,7 @@ describe("centralSkillsStore", () => {
             skill_id: "frontend-design",
             skill_name: "frontend-design",
             central_path: "~/.skillsmanage/skills/frontend-design",
-            copy_installations: mockDeletePreview.installations,
+            copy_installations: mockDeletePreview.copy_installations,
             auto_removed_agent_ids: ["claude-code"],
           },
         ],
@@ -707,7 +720,9 @@ describe("centralSkillsStore", () => {
         .deleteCentralSkill("frontend-design", [])
     ).rejects.toThrow("delete failed");
 
-    expect(useCentralSkillsStore.getState().error).toBe("delete failed");
+    expect(useCentralSkillsStore.getState().error).toBe(
+      "storage.unavailable:delete failed",
+    );
     expect(useCentralSkillsStore.getState().isDeleting).toBe(false);
   });
 

@@ -154,6 +154,16 @@ function canonicalMessage(code: string): string | null {
       return "A portability job is already running.";
     case "startup.rebuild_unavailable":
       return "Database rebuild is not available.";
+    case "central_operation.delete_restore_collision":
+      return "Central recovery evidence conflicts with the current files. Review and resolve the pending operation in Operation Logs.";
+    case "central_skills.delete_failed":
+    case "central_skills.delete_preview_failed":
+    case "central_skills.database_failed":
+    case "central_skills.remote_failed":
+    case "central_skills.budget_exceeded":
+      return "This Central skill could not be deleted.";
+    case "central_skills.force_delete_blocked":
+      return "Force delete is not available for this Central skill.";
     default:
       if (code.startsWith("ai.")) return "The AI provider request failed.";
       if (code.startsWith("github_import.preview_")) {

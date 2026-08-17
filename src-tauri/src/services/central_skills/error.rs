@@ -80,6 +80,9 @@ pub enum CentralSkillsError {
     #[error("Only copy installations can be selected for platform deletion: {0}")]
     OnlyCopyInstallationsDeletable(String),
 
+    #[error("Force delete is not available for this Central skill.")]
+    ForceDeleteBlocked,
+
     #[error("Refusing to delete the Central Skills root for {0}")]
     CentralRootDeleteRefused(String),
 
@@ -227,6 +230,7 @@ impl CentralSkillsError {
             Self::CentralOperation(error) => format!("central_operation.{}", error.code()),
             Self::UpdateRecovery { error_code, .. } => error_code.clone(),
             Self::CentralMutation(_) => "central_skills.mutation_lock_failed".to_string(),
+            Self::ForceDeleteBlocked => "central_skills.force_delete_blocked".to_string(),
             Self::Db(_) => "central_skills.database_failed".to_string(),
             Self::Remote(_) => "central_skills.remote_failed".to_string(),
             Self::Budget(_) => "central_skills.budget_exceeded".to_string(),
@@ -254,7 +258,10 @@ impl CentralSkillsError {
     pub(crate) const fn delete_failure_phase(&self) -> &'static str {
         match self {
             Self::CentralMutation(_) => "mutation_lock",
-            Self::Db(_) | Self::CentralOperation(_) | Self::UpdateRecovery { .. } => "recovery",
+            Self::Db(_)
+            | Self::CentralOperation(_)
+            | Self::UpdateRecovery { .. }
+            | Self::ForceDeleteBlocked => "recovery",
             _ => "prepare",
         }
     }

@@ -299,7 +299,7 @@ Source: `src-tauri/src/commands/skills.rs`
 
 | Command | Inputs | Returns | Doc |
 | --- | --- | --- | --- |
-| `delete_central_skill` | `skill_id: String`<br>`remove_agent_ids: Vec<String>` | `crate::ipc_error::IpcResult<DeleteCentralSkillResult>` | — |
+| `delete_central_skill` | `skill_id: String`<br>`remove_agent_ids: Vec<String>`<br>`force: Option<bool>` | `crate::ipc_error::IpcResult<DeleteCentralSkillResult>` | — |
 | `delete_central_skills` | `requests: Vec<BatchDeleteCentralSkillRequest>` | `crate::ipc_error::IpcResult<BatchDeleteCentralSkillResult>` | — |
 | `delete_skill_repository` | `repository_id: String`<br>`requests: Vec<BatchDeleteCentralSkillRequest>` | `crate::ipc_error::IpcResult<DeleteSkillRepositoryResult>` | — |
 | `get_central_skills` | — | `crate::ipc_error::IpcResult<Vec<SkillWithLinks>>` | Tauri command: return all Central Skills with per-platform link status. |

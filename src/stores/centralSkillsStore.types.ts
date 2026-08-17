@@ -11,13 +11,13 @@ import {
   CentralSkillUpdateJob,
   CentralSkillUpdateResult,
   CentralSkillUpdateState,
+  DeleteCentralSkillPreview,
   DeleteSkillRepositoryPreview,
   DeleteSkillRepositoryResult,
   SkillportStateImportPreview,
   SkillportStateImportResolution,
   SkillportStateImportResult,
   SkillportStatePortabilityJob,
-  SkillDetail,
   SkillAiTagReview,
   SkillRepository,
   SkillRepositoryWithStats,
@@ -76,7 +76,7 @@ export interface CentralSkillsState {
     method: string,
     projectPath?: string | null,
   ) => Promise<CentralBatchInstallResult>;
-  loadDeletePreview: (skillId: string) => Promise<SkillDetail>;
+  loadDeletePreview: (skillId: string) => Promise<DeleteCentralSkillPreview>;
   loadBatchDeletePreview: (
     skillIds: string[],
   ) => Promise<BatchDeleteCentralSkillPreviewResult>;
@@ -87,6 +87,7 @@ export interface CentralSkillsState {
   deleteCentralSkill: (
     skillId: string,
     removeAgentIds: string[],
+    force?: boolean,
   ) => Promise<void>;
   deleteCentralSkills: (
     requests: BatchDeleteCentralSkillRequest[],

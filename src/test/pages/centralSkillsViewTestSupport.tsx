@@ -468,6 +468,23 @@ export const mockTags: SkillTag[] = [
   },
 ];
 
+export const mockDeleteCentralPreview = {
+  skill_id: "frontend-design",
+  skill_name: "frontend-design",
+  central_path: "~/.skillsmanage/skills/frontend-design",
+  copy_installations: [
+    {
+      skill_id: "frontend-design",
+      agent_id: "cursor",
+      installed_path: "/Users/test/.cursor/skills/frontend-design",
+      link_type: "copy",
+      symlink_target: undefined,
+      installed_at: "2026-04-11T00:00:00Z",
+    },
+  ],
+  auto_removed_agent_ids: ["claude-code"],
+};
+
 export const mockDeletePreview: SkillDetail = {
   id: "frontend-design",
   row_id: "frontend-design",

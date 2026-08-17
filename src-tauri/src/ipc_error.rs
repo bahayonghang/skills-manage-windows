@@ -358,6 +358,18 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
         "central_skills.mutation_lock_failed" => {
             Some("Central is busy with another change. Try again shortly.")
         }
+        "central_skills.delete_failed" | "central_skills.delete_preview_failed" => {
+            Some("This Central skill could not be deleted.")
+        }
+        "central_skills.database_failed" => Some("This Central skill could not be deleted."),
+        "central_skills.remote_failed" => Some("This Central skill could not be deleted."),
+        "central_skills.budget_exceeded" => Some("This Central skill could not be deleted."),
+        "central_skills.force_delete_blocked" => {
+            Some("Force delete is not available for this Central skill.")
+        }
+        "central_operation.delete_restore_collision" => Some(
+            "Central recovery evidence conflicts with the current files. Review and resolve the pending operation in Operation Logs.",
+        ),
         "installation.pending_central_recovery" => {
             Some("Central recovery is pending for this skill.")
         }
@@ -595,5 +607,59 @@ mod tests {
     fn display_is_only_the_public_message() {
         let error = unexpected();
         assert_eq!(error.to_string(), INTERNAL_MESSAGE);
+    }
+
+    #[test]
+    fn delete_restore_collision_is_not_internal_unexpected() {
+        let seeds = [
+            r"C:\Users\alice\.skillsmanage\skills\yao-meta",
+            "ghp_super_secret",
+            "manifest_json",
+        ];
+        for seed in seeds {
+            let error =
+                IpcError::from(format!("central_operation.delete_restore_collision:{seed}"));
+            assert_eq!(error.code, "central_operation.delete_restore_collision");
+            assert_eq!(
+                error.message,
+                "Central recovery evidence conflicts with the current files. Review and resolve the pending operation in Operation Logs."
+            );
+            assert!(!error.retryable);
+            assert!(!serde_json::to_string(&error).unwrap().contains(seed));
+        }
+        let uncoded = IpcError::from(
+            "Central operation recovery collision (delete_restore_collision)".to_string(),
+        );
+        assert_eq!(uncoded.code, INTERNAL_CODE);
+    }
+
+    #[test]
+    fn force_delete_blocked_keeps_reviewed_public_message() {
+        let error = IpcError::from(
+            "central_skills.force_delete_blocked:This Central skill could not be deleted."
+                .to_string(),
+        );
+        assert_eq!(error.code, "central_skills.force_delete_blocked");
+        assert_eq!(
+            error.message,
+            "Force delete is not available for this Central skill."
+        );
+        assert!(!error.retryable);
+    }
+
+    #[test]
+    fn generic_delete_failed_codes_are_not_internal_unexpected() {
+        for code in [
+            "central_skills.delete_failed",
+            "central_skills.delete_preview_failed",
+            "central_skills.database_failed",
+            "central_skills.remote_failed",
+            "central_skills.budget_exceeded",
+        ] {
+            let error = IpcError::from(format!("{code}:Skill 'yao-meta' not found"));
+            assert_eq!(error.code, code);
+            assert_eq!(error.message, "This Central skill could not be deleted.");
+            assert!(!serde_json::to_string(&error).unwrap().contains("yao-meta"));
+        }
     }
 }

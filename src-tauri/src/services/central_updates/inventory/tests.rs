@@ -2412,6 +2412,7 @@ async fn apply_delete_missing_removes_skill() {
         &[BatchDeleteCentralSkillRequest {
             skill_id: "doomed".to_string(),
             remove_agent_ids: Vec::new(),
+            force: false,
         }],
         &mut result,
     )
@@ -2482,6 +2483,7 @@ async fn apply_delete_missing_preserves_selected_recovery_diagnostics() {
         &[BatchDeleteCentralSkillRequest {
             skill_id: skill_id.to_string(),
             remove_agent_ids: Vec::new(),
+            force: false,
         }],
         &mut result,
     )
@@ -2657,10 +2659,12 @@ async fn apply_partial_failure_records_step_specific_error() {
             BatchDeleteCentralSkillRequest {
                 skill_id: "ok".to_string(),
                 remove_agent_ids: Vec::new(),
+                force: false,
             },
             BatchDeleteCentralSkillRequest {
                 skill_id: "ghost".to_string(), // 不存在
                 remove_agent_ids: Vec::new(),
+                force: false,
             },
         ],
         &mut result,

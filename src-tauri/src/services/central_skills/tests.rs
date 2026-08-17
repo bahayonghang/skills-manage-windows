@@ -11,6 +11,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tempfile::TempDir;
 
+use crate::targets::ActiveTarget;
 use crate::test_support::mem_pool as setup_test_db;
 
 async fn set_test_central_root(pool: &SqlitePool, root: &Path) {
@@ -514,9 +515,13 @@ async fn test_preview_remote_delete_uses_remote_paths_and_installations() {
     .await
     .unwrap();
 
-    let result = preview_delete_central_skills_ssh_impl(&pool, &["remote-delete".to_string()])
-        .await
-        .unwrap();
+    let result = preview_delete_central_skills_ssh_impl(
+        &pool,
+        &ActiveTarget::Local,
+        &["remote-delete".to_string()],
+    )
+    .await
+    .unwrap();
 
     assert!(result.failed.is_empty());
     assert_eq!(
@@ -545,9 +550,13 @@ async fn test_preview_remote_delete_rejects_central_path_outside_remote_root() {
     .await
     .unwrap();
 
-    let result = preview_delete_central_skills_ssh_impl(&pool, &["outside-remote".to_string()])
-        .await
-        .unwrap();
+    let result = preview_delete_central_skills_ssh_impl(
+        &pool,
+        &ActiveTarget::Local,
+        &["outside-remote".to_string()],
+    )
+    .await
+    .unwrap();
 
     assert!(result.previews.is_empty());
     let failure = &result.failed[0];
@@ -756,7 +765,7 @@ async fn test_delete_central_skill_rejects_non_central_skill() {
     let skill = make_skill("plain-skill", "Plain Skill", false);
     db::upsert_skill(&pool, &skill).await.unwrap();
 
-    let error = delete_central_skill_impl(&pool, "plain-skill", &[])
+    let error = delete_central_skill_impl(&pool, "plain-skill", &[], false)
         .await
         .unwrap_err();
 
@@ -776,7 +785,7 @@ async fn test_delete_central_skill_rejects_path_outside_central_root() {
     let skill = make_central_skill_at("outside-skill", "Outside Skill", &outside_dir);
     db::upsert_skill(&pool, &skill).await.unwrap();
 
-    let error = delete_central_skill_impl(&pool, "outside-skill", &[])
+    let error = delete_central_skill_impl(&pool, "outside-skill", &[], false)
         .await
         .unwrap_err();
 
@@ -836,7 +845,7 @@ async fn test_delete_central_skill_removes_selected_copy_and_retains_unselected_
     .await
     .unwrap();
 
-    let result = delete_central_skill_impl(&pool, "central-delete", &["cursor".to_string()])
+    let result = delete_central_skill_impl(&pool, "central-delete", &["cursor".to_string()], false)
         .await
         .unwrap();
 
@@ -987,10 +996,12 @@ async fn test_batch_delete_central_skills_keeps_partial_failures_isolated() {
             BatchDeleteCentralSkillRequest {
                 skill_id: "valid-delete".to_string(),
                 remove_agent_ids: Vec::new(),
+                force: false,
             },
             BatchDeleteCentralSkillRequest {
                 skill_id: "unsafe-delete".to_string(),
                 remove_agent_ids: Vec::new(),
+                force: false,
             },
         ],
     )
@@ -1058,10 +1069,12 @@ async fn test_batch_delete_central_skills_dedupes_and_merges_copy_agents() {
             BatchDeleteCentralSkillRequest {
                 skill_id: "dedupe-delete".to_string(),
                 remove_agent_ids: vec!["cursor".to_string()],
+                force: false,
             },
             BatchDeleteCentralSkillRequest {
                 skill_id: "dedupe-delete".to_string(),
                 remove_agent_ids: vec!["claude-code".to_string(), "cursor".to_string()],
+                force: false,
             },
         ],
     )
@@ -1101,7 +1114,7 @@ async fn delete_selected_skill_ignores_unrelated_pending_collision() {
         .unwrap()
         .unwrap();
 
-    let result = delete_central_skill_impl(&pool, "claude-md-improver", &[]).await;
+    let result = delete_central_skill_impl(&pool, "claude-md-improver", &[], false).await;
 
     assert!(result.is_ok(), "{result:?}");
     assert!(!selected_dir.exists());
@@ -1143,10 +1156,12 @@ async fn batch_delete_reports_selected_recovery_collision_and_continues_in_reque
             BatchDeleteCentralSkillRequest {
                 skill_id: "skill-a".to_string(),
                 remove_agent_ids: Vec::new(),
+                force: false,
             },
             BatchDeleteCentralSkillRequest {
                 skill_id: "skill-b".to_string(),
                 remove_agent_ids: Vec::new(),
+                force: false,
             },
         ],
     )
@@ -1175,6 +1190,332 @@ async fn batch_delete_reports_selected_recovery_collision_and_continues_in_reque
     assert!(!serialized.contains("manifest"));
 }
 
+fn yao_meta_managed_path(
+    original: &Path,
+    fingerprint: Option<String>,
+) -> crate::services::central_operation::ManagedPath {
+    let parent = original.parent().unwrap();
+    let stem = original.file_name().unwrap().to_string_lossy();
+    crate::services::central_operation::ManagedPath {
+        original: original.to_string_lossy().into_owned(),
+        backup: parent
+            .join(format!("{stem}.backup"))
+            .to_string_lossy()
+            .into_owned(),
+        marker: parent
+            .join(format!("{stem}.marker"))
+            .to_string_lossy()
+            .into_owned(),
+        expected_present: true,
+        fingerprint,
+    }
+}
+
+async fn insert_yao_meta_shaped_pending(
+    pool: &SqlitePool,
+    root: &Path,
+    central_dir: &Path,
+    skill_id: &str,
+    fingerprint: Option<String>,
+    operation_id: &str,
+) {
+    let agents = root.join(".agents").join("skills").join(skill_id);
+    let gemini = root
+        .join(".gemini")
+        .join("antigravity-cli")
+        .join("skills")
+        .join(skill_id);
+    let claude = root.join(".claude").join("skills").join(skill_id);
+    let zed = root
+        .join(".config")
+        .join("zed")
+        .join("skills")
+        .join(skill_id);
+    let agents_path = yao_meta_managed_path(&agents, fingerprint.clone());
+    let mut paths = vec![
+        agents_path.clone(),
+        yao_meta_managed_path(&gemini, fingerprint.clone()),
+        yao_meta_managed_path(&claude, fingerprint.clone()),
+        yao_meta_managed_path(&zed, fingerprint.clone()),
+        yao_meta_managed_path(central_dir, fingerprint.clone()),
+    ];
+    paths.extend(std::iter::repeat_n(agents_path, 9));
+    let manifest = crate::services::central_operation::OperationManifest::Delete(
+        crate::services::central_operation::DeleteManifest {
+            version: crate::services::central_operation::MANIFEST_VERSION,
+            operation_id: operation_id.to_string(),
+            paths,
+        },
+    );
+    let manifest_json = serde_json::to_string(&manifest).unwrap();
+    db::insert_fs_db_operation(
+        pool,
+        db::NewFsDbOperation {
+            id: operation_id,
+            batch_id: None,
+            target_id: "local",
+            target_kind: "local",
+            operation_kind: "central_delete",
+            skill_id,
+            manifest_version: crate::services::central_operation::MANIFEST_VERSION,
+            manifest_json: &manifest_json,
+            old_fingerprint: fingerprint.as_deref(),
+            new_fingerprint: None,
+        },
+    )
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn preview_reports_force_eligible_pending_recovery_for_yao_meta_shape() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let central_root = temp.path().join("central");
+    let skill_dir = central_root.join("yao-meta");
+    write_test_skill_dir(&skill_dir);
+    set_test_central_root(&pool, &central_root).await;
+    db::upsert_skill(
+        &pool,
+        &make_central_skill_at("yao-meta", "Yao Meta", &skill_dir),
+    )
+    .await
+    .unwrap();
+    fs::write(skill_dir.join("SKILL.md"), "drifted after journal").unwrap();
+    insert_yao_meta_shaped_pending(
+        &pool,
+        temp.path(),
+        &skill_dir,
+        "yao-meta",
+        Some("recorded-fingerprint".to_string()),
+        "yao-meta-preview",
+    )
+    .await;
+
+    let result = preview_delete_central_skills_impl(&pool, &["yao-meta".to_string()])
+        .await
+        .unwrap();
+    let recovery = result.previews[0]
+        .pending_recovery
+        .as_ref()
+        .expect("pending recovery");
+    assert!(recovery.force_delete_eligible);
+    assert!(recovery.blocker_codes.is_empty());
+    assert_eq!(recovery.phase, "prepared");
+    assert_eq!(recovery.operation_kind, "central_delete");
+}
+
+#[tokio::test]
+async fn normal_delete_still_collides_on_yao_meta_shaped_pending() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let central_root = temp.path().join("central");
+    let skill_dir = central_root.join("yao-meta");
+    write_test_skill_dir(&skill_dir);
+    set_test_central_root(&pool, &central_root).await;
+    db::upsert_skill(
+        &pool,
+        &make_central_skill_at("yao-meta", "Yao Meta", &skill_dir),
+    )
+    .await
+    .unwrap();
+    insert_yao_meta_shaped_pending(
+        &pool,
+        temp.path(),
+        &skill_dir,
+        "yao-meta",
+        None,
+        "yao-meta-collision",
+    )
+    .await;
+
+    let error = delete_central_skill_impl(&pool, "yao-meta", &[], false)
+        .await
+        .expect_err("collision");
+    assert_eq!(
+        error.stable_delete_error_code(),
+        "central_operation.delete_restore_collision"
+    );
+    assert!(skill_dir.exists());
+    assert!(db::get_skill_by_id(&pool, "yao-meta")
+        .await
+        .unwrap()
+        .is_some());
+}
+
+#[tokio::test]
+async fn force_delete_abandons_stale_prepared_journal_and_deletes_current_paths() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let central_root = temp.path().join("central");
+    let skill_dir = central_root.join("yao-meta");
+    write_test_skill_dir(&skill_dir);
+    set_test_central_root(&pool, &central_root).await;
+    db::upsert_skill(
+        &pool,
+        &make_central_skill_at("yao-meta", "Yao Meta", &skill_dir),
+    )
+    .await
+    .unwrap();
+    fs::write(skill_dir.join("SKILL.md"), "drifted after journal").unwrap();
+    insert_yao_meta_shaped_pending(
+        &pool,
+        temp.path(),
+        &skill_dir,
+        "yao-meta",
+        Some("recorded-fingerprint".to_string()),
+        "yao-meta-force",
+    )
+    .await;
+
+    let result = delete_central_skill_impl(&pool, "yao-meta", &[], true)
+        .await
+        .expect("force delete");
+    assert!(!skill_dir.exists());
+    assert!(db::get_skill_by_id(&pool, "yao-meta")
+        .await
+        .unwrap()
+        .is_none());
+    assert_eq!(
+        db::get_fs_db_operation(&pool, "yao-meta-force")
+            .await
+            .unwrap()
+            .unwrap()
+            .phase,
+        "rolled_back"
+    );
+    let completed = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM fs_db_operations
+         WHERE skill_id = 'yao-meta'
+           AND operation_kind = 'central_delete'
+           AND phase = 'completed'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(completed, 1);
+    assert!(db::list_pending_fs_db_operations(&pool, "local")
+        .await
+        .unwrap()
+        .iter()
+        .all(|row| row.skill_id != "yao-meta"));
+    assert_eq!(result.removed_central_path, skill_dir.to_string_lossy());
+}
+
+#[tokio::test]
+async fn force_delete_rejects_remaining_backup_and_leaves_files() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let central_root = temp.path().join("central");
+    let skill_dir = central_root.join("blocked");
+    write_test_skill_dir(&skill_dir);
+    set_test_central_root(&pool, &central_root).await;
+    db::upsert_skill(
+        &pool,
+        &make_central_skill_at("blocked", "Blocked", &skill_dir),
+    )
+    .await
+    .unwrap();
+    let original_bytes = fs::read(skill_dir.join("SKILL.md")).unwrap();
+    let backup = skill_dir.parent().unwrap().join("blocked.backup");
+    fs::create_dir_all(&backup).unwrap();
+    fs::write(backup.join("kept.txt"), "evidence").unwrap();
+    let operation_id = "blocked-backup";
+    let manifest = crate::services::central_operation::OperationManifest::Delete(
+        crate::services::central_operation::DeleteManifest {
+            version: crate::services::central_operation::MANIFEST_VERSION,
+            operation_id: operation_id.to_string(),
+            paths: vec![yao_meta_managed_path(&skill_dir, None)],
+        },
+    );
+    let manifest_json = serde_json::to_string(&manifest).unwrap();
+    db::insert_fs_db_operation(
+        &pool,
+        db::NewFsDbOperation {
+            id: operation_id,
+            batch_id: None,
+            target_id: "local",
+            target_kind: "local",
+            operation_kind: "central_delete",
+            skill_id: "blocked",
+            manifest_version: crate::services::central_operation::MANIFEST_VERSION,
+            manifest_json: &manifest_json,
+            old_fingerprint: None,
+            new_fingerprint: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let error = delete_central_skill_impl(&pool, "blocked", &[], true)
+        .await
+        .expect_err("force blocked");
+    assert_eq!(
+        error.stable_delete_error_code(),
+        "central_skills.force_delete_blocked"
+    );
+    assert_eq!(
+        db::get_fs_db_operation(&pool, operation_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .phase,
+        "prepared"
+    );
+    assert_eq!(
+        fs::read(skill_dir.join("SKILL.md")).unwrap(),
+        original_bytes
+    );
+    assert_eq!(fs::read(backup.join("kept.txt")).unwrap(), b"evidence");
+}
+
+#[tokio::test]
+async fn force_delete_rejects_non_prepared_phase() {
+    let pool = setup_test_db().await;
+    let temp = TempDir::new().unwrap();
+    let central_root = temp.path().join("central");
+    let skill_dir = central_root.join("staged");
+    write_test_skill_dir(&skill_dir);
+    set_test_central_root(&pool, &central_root).await;
+    db::upsert_skill(
+        &pool,
+        &make_central_skill_at("staged", "Staged", &skill_dir),
+    )
+    .await
+    .unwrap();
+    insert_yao_meta_shaped_pending(
+        &pool,
+        temp.path(),
+        &skill_dir,
+        "staged",
+        None,
+        "staged-pending",
+    )
+    .await;
+    sqlx::query("UPDATE fs_db_operations SET phase = 'fs_staged' WHERE id = ?")
+        .bind("staged-pending")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let error = delete_central_skill_impl(&pool, "staged", &[], true)
+        .await
+        .expect_err("force blocked");
+    assert_eq!(
+        error.stable_delete_error_code(),
+        "central_skills.force_delete_blocked"
+    );
+    assert!(skill_dir.exists());
+    assert_eq!(
+        db::get_fs_db_operation(&pool, "staged-pending")
+            .await
+            .unwrap()
+            .unwrap()
+            .phase,
+        "fs_staged"
+    );
+}
+
 #[tokio::test]
 async fn batch_delete_recovers_selected_pending_update_before_deleting() {
     let pool = setup_test_db().await;
@@ -1198,10 +1539,12 @@ async fn batch_delete_recovers_selected_pending_update_before_deleting() {
             BatchDeleteCentralSkillRequest {
                 skill_id: "skill-with-update".to_string(),
                 remove_agent_ids: Vec::new(),
+                force: false,
             },
             BatchDeleteCentralSkillRequest {
                 skill_id: "skill-clear".to_string(),
                 remove_agent_ids: Vec::new(),
+                force: false,
             },
         ],
     )
@@ -1260,10 +1603,12 @@ async fn batch_delete_reports_selected_update_recovery_collision_and_continues()
             BatchDeleteCentralSkillRequest {
                 skill_id: "skill-with-update".to_string(),
                 remove_agent_ids: Vec::new(),
+                force: false,
             },
             BatchDeleteCentralSkillRequest {
                 skill_id: "skill-clear".to_string(),
                 remove_agent_ids: Vec::new(),
+                force: false,
             },
         ],
     )
@@ -1354,6 +1699,7 @@ async fn fake_ssh_batch_delete_filters_pending_rows_and_reuses_one_target_connec
         &[BatchDeleteCentralSkillRequest {
             skill_id: selected_skill_id.to_string(),
             remove_agent_ids: Vec::new(),
+            force: false,
         }],
         Some("remote-delete-batch"),
     )
@@ -1471,6 +1817,7 @@ async fn fake_ssh_and_wsl_delete_recover_selected_update_with_one_connection() {
             &[BatchDeleteCentralSkillRequest {
                 skill_id: skill_id.to_string(),
                 remove_agent_ids: Vec::new(),
+                force: false,
             }],
             Some("remote-delete-update-recovery"),
         )
@@ -1531,10 +1878,12 @@ async fn test_batch_delete_journal_rows_share_one_batch_id() {
             BatchDeleteCentralSkillRequest {
                 skill_id: "batch-delete-a".to_string(),
                 remove_agent_ids: Vec::new(),
+                force: false,
             },
             BatchDeleteCentralSkillRequest {
                 skill_id: "batch-delete-b".to_string(),
                 remove_agent_ids: Vec::new(),
+                force: false,
             },
         ],
     )

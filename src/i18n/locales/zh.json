@@ -174,7 +174,11 @@
     "central_skills": {
       "mutation_lock_failed": "中央技能库正在处理其他变更，请稍后再试。",
       "delete_preview_failed": "无法删除该中央技能。",
-      "delete_failed": "无法删除该中央技能。"
+      "delete_failed": "无法删除该中央技能。",
+      "database_failed": "无法删除该中央技能。",
+      "remote_failed": "无法删除该中央技能。",
+      "budget_exceeded": "无法删除该中央技能。",
+      "force_delete_blocked": "当前无法强制删除该中央技能。"
     }
   },
   "targets": {
@@ -972,6 +976,9 @@
     "batchDeleteSuccess": "已删除 {{count}} 个技能",
     "batchDeletePartialError": "已删除 {{succeeded}} 个，{{failed}} 个失败",
     "confirmDeleteSkill": "删除中央技能",
+    "forceDeleteSkill": "强制删除",
+    "forceDeleteHint": "这将放弃待恢复记录并删除当前中央副本。链接安装仍会清理。未勾选的独立副本会保留。",
+    "forceDeleteBlocked": "当前无法强制删除。请在操作日志中处理该恢复记录。",
     "deletingSkill": "正在删除...",
     "deleteSkillSuccess": "{{name}} 已删除",
     "deleteSkillError": "删除失败: {{error}}",
