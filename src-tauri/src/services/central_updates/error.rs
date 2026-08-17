@@ -213,6 +213,15 @@ pub enum CentralUpdatesError {
 
     #[error("Remote path '{0}' contains traversal")]
     RemotePathTraversal(String),
+
+    #[error("Failed to remove a deleted platform copy.")]
+    RemoteLeftoverDeleteFailed,
+
+    #[error("Remote leftover delete protocol is invalid.")]
+    RemoteLeftoverProtocol,
+
+    #[error("Failed to update leftover records.")]
+    LeftoverRecordCleanupFailed,
 }
 
 impl CentralUpdatesError {

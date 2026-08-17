@@ -81,6 +81,57 @@ pub async fn delete_skill_installation_with_observations(
     transaction.commit().await
 }
 
+/// Delete leftover installations and writable observations for one physical
+/// remote path. Payload pairs cover stored-path drift; path aliases cover
+/// shared-root sibling platforms that were not in the apply payload.
+pub async fn delete_leftover_installations_and_observations_for_paths(
+    pool: &DbPool,
+    path_aliases: &[String],
+    payload_pairs: &[(String, String)],
+) -> Result<(), sqlx::Error> {
+    let mut transaction = pool.begin().await?;
+    for (skill_id, agent_id) in payload_pairs {
+        sqlx::query(
+            "DELETE FROM skill_installations
+             WHERE skill_id = ? AND agent_id = ?
+               AND skill_id NOT IN (SELECT id FROM skills WHERE is_central = 1)",
+        )
+        .bind(skill_id)
+        .bind(agent_id)
+        .execute(&mut *transaction)
+        .await?;
+    }
+    for chunk in path_aliases.chunks(SQLITE_IN_QUERY_BATCH_SIZE) {
+        if chunk.is_empty() {
+            continue;
+        }
+        let placeholders = chunk.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let install_sql = format!(
+            "DELETE FROM skill_installations
+             WHERE installed_path IN ({placeholders})
+               AND skill_id NOT IN (SELECT id FROM skills WHERE is_central = 1)"
+        );
+        let mut install_query = sqlx::query(&install_sql);
+        for path in chunk {
+            install_query = install_query.bind(path);
+        }
+        install_query.execute(&mut *transaction).await?;
+
+        let observation_sql = format!(
+            "DELETE FROM agent_skill_observations
+             WHERE dir_path IN ({placeholders})
+               AND is_read_only = 0
+               AND source_kind != 'plugin'"
+        );
+        let mut observation_query = sqlx::query(&observation_sql);
+        for path in chunk {
+            observation_query = observation_query.bind(path);
+        }
+        observation_query.execute(&mut *transaction).await?;
+    }
+    transaction.commit().await
+}
+
 /// Remove installation records for a given agent where the skill ID is NOT in
 /// `found_skill_ids`. Pass an empty slice to remove ALL installations for the
 /// agent (used when the agent's skills directory no longer exists).

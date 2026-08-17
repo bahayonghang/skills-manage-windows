@@ -2329,6 +2329,7 @@ async fn apply_no_decisions_is_noop() {
         vec![],
         &mut result,
         None,
+        None,
     )
     .await;
 
@@ -2881,6 +2882,7 @@ async fn apply_remove_deleted_platform_copies_removes_managed_copy() {
         }],
         &mut result,
         None,
+        None,
     )
     .await;
 
@@ -2994,6 +2996,7 @@ async fn apply_rejects_deleted_platform_copy_outside_allowed_agents() {
         }],
         &mut result,
         Some(&allowed),
+        None,
     )
     .await;
 

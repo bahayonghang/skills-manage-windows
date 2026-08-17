@@ -47,6 +47,7 @@ use super::types::{
 
 mod apply_steps;
 mod force;
+mod leftover_cleanup;
 mod persistence;
 mod relocation;
 mod repositories;
@@ -57,10 +58,13 @@ mod types;
 mod view;
 
 #[cfg(test)]
+mod leftover_cleanup_tests;
+#[cfg(test)]
 mod tests;
 
 pub(crate) use apply_steps::*;
 pub(crate) use force::*;
+pub(crate) use leftover_cleanup::*;
 use persistence::*;
 use relocation::*;
 pub(crate) use repositories::*;
@@ -657,6 +661,7 @@ pub(crate) async fn apply_skill_update_decisions_impl(
         decisions.remove_deleted_platform_copies,
         &mut result,
         allowed_agent_ids.as_ref(),
+        Some(cancel),
     )
     .await;
 

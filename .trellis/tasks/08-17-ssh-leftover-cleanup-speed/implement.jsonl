@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-dev checklist and layer entry"}
+{"file": ".trellis/spec/backend/transport-seam.md", "reason": "Remote leftover must open one connection and use CommandRunner; do not copy install/uninstall loops"}
+{"file": ".trellis/spec/backend/central-update-batching.md", "reason": "Forbids one ssh.exe per item; leftover apply must bound process count"}
+{"file": ".trellis/spec/backend/path-policy.md", "reason": "Remote leftover paths must stay under agent root via remote_join and lexical guards"}
+{"file": ".trellis/spec/backend/process-supervision.md", "reason": "Batch rm must use CommandRunner, ProcessPolicy, and cancel"}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "Keep CentralUpdatesError; no new string-error service APIs"}
+{"file": ".trellis/spec/backend/test-support.md", "reason": "FakeRunner + mem pool is the required remote test seam"}
+{"file": ".trellis/tasks/08-17-ssh-leftover-cleanup-speed/research/leftover-cleanup-bottleneck.md", "reason": "Measured leftover apply bottleneck and shared-root 309-count hypothesis"}
