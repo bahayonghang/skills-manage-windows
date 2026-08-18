@@ -26,10 +26,10 @@ type Workflow = {
 
 const source = readFileSync(".github/workflows/release-desktop.yml", "utf8");
 const assetScriptSources = [
-  readFileSync("scripts/generate-latest-json.mjs", "utf8"),
-  readFileSync("scripts/release-preflight.mjs", "utf8"),
+  readFileSync("scripts/release/generate-latest-json.mjs", "utf8"),
+  readFileSync("scripts/release/release-preflight.mjs", "utf8"),
 ].join("\n");
-const releaseContextSource = readFileSync("scripts/release-context.mjs", "utf8");
+const releaseContextSource = readFileSync("scripts/release/release-context.mjs", "utf8");
 const workflow = parse(source) as Workflow;
 const needs = (job: Job) => (Array.isArray(job.needs) ? job.needs : job.needs ? [job.needs] : []);
 

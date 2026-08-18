@@ -7,8 +7,8 @@ SkillPort 桌面发布由 `.github/workflows/release-desktop.yml` 中的
 
 - 触发方式：推送已存在的 `v<semver>` tag 执行 publish，或手动以 `rehearsal` 和精确 40 位、位于 `origin/main` 的 `rehearsal_ref` 演练。
 - 质量门禁：对 tag peel 后的固定 commit SHA 调用可复用 `just-ci`。
-- Release body 来源：`scripts/prepare-release-body.mjs`。
-- Updater metadata 来源：`scripts/generate-latest-json.mjs`。
+- Release body 来源：`scripts/release/prepare-release-body.mjs`。
+- Updater metadata 来源：`scripts/release/generate-latest-json.mjs`。
 - Windows updater 必需 secrets：
   - `TAURI_UPDATER_PUBLIC_KEY`
   - `TAURI_SIGNING_PRIVATE_KEY`
@@ -21,7 +21,7 @@ SkillPort 桌面发布由 `.github/workflows/release-desktop.yml` 中的
 ## 发布检查清单
 
 1. 修改 `package.json` 版本。
-2. 运行 `node scripts/sync-version.mjs`。
+2. 运行 `node scripts/check/sync-version.mjs`。
 3. 核对以下版本字段：
    - `package.json`
    - `src-tauri/tauri.conf.json`

@@ -17,7 +17,7 @@ type CapabilityCheckHelpers = {
 };
 
 // @ts-expect-error The capability checker is an ESM Node script outside the TS source tree.
-const capabilityCheckModule = await import("../../../scripts/check-capability-drift.mjs");
+const capabilityCheckModule = await import("../../../scripts/check/check-capability-drift.mjs");
 
 const {
   parseCapabilityContract,

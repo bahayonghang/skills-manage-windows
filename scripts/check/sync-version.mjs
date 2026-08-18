@@ -1,8 +1,9 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { resolveRepoRoot } from "../lib/repo-root.mjs";
 
-const defaultRepoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const defaultRepoRoot = resolveRepoRoot(import.meta.url);
 
 const targets = [
   {

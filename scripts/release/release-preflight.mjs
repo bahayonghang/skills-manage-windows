@@ -44,7 +44,7 @@ export function parseArgs(argv) {
       index += 1;
     } else if (arg === "--help" || arg === "-h") {
       console.log(
-        "Usage: node scripts/release-preflight.mjs --version <version> --tag <tag> [--mode rehearsal|publish] [--signing-state windows-signing.json] [--config release-updater-config.json] [--asset-dir release-assets] [--repo owner/repo]",
+        "Usage: node scripts/release/release-preflight.mjs --version <version> --tag <tag> [--mode rehearsal|publish] [--signing-state windows-signing.json] [--config release-updater-config.json] [--asset-dir release-assets] [--repo owner/repo]",
       );
       process.exit(0);
     }

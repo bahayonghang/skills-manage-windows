@@ -1,10 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveRepoRoot } from "../lib/repo-root.mjs";
 
-const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const repoRoot = resolveRepoRoot(import.meta.url);
 const testDir = join(repoRoot, "src", "test");
 const vitestEntry = join(repoRoot, "node_modules", "vitest", "vitest.mjs");
 const TEST_FILE_PATTERN = /\.(test|spec)\.(js|jsx|ts|tsx)$/;

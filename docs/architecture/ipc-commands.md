@@ -5,7 +5,7 @@ Every Rust function annotated with `#[tauri::command]` is a callable from the fr
 ## How the dictionary is built
 
 ```text
-[scripts/build-ipc-dict.mjs] ── reads src-tauri/src/commands/**/*.rs
+[scripts/docs/build-ipc-dict.mjs] ── reads src-tauri/src/commands/**/*.rs
                                     │
                                     ▼
                             extract #[tauri::command]

@@ -1,9 +1,10 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { resolveRepoRoot } from "../lib/repo-root.mjs";
 
-const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const repoRoot = resolveRepoRoot(import.meta.url);
 const exceptionPath = resolve(repoRoot, "security/dependency-audit-exceptions.json");
 const EXCEPTION_FIELDS = ["advisory", "ecosystem", "expires", "owner", "reason"];
 const ECOSYSTEMS = new Set(["npm", "cargo"]);

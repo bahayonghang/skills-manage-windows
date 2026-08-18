@@ -28,7 +28,7 @@ type AuditModule = {
 };
 
 // @ts-expect-error The dependency audit helper is an ESM Node script outside the TS source tree.
-const auditModule = await import("../../../scripts/check-dependency-audit.mjs");
+const auditModule = await import("../../../scripts/check/check-dependency-audit.mjs");
 const { evaluateDependencyAudit } = auditModule as AuditModule;
 
 function npmAudit(advisories: unknown[] = []) {

@@ -11,10 +11,31 @@ Rebuild platform sizes with:
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+
+def resolve_repo_root(start: Path) -> Path:
+    current = start.resolve().parent
+    while True:
+        package_json = current / "package.json"
+        if package_json.is_file():
+            try:
+                payload = json.loads(package_json.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                payload = None
+            if isinstance(payload, dict) and payload.get("name") == "skillport":
+                return current
+        parent = current.parent
+        if parent == current:
+            raise SystemExit(
+                'Could not find repository root. Expected a package.json with name "skillport".'
+            )
+        current = parent
+
+
+ROOT = resolve_repo_root(Path(__file__))
 MASTER = ROOT / "src-tauri" / "icons" / "icon-source.png"
 
 

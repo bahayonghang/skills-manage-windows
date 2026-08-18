@@ -27,7 +27,7 @@ export function parseArgs(argv) {
       args.repo = next;
       index += 1;
     } else if (arg === "--help" || arg === "-h") {
-      console.log(`Usage: node scripts/generate-latest-json.mjs --version <version> --tag <tag> [--asset-dir release-assets] [--repo owner/repo]`);
+      console.log(`Usage: node scripts/release/generate-latest-json.mjs --version <version> --tag <tag> [--asset-dir release-assets] [--repo owner/repo]`);
       process.exit(0);
     }
   }

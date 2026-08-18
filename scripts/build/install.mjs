@@ -1,14 +1,14 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { resolveRepoRoot } from "../lib/repo-root.mjs";
 
 if (process.platform !== "win32") {
   console.error("[install] just install is only supported on Windows NSIS builds.");
   process.exit(1);
 }
 
-const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const repoRoot = resolveRepoRoot(import.meta.url);
 const outputDir = join(repoRoot, "outputs");
 
 if (!existsSync(outputDir)) {

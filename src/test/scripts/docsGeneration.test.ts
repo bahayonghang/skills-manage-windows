@@ -23,9 +23,9 @@ type GenerateDocs = (options: {
 }) => string;
 
 // @ts-expect-error The documentation generator is an ESM Node script outside the TS source tree.
-const ipcModule = await import("../../../scripts/build-ipc-dict.mjs");
+const ipcModule = await import("../../../scripts/docs/build-ipc-dict.mjs");
 // @ts-expect-error The documentation generator is an ESM Node script outside the TS source tree.
-const schemaModule = await import("../../../scripts/build-schema-table.mjs");
+const schemaModule = await import("../../../scripts/docs/build-schema-table.mjs");
 
 const generators: Array<{
   createSource: (sourceDir: string) => void;
@@ -187,7 +187,7 @@ describe.each(["build-ipc-dict.mjs", "build-schema-table.mjs"])(
       try {
         const result = spawnSync(
           process.execPath,
-          [join(repositoryRoot, "scripts", scriptName), "--check"],
+          [join(repositoryRoot, "scripts", "docs", scriptName), "--check"],
           { cwd: outsideDirectory, encoding: "utf8" },
         );
 

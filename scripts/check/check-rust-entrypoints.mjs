@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { resolveRepoRoot } from "../lib/repo-root.mjs";
 
-const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const repoRoot = resolveRepoRoot(import.meta.url);
 const manifestPath = join(repoRoot, "src-tauri", "Cargo.toml");
 const expectedDefaultRun = "skillport";
 const expectedBins = ["skillport", "skillport-cli", "release-signature-verifier"];

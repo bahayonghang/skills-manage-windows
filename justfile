@@ -7,7 +7,7 @@ set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
 # 1) 以 package.json 为唯一版本源
 # 2) 同步 Tauri / Cargo 元数据中的应用版本
 sync-version:
-    node scripts/sync-version.mjs
+    node scripts/check/sync-version.mjs
 
 # 只读检查版本元数据，不修改工作树
 version-check:
@@ -15,12 +15,12 @@ version-check:
 
 # 只读诊断本机工具链；不会安装、切换或修改任何环境变量
 doctor:
-    node scripts/doctor.mjs
+    node scripts/check/doctor.mjs
 
 # 快速反馈入口；先自动同步版本元数据，再运行 quick lane
 # 提交前仍必须运行 just ci 与 just audit
 check: sync-version
-    node scripts/run-ci.mjs --lane quick
+    node scripts/check/run-ci.mjs --lane quick
 
 # ========================================================================
 # 步骤2：检查工作流
@@ -32,7 +32,7 @@ check: sync-version
 # 4) GitHub Actions 直接调用 run-ci.mjs，不经过 just，因此 CI 侧版本检查仍然只读
 # 5) common 负责前端、文档、格式与静态合同；Rust lane 负责 Clippy 与测试
 ci: sync-version
-    node scripts/run-ci.mjs
+    node scripts/check/run-ci.mjs
 
 # ========================================================================
 # 步骤2.1：审计生产依赖
@@ -50,7 +50,7 @@ audit:
 # 1) 按当前平台构建 Tauri 应用
 # 2) 把当前平台的安装包/包产物复制到项目根目录 outputs/
 build: sync-version
-    node scripts/build.mjs
+    node scripts/build/build.mjs
 
 # ========================================================================
 # 步骤4：构建并安装桌面应用
@@ -66,10 +66,10 @@ _install_macos:
     @just build
 
 _install_windows: build
-    node scripts/install.mjs
+    node scripts/build/install.mjs
 
 _install_unsupported:
-    node scripts/install.mjs
+    node scripts/build/install.mjs
 
 # ========================================================================
 # 步骤5：启动开发模式

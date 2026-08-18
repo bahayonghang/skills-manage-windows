@@ -5,7 +5,7 @@
 ## 字典如何构建
 
 ```text
-[scripts/build-ipc-dict.mjs] ── 读取 src-tauri/src/commands/**/*.rs
+[scripts/docs/build-ipc-dict.mjs] ── 读取 src-tauri/src/commands/**/*.rs
                                     │
                                     ▼
                          抽出 #[tauri::command]

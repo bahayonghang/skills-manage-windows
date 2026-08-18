@@ -17,7 +17,7 @@ type DevServerHelpers = {
 };
 
 // @ts-expect-error The dev server wrapper is an ESM Node script outside the TS source tree.
-const helpers = (await import("../../../scripts/dev-server.mjs")) as DevServerHelpers;
+const helpers = (await import("../../../scripts/build/dev-server.mjs")) as DevServerHelpers;
 
 const {
   formatProcessInfo,

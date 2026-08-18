@@ -56,11 +56,23 @@ describe("developer and PR experience contract", () => {
   });
 
   it("exposes read-only doctor and audit gates while local check/ci auto-sync version", () => {
-    expect(packageJson.scripts.doctor).toBe("node scripts/doctor.mjs");
-    expect(justfile).toMatch(/doctor:\r?\n\s+node scripts\/doctor\.mjs/);
-    expect(justfile).toMatch(/check: sync-version\r?\n\s+node scripts\/run-ci\.mjs --lane quick/);
-    expect(justfile).toMatch(/ci: sync-version\r?\n\s+node scripts\/run-ci\.mjs/);
+    expect(packageJson.scripts.doctor).toBe("node scripts/check/doctor.mjs");
+    expect(justfile).toMatch(/doctor:\r?\n\s+node scripts\/check\/doctor\.mjs/);
+    expect(justfile).toMatch(/check: sync-version\r?\n\s+node scripts\/check\/run-ci\.mjs --lane quick/);
+    expect(justfile).toMatch(/ci: sync-version\r?\n\s+node scripts\/check\/run-ci\.mjs/);
     expect(justfile).toMatch(/audit:\r?\n\s+pnpm audit:dependencies/);
+  });
+
+  it("keeps repository scripts in classified subfolders", () => {
+    const entries = readdirSync("scripts", { withFileTypes: true });
+    expect(entries.every((entry) => entry.isDirectory())).toBe(true);
+    expect(entries.map((entry) => entry.name).sort()).toEqual([
+      "build",
+      "check",
+      "docs",
+      "lib",
+      "release",
+    ]);
   });
 
   it("runs CI lanes through run-ci.mjs without the just CLI so version drift still fails", () => {

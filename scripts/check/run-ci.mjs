@@ -1,9 +1,10 @@
 import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { resolveRepoRoot } from "../lib/repo-root.mjs";
 
-const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const repoRoot = resolveRepoRoot(import.meta.url);
 const isWindows = process.platform === "win32";
 
 const quickSteps = [
@@ -227,7 +228,7 @@ function resolveLaneNames(lane) {
 export function parseCiArgs(args) {
   if (args.length === 0) return { lane: "all" };
   if (args.length !== 2 || args[0] !== "--lane") {
-    throw new Error("Usage: node scripts/run-ci.mjs [--lane quick|common|rust-platform|all]");
+    throw new Error("Usage: node scripts/check/run-ci.mjs [--lane quick|common|rust-platform|all]");
   }
 
   resolveLaneNames(args[1]);

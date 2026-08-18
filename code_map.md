@@ -8,7 +8,7 @@ Use this file for navigation. It is not a replacement for behavior rules in `AGE
 |---|---|---|
 | `src/` | React + TypeScript renderer | `src/i18n/`, `src/stores/`, `src/components/` |
 | `src-tauri/src/` | Tauri/Rust backend | `commands/`, `services/`, `db/`, `linker.rs`, `paths.rs` |
-| `scripts/` | Version, CI, docs, build, and release helpers | `run-ci.mjs`, `sync-version.mjs`, `build.mjs` |
+| `scripts/` | Version, CI, docs, build, and release helpers | `check/run-ci.mjs`, `check/sync-version.mjs`, `build/build.mjs` |
 | `.github/workflows/` | CI, docs, and desktop release workflows | `just-ci`, `release`, `docs` |
 | `docs/` | User, architecture, and agent-facing documentation | `docs/agents/`, `docs/architecture/` |
 | `.trellis/` | Workflow, specs, tasks, and journals | `.trellis/workflow.md`, `.trellis/spec/` |

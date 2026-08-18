@@ -33,7 +33,7 @@ type RunCiHelpers = {
 };
 
 // @ts-expect-error The CI runner is an ESM Node script outside the TS source tree.
-const { CI_LANES, parseCiArgs, runCi, spawnStep } = (await import("../../../scripts/run-ci.mjs")) as RunCiHelpers;
+const { CI_LANES, parseCiArgs, runCi, spawnStep } = (await import("../../../scripts/check/run-ci.mjs")) as RunCiHelpers;
 
 const tempDirs: string[] = [];
 
@@ -121,7 +121,7 @@ describe("CI command lanes", () => {
 
     const cli = spawnSync(
       process.execPath,
-      ["scripts/run-ci.mjs", "--lane", "missing"],
+      ["scripts/check/run-ci.mjs", "--lane", "missing"],
       { cwd: process.cwd(), encoding: "utf8" },
     );
     expect(cli.status).toBe(1);

@@ -7,8 +7,8 @@ canonical `Release Desktop` workflow at `.github/workflows/release-desktop.yml`.
 
 - Trigger: push an existing `v<semver>` tag for publish, or manually select `rehearsal` with an exact 40-character `rehearsal_ref` on `origin/main`.
 - Quality gate: reusable `just-ci` runs against the tag's peeled commit SHA.
-- Release body source: `scripts/prepare-release-body.mjs`.
-- Updater metadata source: `scripts/generate-latest-json.mjs`.
+- Release body source: `scripts/release/prepare-release-body.mjs`.
+- Updater metadata source: `scripts/release/generate-latest-json.mjs`.
 - Required Windows updater secrets:
   - `TAURI_UPDATER_PUBLIC_KEY`
   - `TAURI_SIGNING_PRIVATE_KEY`
@@ -21,7 +21,7 @@ signing and `latest.json` stay in sync.
 ## Release checklist
 
 1. Bump `package.json`.
-2. Run `node scripts/sync-version.mjs`.
+2. Run `node scripts/check/sync-version.mjs`.
 3. Verify the version fields in:
    - `package.json`
    - `src-tauri/tauri.conf.json`

@@ -18,7 +18,7 @@ type ReleasePreflightHelpers = {
 };
 
 // @ts-expect-error The release preflight helper is an ESM Node script outside the TS source tree.
-const releasePreflightModule = await import("../../../scripts/release-preflight.mjs");
+const releasePreflightModule = await import("../../../scripts/release/release-preflight.mjs");
 const { validateReleasePreflight } = releasePreflightModule as ReleasePreflightHelpers;
 
 type LatestMetadata = {

@@ -10,17 +10,17 @@ The repository is Windows-first, but the merge gate covers the full frontend and
 
 ```text
 just ci
-  -> node scripts/run-ci.mjs --lane all
+  -> node scripts/check/run-ci.mjs --lane all
   -> common + rust-platform in parallel
 
 just version-check
-  -> node scripts/sync-version.mjs --check (read-only)
+  -> node scripts/check/sync-version.mjs --check (read-only)
 
 just sync-version
-  -> node scripts/sync-version.mjs (explicit write)
+  -> node scripts/check/sync-version.mjs (explicit write)
 
 just audit
-  -> node scripts/check-dependency-audit.mjs
+  -> node scripts/check/check-dependency-audit.mjs
   -> pnpm audit --prod --json + cargo audit --json
 
 Toolchain:
@@ -29,10 +29,10 @@ Toolchain:
   rust-toolchain.toml                 -> Rust 1.97.0 + rustfmt + clippy
 
 just doctor
-  -> node scripts/doctor.mjs (read-only environment diagnostics)
+  -> node scripts/check/doctor.mjs (read-only environment diagnostics)
 
 just check
-  -> node scripts/run-ci.mjs --lane quick (development feedback only)
+  -> node scripts/check/run-ci.mjs --lane quick (development feedback only)
 
 GitHub Actions required job/check:
   workflow: .github/workflows/ci.yml
@@ -43,10 +43,10 @@ GitHub Actions required job/check:
   behavior: aggregate only, always(), fail closed
 
 Required lanes (no inter-lane needs):
-  common: ubuntu-22.04, node scripts/run-ci.mjs --lane common
-  windows-rust: windows-2022, node scripts/run-ci.mjs --lane rust-platform
-  linux-rust: ubuntu-22.04, node scripts/run-ci.mjs --lane rust-platform
-  macos-rust: macos-14, node scripts/run-ci.mjs --lane rust-platform
+  common: ubuntu-22.04, node scripts/check/run-ci.mjs --lane common
+  windows-rust: windows-2022, node scripts/check/run-ci.mjs --lane rust-platform
+  linux-rust: ubuntu-22.04, node scripts/check/run-ci.mjs --lane rust-platform
+  macos-rust: macos-14, node scripts/check/run-ci.mjs --lane rust-platform
   supply-chain: ubuntu-22.04, pnpm audit:dependencies
 
 Reusable CI:
@@ -109,6 +109,17 @@ prints credentials. `just check` is not a substitute for `just ci` or `just audi
 - `.github/workflows/docs.yml` retains `release.published` and accepts manual dispatch only from canonical `main`. The build job uploads one official Pages artifact; deploy neither checks out nor installs nor rebuilds.
 - Only the deploy job receives `pages: write` and `id-token: write`, and it binds the `github-pages` environment. Production Pages concurrency does not cancel a deployment already in progress.
 - Smoke consumes `deploy-pages`' `page_url`, requires the exact repository HTTPS Pages URL, retries for bounded CDN propagation, and fails unless the response is HTTP 200 with the SkillPort page identity.
+
+### Repository scripts layout contract
+
+- `scripts/` root contains only `build/`, `check/`, `docs/`, `release/`, and `lib/`. Business entry files live in those four groups. `lib/` holds shared helpers only.
+- `build/` owns desktop bundle, Windows install, Vite dev server, and icon rebuild hints.
+- `check/` owns CI lanes, doctor, version sync, sequential Vitest, and `check-*` gates.
+- `docs/` owns IPC dictionary and schema table generators plus `generated-doc-file.mjs`.
+- `release/` owns updater metadata, release body, artifact inventory, context freeze, draft state, preflight, and signing state.
+- A script that needs the repository root calls `resolveRepoRoot(import.meta.url)` from `scripts/lib/repo-root.mjs`. That helper walks parents until `package.json.name === "skillport"`. Python helpers walk the same way. Do not use a fixed `dirname` count.
+- Do not leave re-export shims at old `scripts/<file>.mjs` paths. Move the file, then update `package.json`, `justfile`, GitHub Actions `run:` lines, `src/test/scripts/`, contract tests, Usage strings, and this spec in the same change.
+- `developerExperienceContract.test.ts` asserts the five root directories. A new script in the wrong folder, or a leftover file at `scripts/` root, fails that test.
 
 ### Event contract
 
@@ -251,6 +262,7 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
 | Manual Docs dispatch uses a branch other than canonical `main` | Build fails before deployment |
 | Pages URL, HTTP status, or SkillPort identity is wrong | Bounded post-deploy smoke fails the workflow |
 | A production source file exceeds 800 lines | `pnpm sizecheck` fails; no per-file baseline exemption is permitted |
+| A business script sits at `scripts/` root, or a caller uses `dirname` twice to find the repo root | `developerExperienceContract.test.ts` fails, or the script reads `scripts/` as the repo root |
 | Rust/Serde IPC metadata drifts from the checked artifact | `pnpm ipc:codegen:check` fails before Rust fmt/Clippy/test |
 | Test/bin target has a Clippy warning | all-target Clippy fails |
 | Cargo lockfile would change | `--locked` command fails |
@@ -275,7 +287,8 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
 - Bad: creating or publishing a release before all required platform jobs and
   post-upload checks pass.
 - Bad: expanding the whole release packaging matrix to every PR, which adds tens of minutes without improving routine feedback proportionally.
-- Bad: adding a new local check without adding it to `scripts/run-ci.mjs`, or duplicating different commands directly in the workflow.
+- Bad: adding a new local check without adding it to `scripts/check/run-ci.mjs`, or duplicating different commands directly in the workflow.
+- Bad: placing a new helper at `scripts/<file>.mjs` and resolving the repo root with `dirname(dirname(import.meta.url))`. After one more nesting level that path becomes `scripts/`.
 - Bad: allowing `docs:build` to refresh tracked files, rebuilding in the Pages deploy job, or treating `deploy-pages` success as proof that the public SkillPort URL works.
 - Bad: adding non-required matrix jobs without propagating their result into the
   existing required `just-ci` context.
@@ -375,9 +388,17 @@ jobs:
 ```
 
 Repository checks such as capability drift belong in the ordered `common` lane in
-`scripts/run-ci.mjs`; local `just ci` and hosted jobs select lanes from that same
+`scripts/check/run-ci.mjs`; local `just ci` and hosted jobs select lanes from that same
 command plan. Formal release platform builds remain in
 `release-desktop.yml`; CI manual smoke jobs do not become release dependencies.
+
+```text
+Wrong: node scripts/run-ci.mjs
+       const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
+Correct: node scripts/check/run-ci.mjs
+         import { resolveRepoRoot } from "../lib/repo-root.mjs"
+         const repoRoot = resolveRepoRoot(import.meta.url)
+```
 
 ## Scenario: Typed IPC Codegen And Parity Gate
 

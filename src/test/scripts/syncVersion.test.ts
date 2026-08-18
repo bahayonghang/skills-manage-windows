@@ -21,7 +21,7 @@ type SyncVersionHelpers = {
 };
 
 // @ts-expect-error The version synchronizer is an ESM Node script outside the TS source tree.
-const { parseSyncVersionArgs, syncVersion } = (await import("../../../scripts/sync-version.mjs")) as SyncVersionHelpers;
+const { parseSyncVersionArgs, syncVersion } = (await import("../../../scripts/check/sync-version.mjs")) as SyncVersionHelpers;
 
 const tempDirs: string[] = [];
 
@@ -64,10 +64,10 @@ describe("version metadata synchronization", () => {
     };
 
     expect(justfile).toMatch(/version-check:\r?\n\s+pnpm version:check/);
-    expect(justfile).toMatch(/sync-version:\r?\n\s+node scripts\/sync-version\.mjs/);
-    expect(justfile).toMatch(/ci: sync-version\r?\n\s+node scripts\/run-ci\.mjs/);
-    expect(justfile).toMatch(/check: sync-version\r?\n\s+node scripts\/run-ci\.mjs --lane quick/);
-    expect(packageJson.scripts["version:check"]).toBe("node scripts/sync-version.mjs --check");
+    expect(justfile).toMatch(/sync-version:\r?\n\s+node scripts\/check\/sync-version\.mjs/);
+    expect(justfile).toMatch(/ci: sync-version\r?\n\s+node scripts\/check\/run-ci\.mjs/);
+    expect(justfile).toMatch(/check: sync-version\r?\n\s+node scripts\/check\/run-ci\.mjs --lane quick/);
+    expect(packageJson.scripts["version:check"]).toBe("node scripts/check/sync-version.mjs --check");
   });
 
   it("reports every drift in check mode without writing files", () => {

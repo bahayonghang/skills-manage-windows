@@ -120,7 +120,7 @@ describe("CI workflow contract", () => {
     expect(workflow.jobs.common["runs-on"]).toBe("ubuntu-22.04");
     expect(findStep(
       workflow.jobs.common,
-      (step) => step.run === "node scripts/run-ci.mjs --lane common",
+      (step) => step.run === "node scripts/check/run-ci.mjs --lane common",
     )).toBeDefined();
 
     const platformJobs = {
@@ -133,7 +133,7 @@ describe("CI workflow contract", () => {
       expect(job["runs-on"]).toBe(runner);
       expect(findStep(
         job,
-        (step) => step.run === "node scripts/run-ci.mjs --lane rust-platform",
+        (step) => step.run === "node scripts/check/run-ci.mjs --lane rust-platform",
       )).toBeDefined();
       const rustSetup = findStep(job, (step) =>
         step.uses?.startsWith("dtolnay/rust-toolchain@") ?? false

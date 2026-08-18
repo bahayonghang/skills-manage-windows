@@ -19,7 +19,7 @@ export function parseArgs(argv) {
       args.output = next;
       index += 1;
     } else if (arg === "--help" || arg === "-h") {
-      console.log("Usage: node scripts/prepare-release-body.mjs --version <version> [--output release-body.md]");
+      console.log("Usage: node scripts/release/prepare-release-body.mjs --version <version> [--output release-body.md]");
       process.exit(0);
     }
   }

@@ -7,13 +7,13 @@ import {
   rmSync,
   statSync,
 } from "node:fs";
-import { dirname, join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, relative } from "node:path";
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
+import { resolveRepoRoot } from "../lib/repo-root.mjs";
 
 const require = createRequire(import.meta.url);
-const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const repoRoot = resolveRepoRoot(import.meta.url);
 const outputDir = join(repoRoot, "outputs");
 const bundleRoot = join(repoRoot, "src-tauri", "target", "release", "bundle");
 const tauriCliEntry = require.resolve("@tauri-apps/cli/tauri.js");

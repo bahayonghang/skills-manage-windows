@@ -14,7 +14,7 @@ type ReleaseArtifactHelpers = {
 };
 
 // @ts-expect-error The release artifact helper is an ESM Node script outside the TS source tree.
-const releaseArtifactModule = await import("../../../scripts/release-artifacts.mjs");
+const releaseArtifactModule = await import("../../../scripts/release/release-artifacts.mjs");
 const {
   buildChecksumManifest,
   expectedReleaseAssets,

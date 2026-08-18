@@ -1,8 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
-import { extname, join, relative, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { extname, join, relative } from "node:path";
+import { resolveRepoRoot } from "../lib/repo-root.mjs";
 
-const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const repoRoot = resolveRepoRoot(import.meta.url);
 const MAX_LINES = 800;
 const SOURCE_ROOTS = ["src", "src-tauri/src"];
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".rs"]);

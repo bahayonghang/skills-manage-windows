@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// scripts/build-schema-table.mjs
+// scripts/docs/build-schema-table.mjs
 //
 // 扫描 src-tauri/src/db/schema/*.rs 中的 CREATE TABLE / CREATE INDEX 语句，
 // 抽取表名 / 字段 / 类型 / 默认值 / 主键 / 索引，
@@ -8,13 +8,11 @@
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative, resolve, sep } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { pathToFileURL } from 'node:url'
 import { writeOrCheckGeneratedFile } from './generated-doc-file.mjs'
+import { resolveRepoRoot } from '../lib/repo-root.mjs'
 
-const scriptUrl = new URL('.', import.meta.url)
-const repoRoot = scriptUrl.protocol === 'file:'
-  ? resolve(fileURLToPath(scriptUrl), '..')
-  : resolve(process.cwd())
+const repoRoot = resolveRepoRoot(import.meta.url)
 const schemaDir = join(repoRoot, 'src-tauri', 'src', 'db', 'schema')
 const outDir = join(repoRoot, 'docs', 'architecture', '_generated')
 const outFile = join(outDir, 'data-model.md')
@@ -174,7 +172,7 @@ export function generateSchemaDocs({
 
 function runCli(args) {
   if (args.some((arg) => arg !== '--check')) {
-    throw new Error('[build-schema-table] usage: node scripts/build-schema-table.mjs [--check]')
+    throw new Error('[build-schema-table] usage: node scripts/docs/build-schema-table.mjs [--check]')
   }
   generateSchemaDocs({ check: args.includes('--check') })
 }

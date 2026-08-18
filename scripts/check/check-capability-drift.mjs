@@ -1,11 +1,12 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { dirname, extname, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { extname, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import ts from "typescript";
+import { resolveRepoRoot } from "../lib/repo-root.mjs";
 
-const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const repoRoot = resolveRepoRoot(import.meta.url);
 const inventoryPath = resolve(repoRoot, "docs/reference/ipc-capability-inventory.md");
 const CONTRACT_START = "<!-- capability-contract:start -->";
 const CONTRACT_END = "<!-- capability-contract:end -->";

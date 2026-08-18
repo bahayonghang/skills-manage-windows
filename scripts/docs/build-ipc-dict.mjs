@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// scripts/build-ipc-dict.mjs
+// scripts/docs/build-ipc-dict.mjs
 //
 // 扫描 src-tauri/src/commands 下所有 .rs 文件中的 `#[tauri::command]` 函数，
 // 解析函数签名（名称、参数、返回类型、所属模块、首段 doc 注释），
@@ -8,13 +8,11 @@
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, resolve, sep } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { pathToFileURL } from 'node:url'
 import { writeOrCheckGeneratedFile } from './generated-doc-file.mjs'
+import { resolveRepoRoot } from '../lib/repo-root.mjs'
 
-const scriptUrl = new URL('.', import.meta.url)
-const repoRoot = scriptUrl.protocol === 'file:'
-  ? resolve(fileURLToPath(scriptUrl), '..')
-  : resolve(process.cwd())
+const repoRoot = resolveRepoRoot(import.meta.url)
 const srcDir = join(repoRoot, 'src-tauri', 'src')
 const outDir = join(repoRoot, 'docs', 'architecture', '_generated')
 const outFile = join(outDir, 'ipc-commands.md')
@@ -236,7 +234,7 @@ export function generateIpcDocs({
 
 function runCli(args) {
   if (args.some((arg) => arg !== '--check')) {
-    throw new Error('[build-ipc-dict] usage: node scripts/build-ipc-dict.mjs [--check]')
+    throw new Error('[build-ipc-dict] usage: node scripts/docs/build-ipc-dict.mjs [--check]')
   }
   generateIpcDocs({ check: args.includes('--check') })
 }

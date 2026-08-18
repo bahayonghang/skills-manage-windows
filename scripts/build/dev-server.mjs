@@ -1,12 +1,13 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import net from "node:net";
-import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { resolveRepoRoot } from "../lib/repo-root.mjs";
 
 export const DEV_PORT = 24200;
 
-const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const repoRoot = resolveRepoRoot(import.meta.url);
 const viteEntry = join(repoRoot, "node_modules", "vite", "bin", "vite.js");
 const PORT_RELEASE_TIMEOUT_MS = 5_000;
 const DEV_SERVER_PROBE_TIMEOUT_MS = 1_000;

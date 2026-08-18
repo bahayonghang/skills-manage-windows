@@ -76,7 +76,7 @@ jobs:
           REHEARSAL_REF: ${{ inputs.rehearsal_ref }}
         run: |
           set -euo pipefail
-          RELEASE_SHA="$(node scripts/release-context.mjs --mode "$RELEASE_MODE" --tag "$RELEASE_TAG" --sha "$REHEARSAL_REF" --resolve-only)"
+          RELEASE_SHA="$(node scripts/release/release-context.mjs --mode "$RELEASE_MODE" --tag "$RELEASE_TAG" --sha "$REHEARSAL_REF" --resolve-only)"
           git checkout --detach "$RELEASE_SHA"
 
       - name: Resolve and validate release context
@@ -85,7 +85,7 @@ jobs:
           RELEASE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'publish' }}
           RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           REHEARSAL_REF: ${{ inputs.rehearsal_ref }}
-        run: node scripts/release-context.mjs --mode "$RELEASE_MODE" --tag "$RELEASE_TAG" --sha "$REHEARSAL_REF"
+        run: node scripts/release/release-context.mjs --mode "$RELEASE_MODE" --tag "$RELEASE_TAG" --sha "$REHEARSAL_REF"
 
   quality-gate:
     name: Validate frozen release commit
@@ -138,7 +138,7 @@ jobs:
 
       - name: Sync version metadata
         shell: pwsh
-        run: node scripts/sync-version.mjs --check
+        run: node scripts/check/sync-version.mjs --check
 
       - name: Validate updater signing secrets
         shell: pwsh
@@ -267,7 +267,7 @@ jobs:
           $exePath = "src-tauri/target/x86_64-pc-windows-msvc/release/skillport.exe"
           if (-not (Test-Path $exePath)) { throw "Windows executable not found at $exePath." }
           Compress-Archive -Path $exePath -DestinationPath "release-assets/skillport_${env:RELEASE_VERSION}_windows_x64.zip" -Force
-          node scripts/generate-latest-json.mjs --version $env:RELEASE_VERSION --tag $env:RELEASE_TAG --asset-dir release-assets
+          node scripts/release/generate-latest-json.mjs --version $env:RELEASE_VERSION --tag $env:RELEASE_TAG --asset-dir release-assets
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -312,7 +312,7 @@ jobs:
           RELEASE_TAG: ${{ needs.release-context.outputs.tag }}
           RELEASE_MODE: ${{ needs.release-context.outputs.mode }}
         run: |
-          node scripts/release-preflight.mjs --version $env:RELEASE_VERSION --tag $env:RELEASE_TAG --mode $env:RELEASE_MODE --asset-dir smoke-assets --config smoke-evidence/release-updater-config.json --signing-state smoke-evidence/windows-signing.json
+          node scripts/release/release-preflight.mjs --version $env:RELEASE_VERSION --tag $env:RELEASE_TAG --mode $env:RELEASE_MODE --asset-dir smoke-assets --config smoke-evidence/release-updater-config.json --signing-state smoke-evidence/windows-signing.json
       - name: Install launch and uninstall final NSIS
         shell: pwsh
         env:
@@ -368,7 +368,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Sync version metadata
-        run: node scripts/sync-version.mjs --check
+        run: node scripts/check/sync-version.mjs --check
       - name: Build universal CLI
         run: |
           cargo build --manifest-path src-tauri/Cargo.toml --release --bin skillport-cli --bin release-signature-verifier --locked --target aarch64-apple-darwin
@@ -457,7 +457,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Sync version metadata
-        run: node scripts/sync-version.mjs --check
+        run: node scripts/check/sync-version.mjs --check
       - name: Build Linux bundles
         run: pnpm tauri build --bundles deb,rpm,appimage --no-sign --ci
       - name: Prepare Linux assets
@@ -532,9 +532,9 @@ jobs:
           RELEASE_TAG: ${{ needs.release-context.outputs.tag }}
           RELEASE_MODE: ${{ needs.release-context.outputs.mode }}
         run: |
-          node scripts/release-preflight.mjs --version "$RELEASE_VERSION" --tag "$RELEASE_TAG" --mode "$RELEASE_MODE" --config signing-evidence/release-updater-config.json --signing-state signing-evidence/windows-signing.json --asset-dir release-assets
-          node scripts/release-artifacts.mjs --version "$RELEASE_VERSION" --asset-dir release-assets
-          node scripts/release-artifacts.mjs --version "$RELEASE_VERSION" --asset-dir release-assets --verify
+          node scripts/release/release-preflight.mjs --version "$RELEASE_VERSION" --tag "$RELEASE_TAG" --mode "$RELEASE_MODE" --config signing-evidence/release-updater-config.json --signing-state signing-evidence/windows-signing.json --asset-dir release-assets
+          node scripts/release/release-artifacts.mjs --version "$RELEASE_VERSION" --asset-dir release-assets
+          node scripts/release/release-artifacts.mjs --version "$RELEASE_VERSION" --asset-dir release-assets --verify
       - name: Record validated release evidence
         env:
           RELEASE_MODE: ${{ needs.release-context.outputs.mode }}
@@ -598,7 +598,7 @@ jobs:
           predicate-type: ${{ steps.provenance-predicate.outputs.predicate-type }}
           predicate: ${{ steps.provenance-predicate.outputs.predicate }}
       - name: Prepare release notes
-        run: node scripts/prepare-release-body.mjs --version "$RELEASE_VERSION" --output release-body.md
+        run: node scripts/release/prepare-release-body.mjs --version "$RELEASE_VERSION" --output release-body.md
       - name: Verify remote tag target
         shell: bash
         run: |
@@ -632,12 +632,12 @@ jobs:
       - name: Verify draft API state and inventory
         run: |
           gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" > release.json
-          node scripts/release-draft-state.mjs --release-json release.json --tag "$RELEASE_TAG" --version "$RELEASE_VERSION"
+          node scripts/release/release-draft-state.mjs --release-json release.json --tag "$RELEASE_TAG" --version "$RELEASE_VERSION"
       - name: Fresh-download and verify checksums and provenance
         run: |
           mkdir fresh-release
           gh release download "$RELEASE_TAG" --dir fresh-release
-          node scripts/release-artifacts.mjs --version "$RELEASE_VERSION" --asset-dir fresh-release --verify
+          node scripts/release/release-artifacts.mjs --version "$RELEASE_VERSION" --asset-dir fresh-release --verify
           gh attestation verify "fresh-release/skillport_${RELEASE_VERSION}_windows_x64_nsis.exe" -R bahayonghang/skills-manage-windows
           gh attestation verify "fresh-release/skillport_${RELEASE_VERSION}_windows_x64.msi" -R bahayonghang/skills-manage-windows
           gh attestation verify "fresh-release/skillport_${RELEASE_VERSION}_windows_x64.zip" -R bahayonghang/skills-manage-windows
@@ -650,7 +650,7 @@ jobs:
           [ "$TAG_SHA" = "$RELEASE_SHA" ] || { echo "Remote tag target changed before publish." >&2; exit 1; }
           gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${{ steps.draft.outputs.release_id }}" -F draft=false > published.json
       - name: Verify public release state
-        run: node scripts/release-draft-state.mjs --release-json published.json --tag "$RELEASE_TAG" --version "$RELEASE_VERSION" --public
+        run: node scripts/release/release-draft-state.mjs --release-json published.json --tag "$RELEASE_TAG" --version "$RELEASE_VERSION" --public
 
   updater-staging-smoke:
     name: Deferred updater staging smoke

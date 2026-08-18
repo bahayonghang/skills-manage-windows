@@ -18,7 +18,7 @@ type DoctorOptions = {
 };
 
 // @ts-expect-error The doctor runner is an ESM Node script outside the TS source tree.
-const { collectDoctorChecks, redactSecrets, runDoctor, TOOLCHAIN } = (await import("../../../scripts/doctor.mjs")) as {
+const { collectDoctorChecks, redactSecrets, runDoctor, TOOLCHAIN } = (await import("../../../scripts/check/doctor.mjs")) as {
   collectDoctorChecks: (options: DoctorOptions) => Array<{
     actual: string;
     id: string;

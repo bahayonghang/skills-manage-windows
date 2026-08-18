@@ -82,7 +82,7 @@ src/test/pages/CentralSkillsView.updates-and-search.test.tsx
 
 - 普通测试不得重新堆回 `src/test` 顶层，也不得另造与生产目录竞争的产品 taxonomy。
 - `src` 内生产 import 优先使用 `@/*`；同组 test harness 可用短相对路径。
-- `scripts/run-vitest-sequential.mjs` 被 import 时不得执行测试，只在 CLI 直接运行时进入逐文件 runner。
+- `scripts/check/run-vitest-sequential.mjs` 被 import 时不得执行测试，只在 CLI 直接运行时进入逐文件 runner。
 - 显式 `pnpm test:serial -- <nested-path>` 与无参数递归发现都必须工作。
 - `src-tauri/tests` 无法访问 `#[cfg(test)] test_support`；两个以上 integration crates 共用的数据库/skill fixture 放入 `tests/common/mod.rs`，单文件专用替身留在拥有者内。
 
