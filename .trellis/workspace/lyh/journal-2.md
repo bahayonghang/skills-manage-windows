@@ -1417,3 +1417,24 @@ SSH/WSL Platform leftover apply now validates paths, deletes unique POSIX paths 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 105: Scripts subfolder reorg
+
+**Date**: 2026-08-18
+**Task**: Scripts subfolder reorg
+**Branch**: `dev`
+
+### Summary
+
+把仓库根 scripts/ 按职责分成 build/check/docs/release，新增 repo-root helper，并改完 just、npm、Actions、测试与现行文档路径。just ci 通过。just doctor 因本机 Node 25 与期望 22 不一致而退出 1。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `65adfef4` | (see git log) |
+
+### Status
+
+[OK] **Completed**

@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 104
-- **Last Active**: 2026-08-17
+- **Total Sessions**: 105
+- **Last Active**: 2026-08-18
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1419 | Active |
+| `journal-2.md` | ~1440 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 105 | 2026-08-18 | Scripts subfolder reorg | `65adfef4` | `dev` |
 | 104 | 2026-08-17 | Optimize SSH leftover cleanup speed | `156e54f9` | `dev` |
 | 103 | 2026-08-17 | 平台技能用量排序与来源区分 | `b5f4fc2cbdca636d0a5c3d04c9ce1a84661827ff` | `dev` |
 | 102 | 2026-08-17 | 更新中心 apply 日志公开错误与本地时间 | `702bda6389de2bf44aadcc35db76b16942057598` | `dev` |
