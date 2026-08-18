@@ -296,7 +296,7 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
     <div
       className={cn(
         cardShellClass(checkbox?.checked),
-        "group/skill-card relative overflow-hidden gap-2 p-3.5",
+        "@container group/skill-card relative overflow-hidden gap-2 p-3.5",
         isCompact ? "min-h-[168px]" : "min-h-[188px]",
         originSurface === "plugin" && "bg-warning/5",
         isLoading && "opacity-50",
@@ -365,7 +365,7 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
 
         {/* Main content */}
         <div className="flex h-full min-w-0 flex-1 flex-col gap-2">
-          {/* Row 1: Name + icon actions */}
+          {/* Row 1: Name + icon actions（卡片 <22rem 时图标降为 hover/focus-within 揭示，让位给技能名；hover 与 focus 成对保证键盘可达） */}
           <div className="flex items-center justify-between gap-2">
             {onDetail ? (
               <button
@@ -399,7 +399,7 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
             {hasActions && (
               <div
                 className={cn(
-                  "flex shrink-0 items-center gap-2",
+                  "flex shrink-0 items-center gap-2 @max-[22rem]:hidden @max-[22rem]:group-hover/skill-card:flex @max-[22rem]:group-focus-within/skill-card:flex",
                   isCompact &&
                     "opacity-0 transition-opacity duration-150 group-hover/skill-card:opacity-100 group-focus-within/skill-card:opacity-100",
                 )}
