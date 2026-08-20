@@ -103,7 +103,8 @@
       "archive_redirect_rejected": "GitHub returned an unsafe or unexpected repository archive redirect. Try checking for updates again.",
       "transport_failed": "GitHub could not be reached. Check the network connection, then try again.",
       "rate_limited": "GitHub rate limited the request. Wait for the limit to reset, then try again.",
-      "access_denied": "GitHub denied access to this repository. Check that the token can read it.",
+      "access_denied": "GitHub denied anonymous access to this repository. Configure a token if the repository requires authentication.",
+      "configured_token_failed": "GitHub denied the authenticated request. Check that the token owner can read this repository and that the token has the required permissions.",
       "repo_not_found": "The GitHub repository no longer exists or is not visible to the configured token.",
       "archive_unavailable": "The repository archive is unavailable on GitHub right now. Try again later.",
       "response_invalid": "GitHub returned a response that could not be read.",
@@ -132,7 +133,9 @@
       "repository_check_failed": "This repository could not be checked.",
       "skill_source_missing": "The tracked source path no longer contains this skill, and no unique new location was found. Re-check in incremental mode to keep or delete it.",
       "relocation_failed": "The moved skill could not be reattached to its new location.",
-      "inventory_invariant": "The update inventory could not be finalized."
+      "inventory_invariant": "The update inventory could not be finalized.",
+      "inventory_refresh_required": "Refresh the update inventory before importing this repository.",
+      "snapshot_changed": "The repository content no longer matches this update inventory. Refresh and try again."
     },
     "central_operation": {
       "delete_restore_collision": "Central recovery evidence conflicts with the current files. Review and resolve the pending operation in Operation Logs."

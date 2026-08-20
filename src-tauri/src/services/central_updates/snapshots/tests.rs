@@ -15,14 +15,19 @@ fn repo(owner: &str, name: &str) -> GitHubRepoRef {
     }
 }
 
-fn snapshot() -> GitHubRepoSnapshot {
-    GitHubRepoSnapshot::default()
+fn pinned_snapshot(snapshot: GitHubRepoSnapshot) -> CentralUpdateRepositorySnapshot {
+    let digest = github_import::repository_snapshot_digest_from_local(&snapshot);
+    CentralUpdateRepositorySnapshot::new("a".repeat(40), digest, snapshot)
 }
 
-fn snapshot_with_bytes(bytes: &[u8]) -> Arc<GitHubRepoSnapshot> {
-    Arc::new(GitHubRepoSnapshot {
+fn snapshot() -> CentralUpdateRepositorySnapshot {
+    pinned_snapshot(GitHubRepoSnapshot::default())
+}
+
+fn snapshot_with_bytes(bytes: &[u8]) -> Arc<CentralUpdateRepositorySnapshot> {
+    Arc::new(pinned_snapshot(GitHubRepoSnapshot {
         files: HashMap::from([("SKILL.md".to_string(), bytes.to_vec())]),
-    })
+    }))
 }
 
 fn test_cache(max_entries: usize, max_bytes: u64, ttl_seconds: i64) -> CentralUpdateSnapshotCache {

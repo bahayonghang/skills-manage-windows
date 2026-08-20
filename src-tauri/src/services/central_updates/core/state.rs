@@ -130,6 +130,9 @@ pub(crate) fn load_remote_skill_content(
 
     let remote_hash = hash_remote_files(snapshot, &files)
         .map_err(|e| RemoteSkillLoadError::other(e.to_string()))?;
+    let content_digest =
+        github_import::candidate_content_digest_from_snapshot(snapshot, &source.source_path)
+            .map_err(|e| RemoteSkillLoadError::other(e.to_string()))?;
     let target_dir = prepared.target_dir.clone().ok_or_else(|| {
         RemoteSkillLoadError::other(format!("Skill '{}' has no target directory.", skill.id))
     })?;
@@ -144,8 +147,8 @@ pub(crate) fn load_remote_skill_content(
         remote_hash,
         local_hash,
         target_dir,
-        resolved_commit_sha: None,
-        content_digest: None,
+        resolved_commit_sha: Some(snapshot.resolved_commit_sha.clone()),
+        content_digest: Some(content_digest),
     }))
 }
 

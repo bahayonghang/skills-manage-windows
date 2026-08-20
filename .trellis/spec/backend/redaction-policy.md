@@ -15,6 +15,7 @@
 8. **Recovery journal 是第三类受控存储**：`fs_db_operations.manifest_json` 可保存恢复所需完整路径和 fingerprint，但不得进入 Operation Log、Runtime Log、IPC summary、状态导出或 telemetry。IPC/Operation Log 仅暴露 operation/target/kind/phase、稳定 error code 与 `CentralOperationError::redacted_message()`；tracing 禁止格式化含 source/path 的原始 recovery error。
 9. **Update apply 单项诊断使用 allowlist**：Operation Log `failureItems` 只允许 `step`、安全逻辑 `identifier`、受控 `phase`、稳定 `errorCode` 和稳定 `errorCategory`，最多 50 项并记录截断数。Runtime apply 事件只记录排序去重的 code/category 与 phase counts。两层都不得记录 item `error`、manifest、完整路径、URL、repository source path 或命令输出。`step` 必须收敛到固定动作表；`identifier` 只保留有限长度的 ASCII 逻辑 ID（含 `agent_id::skill_id` 和 repository 前缀），不符合约束的动态输入统一降级为 `batch`。
 10. **Refresh/retry 仓库诊断使用同一 allowlist**：Operation Log 只允许安全 `repositoryId` 和静态 code/category，最多 50 项；Runtime Log 只允许聚合 code/category 与 retry 数字。持久化历史值在日志前重新校验；URL、owner/repo/ref、HTTP status/detail、响应正文、reqwest Display 与 failed row `error` 不得成为日志输入。
+11. **不可变库存身份不属于诊断载荷**：pending additions 可持久化完整 commit SHA 与 repository digest 作为 Apply 权威，但两者不得进入 IPC error、Operation Log、Runtime Log、telemetry 或 portable export。GitHub 401/403 必须由 typed `used_auth` 事实映射为匿名 `access_denied` 或 `configured_token_failed`；禁止记录 token、Authorization header 或为分类解析动态 Display。
 
 ## Scenario: Structured IPC Error Payload
 

@@ -103,7 +103,8 @@
       "archive_redirect_rejected": "GitHub 返回了不安全或异常的仓库压缩包跳转，已停止检查更新。请重试。",
       "transport_failed": "无法连接 GitHub。请检查网络后重试。",
       "rate_limited": "GitHub 限流了本次请求。请等待配额重置后重试。",
-      "access_denied": "GitHub 拒绝访问该仓库。请确认令牌具备读取权限。",
+      "access_denied": "GitHub 拒绝匿名访问该仓库。如果仓库需要认证，请配置 GitHub 令牌。",
+      "configured_token_failed": "GitHub 拒绝了已认证请求。请确认令牌所属账号可以读取该仓库，并且令牌具备所需权限。",
       "repo_not_found": "该 GitHub 仓库不存在，或当前令牌不可见。",
       "archive_unavailable": "GitHub 当前无法提供该仓库的压缩包。请稍后重试。",
       "response_invalid": "GitHub 返回了无法解析的响应。",
@@ -132,7 +133,9 @@
       "repository_check_failed": "该仓库检查失败。",
       "skill_source_missing": "该技能记录的源路径已不存在，且未能唯一定位到新位置。用增量和删减模式重查后可选择保留或删除。",
       "relocation_failed": "该技能已移动，但重新绑定新位置失败。",
-      "inventory_invariant": "无法完成更新清单。"
+      "inventory_invariant": "无法完成更新清单。",
+      "inventory_refresh_required": "导入该仓库前，请先刷新更新清单。",
+      "snapshot_changed": "仓库内容与当前更新清单不一致。请刷新后重试。"
     },
     "central_operation": {
       "delete_restore_collision": "Central 恢复证据发生冲突。请在操作日志中检查并处理待恢复操作。"

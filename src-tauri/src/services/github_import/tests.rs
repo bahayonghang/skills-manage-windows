@@ -5407,6 +5407,12 @@ metadata:
                 repository_snapshot_digest(&remote_files),
                 repository_snapshot_digest(&local_files)
             );
+            assert_eq!(
+                candidate_content_digest_from_repository_files(&remote_files, ".")
+                    .expect("remote candidate digest"),
+                candidate_content_digest_from_snapshot(&snapshot, ".")
+                    .expect("local candidate digest")
+            );
         }
 
         /// Structural guard for the core invariant: the confirmed import must not

@@ -10,12 +10,17 @@
 //! - C: force update / force mirror rescue mode
 //! - D: scan_platform_duplicate_skills
 
+use super::additions::{
+    group_repository_import_additions, load_repository_for_import_addition,
+    load_verified_local_addition_snapshot_with, PendingAdditionSnapshotIdentity,
+};
 use super::*;
 use crate::db;
 use crate::db::{AgentSkillObservation, Skill, SkillInstallation, SkillUpdateState};
 use crate::services::central_skills::BatchDeleteCentralSkillRequest;
 use crate::services::central_updates;
 use crate::services::central_updates::repo_cache_key;
+use crate::services::central_updates::snapshots::CentralUpdateRepositorySnapshot;
 use crate::services::central_updates::{CentralFs, SnapshotProgressStatus};
 use crate::services::github_import::{
     download_repo_snapshot_with_test_endpoint, GitHubRepoRef, GitHubRepoSnapshot,
@@ -27,6 +32,7 @@ use flate2::{write::GzEncoder, Compression};
 use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
 
@@ -125,10 +131,16 @@ fn snapshots_cache_with(
     let cache = CentralUpdateSnapshotCache::default();
     for (repo, snapshot) in items {
         cache
-            .insert(repo_cache_key(&repo), snapshot)
+            .insert(repo_cache_key(&repo), pinned_snapshot(snapshot))
             .expect("seed snapshot cache");
     }
     cache
+}
+
+fn pinned_snapshot(snapshot: GitHubRepoSnapshot) -> CentralUpdateRepositorySnapshot {
+    let snapshot_digest =
+        crate::services::github_import::repository_snapshot_digest_from_local(&snapshot);
+    CentralUpdateRepositorySnapshot::new("a".repeat(40), snapshot_digest, snapshot)
 }
 
 fn http_client() -> reqwest::Client {
@@ -313,6 +325,8 @@ async fn pending_additions_repo_upsert_then_clear() {
         skill_id: "example".to_string(),
         skill_name: "Example".to_string(),
         conflict_existing_skill_id: None,
+        resolved_commit_sha: None,
+        snapshot_digest: None,
         discovered_at: chrono::Utc::now().to_rfc3339(),
     };
     db::upsert_pending_addition(&pool, &addition).await.unwrap();
@@ -350,6 +364,8 @@ async fn pending_additions_scope_repo_filter() {
                 skill_id: "x".to_string(),
                 skill_name: "x".to_string(),
                 conflict_existing_skill_id: None,
+                resolved_commit_sha: None,
+                snapshot_digest: None,
                 discovered_at: now.clone(),
             },
         )
@@ -917,6 +933,8 @@ async fn refresh_writes_pending_additions_for_remote_added() {
             ),
         ]),
     };
+    let expected_snapshot_digest =
+        crate::services::github_import::repository_snapshot_digest_from_local(&snapshot);
     let cache = snapshots_cache_with(vec![(test_repo(), snapshot)]);
     let client = http_client();
 
@@ -937,6 +955,15 @@ async fn refresh_writes_pending_additions_for_remote_added() {
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].repository_id, repository_id);
     assert_eq!(listed[0].source_path, "skills/new-skill");
+    let expected_commit_sha = "a".repeat(40);
+    assert_eq!(
+        listed[0].resolved_commit_sha.as_deref(),
+        Some(expected_commit_sha.as_str())
+    );
+    assert_eq!(
+        listed[0].snapshot_digest.as_deref(),
+        Some(expected_snapshot_digest.as_str())
+    );
 }
 
 #[tokio::test]
@@ -1768,6 +1795,8 @@ async fn refresh_does_not_persist_skipped_remote_added_as_pending() {
             skill_id: "skipped".to_string(),
             skill_name: "Skipped".to_string(),
             conflict_existing_skill_id: None,
+            resolved_commit_sha: None,
+            snapshot_digest: None,
             discovered_at: Utc::now().to_rfc3339(),
         },
     )
@@ -2011,6 +2040,8 @@ async fn get_inventory_returns_persisted_state_without_remote_fetch() {
             skill_id: "persisted".to_string(),
             skill_name: "Persisted".to_string(),
             conflict_existing_skill_id: None,
+            resolved_commit_sha: None,
+            snapshot_digest: None,
             discovered_at: Utc::now().to_rfc3339(),
         },
     )
@@ -2038,6 +2069,8 @@ async fn get_inventory_prunes_pending_additions_for_deleted_repositories() {
             skill_id: "stale".to_string(),
             skill_name: "Stale".to_string(),
             conflict_existing_skill_id: None,
+            resolved_commit_sha: None,
+            snapshot_digest: None,
             discovered_at: Utc::now().to_rfc3339(),
         },
     )
@@ -2103,6 +2136,8 @@ async fn get_inventory_scope_platform_filters_state_additions_and_platform_bucke
             skill_id: "new-remote".to_string(),
             skill_name: "New Remote".to_string(),
             conflict_existing_skill_id: None,
+            resolved_commit_sha: None,
+            snapshot_digest: None,
             discovered_at: Utc::now().to_rfc3339(),
         },
     )
@@ -2191,6 +2226,8 @@ async fn clear_inventory_all_clears_pending_additions() {
             skill_id: "x".to_string(),
             skill_name: "x".to_string(),
             conflict_existing_skill_id: None,
+            resolved_commit_sha: None,
+            snapshot_digest: None,
             discovered_at: now,
         },
     )
@@ -2211,6 +2248,8 @@ async fn clear_inventory_all_clears_pending_additions() {
             skill_id: "y".to_string(),
             skill_name: "y".to_string(),
             conflict_existing_skill_id: None,
+            resolved_commit_sha: None,
+            snapshot_digest: None,
             discovered_at: Utc::now().to_rfc3339(),
         },
     )
@@ -2235,6 +2274,8 @@ async fn clear_inventory_scope_repositories_only_targets_given_ids() {
                 skill_id: "x".to_string(),
                 skill_name: "x".to_string(),
                 conflict_existing_skill_id: None,
+                resolved_commit_sha: None,
+                snapshot_digest: None,
                 discovered_at: now.clone(),
             },
         )
@@ -2287,6 +2328,8 @@ async fn clear_inventory_does_not_delete_skills_or_update_states() {
             skill_id: "ignored".to_string(),
             skill_name: "ignored".to_string(),
             conflict_existing_skill_id: None,
+            resolved_commit_sha: None,
+            snapshot_digest: None,
             discovered_at: Utc::now().to_rfc3339(),
         },
     )
@@ -2313,6 +2356,36 @@ async fn clear_inventory_does_not_delete_skills_or_update_states() {
  * B. apply 顺序与 partial success
  * ========================================================================
  */
+
+#[test]
+fn apply_groups_duplicate_repository_selection_batches_before_acquisition() {
+    let selection = |source_path: &str| github_import::GitHubSkillImportSelection {
+        source_path: source_path.to_string(),
+        resolution: github_import::DuplicateResolution::Overwrite,
+        renamed_skill_id: None,
+    };
+    let grouped = group_repository_import_additions(vec![
+        central_updates::CentralRepositoryAddedSkillSelection {
+            repository_id: "github:owner-repo-main".to_string(),
+            selections: vec![selection("skills/one")],
+        },
+        central_updates::CentralRepositoryAddedSkillSelection {
+            repository_id: "github:alt-repo-main".to_string(),
+            selections: vec![selection("skills/other")],
+        },
+        central_updates::CentralRepositoryAddedSkillSelection {
+            repository_id: "github:owner-repo-main".to_string(),
+            selections: vec![selection("skills/two")],
+        },
+    ]);
+
+    assert_eq!(grouped.len(), 2);
+    assert_eq!(grouped[0].repository_id, "github:owner-repo-main");
+    assert_eq!(grouped[0].selections.len(), 2);
+    assert_eq!(grouped[0].selections[0].source_path, "skills/one");
+    assert_eq!(grouped[0].selections[1].source_path, "skills/two");
+    assert_eq!(grouped[1].repository_id, "github:alt-repo-main");
+}
 
 #[tokio::test]
 async fn apply_no_decisions_is_noop() {
@@ -2511,11 +2584,242 @@ async fn apply_delete_missing_preserves_selected_recovery_diagnostics() {
 }
 
 #[tokio::test]
-#[ignore = "import 路径需要本地 preview workspace 或 GitHub 网络；core 步骤在其他测试中覆盖"]
 async fn apply_imports_remote_added_and_clears_pending_row() {
-    // 占位骨架：apply 的 import 分支无法在不触网的情况下完整测试。
-    // 已通过 apply_skip_addition_step / apply_unskip_addition_step / 其它单元
-    // 覆盖核心 partial-success 语义；端到端 import 留给集成测试。
+    let temp = TempDir::new().unwrap();
+    let home = temp.path();
+    let pool = setup_test_db_with_home(home).await;
+    let existing_dir = home.join(".skillsmanage/skills/existing");
+    std::fs::create_dir_all(&existing_dir).unwrap();
+    std::fs::write(existing_dir.join("SKILL.md"), b"---\nname: Existing\n---").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("existing", &existing_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "existing", "skills/existing").await;
+    let repository_id = db::get_skill_repository_assignment(&pool, "existing")
+        .await
+        .unwrap()
+        .repository
+        .id;
+
+    let snapshot = skill_snapshot(vec![
+        ("skills/existing/SKILL.md", b"---\nname: Existing\n---"),
+        (
+            "skills/new-skill/SKILL.md",
+            b"---\nname: New Skill\n---\n\nPinned bytes",
+        ),
+    ]);
+    let snapshot_digest =
+        crate::services::github_import::repository_snapshot_digest_from_local(&snapshot);
+    db::upsert_pending_addition(
+        &pool,
+        &db::SkillRepositoryPendingAddition {
+            repository_id: repository_id.clone(),
+            source_path: "skills/new-skill".to_string(),
+            skill_id: "new-skill".to_string(),
+            skill_name: "New Skill".to_string(),
+            conflict_existing_skill_id: None,
+            resolved_commit_sha: Some("a".repeat(40)),
+            snapshot_digest: Some(snapshot_digest),
+            discovered_at: Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+    let cache = snapshots_cache_with(vec![(test_repo(), snapshot)]);
+    let cancel = AtomicBool::new(false);
+
+    let result = super::apply_skill_update_decisions_impl(
+        None,
+        "apply-pinned-addition",
+        &pool,
+        &ActiveTarget::Local,
+        &CentralFs::Local,
+        &cancel,
+        None,
+        &http_client(),
+        &cache,
+        SkillUpdateDecisions {
+            import_additions: vec![central_updates::CentralRepositoryAddedSkillSelection {
+                repository_id: repository_id.clone(),
+                selections: vec![github_import::GitHubSkillImportSelection {
+                    source_path: "skills/new-skill".to_string(),
+                    resolution: github_import::DuplicateResolution::Overwrite,
+                    renamed_skill_id: None,
+                }],
+            }],
+            ..SkillUpdateDecisions::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    assert!(result.failures.is_empty(), "{:#?}", result.failures);
+    assert_eq!(result.imported_skill_ids, vec!["new-skill"]);
+    assert!(db::list_pending_additions(&pool).await.unwrap().is_empty());
+    assert_eq!(
+        std::fs::read_to_string(home.join(".skillsmanage/skills/new-skill/SKILL.md")).unwrap(),
+        "---\nname: New Skill\n---\n\nPinned bytes"
+    );
+    let resolved_commit_sha: Option<String> = sqlx::query_scalar(
+        "SELECT resolved_commit_sha FROM skill_repository_members WHERE skill_id = ?",
+    )
+    .bind("new-skill")
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let expected_commit_sha = "a".repeat(40);
+    assert_eq!(
+        resolved_commit_sha.as_deref(),
+        Some(expected_commit_sha.as_str())
+    );
+}
+
+#[tokio::test]
+async fn apply_legacy_pending_addition_fails_closed_and_keeps_the_row() {
+    let temp = TempDir::new().unwrap();
+    let home = temp.path();
+    let pool = setup_test_db_with_home(home).await;
+    let existing_dir = home.join(".skillsmanage/skills/existing");
+    std::fs::create_dir_all(&existing_dir).unwrap();
+    std::fs::write(existing_dir.join("SKILL.md"), b"---\nname: Existing\n---").unwrap();
+    db::upsert_skill(&pool, &make_central_skill("existing", &existing_dir))
+        .await
+        .unwrap();
+    assign_test_repo(&pool, "existing", "skills/existing").await;
+    let repository_id = db::get_skill_repository_assignment(&pool, "existing")
+        .await
+        .unwrap()
+        .repository
+        .id;
+    db::upsert_pending_addition(
+        &pool,
+        &db::SkillRepositoryPendingAddition {
+            repository_id: repository_id.clone(),
+            source_path: "skills/legacy".to_string(),
+            skill_id: "legacy".to_string(),
+            skill_name: "Legacy".to_string(),
+            conflict_existing_skill_id: None,
+            resolved_commit_sha: None,
+            snapshot_digest: None,
+            discovered_at: Utc::now().to_rfc3339(),
+        },
+    )
+    .await
+    .unwrap();
+    let cancel = AtomicBool::new(false);
+
+    let result = super::apply_skill_update_decisions_impl(
+        None,
+        "apply-legacy-addition",
+        &pool,
+        &ActiveTarget::Local,
+        &CentralFs::Local,
+        &cancel,
+        Some("configured-token"),
+        &http_client(),
+        &CentralUpdateSnapshotCache::default(),
+        SkillUpdateDecisions {
+            import_additions: vec![central_updates::CentralRepositoryAddedSkillSelection {
+                repository_id: repository_id.clone(),
+                selections: vec![github_import::GitHubSkillImportSelection {
+                    source_path: "skills/legacy".to_string(),
+                    resolution: github_import::DuplicateResolution::Overwrite,
+                    renamed_skill_id: None,
+                }],
+            }],
+            ..SkillUpdateDecisions::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    assert!(result.imported_skill_ids.is_empty());
+    assert_eq!(result.failures.len(), 1);
+    assert_eq!(
+        result.failures[0].error_code.as_deref(),
+        Some("central_updates.inventory_refresh_required")
+    );
+    assert_eq!(db::list_pending_additions(&pool).await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn pinned_addition_cache_miss_downloads_the_persisted_commit_only() {
+    let snapshot = skill_snapshot(vec![(
+        "skills/new-skill/SKILL.md",
+        b"---\nname: New Skill\n---",
+    )]);
+    let identity = PendingAdditionSnapshotIdentity {
+        resolved_commit_sha: "b".repeat(40),
+        snapshot_digest: crate::services::github_import::repository_snapshot_digest_from_local(
+            &snapshot,
+        ),
+    };
+    let cache = CentralUpdateSnapshotCache::default();
+    let download_count = Arc::new(AtomicUsize::new(0));
+    let observed_count = Arc::clone(&download_count);
+    let expected_commit = identity.resolved_commit_sha.clone();
+
+    let loaded = load_verified_local_addition_snapshot_with(
+        &cache,
+        &test_repo(),
+        &identity,
+        move |pinned_repo| async move {
+            observed_count.fetch_add(1, Ordering::SeqCst);
+            assert_eq!(pinned_repo.branch, expected_commit);
+            Ok(snapshot)
+        },
+    )
+    .await
+    .unwrap();
+
+    assert!(loaded.matches_identity(&identity.resolved_commit_sha, &identity.snapshot_digest));
+    assert_eq!(download_count.load(Ordering::SeqCst), 1);
+    let cached =
+        load_verified_local_addition_snapshot_with(&cache, &test_repo(), &identity, |_| async {
+            panic!("an exact cache hit must not download GitHub again")
+        })
+        .await
+        .unwrap();
+    assert!(Arc::ptr_eq(&loaded, &cached));
+    assert_eq!(download_count.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn pinned_addition_rejects_cache_bytes_that_do_not_match_the_inventory_digest() {
+    let expected_snapshot = skill_snapshot(vec![(
+        "skills/new-skill/SKILL.md",
+        b"---\nname: Expected\n---",
+    )]);
+    let identity = PendingAdditionSnapshotIdentity {
+        resolved_commit_sha: "c".repeat(40),
+        snapshot_digest: crate::services::github_import::repository_snapshot_digest_from_local(
+            &expected_snapshot,
+        ),
+    };
+    let corrupted_snapshot = skill_snapshot(vec![(
+        "skills/new-skill/SKILL.md",
+        b"---\nname: Changed\n---",
+    )]);
+    let cache = CentralUpdateSnapshotCache::default();
+    cache
+        .insert(
+            repo_cache_key(&test_repo()),
+            CentralUpdateRepositorySnapshot::new(
+                identity.resolved_commit_sha.clone(),
+                identity.snapshot_digest.clone(),
+                corrupted_snapshot,
+            ),
+        )
+        .unwrap();
+
+    let error =
+        load_verified_local_addition_snapshot_with(&cache, &test_repo(), &identity, |_| async {
+            panic!("identity-matched cache corruption must fail before download")
+        })
+        .await
+        .unwrap_err();
+
+    assert!(matches!(error, CentralUpdatesError::SnapshotChanged));
 }
 
 #[tokio::test]
@@ -2529,6 +2833,8 @@ async fn apply_import_prunes_pending_additions_for_deleted_repository() {
             skill_id: "stale".to_string(),
             skill_name: "Stale".to_string(),
             conflict_existing_skill_id: None,
+            resolved_commit_sha: None,
+            snapshot_digest: None,
             discovered_at: Utc::now().to_rfc3339(),
         },
     )
@@ -2566,6 +2872,8 @@ async fn apply_skip_addition_records_sync_skip_and_clears_pending() {
             skill_id: "new-skill".to_string(),
             skill_name: "New Skill".to_string(),
             conflict_existing_skill_id: None,
+            resolved_commit_sha: None,
+            snapshot_digest: None,
             discovered_at: Utc::now().to_rfc3339(),
         },
     )
@@ -4066,10 +4374,10 @@ async fn retry_refreshes_only_the_requested_repository_and_keeps_the_rest() {
     cache
         .insert(
             repo_cache_key(&alt_repo()),
-            skill_snapshot(vec![(
+            pinned_snapshot(skill_snapshot(vec![(
                 "skills/broken/SKILL.md",
                 b"---\nname: Broken\n---\n\nnew",
-            )]),
+            )])),
         )
         .expect("seed alt snapshot");
 

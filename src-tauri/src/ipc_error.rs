@@ -314,7 +314,12 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
             Some("Could not reach GitHub. Check the network and try again.")
         }
         "github_import.rate_limited" => Some("GitHub rate limited the request. Try again later."),
-        "github_import.access_denied" => Some("GitHub denied access to the repository."),
+        "github_import.access_denied" => Some(
+            "GitHub denied anonymous access to the repository. Configure a token if the repository requires authentication.",
+        ),
+        "github_import.configured_token_failed" => Some(
+            "GitHub denied the authenticated request. Check that the token owner can read the repository and that the token has the required permissions.",
+        ),
         "github_import.repo_not_found" => Some("The GitHub repository was not found."),
         "github_import.archive_unavailable" => {
             Some("The GitHub repository archive is unavailable.")
@@ -370,6 +375,12 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
         "central_updates.inventory_invariant" => {
             Some("The update inventory could not be finalized.")
         }
+        "central_updates.inventory_refresh_required" => {
+            Some("Refresh the update inventory before importing this repository.")
+        }
+        "central_updates.snapshot_changed" => Some(
+            "The repository content did not match the update inventory. Refresh and try again.",
+        ),
         "central.reset_failed" => Some("Unknown-source Central skills could not be reset."),
         "central_skills.mutation_lock_failed" => {
             Some("Central is busy with another change. Try again shortly.")

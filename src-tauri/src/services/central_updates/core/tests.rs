@@ -8,6 +8,7 @@ use crate::services::central_updates::fs::{
     collect_remote_skill_files, ensure_remote_skill_manifest, RemoteSkillFile,
 };
 use crate::services::central_updates::repository_sync::build_remote_missing_skills;
+use crate::services::central_updates::snapshots::CentralUpdateRepositorySnapshot;
 use crate::services::central_updates::{collect_remote_added_skills, repo_cache_key};
 use crate::services::github_import::{GitHubRepoRef, GitHubRepoSnapshot};
 use crate::test_support::mem_pool as setup_test_db;
@@ -16,6 +17,15 @@ use sqlx::SqlitePool;
 use std::path::Path;
 use std::sync::Arc;
 use tempfile::TempDir;
+
+fn pinned_snapshot(snapshot: GitHubRepoSnapshot) -> Arc<CentralUpdateRepositorySnapshot> {
+    let digest = crate::services::github_import::repository_snapshot_digest_from_local(&snapshot);
+    Arc::new(CentralUpdateRepositorySnapshot::new(
+        "a".repeat(40),
+        digest,
+        snapshot,
+    ))
+}
 
 async fn setup_remote_test_db(remote_home: &Path) -> SqlitePool {
     crate::test_support::mem_pool_with_home(&remote_home.to_string_lossy()).await
@@ -146,7 +156,7 @@ async fn collect_remote_added_skills_detects_repo_candidates_not_in_local_member
     let repo = test_repo();
     let snapshots = HashMap::from([(
         repo_cache_key(&repo),
-        Arc::new(GitHubRepoSnapshot {
+        pinned_snapshot(GitHubRepoSnapshot {
             files: HashMap::from([
                 (
                     "skills/existing/SKILL.md".to_string(),
@@ -208,7 +218,7 @@ async fn collect_remote_added_skills_splits_persisted_skips() {
     let repo = test_repo();
     let snapshots = HashMap::from([(
         repo_cache_key(&repo),
-        Arc::new(GitHubRepoSnapshot {
+        pinned_snapshot(GitHubRepoSnapshot {
             files: HashMap::from([
                 (
                     "skills/existing/SKILL.md".to_string(),

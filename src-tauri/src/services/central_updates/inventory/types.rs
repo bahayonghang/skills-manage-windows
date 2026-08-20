@@ -385,17 +385,17 @@ impl SkillUpdateApplyFailure {
         repository_id: impl Into<String>,
         error: crate::services::github_import::GithubImportError,
     ) -> Self {
+        let error_code = error
+            .ipc_error_code()
+            .unwrap_or("central_updates.import_addition_failed");
+        let public_error = crate::ipc_error::public_message_for_code(error_code)
+            .unwrap_or("This update item could not be applied.");
         Self {
             step: "import_addition".to_string(),
             identifier: safe_logical_identifier(repository_id.into()),
             phase: Some("decision_apply".to_string()),
-            error: error.to_string(),
-            error_code: Some(
-                error
-                    .ipc_error_code()
-                    .unwrap_or("central_updates.import_addition_failed")
-                    .to_string(),
-            ),
+            error: public_error.to_string(),
+            error_code: Some(error_code.to_string()),
             error_category: Some(error.diagnostic_category().to_string()),
         }
     }

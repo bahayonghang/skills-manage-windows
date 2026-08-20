@@ -356,9 +356,9 @@ pub(super) fn fallback_reason_for(error: &GithubImportError) -> Option<FallbackR
     match error {
         GithubImportError::TreeManifestTruncated => Some(FallbackReason::Truncated),
         GithubImportError::TreeManifestUnsupportedMode { .. } => Some(FallbackReason::Unsupported),
-        GithubImportError::RateLimited(_) | GithubImportError::AccessDenied(_) => {
-            Some(FallbackReason::Denied)
-        }
+        GithubImportError::RateLimited(_)
+        | GithubImportError::AccessDenied(_)
+        | GithubImportError::ConfiguredTokenAccessDenied(_) => Some(FallbackReason::Denied),
         GithubImportError::Http(_) | GithubImportError::RepoNotFound => {
             Some(FallbackReason::Transport)
         }

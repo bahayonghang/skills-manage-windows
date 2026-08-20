@@ -74,6 +74,12 @@ foreign_key_check -> seed -> publish pool`.
   on `skill_repositories`, because repository rows are shared by every skill
   imported from the same repo and would overwrite each other. See
   [GitHub Import Preview Contract](./github-import-preview-contract.md).
+- Migration 6 is append-only: two nullable columns, `resolved_commit_sha` and
+  `snapshot_digest`, are added to `skill_repository_pending_additions`. Existing
+  rows remain `NULL` and Update Center Apply fails closed until Refresh replaces
+  them with one immutable repository identity. Migration 1's live table builder
+  remains unchanged so the released migration-1 checksum and the v6 `ALTER`
+  history do not collide.
 
 ## 4. Validation & Error Matrix
 
@@ -91,6 +97,7 @@ foreign_key_check -> seed -> publish pool`.
 | Table rebuild row count changes                               | Roll back migration 2                                                  |
 | Migration 3 active-operation uniqueness or schema check fails | Roll back migration 3 and restore the pre-migration database backup    |
 | Migration 4 `ADD COLUMN` fails                                | Roll back migration 4 and restore the pre-migration database backup    |
+| Migration 6 pending-addition `ADD COLUMN` fails                | Roll back migration 6 and restore the pre-migration database backup    |
 | A later writer supplies no provenance for an existing row     | `COALESCE` keeps the stored commit/digest; never overwrite with `NULL` |
 
 All errors below command boundaries remain `sqlx::Error`; backup, metadata,
@@ -128,7 +135,7 @@ repair audit, restore, and FK validation are never best effort.
   digests before the focused fixture-lock test runs.
 - A locked digest for each descriptor, including migrations 3 and 4; changing
   runtime repair code alone must not change an already-released migration digest.
-- Fixture pre-schema assertions, four contiguous migration rows, preserved
+- Fixture pre-schema assertions, six contiguous migration rows, preserved
   sentinel data, seven cascade FKs, empty `foreign_key_check`, and idempotent
   current reopen with no extra backup.
 - The future-version preflight fixture must sit one above the highest descriptor;
@@ -137,6 +144,9 @@ repair audit, restore, and FK validation are never best effort.
   without a snapshot writes `(None, None)`, and a later provenance-less writer
   preserves a stored commit/digest
   (`test_github_provenance_is_written_once_and_preserved_by_later_writers`).
+- Pending-addition provenance coverage: pre-v6 rows survive with `(None, None)`,
+  new upserts replace both identity fields together, current/new databases open
+  at v6, and the future-version fixture remains exactly one version ahead.
 - Multiple simultaneous pool connections each report `foreign_keys=1`.
 - Checksum drift, applied gap, and future version reject without backup/write.
 - The exact migration-1 Windows alias opens without rewrite or backup; a random

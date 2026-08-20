@@ -58,6 +58,33 @@ pub(crate) fn repository_import_url(repository: &SkillRepository) -> Option<Stri
     }
 }
 
+/// Reconstruct the persisted repository reference without resolving a URL or
+/// branch. Decision Apply must stay bound to the immutable commit recorded by
+/// Refresh, so incomplete legacy repository metadata is not repaired through
+/// a second GitHub lookup here.
+pub(crate) fn repository_repo_ref(repository: &SkillRepository) -> Option<GitHubRepoRef> {
+    if repository.source_type != "github" || repository.is_unknown {
+        return None;
+    }
+    let owner = repository.owner.as_ref()?.trim();
+    let repo = repository.repo.as_ref()?.trim();
+    let branch = repository.branch.as_ref()?.trim();
+    if owner.is_empty() || repo.is_empty() || branch.is_empty() {
+        return None;
+    }
+    Some(GitHubRepoRef {
+        owner: owner.to_string(),
+        repo: repo.to_string(),
+        branch: branch.to_string(),
+        normalized_url: repository
+            .url
+            .as_deref()
+            .filter(|url| !url.trim().is_empty())
+            .map(|url| url.trim().trim_end_matches('/').to_string())
+            .unwrap_or_else(|| format!("https://github.com/{owner}/{repo}")),
+    })
+}
+
 pub(crate) fn repository_id_for_state(
     repo_by_id: &HashMap<String, SkillRepository>,
     state_row: &SkillUpdateState,
@@ -85,20 +112,8 @@ pub(crate) async fn load_syncable_github_repositories(
         if repository.is_unknown || repository.source_type != "github" {
             continue;
         }
-        let repo_ref = if let (Some(owner), Some(repo), Some(branch)) = (
-            repository.owner.as_ref(),
-            repository.repo.as_ref(),
-            repository.branch.as_ref(),
-        ) {
-            GitHubRepoRef {
-                owner: owner.clone(),
-                repo: repo.clone(),
-                branch: branch.clone(),
-                normalized_url: repository
-                    .url
-                    .clone()
-                    .unwrap_or_else(|| format!("https://github.com/{owner}/{repo}")),
-            }
+        let repo_ref = if let Some(repo_ref) = repository_repo_ref(&repository) {
+            repo_ref
         } else {
             let Some(url) = repository_import_url(&repository) else {
                 continue;

@@ -50,6 +50,17 @@ refresh/retry Operation Log 最多保存 50 个 `{repositoryId,errorCode,errorCa
 
 分片继承基线的 cache policy，使重试看到的与再刷一次该面板一致。
 
+### 2.3 Remote addition 的不可变 Apply 权威
+
+- Refresh 从同一 pinned repository snapshot 生成新增项，并在每个 pending row
+  写入同一 full commit SHA 和 repository digest。
+- Apply 先按 repository 合并 selections，再读取 selected pending rows；缺失、
+  legacy `NULL`、格式错误或混合 identity 只失败该 repository，并保留其 rows。
+- Local exact cache hit不得触网；cache miss 只获取持久化 full SHA 并校验摘要。
+  SSH / WSL 同样以 full SHA 创建 workspace并校验完整 repository manifest。
+- Apply 禁止重新解析 display branch。成功后只删除成功 imported 或明确 skip 的
+  pending rows，不影响同批其它 repository 的 partial success。
+
 Inventory invariant 是内部 fail-closed 错误：IPC code 固定为 `central_updates.inventory_invariant`、`retryable=false`，Operation Log 只记录固定 category / phase，不得写重复 key、skill id、仓库 URL、本地路径或 SQLite 错误文本。全局 legacy unique-constraint 映射不作为 inventory 的错误分类路径。
 
 ## 3. 自动归位规则

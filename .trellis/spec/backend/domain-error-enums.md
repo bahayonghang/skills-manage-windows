@@ -47,7 +47,8 @@ pub enum XxxError {
 ```rust
 #[error("{0}")] Http(String),         // 传输/协议/非 2xx/镜像回退汇总
 #[error("{0}")] RateLimited(String),  // 429 / x-ratelimit 分类命中
-#[error("{0}")] AccessDenied(String), // 401/403 非限流
+#[error("{0}")] AccessDenied(String), // 401/403 非限流，未使用认证
+#[error("{0}")] ConfiguredTokenAccessDenied(String), // 401/403 且请求已使用认证
 #[error("{0}")] Parse(String),        // JSON/UTF-8 解析失败，不复用 Http
 ```
 
@@ -66,6 +67,7 @@ pub enum XxxError {
 | 直接 sqlx 调用       | `#[from] sqlx::Error` 透传（`?`）                                                                   |
 | repos 内业务校验失败 | `sqlx::Error::InvalidArgument(原消息)`（Display "{0}"，文案逐字保留）                               |
 | reqwest 失败         | 按类别 map 到 `Http`/`RateLimited`/`AccessDenied`/`Parse`，禁止 `#[from]`                           |
+| GitHub 401/403       | 保留 typed `used_auth`；匿名与 configured-token failure 使用不同稳定 code，禁止解析 Display       |
 | resource_budget 违规 | `.map_err(XxxError::Budget)`（`#[error("{0}")] Budget(BudgetExceeded)`，typed struct 文案逐字保留） |
 | spawn_blocking join  | `run_blocking_fs_with(label, task, XxxError::task_join)`                                            |
 | 调用方需区分错误类别 | 加语义化变体 + `matches!`，禁止 `error.contains("...")` 字符串判断                                  |
