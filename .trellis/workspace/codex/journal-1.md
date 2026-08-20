@@ -112,3 +112,39 @@ nanoid 3.3.16 -> 3.3.18（CVE-2026-67213），RUSTSEC-2026-0235 因 rust_decimal
 ### Next Steps
 
 - 到期前复查 rkyv 0.7 是否有修复版本
+
+
+## Session 4: 永久固定 Update Center 新增项导入快照
+
+**Date**: 2026-08-20
+**Task**: 永久固定 Update Center 新增项导入快照
+**Branch**: `dev`
+
+### Summary
+
+Update Center Refresh 持久化固定 commit SHA 与仓库摘要，Apply 在 Local、SSH 和 WSL 上只导入同一已确认快照，并准确区分匿名拒绝与已配置 token 失败。
+
+### Main Changes
+
+- 新增 migration 6，为 pending additions 持久化 resolved commit SHA 与 snapshot digest；旧 NULL 行安全要求 Refresh。
+- Apply 按仓库合并 selections，精确复用缓存或仅按固定 SHA 重取并校验摘要，覆盖 Local、SSH 与 WSL。
+- 保留 GitHub used_auth 类型事实，输出稳定、脱敏、可本地化的 access_denied、configured_token_failed 与 snapshot 错误。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `76921945` | (see git log) |
+| `92ce4c19` | (see git log) |
+| `19511d74` | (see git log) |
+
+### Testing
+
+- [OK] just ci 通过。
+- [OK] task.py validate 通过：implement.jsonl 与 check.jsonl 各 14 条。
+- [OK] just audit 仅因既有过期 exceptions 与 GHSA-qwww-vcr4-c8h2、RUSTSEC-2026-0258、RUSTSEC-2023-0071 未通过；本任务未改依赖或 lockfile。
+- [OK] 未访问真实 GitHub token，也未执行真实 SSH/WSL 端到端；固定 ref 与 digest parity 由纯测试覆盖。
+
+### Status
+
+[OK] **Completed**
