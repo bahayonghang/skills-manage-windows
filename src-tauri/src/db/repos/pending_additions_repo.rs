@@ -51,12 +51,15 @@ pub async fn upsert_pending_addition(
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO skill_repository_pending_additions
-         (repository_id, source_path, skill_id, skill_name, conflict_existing_skill_id, discovered_at)
-         VALUES (?, ?, ?, ?, ?, ?)
+         (repository_id, source_path, skill_id, skill_name, conflict_existing_skill_id,
+          resolved_commit_sha, snapshot_digest, discovered_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(repository_id, source_path) DO UPDATE SET
            skill_id                   = excluded.skill_id,
            skill_name                 = excluded.skill_name,
            conflict_existing_skill_id = excluded.conflict_existing_skill_id,
+           resolved_commit_sha        = excluded.resolved_commit_sha,
+           snapshot_digest            = excluded.snapshot_digest,
            discovered_at              = excluded.discovered_at",
     )
     .bind(&addition.repository_id)
@@ -64,6 +67,8 @@ pub async fn upsert_pending_addition(
     .bind(&addition.skill_id)
     .bind(&addition.skill_name)
     .bind(&addition.conflict_existing_skill_id)
+    .bind(&addition.resolved_commit_sha)
+    .bind(&addition.snapshot_digest)
     .bind(&addition.discovered_at)
     .execute(pool)
     .await

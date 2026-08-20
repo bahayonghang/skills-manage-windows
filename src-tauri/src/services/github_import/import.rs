@@ -162,6 +162,52 @@ pub(super) async fn import_github_repo_skills_from_snapshot(
     })
 }
 
+/// Import Central Update selections from a repository snapshot already bound
+/// to an immutable commit. This is deliberately narrower than the generic
+/// URL-based importer: it performs no source resolution or network request.
+pub(crate) async fn import_github_repo_skills_from_pinned_snapshot(
+    pool: &DbPool,
+    repo: &GitHubRepoRef,
+    resolved_commit_sha: &str,
+    snapshot: &GitHubRepoSnapshot,
+    selections: Vec<GitHubSkillImportSelection>,
+    app: Option<&AppHandle>,
+) -> Result<GitHubRepoImportResult, GithubImportError> {
+    validate_commit_sha(resolved_commit_sha)?;
+    let candidates = build_repo_skill_candidates_from_snapshot_at_path(repo, snapshot, None)?;
+    if candidates.is_empty() {
+        return Err(GithubImportError::NoImportableSkills);
+    }
+    let content_digest_by_source_path = candidates
+        .iter()
+        .map(|candidate| {
+            Ok((
+                candidate.source_path.clone(),
+                candidate_content_digest_from_snapshot(snapshot, &candidate.source_path)?,
+            ))
+        })
+        .collect::<Result<HashMap<_, _>, GithubImportError>>()?;
+    let provenance = ImportProvenance {
+        resolved_commit_sha: resolved_commit_sha.to_string(),
+        content_digest_by_source_path,
+    };
+    let central_root = central_skills_root(pool).await?;
+    std::fs::create_dir_all(&central_root).map_err(|error| {
+        GithubImportError::io("Failed to create central skills directory", error)
+    })?;
+    import_github_repo_skills_from_snapshot(
+        pool,
+        repo,
+        snapshot,
+        &candidates,
+        selections,
+        &central_root,
+        Some(&provenance),
+        app,
+    )
+    .await
+}
+
 pub(crate) async fn import_github_repo_skills_partially_with_auth(
     pool: &DbPool,
     repo_url: &str,

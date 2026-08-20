@@ -47,6 +47,12 @@ pub enum GithubImportError {
     #[error("{0}")]
     AccessDenied(String),
 
+    /// Authentication/permission denial after a configured token was sent to
+    /// a trusted GitHub endpoint. Kept separate from anonymous denial so IPC
+    /// and diagnostics never have to recover auth context from Display text.
+    #[error("{0}")]
+    ConfiguredTokenAccessDenied(String),
+
     /// Response-body / archive parse failure (JSON decode, UTF-8 checks).
     #[error("{0}")]
     Parse(String),
@@ -316,11 +322,14 @@ impl GithubImportError {
     /// Classify a GitHub access denial into `RateLimited` / `AccessDenied`,
     /// keeping the denial's preformatted Display text.
     pub(super) fn from_denial(denial: GitHubAccessDenial) -> Self {
+        let used_auth = denial.used_auth;
+        let message = denial.to_string();
         match denial.kind {
-            GitHubAccessDenialKind::RateLimited { .. } => Self::RateLimited(denial.to_string()),
-            GitHubAccessDenialKind::AuthenticationOrPermission => {
-                Self::AccessDenied(denial.to_string())
+            GitHubAccessDenialKind::RateLimited { .. } => Self::RateLimited(message),
+            GitHubAccessDenialKind::AuthenticationOrPermission if used_auth => {
+                Self::ConfiguredTokenAccessDenied(message)
             }
+            GitHubAccessDenialKind::AuthenticationOrPermission => Self::AccessDenied(message),
         }
     }
 
@@ -391,6 +400,7 @@ impl GithubImportError {
             | Self::ArchiveStatusExhausted => "github_import.transport_failed",
             Self::RateLimited(_) => "github_import.rate_limited",
             Self::AccessDenied(_) => "github_import.access_denied",
+            Self::ConfiguredTokenAccessDenied(_) => "github_import.configured_token_failed",
             Self::RepoNotFound => "github_import.repo_not_found",
             Self::ArchiveUnavailable => "github_import.archive_unavailable",
             Self::Parse(_) => "github_import.response_invalid",
@@ -481,6 +491,9 @@ impl GithubImportError {
             }
             Self::AccessDenied(_) => {
                 SnapshotFailureClassification::terminal("github_import.access_denied")
+            }
+            Self::ConfiguredTokenAccessDenied(_) => {
+                SnapshotFailureClassification::terminal("github_import.configured_token_failed")
             }
             Self::RateLimited(_) => {
                 SnapshotFailureClassification::terminal("github_import.rate_limited")
@@ -593,6 +606,7 @@ mod snapshot_failure_tests {
             GithubImportError::InvalidBranchSelection,
             GithubImportError::ArchiveRedirectRejected,
             GithubImportError::AccessDenied("token=secret".to_string()),
+            GithubImportError::ConfiguredTokenAccessDenied("token=secret".to_string()),
             GithubImportError::RepoNotFound,
             GithubImportError::Parse("response body".to_string()),
             GithubImportError::Budget(crate::services::resource_budget::BudgetExceeded::new(
@@ -610,6 +624,39 @@ mod snapshot_failure_tests {
 mod ipc_error_code_tests {
     use super::*;
     use crate::ipc_error::public_message_for_code;
+
+    #[test]
+    fn configured_github_denial_keeps_auth_context_in_the_typed_code() {
+        let configured = GithubImportError::from_denial(GitHubAccessDenial {
+            kind: GitHubAccessDenialKind::AuthenticationOrPermission,
+            operation: "reading the repository",
+            status: reqwest::StatusCode::FORBIDDEN,
+            used_auth: true,
+        });
+        let anonymous = GithubImportError::from_denial(GitHubAccessDenial {
+            kind: GitHubAccessDenialKind::AuthenticationOrPermission,
+            operation: "reading the repository",
+            status: reqwest::StatusCode::FORBIDDEN,
+            used_auth: false,
+        });
+
+        assert_eq!(
+            configured.ipc_error_code(),
+            Some("github_import.configured_token_failed")
+        );
+        assert_eq!(
+            configured.diagnostic_category(),
+            "github_import.configured_token_failed"
+        );
+        assert_eq!(
+            anonymous.ipc_error_code(),
+            Some("github_import.access_denied")
+        );
+        assert_eq!(
+            anonymous.diagnostic_category(),
+            "github_import.access_denied"
+        );
+    }
 
     fn locale_github_import_keys(json: &str) -> serde_json::Value {
         serde_json::from_str::<serde_json::Value>(json).unwrap()["backendErrors"]["github_import"]

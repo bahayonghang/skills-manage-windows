@@ -97,6 +97,7 @@ describe("backend error helpers", () => {
       "github_import.transport_failed",
       "github_import.rate_limited",
       "github_import.access_denied",
+      "github_import.configured_token_failed",
       "github_import.repo_not_found",
       "github_import.archive_unavailable",
       "github_import.response_invalid",
@@ -111,6 +112,8 @@ describe("backend error helpers", () => {
       "github_import.duplicate_selection",
       "github_import.rename_conflict",
       "central_updates.repository_check_failed",
+      "central_updates.inventory_refresh_required",
+      "central_updates.snapshot_changed",
     ];
 
     for (const language of ["en", "zh"] as const) {

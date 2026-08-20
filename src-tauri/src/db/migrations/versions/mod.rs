@@ -5,6 +5,7 @@ pub(super) mod v2;
 pub(super) mod v3;
 pub(super) mod v4;
 pub(super) mod v5;
+pub(super) mod v6;
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct MigrationDescriptor {
@@ -16,7 +17,7 @@ pub(super) struct MigrationDescriptor {
 pub(super) const PUBLISHED_WINDOWS_V1_CHECKSUM: &str =
     "aabde4fd51822355cbe2a7982ac895073f6e49e9f34882a50086d145462a736d";
 
-pub(super) const MIGRATIONS: [MigrationDescriptor; 5] = [
+pub(super) const MIGRATIONS: [MigrationDescriptor; 6] = [
     MigrationDescriptor {
         version: 1,
         source: v1::SOURCE,
@@ -40,6 +41,11 @@ pub(super) const MIGRATIONS: [MigrationDescriptor; 5] = [
     MigrationDescriptor {
         version: 5,
         source: v5::SOURCE,
+        legacy_checksums: &[],
+    },
+    MigrationDescriptor {
+        version: 6,
+        source: v6::SOURCE,
         legacy_checksums: &[],
     },
 ];

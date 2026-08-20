@@ -241,8 +241,8 @@ describe("UpdateCenterDialog platform leftover cleanup", () => {
             identifier: "github:emilkowalski-skill-main",
             phase: "decision_apply",
             error: "token=secret https://example.invalid C:\\Users\\private",
-            errorCode: "github_import.access_denied",
-            errorCategory: "github_import.access_denied",
+            errorCode: "github_import.configured_token_failed",
+            errorCategory: "github_import.configured_token_failed",
           },
         ],
       }),
@@ -256,7 +256,7 @@ describe("UpdateCenterDialog platform leftover cleanup", () => {
 
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(
-        "github:emilkowalski-skill-main：GitHub 拒绝访问该仓库。请确认令牌具备读取权限。",
+        "github:emilkowalski-skill-main：GitHub 拒绝了已认证请求。请确认令牌所属账号可以读取该仓库，并且令牌具备所需权限。",
       ),
     );
     const messages = vi.mocked(toast.error).mock.calls.flat().join("\n");

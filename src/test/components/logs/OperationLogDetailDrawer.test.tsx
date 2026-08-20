@@ -70,7 +70,7 @@ describe("OperationLogDetailDrawer", () => {
 
     const failures = await screen.findByTestId("logs-detail-failures");
     expect(failures).toHaveTextContent(
-      "GitHub 拒绝访问该仓库。请确认令牌具备读取权限。",
+      "GitHub 拒绝匿名访问该仓库。如果仓库需要认证，请配置 GitHub 令牌。",
     );
     expect(failures).toHaveTextContent("github:emilkowalski-skill-main");
     expect(failures).not.toHaveTextContent("token=secret");

@@ -200,6 +200,8 @@ async fn local_apply_deletes_only_unknown_source_and_clears_inventory() {
             skill_id: "extra".to_string(),
             skill_name: "extra".to_string(),
             conflict_existing_skill_id: None,
+            resolved_commit_sha: None,
+            snapshot_digest: None,
             discovered_at: Utc::now().to_rfc3339(),
         },
     )

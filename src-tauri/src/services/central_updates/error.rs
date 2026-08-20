@@ -159,6 +159,17 @@ pub enum CentralUpdatesError {
     #[error("Update inventory contains duplicate entry keys.")]
     InventoryInvariant,
 
+    /// A pending addition predates immutable inventory provenance or mixes
+    /// identities from different refreshes. The user must refresh before any
+    /// repository content can be imported safely.
+    #[error("The update inventory must be refreshed before importing this repository.")]
+    InventoryRefreshRequired,
+
+    /// Pinned reacquisition returned bytes that do not match the digest which
+    /// produced the pending inventory. Fail closed before Central mutation.
+    #[error("The repository snapshot no longer matches the update inventory.")]
+    SnapshotChanged,
+
     // ── Update inventory: platform-copy removal safety rails ────────────────
     #[error("Agent '{0}' not found")]
     AgentNotFound(String),
@@ -244,6 +255,11 @@ impl CentralUpdatesError {
                 "central_updates.inventory_invariant",
                 "inventory_persistence",
             )),
+            Self::InventoryRefreshRequired => Some((
+                "central_updates.inventory_refresh_required",
+                "decision_apply",
+            )),
+            Self::SnapshotChanged => Some(("central_updates.snapshot_changed", "decision_apply")),
             _ => None,
         }
     }
@@ -268,6 +284,8 @@ impl CentralUpdatesError {
             Self::BatchCancelled => "central_updates.cancelled",
             Self::Json(_) => "central_updates.json",
             Self::InventoryInvariant => "central_updates.inventory_invariant",
+            Self::InventoryRefreshRequired => "central_updates.inventory_refresh_required",
+            Self::SnapshotChanged => "central_updates.snapshot_changed",
             Self::TaskJoin { .. } => "central_updates.task_join",
             Self::SnapshotDownloaderClosed => "central_updates.snapshot_downloader_closed",
             _ => "central_updates.validation",
@@ -301,6 +319,16 @@ impl CentralUpdatesError {
             Self::InventoryInvariant => concat!(
                 "central_updates.inventory_invariant: ",
                 "The update inventory could not be finalized."
+            )
+            .to_string(),
+            Self::InventoryRefreshRequired => concat!(
+                "central_updates.inventory_refresh_required: ",
+                "Refresh the update inventory before importing this repository."
+            )
+            .to_string(),
+            Self::SnapshotChanged => concat!(
+                "central_updates.snapshot_changed: ",
+                "The repository content did not match the update inventory. Refresh and try again."
             )
             .to_string(),
             _ => self.to_string(),
