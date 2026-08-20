@@ -1208,6 +1208,61 @@ snapshot.verify_integrity(&selections)?;
 A lost or moved snapshot is a user-visible "preview again", never a silent
 re-fetch.
 
+## Scenario: Central Update Immutable Addition Authority
+
+### 1. Scope / Trigger
+
+Apply this scenario when Update Center refresh or decision apply changes remote
+addition discovery, pending-addition persistence, snapshot caching, or Local /
+SSH / WSL GitHub import. Unlike the renderer preview registry, this authority
+must survive cache eviction and application restart.
+
+### 2. Contracts
+
+- Refresh resolves each display repository ref to one full 40-hex commit SHA,
+  acquires the repository at that pinned ref, and computes the existing
+  `sha256-v1:<hex>` repository snapshot digest. Every pending addition from that
+  snapshot persists the same commit and digest.
+- Apply groups selections by repository and treats the pending rows as the only
+  content authority. A selected row that is missing, has legacy `NULL`
+  provenance, has malformed provenance, or disagrees with another selected row
+  returns `central_updates.inventory_refresh_required` before mutation.
+- A Local exact cache hit verifies both the immutable identity and retained
+  bytes, then uses the snapshot-only importer without a GitHub request. A miss
+  downloads the persisted commit directly and accepts it only when the complete
+  repository digest matches. Apply never resolves the display branch.
+- SSH / WSL creates a remote workspace from the persisted full commit, computes
+  the complete remote repository manifest digest, and calls the workspace-only
+  importer only after equality. Cleanup runs on every outcome.
+- Successful Local and remote imports persist the full commit and per-candidate
+  content digest on `skill_repository_members`. Repository snapshot bytes and
+  credentials are never persisted.
+- `central_updates.snapshot_changed` is the fixed pre-mutation failure for an
+  identity-matched cache whose bytes are corrupt or a pinned reacquisition whose
+  digest differs. The failed pending rows remain available for refresh/retry.
+
+### 3. Validation Matrix
+
+| Condition | Required result |
+| --- | --- |
+| Fresh cache contains exact commit, digest, and bytes | Import with zero acquisition |
+| Cache missing, expired, evicted, or oversized | Acquire the persisted full SHA once; never resolve branch |
+| Branch moves after Refresh | Continue using Refresh-time commit and bytes |
+| Selected pending identity is absent, malformed, or mixed | `inventory_refresh_required`; no Central mutation |
+| Pinned bytes do not reproduce repository digest | `snapshot_changed`; no Central mutation |
+| One repository fails while another succeeds | Preserve ordered partial success and only delete successful rows |
+
+### 4. Tests Required
+
+- Inventory tests proving repository grouping, exact-cache zero acquisition,
+  cache-miss full-SHA acquisition, legacy `NULL` rejection, digest mismatch,
+  successful pending-row cleanup, and failure-row retention.
+- Refresh persistence tests asserting full commit and digest on pending rows.
+- Remote repository/candidate digest parity tests using the existing manifest
+  parser and pinned-ref helper; real SSH/WSL end-to-end evidence remains subject
+  to the transport-seam limitation documented above.
+- Migration, coded-error/i18n, Rust locked tests, and full `just ci`.
+
 ## Scenario: Manual Single-Segment Branch Selection
 
 ### 1. Scope / Trigger
