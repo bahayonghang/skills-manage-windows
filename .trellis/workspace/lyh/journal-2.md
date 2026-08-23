@@ -1438,3 +1438,37 @@ SSH/WSL Platform leftover apply now validates paths, deletes unique POSIX paths 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 106: 归档 Basic Memory 八客户端接入任务
+
+**Date**: 2026-08-23
+**Task**: 归档 Basic Memory 八客户端接入任务
+**Branch**: `dev`
+
+### Summary
+
+把 08-23-basic-memory-agents 的规划、调研与实施记录提交进仓库，并归档该任务。SkillPort 产品代码未改。本机 Basic Memory CLI、用户级 MCP、Claude/Codex plugin 已落地。Codex /hooks 信任仍待用户在客户端内完成。
+
+### Main Changes
+
+- 提交 Trellis 任务文件：prd、design、implement、research/host-setup、notes
+- 归档任务到 .trellis/tasks/archive/2026-08/08-23-basic-memory-agents
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a1dab5bb` | (see git log) |
+
+### Testing
+
+- [OK] python ./.trellis/scripts/task.py validate 08-23-basic-memory-agents
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 用户在 Codex 打开 /hooks 并信任 Basic Memory hook
