@@ -1,0 +1,3 @@
+{"file": ".trellis/tasks/08-23-basic-memory-agents/research/host-setup.md", "reason": "核对 8 个用户级文件、未写入项目级 MCP、Grok memory 仍开启"}
+{"file": ".trellis/tasks/08-23-basic-memory-agents/prd.md", "reason": "验收标准：CLI、project 路径、plugin、SkillPort git status、Codex hooks 未冒充已验证"}
+{"file": "docs/agents/security-and-shared-state.md", "reason": "确认无密钥进入 Trellis 记录或 SkillPort 工作区"}
