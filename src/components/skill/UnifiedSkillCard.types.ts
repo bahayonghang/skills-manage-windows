@@ -90,6 +90,8 @@ export interface PlatformSkillCardProps extends SkillCardCoreProps {
   variant: "platform";
   sourceType: "symlink" | "copy" | "native";
   originKind: ClaudeSourceKind | null;
+  /** Backend/view-model origin; CLI junctions are not Central. */
+  installOrigin?: "central" | "standalone" | "skillsCli";
   isReadOnly: boolean;
   publisher?: string;
   /** 「近 30 天调用 N 次」徽章；仅当数值 > 0 时渲染。 */
@@ -150,6 +152,17 @@ export interface CollectionSkillCardProps extends SkillCardCoreProps {
   onRemove: () => void;
 }
 
+/** Skills CLI 全局技能卡片：规范路径 + 卸载（确认由页面对话框完成）。 */
+export interface SkillsCliSkillCardProps extends SkillCardCoreProps {
+  variant: "skillsCli";
+  path?: string | null;
+  agents: string[];
+  source?: string | null;
+  onUninstall: () => void;
+  uninstallLabel?: string;
+  isLoading?: boolean;
+}
+
 /**
  * 唯一技能卡片实现的显式场景 interface：调用方声明 `variant` + 该场景的窄 props，
  * 场景间互斥的 props 在编译期被拒绝（判别联合 + excess property check）。
@@ -160,4 +173,5 @@ export type UnifiedSkillCardProps =
   | ProjectSkillCardProps
   | ImportSkillCardProps
   | MarketplaceSkillCardProps
-  | CollectionSkillCardProps;
+  | CollectionSkillCardProps
+  | SkillsCliSkillCardProps;

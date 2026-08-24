@@ -16,20 +16,33 @@ export function SourceChip({ label }: { label: string }) {
   );
 }
 
-export function SourceIndicator({ sourceType }: { sourceType: string }) {
+export function SourceIndicator({
+  sourceType,
+  origin,
+}: {
+  sourceType: string;
+  origin?: "central" | "standalone" | "skillsCli";
+}) {
   const { t, i18n } = useTranslation();
-  const isSymlink = sourceType === "symlink";
+  const resolved =
+    origin ?? (sourceType === "symlink" ? "central" : "standalone");
+  const isCli = resolved === "skillsCli";
+  const isCentral = resolved === "central";
   const isNative = sourceType === "native";
-  const primaryLabel = isSymlink
-    ? t("platform.sourceCentral")
-    : t("platform.sourceStandalone");
-  const secondaryLabel = isSymlink
+  const primaryLabel = isCli
+    ? t("platform.sourceSkillsCli")
+    : isCentral
+      ? t("platform.sourceCentral")
+      : t("platform.sourceStandalone");
+  const secondaryLabel = isCli
     ? t("platform.sourceSymlinkLabel")
-    : isNative
-      ? t("platform.sourceNativeLabel", {
-          defaultValue: i18n.language.startsWith("zh") ? "原生" : "native",
-        })
-      : t("platform.sourceCopyLabel");
+    : isCentral
+      ? t("platform.sourceSymlinkLabel")
+      : isNative
+        ? t("platform.sourceNativeLabel", {
+            defaultValue: i18n.language.startsWith("zh") ? "原生" : "native",
+          })
+        : t("platform.sourceCopyLabel");
 
   return (
     <span
@@ -37,12 +50,12 @@ export function SourceIndicator({ sourceType }: { sourceType: string }) {
       className={cn(
         skillCardChipClassName,
         "border",
-        isSymlink
+        isCli || isCentral
           ? statusChipClass.info
           : "border-border bg-muted/40 text-muted-foreground",
       )}
     >
-      {isSymlink ? (
+      {isCli || isCentral ? (
         <Link2 className="size-3 shrink-0" />
       ) : (
         <FolderOpen className="size-3 shrink-0" />

@@ -85,7 +85,10 @@ step in an isolated process group and signal that group, so `pnpm`, Cargo, and
 their descendants do not continue after the aggregate command has failed.
 
 `pnpm sizecheck` enforces the 800-line limit uniformly across production source
-files. There are no frozen baseline exceptions or per-file allowlist bypasses.
+files. The generated IPC contract artifact `src/lib/ipc/generatedCommandMap.ts`
+is excluded because it is machine-written and must not be hand-split. There are
+no frozen baseline exceptions or per-file allowlist bypasses for hand-written
+production source.
 
 The local developer entrypoints are intentionally layered:
 
@@ -261,7 +264,7 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
 | Docs deploy checks out or rebuilds after artifact upload | Docs workflow contract fails |
 | Manual Docs dispatch uses a branch other than canonical `main` | Build fails before deployment |
 | Pages URL, HTTP status, or SkillPort identity is wrong | Bounded post-deploy smoke fails the workflow |
-| A production source file exceeds 800 lines | `pnpm sizecheck` fails; no per-file baseline exemption is permitted |
+| A hand-written production source file exceeds 800 lines | `pnpm sizecheck` fails; generated IPC artifacts are excluded, and no per-file baseline exemption is permitted for production source |
 | A business script sits at `scripts/` root, or a caller uses `dirname` twice to find the repo root | `developerExperienceContract.test.ts` fails, or the script reads `scripts/` as the repo root |
 | Rust/Serde IPC metadata drifts from the checked artifact | `pnpm ipc:codegen:check` fails before Rust fmt/Clippy/test |
 | Test/bin target has a Clippy warning | all-target Clippy fails |

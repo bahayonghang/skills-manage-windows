@@ -19,6 +19,7 @@
 ## 核心能力
 
 - 中央技能库与按平台安装、卸载工作流。
+- 在本机 Local 目标上管理 Skills CLI 全局技能（`npx skills -g`，固定 `skills@1.5.23`）。SkillPort 并不把 `~/.agents/skills/` 整棵树视为 Skills CLI 所有；所有权以 Skills CLI lock 文件为准。
 - 完整技能详情视图，支持 Markdown 预览、原始源码查看和 AI 解释生成。
 - 通过技能集合整理和批量安装 skills。
 - 支持扫描本地项目级 skill 库的 Discover 能力。

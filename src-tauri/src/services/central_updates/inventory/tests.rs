@@ -52,6 +52,7 @@ async fn refresh_skill_update_inventory_impl(
         snapshots_cache,
         scope,
         None,
+        false,
     )
     .await
 }
@@ -462,6 +463,7 @@ async fn refresh_regular_skill_scope_persists_unassigned_skills_as_unsupported()
         &cache,
         scope.clone(),
         Some(progress),
+        false,
     )
     .await
     .unwrap();
@@ -497,7 +499,7 @@ async fn refresh_regular_skill_scope_persists_unassigned_skills_as_unsupported()
     assert_eq!(entries[0].bucket, "unsupported");
     assert_eq!(entries[0].skill_id.as_deref(), Some("local-only"));
 
-    let reloaded = get_skill_update_inventory_impl_scoped(&pool, Some(scope))
+    let reloaded = get_skill_update_inventory_impl_scoped(&pool, Some(scope), false)
         .await
         .unwrap();
     assert_eq!(reloaded.unsupported.len(), 1);
@@ -542,7 +544,7 @@ async fn refresh_classifies_an_unparseable_github_source_path_as_unsupported() {
         inventory.unsupported[0].reason_code,
         UnsupportedSkillReasonCode::MissingSourcePath,
     );
-    let reloaded = get_skill_update_inventory_impl_scoped(&pool, Some(scope))
+    let reloaded = get_skill_update_inventory_impl_scoped(&pool, Some(scope), false)
         .await
         .unwrap();
     assert_eq!(reloaded.unsupported.len(), 1);
@@ -807,6 +809,7 @@ async fn refresh_progress_finishes_after_the_snapshot_stage() {
         &CentralUpdateSnapshotCache::default(),
         scope_all(),
         Some(progress),
+        false,
     )
     .await
     .unwrap();
@@ -857,6 +860,7 @@ async fn refresh_snapshot_failure_settles_the_repository_and_keeps_the_run() {
         &CentralUpdateSnapshotCache::default(),
         scope_repos(vec![&repository_id]),
         Some(progress),
+        false,
     )
     .await
     .expect("snapshot failure must not abort the refresh");
@@ -1247,6 +1251,7 @@ async fn refresh_regular_mode_returns_only_content_update_buckets() {
             scope_repos(vec![&repository_id]),
             SkillRefreshMode::Regular,
         )),
+        false,
     )
     .await
     .unwrap();
@@ -1626,6 +1631,7 @@ async fn refresh_persists_redirect_snapshot_actionable_states_for_reload() {
         &cache,
         scope_repos(vec![&repository_id]),
         Some(progress),
+        false,
     )
     .await
     .unwrap();
@@ -1637,10 +1643,13 @@ async fn refresh_persists_redirect_snapshot_actionable_states_for_reload() {
         .iter()
         .any(|event| event.status == SnapshotProgressStatus::RepositoryCompleted));
 
-    let reloaded =
-        get_skill_update_inventory_impl_scoped(&pool, Some(scope_repos(vec![&repository_id])))
-            .await
-            .unwrap();
+    let reloaded = get_skill_update_inventory_impl_scoped(
+        &pool,
+        Some(scope_repos(vec![&repository_id])),
+        false,
+    )
+    .await
+    .unwrap();
     assert_eq!(reloaded.updatable.len(), 1);
     assert_eq!(reloaded.updatable[0].state.skill_id, "with-update");
     assert_eq!(reloaded.remote_missing.len(), 1);
@@ -1750,7 +1759,7 @@ async fn refresh_clears_stale_update_inventory_without_touching_baseline() {
     .await
     .unwrap();
 
-    let inventory = get_skill_update_inventory_impl_scoped(&pool, None)
+    let inventory = get_skill_update_inventory_impl_scoped(&pool, None, false)
         .await
         .unwrap();
     assert!(inventory.updatable.is_empty());
@@ -1831,7 +1840,7 @@ async fn refresh_does_not_persist_skipped_remote_added_as_pending() {
 
     assert!(refreshed.remote_added.is_empty());
     assert!(db::list_pending_additions(&pool).await.unwrap().is_empty());
-    let reloaded = get_skill_update_inventory_impl_scoped(&pool, None)
+    let reloaded = get_skill_update_inventory_impl_scoped(&pool, None, false)
         .await
         .unwrap();
     assert!(reloaded.remote_added.is_empty());
@@ -2048,7 +2057,7 @@ async fn get_inventory_returns_persisted_state_without_remote_fetch() {
     .await
     .unwrap();
 
-    let inventory = get_skill_update_inventory_impl_scoped(&pool, None)
+    let inventory = get_skill_update_inventory_impl_scoped(&pool, None, false)
         .await
         .unwrap();
 
@@ -2077,7 +2086,7 @@ async fn get_inventory_prunes_pending_additions_for_deleted_repositories() {
     .await
     .unwrap();
 
-    let inventory = get_skill_update_inventory_impl_scoped(&pool, None)
+    let inventory = get_skill_update_inventory_impl_scoped(&pool, None, false)
         .await
         .unwrap();
 
@@ -2203,7 +2212,7 @@ async fn get_inventory_scope_platform_filters_state_additions_and_platform_bucke
     .unwrap();
 
     let inventory =
-        get_skill_update_inventory_impl_scoped(&pool, Some(scope_platform(vec!["codex"])))
+        get_skill_update_inventory_impl_scoped(&pool, Some(scope_platform(vec!["codex"])), false)
             .await
             .unwrap();
 
@@ -3822,9 +3831,10 @@ async fn scan_deleted_platform_copies_detects_observations_missing_from_central(
     .await
     .unwrap();
 
-    let groups = scan_deleted_platform_copies_with_pool(&pool, Some(vec!["cursor".to_string()]))
-        .await
-        .unwrap();
+    let groups =
+        scan_deleted_platform_copies_with_pool(&pool, Some(vec!["cursor".to_string()]), false)
+            .await
+            .unwrap();
 
     assert_eq!(groups.len(), 1);
     assert_eq!(groups[0].agent_id, "cursor");
@@ -3878,9 +3888,10 @@ async fn scan_deleted_platform_copies_excludes_skills_that_still_exist_in_centra
     .await
     .unwrap();
 
-    let groups = scan_deleted_platform_copies_with_pool(&pool, Some(vec!["cursor".to_string()]))
-        .await
-        .unwrap();
+    let groups =
+        scan_deleted_platform_copies_with_pool(&pool, Some(vec!["cursor".to_string()]), false)
+            .await
+            .unwrap();
 
     assert!(groups.is_empty());
 }
@@ -3912,9 +3923,10 @@ async fn scan_deleted_platform_copies_excludes_paths_outside_agent_root() {
     )
     .await
     .unwrap();
-    let groups = scan_deleted_platform_copies_with_pool(&pool, Some(vec!["cursor".to_string()]))
-        .await
-        .unwrap();
+    let groups =
+        scan_deleted_platform_copies_with_pool(&pool, Some(vec!["cursor".to_string()]), false)
+            .await
+            .unwrap();
 
     assert!(groups.is_empty());
 }
@@ -3941,9 +3953,10 @@ async fn scan_deleted_platform_copies_excludes_file_paths() {
     .await
     .unwrap();
 
-    let groups = scan_deleted_platform_copies_with_pool(&pool, Some(vec!["cursor".to_string()]))
-        .await
-        .unwrap();
+    let groups =
+        scan_deleted_platform_copies_with_pool(&pool, Some(vec!["cursor".to_string()]), false)
+            .await
+            .unwrap();
 
     assert!(groups.is_empty());
 }
@@ -3971,6 +3984,7 @@ async fn retry_failed_repositories_impl(
         repository_ids.into_iter().map(String::from).collect(),
         mode_override,
         None,
+        false,
     )
     .await
 }
@@ -4480,7 +4494,7 @@ async fn retry_skills_regular_inventory_replaces_repository_slice_without_duplic
     );
     assert!(merged.failed_repositories.is_empty());
 
-    let stored = get_skill_update_inventory_impl_scoped(&pool, Some(base_scope.clone()))
+    let stored = get_skill_update_inventory_impl_scoped(&pool, Some(base_scope.clone()), false)
         .await
         .unwrap();
     assert_eq!(stored.updatable.len(), 1);
@@ -4550,7 +4564,7 @@ async fn retry_platform_regular_inventory_replaces_repository_slice_without_dupl
     assert_eq!(merged.remote_missing[0].state.skill_id, "gone");
     assert!(merged.failed_repositories.is_empty());
 
-    let stored = get_skill_update_inventory_impl_scoped(&pool, Some(base_scope))
+    let stored = get_skill_update_inventory_impl_scoped(&pool, Some(base_scope), false)
         .await
         .unwrap();
     assert_eq!(stored.updatable.len(), 1);
@@ -4623,7 +4637,7 @@ async fn retry_replaces_legacy_null_repository_membership_rows() {
     set_persisted_actionable_repository_id_to_null(&pool, &inventory_id, "updatable", "stable")
         .await;
 
-    let legacy = get_skill_update_inventory_impl_scoped(&pool, Some(base_scope.clone()))
+    let legacy = get_skill_update_inventory_impl_scoped(&pool, Some(base_scope.clone()), false)
         .await
         .unwrap();
     assert_eq!(legacy.updatable.len(), 1);
@@ -4648,7 +4662,7 @@ async fn retry_replaces_legacy_null_repository_membership_rows() {
     assert_eq!(merged.remote_missing.len(), 1);
     assert_eq!(merged.remote_missing[0].state.skill_id, "gone");
 
-    let stored = get_skill_update_inventory_impl_scoped(&pool, Some(base_scope))
+    let stored = get_skill_update_inventory_impl_scoped(&pool, Some(base_scope), false)
         .await
         .unwrap();
     assert_eq!(stored.updatable.len(), 1);
@@ -4701,7 +4715,7 @@ async fn retry_replaces_legacy_null_remote_missing_row() {
         merged.remote_missing[0].repository_id.as_deref(),
         Some(repository_id.as_str())
     );
-    let stored = get_skill_update_inventory_impl_scoped(&pool, Some(base_scope))
+    let stored = get_skill_update_inventory_impl_scoped(&pool, Some(base_scope), false)
         .await
         .unwrap();
     assert_eq!(stored.remote_missing.len(), 1);
@@ -4760,7 +4774,7 @@ async fn retry_removes_legacy_null_row_when_target_is_now_up_to_date() {
     .unwrap();
 
     assert!(merged.updatable.is_empty());
-    let stored = get_skill_update_inventory_impl_scoped(&pool, Some(base_scope))
+    let stored = get_skill_update_inventory_impl_scoped(&pool, Some(base_scope), false)
         .await
         .unwrap();
     assert!(stored.updatable.is_empty());

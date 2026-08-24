@@ -117,6 +117,14 @@ export function PlatformOriginNav({
           />
         )}
         <OriginNavItem
+          label={t("platform.originNav.skillsCli")}
+          count={model.skillsCliCount}
+          icon={Link2}
+          isSelected={value.kind === "skillsCli"}
+          title={t("platform.sourceSkillsCli")}
+          onClick={() => onChange({ kind: "skillsCli" })}
+        />
+        <OriginNavItem
           label={t("platform.originNav.standalone")}
           count={model.standaloneCount}
           icon={FolderOpen}

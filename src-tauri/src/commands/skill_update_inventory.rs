@@ -116,6 +116,9 @@ pub async fn refresh_skill_update_inventory(
             let active_target = request_context.target().clone();
             let pool = request_context.db().clone();
             let target_context = target_context_from_active_target(&active_target);
+            // Only the Local target consults this machine's Skills CLI lock
+            // when excluding CLI-owned skills from leftover buckets.
+            let cli_lock_protect = crate::services::skills_cli::is_local_target(&active_target);
             let request_details = refresh_request_details(&scope);
             let progress = inventory_progress_reporter(app, operation_id);
             with_operation_log(
@@ -147,6 +150,7 @@ pub async fn refresh_skill_update_inventory(
                         &state.central_update_snapshots,
                         scope,
                         Some(progress),
+                        cli_lock_protect,
                     )
                     .await
                     .map_err(UpdateCommandError::from_central_updates)
@@ -179,6 +183,7 @@ pub async fn retry_failed_update_repositories(
             let active_target = request_context.target().clone();
             let pool = request_context.db().clone();
             let target_context = target_context_from_active_target(&active_target);
+            let cli_lock_protect = crate::services::skills_cli::is_local_target(&active_target);
             let request_details = retry_request_details(&scope, &repository_ids, mode_override);
             let progress = inventory_progress_reporter(app, operation_id);
             with_operation_log(
@@ -212,6 +217,7 @@ pub async fn retry_failed_update_repositories(
                         repository_ids,
                         mode_override,
                         Some(progress),
+                        cli_lock_protect,
                     )
                     .await
                     .map_err(UpdateCommandError::from_central_updates)
@@ -232,8 +238,11 @@ pub async fn get_skill_update_inventory(
 ) -> crate::ipc_error::IpcResult<SkillUpdateInventory> {
     crate::ipc_boundary!(
         async move {
-            let pool = state.active_db().await?;
-            get_skill_update_inventory_impl_scoped(&pool, scope)
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let pool = request_context.db().clone();
+            let cli_lock_protect = crate::services::skills_cli::is_local_target(&active_target);
+            get_skill_update_inventory_impl_scoped(&pool, scope, cli_lock_protect)
                 .await
                 .map_err(|e| e.to_string())
         }
@@ -764,8 +773,13 @@ pub async fn scan_deleted_platform_copies(
 ) -> crate::ipc_error::IpcResult<Vec<DeletedPlatformCopyGroup>> {
     crate::ipc_boundary!(
         async move {
-            let pool = state.active_db().await?;
-            scan_deleted_platform_copies_with_pool(&pool, agent_ids)
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let pool = request_context.db().clone();
+            // CLI lock protection applies only to the Local target; remote
+            // scans never consult this machine's lock file.
+            let cli_lock_protect = crate::services::skills_cli::is_local_target(&active_target);
+            scan_deleted_platform_copies_with_pool(&pool, agent_ids, cli_lock_protect)
                 .await
                 .map_err(|e| e.to_string())
         }

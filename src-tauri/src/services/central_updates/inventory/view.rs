@@ -10,6 +10,7 @@ use crate::services::central_updates::CentralUpdatesError;
 pub(crate) async fn get_skill_update_inventory_impl_scoped(
     pool: &DbPool,
     scope: Option<SkillRefreshScope>,
+    cli_lock_protect: bool,
 ) -> Result<SkillUpdateInventory, CentralUpdatesError> {
     /*
      * ========================================================================
@@ -62,8 +63,12 @@ pub(crate) async fn get_skill_update_inventory_impl_scoped(
      */
     let platform_duplicates =
         scan_platform_duplicate_skills_with_pool(pool, scope_filter.agent_ids.clone()).await?;
-    let deleted_platform_copies =
-        scan_deleted_platform_copies_with_pool(pool, scope_filter.agent_ids.clone()).await?;
+    let deleted_platform_copies = scan_deleted_platform_copies_with_pool(
+        pool,
+        scope_filter.agent_ids.clone(),
+        cli_lock_protect,
+    )
+    .await?;
 
     Ok(SkillUpdateInventory {
         updatable,

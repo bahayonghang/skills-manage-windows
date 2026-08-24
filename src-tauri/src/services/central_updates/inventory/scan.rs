@@ -41,9 +41,39 @@ pub(crate) async fn scan_platform_duplicate_skills_with_pool(
 }
 
 /// 内核版本：扫描平台目录中 Central 已不存在但仍可删除的本平台副本。
+///
+/// `cli_lock_protect` 仅在 Local target 为 true：读取本机 Skills CLI lock，
+/// 排除 lock 拥有的 canonical 目录及指向它们的 symlink/junction。远程扫描
+/// 不得使用本机 lock 证据（零 CLI 保护）。禁止仅因路径位于
+/// `~/.agents/skills/` 就整棵排除——无 lock 条目的副本仍是合法 leftover。
 pub(crate) async fn scan_deleted_platform_copies_with_pool(
     pool: &DbPool,
     agent_ids: Option<Vec<String>>,
+    cli_lock_protect: bool,
+) -> Result<Vec<DeletedPlatformCopyGroup>, CentralUpdatesError> {
+    let ownership = if cli_lock_protect {
+        Some(load_local_cli_lock_ownership()?)
+    } else {
+        None
+    };
+    scan_deleted_platform_copies_with_ownership(
+        pool,
+        agent_ids,
+        ownership.as_ref(),
+        &crate::paths::universal_skills_dir(),
+    )
+    .await
+}
+
+/// Scan leftover copies against an injected lock-ownership snapshot.
+///
+/// `ownership = None` is the remote / unprotected path. Tests inject a parsed
+/// lock and a temp Universal root so they never read the machine HOME lock.
+pub(crate) async fn scan_deleted_platform_copies_with_ownership(
+    pool: &DbPool,
+    agent_ids: Option<Vec<String>>,
+    cli_ownership: Option<&crate::services::skills_cli::CliLockOwnership>,
+    universal_skills_dir: &std::path::Path,
 ) -> Result<Vec<DeletedPlatformCopyGroup>, CentralUpdatesError> {
     let agents = db::get_all_agents(pool).await?;
     let target_agent_ids: HashSet<String> = match agent_ids {
@@ -59,7 +89,16 @@ pub(crate) async fn scan_deleted_platform_copies_with_pool(
         .into_iter()
         .map(|skill| skill.id)
         .collect::<HashSet<_>>();
-
+    let is_cli_protected = |path: &str| {
+        let Some(ownership) = cli_ownership else {
+            return false;
+        };
+        crate::services::skills_cli::classify_local_path_origin(
+            std::path::Path::new(path),
+            universal_skills_dir,
+            ownership,
+        ) == crate::services::skills_cli::LinkOrigin::SkillsCli
+    };
     let mut grouped: HashMap<(String, String), (String, Vec<String>)> = HashMap::new();
     for agent in agents {
         if agent.id == "central" || !target_agent_ids.contains(&agent.id) {
@@ -72,6 +111,9 @@ pub(crate) async fn scan_deleted_platform_copies_with_pool(
                 continue;
             }
             if !is_candidate_path_within_agent_root(&agent, &obs.dir_path) {
+                continue;
+            }
+            if is_cli_protected(&obs.dir_path) {
                 continue;
             }
             if !is_candidate_entry_deletable_shape(&obs.dir_path) {
@@ -99,6 +141,9 @@ pub(crate) async fn scan_deleted_platform_copies_with_pool(
                 continue;
             }
             if !is_candidate_path_within_agent_root(&agent, &installation.installed_path) {
+                continue;
+            }
+            if is_cli_protected(&installation.installed_path) {
                 continue;
             }
             if !is_candidate_entry_deletable_shape(&installation.installed_path) {
@@ -132,6 +177,29 @@ pub(crate) async fn scan_deleted_platform_copies_with_pool(
             .then_with(|| a.skill_id.cmp(&b.skill_id))
     });
     Ok(groups)
+}
+
+/// Load the Local machine's Skills CLI lock evidence for leftover exclusion.
+///
+/// A missing lock yields empty ownership; an unreadable lock fails the scan so
+/// cleanup never deletes paths whose CLI ownership is undeterminable.
+fn load_local_cli_lock_ownership(
+) -> Result<crate::services::skills_cli::CliLockOwnership, CentralUpdatesError> {
+    use crate::services::skills_cli::{load_cli_lock_ownership, skills_cli_lock_path};
+    let home = crate::paths::resolve_home_dir();
+    let lock_path = skills_cli_lock_path(&home);
+    match load_cli_lock_ownership(&lock_path) {
+        Ok(ownership) => Ok(ownership),
+        Err(crate::services::skills_cli::SkillsCliError::Io { source, .. }) => {
+            Err(CentralUpdatesError::Io {
+                context: "read Skills CLI lock".to_string(),
+                source,
+            })
+        }
+        Err(_) => Err(CentralUpdatesError::Batch(
+            "Skills CLI lock ownership could not be established.".to_string(),
+        )),
+    }
 }
 
 /// 纯函数：从某 agent 的 observations 中分出 writable + plugin readonly 同时存在的组。

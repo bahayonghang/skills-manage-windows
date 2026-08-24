@@ -11,14 +11,15 @@
 ```ts
 export type UnifiedSkillCardProps =
   | CentralSkillCardProps // variant: "central"     中央库全功能管理面（唯一构造方：buildCentralSkillCardProps）
-  | PlatformSkillCardProps // variant: "platform"    平台已装技能（来源类型 + 装/卸该平台 + lifetimeUsage）
+  | PlatformSkillCardProps // variant: "platform"    平台已装技能（来源类型 + 装/卸该平台 + lifetimeUsage + installOrigin）
   | ProjectSkillCardProps // variant: "project"     项目技能（来源徽章 + 卸载）
   | ImportSkillCardProps // variant: "import"      Obsidian vault 导入候选（原 discover 簇）
   | MarketplaceSkillCardProps // variant: "marketplace" 远程技能浏览/安装
-  | CollectionSkillCardProps; // variant: "collection"  集合成员
+  | CollectionSkillCardProps // variant: "collection"  集合成员
+  | SkillsCliSkillCardProps; // variant: "skillsCli"   Skills CLI 全局技能（卸载确认由页面完成）
 ```
 
-平台场景可有 `lifetimeUsage?: { rank: number | null; count: number }`（全历史当前列表名次）。`undefined` = 未就绪，不画右下角；`rank < 1` 或 `null` = 「无记录」；`rank >= 1` = `#N · count`。来源竖条由 `toModel` 从 `originKind` / `sourceType` 派生（plugin / central），不要把 `statusAccent` 挪来表达来源。
+平台场景可有 `lifetimeUsage?: { rank: number | null; count: number }`（全历史当前列表名次）。`undefined` = 未就绪，不画右下角；`rank < 1` 或 `null` = 「无记录」；`rank >= 1` = `#N · count`。来源竖条由 `toModel` 从 `originKind` / `installOrigin` / `sourceType` 派生（plugin / central / skillsCli）。**`link_type === "symlink"` 不再等于 Central**：Skills CLI junction/symlink 必须传 `installOrigin: "skillsCli"`。不要把 `statusAccent` 挪来表达来源。
 
 **Why**：单场景可见 props 从 40 收敛到 9–23；隐式组合判定内化后，调用点不再可能拼出无名义的 prop 组合。「唯一卡片实现」约束不变——一个 module 一份渲染实现。
 
@@ -32,7 +33,7 @@ export type UnifiedSkillCardProps =
 2. 在 `toModel` 对应分支拷贝该字段；
 3. 渲染层从 model 解构使用。
 
-**Why**：场景→渲染的映射只存在于 `toModel` 一个点；渲染逻辑改动无需理解 6 个场景。
+**Why**：场景→渲染的映射只存在于 `toModel` 一个点；渲染逻辑改动无需理解 7 个场景。
 
 **违反成本**：在渲染层直接 `props.variant === …` 分支 = 场景知识二次泄漏；导出 `SkillCardModel` = 判别联合被旁路。
 

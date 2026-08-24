@@ -62,7 +62,8 @@ interface SkillCardModel {
   installLabel?: string;
   usageBadge?: number;
   lifetimeUsage?: { rank: number | null; count: number };
-  originSurface?: "plugin" | "central";
+  originSurface?: "plugin" | "central" | "skillsCli";
+  installOrigin?: "central" | "standalone" | "skillsCli";
   onDetail?: MouseEventHandler<HTMLButtonElement>;
   onInstallTo?: () => void;
   onUninstallFromPlatforms?: () => void;
@@ -75,6 +76,8 @@ interface SkillCardModel {
   uninstallFromLabel?: string;
   onInstall?: () => void;
   onRemove?: () => void;
+  onUninstall?: () => void;
+  uninstallLabel?: string;
   isLoading?: boolean;
   detailButtonRef?: Ref<HTMLButtonElement>;
   density?: SkillCardTypes.SkillCardDensity;
@@ -124,12 +127,16 @@ function toModel(props: SkillCardTypes.UnifiedSkillCardProps): SkillCardModel {
         publisher: props.publisher,
         usageBadge: props.usageBadge,
         lifetimeUsage: props.lifetimeUsage,
+        installOrigin: props.installOrigin,
         originSurface:
           props.originKind === "plugin"
             ? "plugin"
-            : props.sourceType === "symlink"
-              ? "central"
-              : undefined,
+            : props.installOrigin === "skillsCli"
+              ? "skillsCli"
+              : props.installOrigin === "central" ||
+                  (props.installOrigin === undefined && props.sourceType === "symlink")
+                ? "central"
+                : undefined,
         checkbox: props.checkbox,
         isLoading: props.isLoading,
         onDetail: props.onDetail,
@@ -178,6 +185,19 @@ function toModel(props: SkillCardTypes.UnifiedSkillCardProps): SkillCardModel {
         onInstallTo: props.onInstallTo,
         onRemove: props.onRemove,
       };
+    case "skillsCli":
+      return {
+        ...core,
+        publisher: props.source ?? undefined,
+        tags: props.agents.map((agent) => ({ key: agent, label: agent })),
+        onUninstall: props.onUninstall,
+        uninstallFromLabel: props.uninstallLabel,
+        isLoading: props.isLoading,
+      };
+    default: {
+      const _exhaustive: never = props;
+      return _exhaustive;
+    }
   }
 }
 
@@ -206,6 +226,7 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
     usageBadge,
     lifetimeUsage,
     originSurface,
+    installOrigin,
     onDetail,
     onInstallTo,
     onUninstallFromPlatforms,
@@ -218,6 +239,7 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
     uninstallFromLabel,
     onInstall,
     onRemove,
+    onUninstall,
     isLoading,
     detailButtonRef,
     density: rawDensity = "comfortable",
@@ -257,7 +279,8 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
     onInstallToPlatform ||
     onUninstallFromPlatform ||
     onInstall ||
-    onRemove
+    onRemove ||
+    onUninstall
   );
   const trimmedAiSummary = aiSummary?.trim() ?? "";
   const hasAiSummary = trimmedAiSummary.length > 0;
@@ -299,6 +322,7 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
         "@container group/skill-card relative overflow-hidden gap-2 p-3.5",
         isCompact ? "min-h-[168px]" : "min-h-[188px]",
         originSurface === "plugin" && "bg-warning/5",
+        originSurface === "skillsCli" && "bg-primary/5",
         isLoading && "opacity-50",
         className
       )}
@@ -532,6 +556,18 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
                   />
                 )}
 
+                {onUninstall && (
+                  <CardActionButton
+                    onClick={onUninstall}
+                    disabled={isLoading}
+                    title={uninstallFromLabel ?? t("common.uninstall")}
+                    ariaLabel={uninstallFromLabel ?? t("common.uninstall")}
+                    testId={`uninstall-skills-cli-${name}`}
+                    danger
+                    icon={<Trash2 className="size-4" />}
+                  />
+                )}
+
                 {compactMoreMenuItems && (
                   <CompactCardMoreMenu
                     skillName={name}
@@ -557,6 +593,7 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
             originKind={originKind ?? undefined}
             isReadOnly={isReadOnly}
             sourceType={sourceType}
+            installOrigin={installOrigin}
             originBadge={originBadge}
             usageBadge={footer ? undefined : usageBadge}
             isCentral={isCentral}

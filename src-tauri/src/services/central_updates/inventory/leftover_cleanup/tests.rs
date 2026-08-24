@@ -6,11 +6,14 @@ use std::sync::Arc;
 use chrono::Utc;
 use tempfile::TempDir;
 
+use super::super::scan::{
+    scan_deleted_platform_copies_with_ownership, scan_deleted_platform_copies_with_pool,
+};
+use super::super::{DeletedPlatformCopyRemoval, SkillUpdateApplyResult};
 use super::{
     apply_remove_deleted_platform_copies_on_connection, apply_remove_deleted_platform_copies_step,
-    leftover_remote_chunk_count, parse_remote_leftover_delete_stdout,
-    scan_deleted_platform_copies_with_pool, DeletedPlatformCopyRemoval, RemoteLeftoverPathStatus,
-    SkillUpdateApplyResult, REMOTE_LEFTOVER_DELETE_CHUNK_SIZE, REMOTE_LEFTOVER_DELETE_SCRIPT,
+    leftover_remote_chunk_count, parse_remote_leftover_delete_stdout, set_leftover_guard_timeout,
+    RemoteLeftoverPathStatus, REMOTE_LEFTOVER_DELETE_CHUNK_SIZE, REMOTE_LEFTOVER_DELETE_SCRIPT,
 };
 use crate::db::{self, AgentSkillObservation, SkillInstallation, UNIVERSAL_AGENT_IDS};
 use crate::targets::{
@@ -208,7 +211,7 @@ async fn shared_universal_root_uses_one_runner_call_and_clears_scan() {
         assert_eq!(recorded_path_hits(&calls[0], SHARED_PATH), 1);
     }
 
-    let groups = scan_deleted_platform_copies_with_pool(&pool, None)
+    let groups = scan_deleted_platform_copies_with_pool(&pool, None, false)
         .await
         .unwrap();
     assert!(
@@ -246,6 +249,7 @@ async fn shared_root_success_clears_sibling_platforms_not_in_payload() {
     let groups = scan_deleted_platform_copies_with_pool(
         &pool,
         Some(vec!["amp".to_string(), "cursor".to_string()]),
+        false,
     )
     .await
     .unwrap();
@@ -367,7 +371,7 @@ async fn mixed_remote_paths_keep_partial_success() {
     assert_eq!(leftover_obs.len(), 1);
     assert_eq!(leftover_obs[0].skill_id, "err-skill");
     let groups =
-        scan_deleted_platform_copies_with_pool(&pool, Some(vec!["claude-code".to_string()]))
+        scan_deleted_platform_copies_with_pool(&pool, Some(vec!["claude-code".to_string()]), false)
             .await
             .unwrap();
     assert_eq!(groups.len(), 1);
@@ -721,4 +725,115 @@ async fn cancel_after_first_chunk_does_not_start_next_chunk() {
         result.failures[0].error_code.as_deref(),
         Some("operation.cancelled")
     );
+}
+
+async fn seed_leftover_observation(pool: &db::DbPool, agent_id: &str, skill_id: &str, path: &Path) {
+    db::upsert_agent_skill_observation(
+        pool,
+        &make_observation(agent_id, skill_id, &path.to_string_lossy()),
+    )
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn ac9_ac10_lock_owned_canonical_is_excluded_unlocked_copy_still_listed() {
+    let pool = crate::test_support::mem_pool().await;
+    let temp = TempDir::new().unwrap();
+    let universal = temp.path().join("universal");
+    let locked = universal.join("locked-skill");
+    let unlocked = universal.join("unlocked-skill");
+    std::fs::create_dir_all(&locked).unwrap();
+    std::fs::create_dir_all(&unlocked).unwrap();
+    crate::test_support::set_agent_dir(&pool, "cursor", &universal).await;
+    seed_leftover_observation(&pool, "cursor", "locked-skill", &locked).await;
+    seed_leftover_observation(&pool, "cursor", "unlocked-skill", &unlocked).await;
+
+    let lock_path = temp.path().join(".skill-lock.json");
+    std::fs::write(&lock_path, r#"{"version":3,"skills":{"locked-skill":{}}}"#).unwrap();
+    let ownership = crate::services::skills_cli::load_cli_lock_ownership(&lock_path).unwrap();
+
+    let protected = scan_deleted_platform_copies_with_ownership(
+        &pool,
+        Some(vec!["cursor".to_string()]),
+        Some(&ownership),
+        &universal,
+    )
+    .await
+    .unwrap();
+    assert_eq!(protected.len(), 1);
+    assert_eq!(protected[0].skill_id, "unlocked-skill");
+    assert_eq!(
+        protected[0].writable_paths,
+        vec![unlocked.to_string_lossy().into_owned()]
+    );
+
+    let remote = scan_deleted_platform_copies_with_ownership(
+        &pool,
+        Some(vec!["cursor".to_string()]),
+        None,
+        &universal,
+    )
+    .await
+    .unwrap();
+    let remote_ids: Vec<&str> = remote.iter().map(|group| group.skill_id.as_str()).collect();
+    assert!(remote_ids.contains(&"locked-skill"));
+    assert!(remote_ids.contains(&"unlocked-skill"));
+}
+
+#[tokio::test]
+async fn ac2_remote_scan_does_not_use_local_lock_exclusion() {
+    let pool = crate::test_support::mem_pool().await;
+    let temp = TempDir::new().unwrap();
+    let universal = temp.path().join("universal");
+    let locked = universal.join("locked-skill");
+    std::fs::create_dir_all(&locked).unwrap();
+    crate::test_support::set_agent_dir(&pool, "cursor", &universal).await;
+    seed_leftover_observation(&pool, "cursor", "locked-skill", &locked).await;
+
+    let groups =
+        scan_deleted_platform_copies_with_pool(&pool, Some(vec!["cursor".to_string()]), false)
+            .await
+            .unwrap();
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].skill_id, "locked-skill");
+}
+
+#[tokio::test]
+async fn ac15_leftover_local_apply_is_busy_while_default_lock_held() {
+    let pool = crate::test_support::mem_pool().await;
+    let temp = TempDir::new().unwrap();
+    let cursor_dir = temp.path().join("cursor");
+    let leftover = cursor_dir.join("gone-skill");
+    std::fs::create_dir_all(&leftover).unwrap();
+    crate::test_support::set_agent_dir(&pool, "cursor", &cursor_dir).await;
+
+    let _holder = crate::services::central_mutation::acquire_central_mutation_guard_at(
+        crate::paths::central_mutation_lock_path(),
+        "hold leftover lock",
+        std::time::Duration::from_secs(5),
+    )
+    .await
+    .unwrap();
+
+    set_leftover_guard_timeout(Some(std::time::Duration::ZERO));
+    let mut result = SkillUpdateApplyResult::default();
+    apply_remove_deleted_platform_copies_step(
+        &pool,
+        &ActiveTarget::Local,
+        vec![DeletedPlatformCopyRemoval {
+            agent_id: "cursor".to_string(),
+            skill_id: "gone-skill".to_string(),
+            paths: vec![leftover.to_string_lossy().into_owned()],
+        }],
+        &mut result,
+        None,
+        None,
+    )
+    .await;
+    set_leftover_guard_timeout(None);
+
+    assert!(result.removed_deleted_platform_copy_paths.is_empty());
+    assert_eq!(result.failures[0].phase.as_deref(), Some("mutation_lock"));
+    assert!(leftover.exists());
 }

@@ -159,6 +159,10 @@ pub struct SkillForAgent {
     pub dir_path: String,
     /// How the skill is linked: "symlink", "copy", or "native".
     pub link_type: String,
+    /// Install origin for platform view: "central", "standalone", or "skills_cli".
+    /// Computed from `link_type` plus Skills CLI lock evidence on Local.
+    #[serde(default = "default_install_origin")]
+    pub install_origin: String,
     /// Symlink target path, if `link_type` is "symlink".
     pub symlink_target: Option<String>,
     pub is_central: bool,
@@ -179,6 +183,18 @@ pub struct SkillForAgent {
     pub is_read_only: bool,
     pub conflict_group: Option<String>,
     pub conflict_count: i64,
+}
+
+fn default_install_origin() -> String {
+    "standalone".to_string()
+}
+
+fn install_origin_from_link_type(link_type: &str) -> String {
+    if link_type == "symlink" {
+        "central".to_string()
+    } else {
+        "standalone".to_string()
+    }
 }
 
 #[derive(Debug, FromRow)]
@@ -320,7 +336,8 @@ fn installed_row_to_skill_for_agent(
         description: row.description,
         file_path: row.file_path,
         dir_path: row.dir_path,
-        link_type: row.link_type,
+        link_type: row.link_type.clone(),
+        install_origin: install_origin_from_link_type(&row.link_type),
         symlink_target: row.symlink_target,
         is_central: row.is_central,
         scanned_at: row.scanned_at,
@@ -445,7 +462,8 @@ fn observation_to_skill_for_agent(
         description: observation.description,
         file_path: observation.file_path,
         dir_path: observation.dir_path,
-        link_type: observation.link_type,
+        link_type: observation.link_type.clone(),
+        install_origin: install_origin_from_link_type(&observation.link_type),
         symlink_target: observation.symlink_target,
         is_central: false,
         scanned_at: observation.scanned_at.clone(),

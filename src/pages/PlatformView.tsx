@@ -43,6 +43,7 @@ import {
 import {
   derivePlatformOriginNav,
   derivePlatformSkillRows,
+  getPlatformSkillOrigin,
   type PlatformGroupBy,
   type PlatformOriginFilter,
   type PlatformSortDirection,
@@ -515,6 +516,7 @@ export function PlatformView() {
       aiSummary={getAiSummary(skill)}
       sourceType={skill.link_type as "symlink" | "copy" | "native"}
       originKind={skill.source_kind ?? null}
+      installOrigin={getPlatformSkillOrigin(skill)}
       isReadOnly={skill.is_read_only ?? false}
       publisher={skill.repository?.name}
       usageBadge={usageCounts?.[skill.name]}

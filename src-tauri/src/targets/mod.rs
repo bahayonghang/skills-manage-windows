@@ -48,7 +48,7 @@ pub use model::*;
 pub use registry::TargetRegistry;
 pub use remote::*;
 pub(crate) use runner::{
-    CommandRunner, ProcessCancellation, ProcessPolicy, ProcessRequest, ProcessRunner, RunnerError,
-    RunnerPhase,
+    CommandRunner, ProcessCancellation, ProcessClass, ProcessPolicy, ProcessRequest, ProcessRunner,
+    RunnerError, RunnerPhase,
 };
 pub use wsl_discovery::list_wsl_distributions_impl;

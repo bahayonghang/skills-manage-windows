@@ -7,7 +7,8 @@ export type PlatformSourceFilter = "all" | "user" | "plugin";
 export type PlatformOriginFilter =
   | { kind: "all" }
   | { kind: "standalone" }
-  | { kind: "central"; repoKey?: string };
+  | { kind: "central"; repoKey?: string }
+  | { kind: "skillsCli" };
 export type PlatformSortField =
   "repository" | "name" | "installedAt" | "updatedAt" | "callCount";
 export type PlatformSortDirection = "asc" | "desc";
@@ -185,10 +186,19 @@ export function getPlatformRepositoryGroupInfo(
   };
 }
 
-/** 与 SkillCardBadges.SourceIndicator 同语义：symlink 即中央链接，其余归独立安装 */
+/**
+ * Install origin for a platform skill row.
+ *
+ * Prefer backend `install_origin` (lock + resolved link target). Fall back to
+ * `link_type === "symlink"` → Central only for older rows that lack the field.
+ * A Skills CLI junction/symlink is `skillsCli`, not SkillPort Central.
+ */
 export function getPlatformSkillOrigin(
   skill: ScannedSkill,
-): "central" | "standalone" {
+): "central" | "standalone" | "skillsCli" {
+  if (skill.install_origin === "skills_cli") return "skillsCli";
+  if (skill.install_origin === "central") return "central";
+  if (skill.install_origin === "standalone") return "standalone";
   return skill.link_type === "symlink" ? "central" : "standalone";
 }
 
@@ -205,6 +215,7 @@ export interface PlatformOriginNavModel {
   total: number;
   centralCount: number;
   standaloneCount: number;
+  skillsCliCount: number;
   /** 仅统计 origin=central 且仓库已指派的行；按 label 排序 */
   repos: Array<{ key: string; label: string; count: number }>;
   /** symlink 且仓库未指派（缺失或 is_unknown）的行数 */
@@ -216,6 +227,7 @@ export function derivePlatformOriginNav(
 ): PlatformOriginNavModel {
   let centralCount = 0;
   let standaloneCount = 0;
+  let skillsCliCount = 0;
   let unassignedCentralCount = 0;
   const repoBuckets = new Map<
     string,
@@ -223,8 +235,13 @@ export function derivePlatformOriginNav(
   >();
 
   for (const skill of skills) {
-    if (getPlatformSkillOrigin(skill) === "standalone") {
+    const origin = getPlatformSkillOrigin(skill);
+    if (origin === "standalone") {
       standaloneCount += 1;
+      continue;
+    }
+    if (origin === "skillsCli") {
+      skillsCliCount += 1;
       continue;
     }
     centralCount += 1;
@@ -258,6 +275,7 @@ export function derivePlatformOriginNav(
     total: skills.length,
     centralCount,
     standaloneCount,
+    skillsCliCount,
     repos,
     unassignedCentralCount,
   };
@@ -267,12 +285,23 @@ function matchesOriginFilter(
   skill: ScannedSkill,
   filter: PlatformOriginFilter,
 ): boolean {
-  if (filter.kind === "all") return true;
-  const origin = getPlatformSkillOrigin(skill);
-  if (filter.kind === "standalone") return origin === "standalone";
-  if (origin !== "central") return false;
-  if (filter.repoKey === undefined) return true;
-  return getPlatformOriginRepoKey(skill) === filter.repoKey;
+  switch (filter.kind) {
+    case "all":
+      return true;
+    case "standalone":
+      return getPlatformSkillOrigin(skill) === "standalone";
+    case "skillsCli":
+      return getPlatformSkillOrigin(skill) === "skillsCli";
+    case "central": {
+      if (getPlatformSkillOrigin(skill) !== "central") return false;
+      if (filter.repoKey === undefined) return true;
+      return getPlatformOriginRepoKey(skill) === filter.repoKey;
+    }
+    default: {
+      const _exhaustive: never = filter;
+      return _exhaustive;
+    }
+  }
 }
 
 export function comparePlatformSkills(

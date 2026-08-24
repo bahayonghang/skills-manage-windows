@@ -107,9 +107,45 @@ export interface ScannedSkill {
   is_source_unknown?: boolean;
   source_kind?: ClaudeSourceKind | null;
   source_root?: string | null;
+  /** Backend install origin: central | standalone | skills_cli. */
+  install_origin?: "central" | "standalone" | "skills_cli";
   is_read_only?: boolean;
   conflict_group?: string | null;
   conflict_count?: number;
+}
+
+export interface SkillsCliDoctorReport {
+  nodeVersion: string;
+  npmSpec: string;
+}
+
+export interface SkillsCliGlobalSkill {
+  name: string;
+  path: string | null;
+  scope: string | null;
+  agents: string[];
+  source: string | null;
+  sourceUrl: string | null;
+  sourceType: string | null;
+}
+
+export interface SkillsCliInstallTarget {
+  id: string;
+  displayName: string;
+  iconName: string | null;
+  cliAgent: string;
+  isEnabled: boolean;
+  defaultSelected: boolean;
+}
+
+export interface SkillsCliSourcePreview {
+  source: string;
+  skills: string[];
+}
+
+export interface SkillsCliAddResult {
+  installedSkills: number;
+  targetedPlatforms: number;
 }
 
 // ─── Skill Types ──────────────────────────────────────────────────────────────

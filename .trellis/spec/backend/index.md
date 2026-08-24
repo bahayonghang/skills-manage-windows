@@ -29,6 +29,7 @@
 - [Recoverable FS + DB Operation Journal Contract](./fs-db-operation-journal.md)
 - [Settings Domain Boundary and Target Quarantine Contract](./settings-domain-boundary.md)
 - [Exclusive Job Lifecycle Contract](./exclusive-job-lifecycle.md)
+- [Skills CLI Global Contract](./skills-cli-global.md)
 - [Bounded External Text Ingestion Contract](./external-text-ingestion.md)
 - [Recoverable Desktop Startup Contract](./startup-recovery.md)
 - [Update Inventory Retry and Relocation Contract](./update-inventory-retry.md)

@@ -1,16 +1,51 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use crate::db::{self, Agent, DbPool};
+use crate::services::central_mutation::{
+    acquire_target_mutation_guard, DEFAULT_CENTRAL_MUTATION_TIMEOUT,
+};
 use crate::services::central_updates::{CentralUpdateFailurePhase, CentralUpdatesError};
-use crate::services::installation::{uninstall_skill, InstallTransport};
+use crate::services::installation::install::uninstall_skill_under_guard;
+use crate::services::installation::InstallTransport;
 use crate::targets::{connect_remote_target, ActiveTarget, ConnectedRemoteTarget};
 
 use super::apply_steps::is_agent_allowed;
 use super::{DeletedPlatformCopyRemoval, SkillUpdateApplyFailure, SkillUpdateApplyResult};
 
+mod fs;
+#[cfg(test)]
+mod tests;
+
+use fs::{
+    ensure_local_child_path, ensure_remote_child_path, paths_equivalent_path, paths_equivalent_str,
+};
+
 pub(crate) const REMOTE_LEFTOVER_DELETE_CHUNK_SIZE: usize = 256;
+const LEFTOVER_LOCK_OPERATION: &str = "remove leftover platform copies";
+
+#[cfg(test)]
+thread_local! {
+    static LEFTOVER_GUARD_TIMEOUT: std::cell::Cell<Option<Duration>> =
+        const { std::cell::Cell::new(None) };
+}
+
+fn leftover_guard_timeout() -> Duration {
+    #[cfg(test)]
+    {
+        if let Some(timeout) = LEFTOVER_GUARD_TIMEOUT.with(|cell| cell.get()) {
+            return timeout;
+        }
+    }
+    DEFAULT_CENTRAL_MUTATION_TIMEOUT
+}
+
+#[cfg(test)]
+pub(crate) fn set_leftover_guard_timeout(timeout: Option<Duration>) {
+    LEFTOVER_GUARD_TIMEOUT.with(|cell| cell.set(timeout));
+}
 
 pub(crate) const REMOTE_LEFTOVER_DELETE_SCRIPT: &str = r#"set -u
 index=0
@@ -80,6 +115,24 @@ async fn apply_remove_deleted_platform_copies_local(
     result: &mut SkillUpdateApplyResult,
     allowed_agent_ids: Option<&HashSet<String>>,
 ) {
+    if removals.is_empty() {
+        return;
+    }
+    let _guard = match acquire_target_mutation_guard(
+        &ActiveTarget::Local,
+        LEFTOVER_LOCK_OPERATION,
+        leftover_guard_timeout(),
+    )
+    .await
+    {
+        Ok(guard) => guard,
+        Err(error) => {
+            for removal in &removals {
+                push_leftover_lock_failure(result, &removal.agent_id, &removal.skill_id, &error);
+            }
+            return;
+        }
+    };
     for removal in removals {
         if !is_agent_allowed(&removal.agent_id, allowed_agent_ids) {
             result.failures.push(SkillUpdateApplyFailure::new(
@@ -129,6 +182,24 @@ async fn apply_remove_deleted_platform_copies_remote(
             return;
         }
     };
+    let _guard = match acquire_target_mutation_guard(
+        active_target,
+        LEFTOVER_LOCK_OPERATION,
+        leftover_guard_timeout(),
+    )
+    .await
+    {
+        Ok(guard) => guard,
+        Err(error) => {
+            fail_remote_leftover_paths_with(
+                &plan,
+                plan.unique_paths.iter(),
+                result,
+                CentralUpdatesError::CentralMutation(error.to_string()),
+            );
+            return;
+        }
+    };
     execute_remote_leftover_deletes(pool, &connection, plan, result, cancel).await;
 }
 
@@ -174,6 +245,22 @@ fn push_leftover_failure(
 
 fn leftover_cancel_error() -> CentralUpdatesError {
     CentralUpdatesError::BatchCancelled
+}
+
+fn push_leftover_lock_failure(
+    result: &mut SkillUpdateApplyResult,
+    agent_id: &str,
+    skill_id: &str,
+    error: &crate::services::central_mutation::CentralMutationError,
+) {
+    result
+        .failures
+        .push(SkillUpdateApplyFailure::from_central_error(
+            "remove_deleted_platform_copy",
+            format!("{agent_id}::{skill_id}"),
+            CentralUpdateFailurePhase::MutationLock,
+            CentralUpdatesError::CentralMutation(error.to_string()),
+        ));
 }
 
 async fn remove_deleted_platform_copy_local_item(
@@ -515,6 +602,9 @@ fn leftover_plan_error(error: &CentralUpdatesError) -> CentralUpdatesError {
         CentralUpdatesError::RemotePathTraversal(path) => {
             CentralUpdatesError::RemotePathTraversal(path.clone())
         }
+        CentralUpdatesError::CentralMutation(message) => {
+            CentralUpdatesError::CentralMutation(message.clone())
+        }
         _ => CentralUpdatesError::RemoteLeftoverDeleteFailed,
     }
 }
@@ -628,7 +718,7 @@ async fn remove_deleted_platform_copy_local(
             if obs.is_read_only || obs.source_kind == "plugin" {
                 return Err(CentralUpdatesError::ReadOnlyPluginCopy);
             }
-            uninstall_skill(
+            uninstall_skill_under_guard(
                 pool,
                 &InstallTransport::Local,
                 &removal.skill_id,
@@ -649,7 +739,7 @@ async fn remove_deleted_platform_copy_local(
         });
     }
 
-    uninstall_skill(
+    uninstall_skill_under_guard(
         pool,
         &InstallTransport::Local,
         &removal.skill_id,
@@ -658,86 +748,4 @@ async fn remove_deleted_platform_copy_local(
     )
     .await?;
     Ok(())
-}
-
-fn ensure_local_child_path(
-    root: &Path,
-    child: &Path,
-    label: &str,
-) -> Result<(), CentralUpdatesError> {
-    if crate::paths::paths_equivalent(root, child) {
-        return Err(CentralUpdatesError::PlatformRootDeletion(label.to_string()));
-    }
-
-    let root_cmp = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
-    let child_parent = child
-        .parent()
-        .ok_or_else(|| CentralUpdatesError::PathNoParent(child.display().to_string()))?;
-    let child_parent_cmp = child_parent
-        .canonicalize()
-        .unwrap_or_else(|_| child_parent.to_path_buf());
-    if !child_parent_cmp.starts_with(&root_cmp) {
-        return Err(CentralUpdatesError::OutsidePlatformRoot {
-            child: child.display().to_string(),
-            root: root.display().to_string(),
-        });
-    }
-    Ok(())
-}
-
-fn ensure_remote_child_path(
-    root: &str,
-    child: &str,
-    label: &str,
-) -> Result<String, CentralUpdatesError> {
-    let root_cmp = normalize_remote_path(root)?;
-    let child_cmp = normalize_remote_path(child)?;
-    if root_cmp == "/" {
-        return Err(CentralUpdatesError::RemoteRootDeletionScope(
-            label.to_string(),
-        ));
-    }
-    if root_cmp == child_cmp {
-        return Err(CentralUpdatesError::RemoteRootDeletion {
-            root: root_cmp,
-            label: label.to_string(),
-        });
-    }
-    let prefix = format!("{}/", root_cmp.trim_end_matches('/'));
-    if !child_cmp.starts_with(&prefix) {
-        return Err(CentralUpdatesError::OutsideRemoteRoot {
-            child: child.to_string(),
-            root: root.to_string(),
-        });
-    }
-    Ok(child_cmp)
-}
-
-fn normalize_remote_path(path: &str) -> Result<String, CentralUpdatesError> {
-    let trimmed = path.trim();
-    if trimmed.is_empty() || !trimmed.starts_with('/') || trimmed.contains('\0') {
-        return Err(CentralUpdatesError::InvalidRemotePath(path.to_string()));
-    }
-
-    let mut segments = Vec::new();
-    for segment in trimmed.split('/') {
-        match segment {
-            "" | "." => {}
-            ".." => return Err(CentralUpdatesError::RemotePathTraversal(path.to_string())),
-            value => segments.push(value),
-        }
-    }
-    if segments.is_empty() {
-        Ok("/".to_string())
-    } else {
-        Ok(format!("/{}", segments.join("/")))
-    }
-}
-
-fn paths_equivalent_str(left: &str, right: &str) -> bool {
-    paths_equivalent_path(Path::new(left), Path::new(right))
-}
-
-fn paths_equivalent_path(left: &Path, right: &Path) -> bool {
-    crate::paths::paths_equivalent(left, right)
 }

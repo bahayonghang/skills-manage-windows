@@ -1,0 +1,118 @@
+//! Local process execution seam for the pinned Skills CLI.
+//!
+//! Production runs `node <npx-cli.js> --yes --package=skills@1.5.23 -- …`
+//! through the shared `targets` supervisor, which provides bounded output,
+//! deadlines, cancellation polling, and Windows Job Object / Unix process
+//! group teardown. Tests inject [`FakeRunner`]-style doubles.
+
+use std::path::PathBuf;
+use std::process::Output as StdOutput;
+use std::sync::atomic::AtomicBool;
+use std::time::Duration;
+
+use async_trait::async_trait;
+
+use crate::targets::{
+    CommandRunner, ProcessCancellation, ProcessClass, ProcessPolicy, ProcessRequest, ProcessRunner,
+};
+
+use super::error::SkillsCliError;
+
+/// One supervised CLI invocation.
+pub(crate) struct RunnerRequest<'a> {
+    pub program: PathBuf,
+    pub args: Vec<String>,
+    pub policy: ProcessPolicy,
+    pub cancel: Option<&'a AtomicBool>,
+}
+
+/// Captured result of one invocation. Raw streams stay here; callers must
+/// parse or drop them — they never reach IPC payloads or logs.
+pub(crate) struct CliOutput {
+    pub status_success: bool,
+    pub stdout: Vec<u8>,
+    /// Captured for diagnostics; production paths drop it after parsing.
+    /// Parsed only by tests asserting cap behavior.
+    #[allow(dead_code)]
+    pub stderr: Vec<u8>,
+}
+
+#[allow(dead_code)]
+impl CliOutput {
+    fn from_std(output: StdOutput) -> Self {
+        Self {
+            status_success: output.status.success(),
+            stdout: output.stdout,
+            stderr: output.stderr,
+        }
+    }
+}
+
+#[async_trait]
+pub(crate) trait SkillsCliRunner: Send + Sync {
+    async fn run(&self, request: RunnerRequest<'_>) -> Result<CliOutput, SkillsCliError>;
+}
+
+fn map_runner_error(error: crate::targets::RunnerError) -> SkillsCliError {
+    use crate::targets::RunnerError;
+    match error {
+        RunnerError::Io {
+            phase: crate::targets::RunnerPhase::Start,
+            source,
+        } => SkillsCliError::Io {
+            context: "spawn Skills CLI process",
+            source,
+        },
+        RunnerError::TimedOut { deadline, .. } => SkillsCliError::Timeout(deadline),
+        RunnerError::Cancelled => SkillsCliError::Cancelled,
+        RunnerError::OutputLimitExceeded { stream, .. } => SkillsCliError::OutputLimitExceeded {
+            stream: stream.label(),
+        },
+        RunnerError::Io { source, .. } | RunnerError::TerminationFailed { source, .. } => {
+            SkillsCliError::Io {
+                context: "supervise Skills CLI process",
+                source,
+            }
+        }
+    }
+}
+
+/// Production runner backed by the shared process supervisor.
+pub(crate) struct NodeProcessRunner;
+
+#[async_trait]
+impl SkillsCliRunner for NodeProcessRunner {
+    async fn run(&self, request: RunnerRequest<'_>) -> Result<CliOutput, SkillsCliError> {
+        let mut command = std::process::Command::new(&request.program);
+        command.args(&request.args);
+        let process_request = ProcessRequest::new(command, request.policy)
+            .with_cancellation(ProcessCancellation::from(request.cancel));
+        let output: StdOutput = ProcessRunner
+            .run(process_request)
+            .await
+            .map_err(map_runner_error)?;
+        Ok(CliOutput::from_std(output))
+    }
+}
+
+/// Standard policy (120 s / 8 MiB stdout) with the CLI stderr cap held at
+/// 1 MiB.
+pub(crate) fn standard_policy() -> ProcessPolicy {
+    ProcessPolicy {
+        deadline: Duration::from_secs(120),
+        stdout_limit: 8 * 1024 * 1024,
+        stderr_limit: 1024 * 1024,
+        class: ProcessClass::Standard,
+    }
+}
+
+/// BulkTransfer policy (15 min / 32 MiB stdout) with the CLI stderr cap held
+/// at 1 MiB.
+pub(crate) fn bulk_transfer_policy() -> ProcessPolicy {
+    ProcessPolicy {
+        deadline: Duration::from_secs(15 * 60),
+        stdout_limit: 32 * 1024 * 1024,
+        stderr_limit: 1024 * 1024,
+        class: ProcessClass::BulkTransfer,
+    }
+}

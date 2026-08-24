@@ -178,6 +178,7 @@ fn retryable_for_code(code: &str) -> bool {
         "github_import.rate_limited"
             | "github_import.transport_failed"
             | "github_import.archive_unavailable"
+            | "skills_cli.busy"
     )
 }
 
@@ -406,11 +407,25 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
         "recovery.reconcile_preflight_blocked" => {
             Some("The prepared delete operation no longer passes reconciliation checks.")
         }
-        "job.invalid_id" => Some("The job identifier is invalid."),
-        "job.id_mismatch" => Some("The cancellation request does not match the active job."),
-        "job.registry_unavailable" => Some("The job registry is unavailable."),
-        "job.central_update_busy" => Some("A Central update job is already running."),
         "job.portability_busy" => Some("A portability job is already running."),
+        "skills_cli.local_target_only" => {
+            Some("Skills CLI is available only on the Local target.")
+        }
+        "skills_cli.node_missing" => Some("Node.js 22.20 or later is required."),
+        "skills_cli.cli_unavailable" => {
+            Some("The Skills CLI package could not be executed.")
+        }
+        "skills_cli.source_invalid" => Some("The skill source is not allowed."),
+        "skills_cli.preview_unparsed" => Some("The skill preview could not be parsed."),
+        "skills_cli.selection_empty" => {
+            Some("Select at least one skill and one platform.")
+        }
+        "skills_cli.agent_unmapped" => {
+            Some("That platform cannot be targeted by Skills CLI.")
+        }
+        "skills_cli.busy" => Some("Another skill operation is using this target."),
+        "skills_cli.timeout" => Some("The Skills CLI command timed out."),
+        "skills_cli.cancelled" => Some("The operation was cancelled."),
         "startup.rebuild_unavailable" => Some("Database rebuild is not available."),
         _ => None,
     }

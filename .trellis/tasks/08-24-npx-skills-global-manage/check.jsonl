@@ -1,0 +1,15 @@
+{"file": ".trellis/tasks/08-24-npx-skills-global-manage/prd.md", "reason": "AC1-AC16 map to R1-R12 including lock, Local-only, cancel, timeout"}
+{"file": ".trellis/tasks/08-24-npx-skills-global-manage/design.md", "reason": "Mutation lock order, lock-based leftover, node.exe argv, mapping closure"}
+{"file": ".trellis/tasks/08-24-npx-skills-global-manage/research/npx-skills-global-feasibility.md", "reason": "npx --yes before package; skills -y after; PIN 1.5.23"}
+{"file": ".trellis/tasks/08-24-npx-skills-global-manage/research/codex-review-disposition.md", "reason": "Every blocking finding has a mechanism"}
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "just ci; task PRs target dev"}
+{"file": ".trellis/spec/backend/central-mutation-lock.md", "reason": "CLI add/remove and leftover local apply share the Local guard"}
+{"file": ".trellis/spec/backend/exclusive-job-lifecycle.md", "reason": "Do not treat a new job family as FS exclusion"}
+{"file": ".trellis/spec/backend/target-context.md", "reason": "Non-Local commands fail closed"}
+{"file": ".trellis/spec/backend/process-supervision.md", "reason": "Job Object, timeout, output cap, cancel"}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "No Result<T, String>; unknown Display is internal.unexpected"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "stdout/stderr/URL must not cross IPC"}
+{"file": ".trellis/spec/frontend/skill-card-scenarios.md", "reason": "skillsCli variant plus negative tests"}
+{"file": ".trellis/spec/frontend/platform-origin-classification.md", "reason": "CLI links must not show as SkillPort central"}
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "Commands typed; no component invoke"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "Visible toasts on failure"}

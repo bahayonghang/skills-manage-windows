@@ -31,6 +31,8 @@ function isIgnoredSourceFile(relativePath) {
     normalized.startsWith("src/data/") ||
     normalized.startsWith("src/i18n/locales/") ||
     normalized === "src/index.css" ||
+    // Machine-generated IPC contract; must not be hand-split to satisfy the budget.
+    normalized === "src/lib/ipc/generatedCommandMap.ts" ||
     normalized.includes("/__tests__/") ||
     /\.(test|spec)\.(js|jsx|ts|tsx)$/.test(normalized) ||
     normalized.endsWith("/tests.rs")

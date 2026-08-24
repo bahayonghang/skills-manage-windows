@@ -59,7 +59,10 @@ pub struct AppState {
     /// that was just downloaded without copying credentials into target DBs.
     pub central_update_snapshots: CentralUpdateSnapshotCache,
     pub portable_state_jobs: services::exclusive_job::ExclusiveJobRegistry,
-    /// Application-level sensitive values such as GitHub PAT and AI API keys.
+    /// Skills CLI global add/remove family: exclusive within itself for
+    /// cancel/progress only; filesystem mutual exclusion comes from the
+    /// Local target mutation guard.
+    pub skills_cli_jobs: services::exclusive_job::ExclusiveJobRegistry,
     /// Commands receive this injectable store from AppState so unit tests do
     /// not need to touch the real OS credential vault.
     pub secrets: Arc<dyn secrets::SecretStore>,
@@ -238,6 +241,10 @@ async fn install_ready_state(
         portable_state_jobs: services::exclusive_job::ExclusiveJobRegistry::new(
             "job.portability_busy",
             "A portability job is already running.",
+        ),
+        skills_cli_jobs: services::exclusive_job::ExclusiveJobRegistry::new(
+            "job.skills_cli_busy",
+            "A Skills CLI job is already running.",
         ),
         secrets: Arc::clone(&secrets),
         targets: targets::TargetRegistry::default(),

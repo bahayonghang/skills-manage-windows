@@ -59,8 +59,6 @@ mod types;
 mod view;
 
 #[cfg(test)]
-mod leftover_cleanup_tests;
-#[cfg(test)]
 mod tests;
 
 pub(crate) use apply_steps::*;
@@ -89,6 +87,7 @@ pub(super) struct RepositoryOwnedUpdateState {
 /// 当 `snapshots_cache` 已用 `cache.insert(repo_cache_key(&repo), snapshot)` 预填时，
 /// 内部 `prepare_snapshots_for_repo_refs` 跳过网络下载直接复用缓存命中，所以测试
 /// 可以完全离线运行。
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn refresh_skill_update_inventory_impl(
     pool: &DbPool,
     fs: &CentralFs,
@@ -97,6 +96,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
     snapshots_cache: &CentralUpdateSnapshotCache,
     scope: SkillRefreshScope,
     progress: Option<SnapshotProgressReporter>,
+    cli_lock_protect: bool,
 ) -> Result<SkillUpdateInventory, CentralUpdatesError> {
     let mode = scope.mode.unwrap_or(SkillRefreshMode::Sync);
     let cache_policy = scope
@@ -110,6 +110,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         snapshots_cache,
         &scope,
         progress,
+        cli_lock_protect,
     )
     .await?;
     persist_refresh_inventory(pool, &scope, mode, cache_policy, &inventory).await?;
@@ -118,6 +119,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
 
 /// Build an inventory without persisting it. Retry merges several computed
 /// slices into one stored inventory, so the write stays with the caller.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn compute_skill_update_inventory(
     pool: &DbPool,
     fs: &CentralFs,
@@ -126,6 +128,7 @@ pub(crate) async fn compute_skill_update_inventory(
     snapshots_cache: &CentralUpdateSnapshotCache,
     scope: &SkillRefreshScope,
     progress: Option<SnapshotProgressReporter>,
+    cli_lock_protect: bool,
 ) -> Result<SkillUpdateInventory, CentralUpdatesError> {
     /*
      * ========================================================================
@@ -455,7 +458,8 @@ pub(crate) async fn compute_skill_update_inventory(
         Vec::new()
     };
     let deleted_platform_copies = if include_sync_buckets {
-        scan_deleted_platform_copies_with_pool(pool, platform_agent_ids.clone()).await?
+        scan_deleted_platform_copies_with_pool(pool, platform_agent_ids.clone(), cli_lock_protect)
+            .await?
     } else {
         Vec::new()
     };

@@ -16,6 +16,7 @@ export interface SkillCardMetaProps {
   originKind?: ClaudeSourceKind;
   isReadOnly?: boolean;
   sourceType?: "symlink" | "copy" | "native";
+  installOrigin?: "central" | "standalone" | "skillsCli";
   originBadge?: { kind: "central" | "project" | string; label: string };
   usageBadge?: number;
   isCentral?: boolean;
@@ -37,6 +38,7 @@ export function SkillCardMeta({
   originKind,
   isReadOnly,
   sourceType,
+  installOrigin,
   originBadge,
   usageBadge,
   isCentral,
@@ -54,7 +56,7 @@ export function SkillCardMeta({
       {originKind === "plugin" ? (
         <PluginSourceChip />
       ) : sourceType ? (
-        <SourceIndicator sourceType={sourceType} />
+        <SourceIndicator sourceType={sourceType} origin={installOrigin} />
       ) : null}
       {isReadOnly && originKind !== "plugin" && <ReadOnlyBadge />}
       {originBadge && <ProjectSourceBadge originBadge={originBadge} />}

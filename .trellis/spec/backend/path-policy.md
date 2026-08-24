@@ -15,6 +15,11 @@ README 路径语义（Central Skills `~/.skillsmanage/skills/`、Universal Agent
 | `UNIVERSAL_AGENTS_DIR_NAME`    | `.agents`              |
 | `UNIVERSAL_SKILLS_REL`         | `.agents/skills`       |
 
+Skills CLI lock fallback is `home / UNIVERSAL_AGENTS_DIR_NAME / .skill-lock.json`
+(or `$XDG_STATE_HOME/skills/.skill-lock.json`). Do not hard-code `.agents` in
+`services/skills_cli`. Ownership still requires a version-3 lock entry — the
+Universal skills root is not wholly CLI-owned. See `skills-cli-global.md`.
+
 ### remote 路径构造（唯一来源 `paths.rs`）
 
 - `remote_join(parent, child)`：POSIX 拼接原语，本体在 `paths.rs`，`targets` 模块 `pub use` re-export（调用方继续写 `crate::targets::remote_join` 也合法）。

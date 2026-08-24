@@ -197,6 +197,13 @@ macro_rules! __skillport_runtime_commands {
             usage_resolve_skill_id => commands::usage::usage_resolve_skill_id,
             usage_get_scope_info => commands::usage::usage_get_scope_info,
             usage_get_unused_skills => commands::usage::usage_get_unused_skills,
+            skills_cli_doctor => commands::skills_cli::skills_cli_doctor,
+            skills_cli_list_global => commands::skills_cli::skills_cli_list_global,
+            skills_cli_install_targets => commands::skills_cli::skills_cli_install_targets,
+            skills_cli_preview_source => commands::skills_cli::skills_cli_preview_source,
+            skills_cli_add_global => commands::skills_cli::skills_cli_add_global,
+            skills_cli_remove_global => commands::skills_cli::skills_cli_remove_global,
+            cancel_skills_cli_job => commands::skills_cli::cancel_skills_cli_job,
         }
     };
 }
@@ -249,6 +256,13 @@ macro_rules! __skillport_generated_commands {
             install_marketplace_skill => commands::marketplace::install_marketplace_skill,
             install_from_skills_sh => commands::marketplace::install_from_skills_sh,
             test_ai_connection => commands::marketplace::test_ai_connection,
+            skills_cli_doctor => commands::skills_cli::skills_cli_doctor,
+            skills_cli_list_global => commands::skills_cli::skills_cli_list_global,
+            skills_cli_install_targets => commands::skills_cli::skills_cli_install_targets,
+            skills_cli_preview_source => commands::skills_cli::skills_cli_preview_source,
+            skills_cli_add_global => commands::skills_cli::skills_cli_add_global,
+            skills_cli_remove_global => commands::skills_cli::skills_cli_remove_global,
+            cancel_skills_cli_job => commands::skills_cli::cancel_skills_cli_job,
         }
     };
 }

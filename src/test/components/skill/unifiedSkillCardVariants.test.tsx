@@ -58,6 +58,12 @@ const positiveCases: UnifiedSkillCardProps[] = [
     onInstallTo: noop,
     onRemove: noop,
   },
+  {
+    variant: "skillsCli",
+    name: "case-skills-cli",
+    agents: ["cursor"],
+    onUninstall: noop,
+  },
 ];
 
 /**
@@ -133,16 +139,26 @@ const negativeCases: UnifiedSkillCardProps[] = [
     // @ts-expect-error 场景互斥：project 不接受 import 专属的 onInstallToCentral
     onInstallToCentral: noop,
   },
+  {
+    variant: "skillsCli",
+    name: "bad-skills-cli",
+    agents: ["cursor"],
+    onUninstall: noop,
+    // @ts-expect-error 场景互斥：skillsCli 不接受 collection 专属的 onRemove
+    onRemove: noop,
+  },
 ];
 
 // JSX 形态同样被拒绝（单行元素，directive 覆盖整行）
 const jsxNegativeCase = [
   // @ts-expect-error 场景互斥（JSX 形态）：collection 不接受 central 专属的 statusChipLabel
   <UnifiedSkillCard key="jsx-bad" variant="collection" name="jsx-bad" onDetail={noop} onInstallTo={noop} onRemove={noop} statusChipLabel="可更新" />,
+  // @ts-expect-error 场景互斥（JSX 形态）：skillsCli 不接受 marketplace 专属的 onInstall
+  <UnifiedSkillCard key="jsx-skills-cli" variant="skillsCli" name="jsx-cli" agents={[]} onUninstall={noop} onInstall={noop} />,
 ];
 
 describe("UnifiedSkillCard 场景 interface", () => {
-  it("六个场景的最小合法 props 均可渲染", () => {
+  it("七个场景的最小合法 props 均可渲染", () => {
     for (const props of positiveCases) {
       const { unmount } = render(<UnifiedSkillCard {...props} />);
       expect(screen.getByText(props.name)).toBeInTheDocument();
@@ -151,7 +167,7 @@ describe("UnifiedSkillCard 场景 interface", () => {
   });
 
   it("互斥负例仅存在于编译期（运行时对象可构造）", () => {
-    expect(negativeCases).toHaveLength(6);
-    expect(jsxNegativeCase).toHaveLength(1);
+    expect(negativeCases).toHaveLength(7);
+    expect(jsxNegativeCase).toHaveLength(2);
   });
 });

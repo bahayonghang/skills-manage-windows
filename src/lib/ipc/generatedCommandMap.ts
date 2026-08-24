@@ -11,6 +11,7 @@ export const GENERATED_IPC_COMMANDS = {
   batch_install_central_skills: command<{ skillIds: string[]; agentIds: string[]; method: string | null; projectPath: string | null }, CentralBatchInstallResult>(),
   batch_install_collection: command<{ collectionId: string; agentIds: string[] }, BatchInstallResult>(),
   batch_install_to_agents: command<{ skillId: string; agentIds: string[]; method: string | null }, BatchInstallResult>(),
+  cancel_skills_cli_job: command<{ jobId: string }, boolean>(),
   clear_ai_api_key: command<{ provider: string | null }, AiApiKeyState_Serialize>(),
   clear_github_pat: command<undefined, GitHubPatState_Serialize>(),
   clear_skill_update_inventory: command<{ scope: {
@@ -58,6 +59,12 @@ export const GENERATED_IPC_COMMANDS = {
   scan_platform_duplicate_skills: command<{ agentIds: string[] | null }, PlatformDuplicateGroup[]>(),
   set_ai_api_key: command<{ value: string; provider: string | null }, AiApiKeyState_Serialize>(),
   set_github_pat: command<{ value: string }, GitHubPatState_Serialize>(),
+  skills_cli_add_global: command<{ jobId: string; source: string; skillNames: string[]; skillportAgentIds: string[] }, SkillsCliAddResult>(),
+  skills_cli_doctor: command<undefined, SkillsCliDoctorReport>(),
+  skills_cli_install_targets: command<undefined, SkillsCliInstallTarget[]>(),
+  skills_cli_list_global: command<undefined, SkillsCliGlobalSkill[]>(),
+  skills_cli_preview_source: command<{ source: string }, SkillsCliSourcePreview>(),
+  skills_cli_remove_global: command<{ jobId: string; skillName: string }, null>(),
   test_ai_connection: command<undefined, AiConnectionTestResult_Serialize>(),
   test_github_pat: command<undefined, GitHubPatTestResult>(),
   unassign_skill_tags: command<{ skillId: string; tagIds: string[] }, null>(),
@@ -71,6 +78,7 @@ export const GENERATED_IPC_COMMAND_NAMES = [
   "batch_install_central_skills",
   "batch_install_collection",
   "batch_install_to_agents",
+  "cancel_skills_cli_job",
   "clear_ai_api_key",
   "clear_github_pat",
   "clear_skill_update_inventory",
@@ -104,6 +112,12 @@ export const GENERATED_IPC_COMMAND_NAMES = [
   "scan_platform_duplicate_skills",
   "set_ai_api_key",
   "set_github_pat",
+  "skills_cli_add_global",
+  "skills_cli_doctor",
+  "skills_cli_install_targets",
+  "skills_cli_list_global",
+  "skills_cli_preview_source",
+  "skills_cli_remove_global",
   "test_ai_connection",
   "test_github_pat",
   "unassign_skill_tags",
@@ -764,6 +778,47 @@ export type SkillUpdateState = {
 };
 
 export type SkillUpdateStatus = "up_to_date" | "update_available" | "unsupported" | "remote_missing" | "error" | "cancelled";
+
+/**  Summary of a completed global install. */
+export type SkillsCliAddResult = {
+	installedSkills: number,
+	targetedPlatforms: number,
+};
+
+/**  Result of `skills_cli_doctor`. */
+export type SkillsCliDoctorReport = {
+	nodeVersion: string,
+	npmSpec: string,
+};
+
+/**  One global skill as reported by `skills ls -g --json`. */
+export type SkillsCliGlobalSkill = {
+	name: string,
+	path: string | null,
+	scope: string | null,
+	agents: string[],
+	source: string | null,
+	sourceUrl: string | null,
+	sourceType: string | null,
+};
+
+/**  One detected, mappable Local platform offered by the install flow. */
+export type SkillsCliInstallTarget = {
+	id: string,
+	displayName: string,
+	iconName: string | null,
+	/**  CLI `--agent` id this platform maps to. */
+	cliAgent: string,
+	/**  SkillPort enablement state; drives the default selection. */
+	isEnabled: boolean,
+	defaultSelected: boolean,
+};
+
+/**  Parsed result of `skills add <source> --list`. */
+export type SkillsCliSourcePreview = {
+	source: string,
+	skills: string[],
+};
 
 /**  Describes a target that was already installed and safely left in place. */
 export type SkippedInstall = {

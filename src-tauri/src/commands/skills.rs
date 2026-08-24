@@ -45,10 +45,15 @@ pub async fn get_skills_by_agent(
 ) -> crate::ipc_error::IpcResult<Vec<SkillForAgent>> {
     crate::ipc_boundary!(
         async move {
-            let pool = state.active_db().await?;
-            central_skills::get_skills_by_agent_impl(&pool, &agent_id)
+            let context = state.resolve_target_context().await?;
+            let pool = context.db().clone();
+            let mut skills = central_skills::get_skills_by_agent_impl(&pool, &agent_id)
                 .await
-                .map_err(|e| e.to_string())
+                .map_err(|e| e.to_string())?;
+            if crate::services::skills_cli::is_local_target(context.target()) {
+                crate::services::skills_cli::annotate_platform_install_origins(&mut skills);
+            }
+            Ok(skills)
         }
         .await
     )

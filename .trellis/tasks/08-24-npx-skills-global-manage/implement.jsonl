@@ -1,0 +1,17 @@
+{"file": ".trellis/tasks/08-24-npx-skills-global-manage/prd.md", "reason": "R1-R12 and numbered AC after Codex review"}
+{"file": ".trellis/tasks/08-24-npx-skills-global-manage/design.md", "reason": "Target mutation lock, Local-only IPC, node.exe launcher, lock ownership"}
+{"file": ".trellis/tasks/08-24-npx-skills-global-manage/research/npx-skills-global-feasibility.md", "reason": "npx --yes vs skills -y; PIN skills@1.5.23"}
+{"file": ".trellis/tasks/08-24-npx-skills-global-manage/research/codex-review-disposition.md", "reason": "Disposition of blocking review findings"}
+{"file": "CONTEXT.md", "reason": "Central vs Universal Agents vs Skills CLI global"}
+{"file": ".trellis/spec/backend/path-policy.md", "reason": "Central and Universal Agents path single source"}
+{"file": ".trellis/spec/backend/central-mutation-lock.md", "reason": "Share Local target mutation guard with install/uninstall/leftover"}
+{"file": ".trellis/spec/backend/exclusive-job-lifecycle.md", "reason": "Job families run concurrently; not an FS mutex"}
+{"file": ".trellis/spec/backend/target-context.md", "reason": "Resolve TargetContext once; reject non-Local"}
+{"file": ".trellis/spec/backend/process-supervision.md", "reason": "Reuse ProcessRequest and Job Object for local node"}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "SkillsCliError plus reviewed IPC codes"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "Redact npx output; no URL/token in IPC"}
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "Type new IPC commands"}
+{"file": ".trellis/spec/frontend/skill-card-scenarios.md", "reason": "skillsCli UnifiedSkillCard variant"}
+{"file": ".trellis/spec/frontend/platform-origin-classification.md", "reason": "Symlink to CLI canonical is not Central"}
+{"file": ".trellis/spec/frontend/renderer-authority-boundary.md", "reason": "Do not grant renderer a raw shell"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "formatBackendError on preview/add/remove"}

@@ -1,0 +1,132 @@
+# Skills CLI Global Contract
+
+## 1. Scope / Trigger
+
+Apply this contract when adding, changing, or calling the official Skills CLI
+global (`-g`) surface: `skills_cli_*` IPC, `services/skills_cli`, leftover
+CLI-lock exclusion, leftover apply mutation locking, or platform
+`install_origin` annotation.
+
+This is **not** SkillPort Central (`~/.skillsmanage/skills/`) and **not** the
+`skillport-cli` binary (`shared-local-cli.md`). The npm package is pinned
+(`SKILLS_CLI_NPM_SPEC = "skills@1.5.23"`). MVP is Local target only.
+
+## 2. Signatures
+
+```rust
+// commands/skills_cli.rs — each command resolve_target_context() first.
+pub async fn skills_cli_doctor() -> IpcResult<SkillsCliDoctorReport>;
+pub async fn skills_cli_list_global() -> IpcResult<Vec<SkillsCliGlobalSkill>>;
+pub async fn skills_cli_install_targets() -> IpcResult<Vec<SkillsCliInstallTarget>>;
+pub async fn skills_cli_preview_source(source: String) -> IpcResult<SkillsCliSourcePreview>;
+pub async fn skills_cli_add_global(
+    job_id: String,
+    source: String,
+    skill_names: Vec<String>,
+    skillport_agent_ids: Vec<String>,
+) -> IpcResult<SkillsCliAddResult>;
+pub async fn skills_cli_remove_global(job_id: String, skill_name: String) -> IpcResult<()>;
+pub async fn cancel_skills_cli_job(job_id: String) -> IpcResult<bool>;
+```
+
+Frontend: only `src/stores/skillsCliStore.ts` may `invoke` these commands.
+Renderer job IDs follow `job-correlation-cancellation.md`.
+
+## 3. Contracts
+
+- **Local gate**: SSH/WSL returns `skills_cli.local_target_only` before spawn,
+  lock reads, leftover CLI protection, or origin annotation. Do not use this
+  machine's lock to protect remote leftover.
+- **Ownership**: a path is CLI-owned only when `.skill-lock.json` (version 3)
+  contains the sanitized name. Do not treat `~/.agents/skills/` as wholly
+  owned. Lock path: `$XDG_STATE_HOME/skills/.skill-lock.json`, else
+  `home / UNIVERSAL_AGENTS_DIR_NAME / .skill-lock.json` (no `.agents` literal).
+- **Launcher**: program is `node.exe` / `node`. `argv[1]` is npm `npx-cli.js`.
+  Never `Command::new("npx.cmd")` or `cmd /c` string concat. Prefix:
+  `--yes --package=skills@1.5.23 -- skills`. Add/remove then add skills-layer
+  `-g -y` plus at least one `-a` and `-s`. Never default `--all` or `--agent '*'`.
+- **Process**: reuse `ProcessRequest` + Job Object. list/preview = Standard;
+  add/remove = BulkTransfer. stderr cap 1 MiB. stdout/stderr/URLs stay out of
+  `IpcError.message` and unredacted operation-log details.
+- **FS mutex vs job family**: exclusive job `skills_cli` is cancel/progress
+  only (`exclusive-job-lifecycle.md`). Filesystem writes take
+  `acquire_target_mutation_guard` (`central-mutation-lock.md`). Order: lease →
+  guard → spawn/delete → drop guard → drop lease.
+- **Leftover**: Local scan sets `cli_lock_protect=true` and excludes lock-owned
+  canonicals and resolved links. Unlocked copies under the Universal root stay
+  eligible. Local leftover apply holds the Local guard for the whole delete
+  loop; remote leftover apply holds that target's guard.
+- **Origin**: Local `get_skills_by_agent` annotates `install_origin` via
+  `classify_local_path_origin`. Renderer never reads the lock.
+  `link_type === "symlink"` is not automatically Central
+  (`platform-origin-classification.md`).
+- **Selection**: candidate platforms = detected ∩ mapped. Default selected =
+  those that are enabled. Empty skill or platform lists refuse add. Every seed
+  builtin id is mapped or explicitly unsupported.
+
+## 4. Validation & Error Matrix
+
+| Condition | Code | retryable |
+| --- | --- | --- |
+| ActiveTarget is SSH/WSL | `skills_cli.local_target_only` | false |
+| Node missing or `< 22.20.0` | `skills_cli.node_missing` | false |
+| npx JS or PIN package cannot run | `skills_cli.cli_unavailable` | false |
+| Source fails whitelist (`&\|^%!<>"'`, spaces, `-c`) | `skills_cli.source_invalid` | false |
+| `--list` stdout has no parseable skill names | `skills_cli.preview_unparsed` | false |
+| Zero skills or zero platforms | `skills_cli.selection_empty` | false |
+| Selected SkillPort id has no `--agent` mapping | `skills_cli.agent_unmapped` | false |
+| Target mutation lock or same-family job busy | `skills_cli.busy` | true |
+| Process deadline exceeded | `skills_cli.timeout` | false |
+| Exclusive-job cancel | `skills_cli.cancelled` | false |
+| CLI non-zero, list unparsed, IO, output cap | `internal.unexpected` | false |
+
+Same-family exclusive-job busy at the registry is `job.skills_cli_busy`; the
+command layer remaps it to `skills_cli.busy` so the UI sees one envelope.
+
+## 5. Good / Base / Bad Cases
+
+- Good: add acquires the `skills_cli` lease, then the Local mutation guard,
+  spawns `node` + `npx-cli.js --yes --package=skills@1.5.23 -- skills add … -g -y -a … -s …`,
+  and leftover local apply / Central install wait Busy until the guard drops.
+- Base: doctor/list/preview are Local reads: no exclusive job, no mutation lock.
+- Bad: `Command::new("npx.cmd")`; leftover scan skipping every path under
+  `~/.agents/skills/`; using the local lock while scanning SSH leftover;
+  mixing `active_db()` + `active_target()` when annotating origin.
+
+## 6. Tests Required
+
+- Argv table: `--yes`, PIN spec, `-g -y -a -s`; assert no `--all`, `*`, `npx.cmd`.
+- Mapping closure: every seed builtin id is mapped or unsupported.
+- Doctor: missing node / too old / missing npx JS.
+- Non-Local IPC reject; `cli_lock_protect=false` does not exclude remote leftover.
+- Leftover: lock hit excluded; unlocked Universal-root copy still listed.
+- Origin: CLI junction/symlink vs Central symlink vs copy.
+- Cancel: fake runner observes cancel flag → `skills_cli.cancelled`.
+- Timeout and stdout cap via `ProcessPolicy::for_tests`.
+- Source `&|^%!` rejected; stderr absent from `IpcError.message`.
+- Contention: held Local guard → leftover apply and `acquire_target_mutation_guard` Busy/Timeout.
+- Vitest: list, default platform checks, changed add payload, uninstall confirm
+  stays open on failure, non-Local sidebar hidden, doctor error. No public network.
+
+## 7. Wrong vs Correct
+
+```rust
+// Wrong: batch file as program; skills-layer -y stolen by npx.
+Command::new("npx.cmd").args(["-y", "skills@1.5.23", "add", source]);
+
+// Correct: node + npx JS; npx flags before `--`; skills flags after.
+ProcessRequest::new(Command::new(&launcher.program), policy)
+    .args(launcher.npx_argv_prefix()) // npx-cli.js --yes --package=skills@1.5.23 -- skills
+    .args(["add", source, "-s", name, "-g", "-a", agent, "-y"])
+```
+
+```rust
+// Wrong: exclusive job family as filesystem mutex (other families still run).
+let _lease = state.skills_cli_jobs.acquire(&job_id)?;
+spawn_add().await; // leftover apply / install_skill can write the same path
+
+// Correct: lease then Local target mutation guard covering the whole child.
+let _lease = state.skills_cli_jobs.acquire(&job_id)?;
+let _guard = acquire_target_mutation_guard(&ActiveTarget::Local, "Skills CLI global install", timeout).await?;
+spawn_add().await;
+```

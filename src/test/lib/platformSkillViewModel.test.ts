@@ -365,6 +365,29 @@ describe("platformSkillViewModel", () => {
         ),
       ).toBe("standalone");
     });
+
+    it("treats lock-owned Skills CLI junctions as skillsCli even when link_type is symlink", () => {
+      expect(
+        getPlatformSkillOrigin(
+          skill({
+            id: "cli",
+            name: "CLI Skill",
+            link_type: "symlink",
+            install_origin: "skills_cli",
+          }),
+        ),
+      ).toBe("skillsCli");
+      expect(
+        getPlatformSkillOrigin(
+          skill({
+            id: "central",
+            name: "Central Skill",
+            link_type: "symlink",
+            install_origin: "central",
+          }),
+        ),
+      ).toBe("central");
+    });
   });
 
   describe("getPlatformOriginRepoKey", () => {
@@ -436,7 +459,10 @@ describe("platformSkillViewModel", () => {
       expect(nav.total).toBe(7);
       expect(nav.centralCount).toBe(5);
       expect(nav.standaloneCount).toBe(2);
-      expect(nav.centralCount + nav.standaloneCount).toBe(nav.total);
+      expect(nav.skillsCliCount).toBe(0);
+      expect(
+        nav.centralCount + nav.standaloneCount + nav.skillsCliCount,
+      ).toBe(nav.total);
       expect(nav.repos).toEqual([
         { key: "repo:repo-alpha", label: "tools/alpha", count: 2 },
         { key: "repo:repo-bravo", label: "tools/bravo", count: 1 },
@@ -461,6 +487,7 @@ describe("platformSkillViewModel", () => {
       expect(nav.total).toBe(1);
       expect(nav.centralCount).toBe(0);
       expect(nav.standaloneCount).toBe(1);
+      expect(nav.skillsCliCount).toBe(0);
       expect(nav.repos).toEqual([]);
       expect(nav.unassignedCentralCount).toBe(0);
     });
@@ -483,6 +510,26 @@ describe("platformSkillViewModel", () => {
       expect(nav.repos).toEqual([
         { key: "repo:repo-unnamed", label: "acme/widgets", count: 1 },
       ]);
+    });
+
+    it("counts Skills CLI origin separately from Central and standalone", () => {
+      const nav = derivePlatformOriginNav([
+        skill({
+          id: "cli",
+          name: "CLI",
+          link_type: "symlink",
+          install_origin: "skills_cli",
+        }),
+        skill({ id: "copy", name: "Copy", link_type: "copy" }),
+        skill({ id: "central", name: "Central", link_type: "symlink" }),
+      ]);
+      expect(nav.total).toBe(3);
+      expect(nav.skillsCliCount).toBe(1);
+      expect(nav.standaloneCount).toBe(1);
+      expect(nav.centralCount).toBe(1);
+      expect(
+        nav.centralCount + nav.standaloneCount + nav.skillsCliCount,
+      ).toBe(nav.total);
     });
   });
 

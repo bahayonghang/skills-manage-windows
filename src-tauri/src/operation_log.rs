@@ -488,6 +488,10 @@ mod tests {
                 "job.portability_busy",
                 "A portability job is already running.",
             ),
+            skills_cli_jobs: crate::services::exclusive_job::ExclusiveJobRegistry::new(
+                "job.skills_cli_busy",
+                "A Skills CLI job is already running.",
+            ),
             secrets: std::sync::Arc::new(crate::secrets::MockSecretStore::default()),
             targets: crate::targets::TargetRegistry::default(),
         }
