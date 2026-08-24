@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 106
-- **Last Active**: 2026-08-23
+- **Total Sessions**: 107
+- **Last Active**: 2026-08-24
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1474 | Active |
+| `journal-2.md` | ~1509 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 107 | 2026-08-24 | Skills CLI global Local 管理 | `436e6c9b` | `feat/npx-skills-global-manage` |
 | 106 | 2026-08-23 | 归档 Basic Memory 八客户端接入任务 | `a1dab5bb` | `dev` |
 | 105 | 2026-08-18 | Scripts subfolder reorg | `65adfef4` | `dev` |
 | 104 | 2026-08-17 | Optimize SSH leftover cleanup speed | `156e54f9` | `dev` |

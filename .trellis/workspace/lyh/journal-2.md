@@ -1472,3 +1472,38 @@ SSH/WSL Platform leftover apply now validates paths, deletes unique POSIX paths 
 ### Next Steps
 
 - 用户在 Codex 打开 /hooks 并信任 Basic Memory hook
+
+
+## Session 107: Skills CLI global Local 管理
+
+**Date**: 2026-08-24
+**Task**: Skills CLI global Local 管理
+**Branch**: `feat/npx-skills-global-manage`
+
+### Summary
+
+实现并验收 Local 上的冻结版 npx skills -g 管理页：leftover 扫描按 lock 排除、本地清理与 CLI add/remove 共用 target mutation lock，just ci 通过后提交并归档。
+
+### Main Changes
+
+- 新增 skills_cli IPC/服务：node+npx-cli.js 启动 PIN skills@1.5.23，Local 门闩，exclusive job 只负责取消
+- leftover 本地 apply 持有 mutation lock；平台 origin 增加 skills_cli，symlink 不再一律 Central
+- 前端 /skills-cli + skillsCliStore + UnifiedSkillCard skillsCli variant，并写入 skills-cli-global spec
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `436e6c9b` | (see git log) |
+
+### Testing
+
+- [OK] just ci 通过（前端 1737、Rust lib 1295）；cargo test skills_cli / central_updates::inventory / services::installation
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 未做实机 Tauri 走查、Windows Job Object 与 live junction 证据；需要时从 feat/npx-skills-global-manage 向 dev 开 PR
