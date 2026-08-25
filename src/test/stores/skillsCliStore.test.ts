@@ -13,6 +13,11 @@ const skills = [
     source: "owner/repo",
   },
 ];
+const listGlobal = {
+  skills,
+  canonicalRoot: "/tmp/agents",
+  lockPath: "/tmp/agents/skills.lock",
+};
 const targets = [
   {
     id: "cursor",
@@ -49,7 +54,7 @@ describe("skillsCliStore", () => {
   it("loads doctor, list, and install targets", async () => {
     mockIpcCommands({
       skills_cli_doctor: doctor,
-      skills_cli_list_global: skills,
+      skills_cli_list_global: listGlobal,
       skills_cli_install_targets: targets,
     });
 
@@ -77,7 +82,7 @@ describe("skillsCliStore", () => {
   it("sends jobId and the changed selection payload on add", async () => {
     mockIpcCommands({
       skills_cli_doctor: doctor,
-      skills_cli_list_global: skills,
+      skills_cli_list_global: listGlobal,
       skills_cli_install_targets: targets,
       skills_cli_add_global: {
         installedSkills: 1,
@@ -127,7 +132,7 @@ describe("skillsCliStore", () => {
         "The Skills CLI package could not be executed.",
       );
     });
-    mockIpcCommand("skills_cli_list_global", skills);
+    mockIpcCommand("skills_cli_list_global", listGlobal);
     mockIpcCommand("skills_cli_install_targets", targets);
 
     await useSkillsCliStore.getState().loadAll();

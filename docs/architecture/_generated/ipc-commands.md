@@ -325,7 +325,7 @@ Source: `src-tauri/src/commands/skills_cli.rs`
 | `skills_cli_add_global` | `job_id: String`<br>`source: String`<br>`skill_names: Vec<String>`<br>`skillport_agent_ids: Vec<String>` | `crate::ipc_error::IpcResult<SkillsCliAddResult>` | — |
 | `skills_cli_doctor` | — | `crate::ipc_error::IpcResult<SkillsCliDoctorReport>` | — |
 | `skills_cli_install_targets` | — | `crate::ipc_error::IpcResult<Vec<SkillsCliInstallTarget>>` | — |
-| `skills_cli_list_global` | — | `crate::ipc_error::IpcResult<Vec<SkillsCliGlobalSkill>>` | — |
+| `skills_cli_list_global` | — | `crate::ipc_error::IpcResult<SkillsCliGlobalSnapshot>` | — |
 | `skills_cli_preview_source` | `source: String` | `crate::ipc_error::IpcResult<SkillsCliSourcePreview>` | — |
 | `skills_cli_remove_global` | `job_id: String`<br>`skill_name: String` | `crate::ipc_error::IpcResult<()>` | — |
 

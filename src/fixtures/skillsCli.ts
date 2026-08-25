@@ -2,6 +2,7 @@ import { registerIpcFixtures } from "@/lib/ipc";
 import type {
   SkillsCliDoctorReport,
   SkillsCliGlobalSkill,
+  SkillsCliGlobalSnapshot,
   SkillsCliInstallTarget,
   SkillsCliSourcePreview,
 } from "@/types";
@@ -10,13 +11,21 @@ const FIXTURE_SKILLS: SkillsCliGlobalSkill[] = [
   {
     name: "demo-skill",
     path: "/Users/fixture/.agents/skills/demo-skill",
+    installKind: "copy",
     scope: null,
     agents: ["cursor"],
     source: "owner/repo",
     sourceUrl: null,
     sourceType: null,
+    sourceTypeBucket: "github",
   },
 ];
+
+const FIXTURE_SNAPSHOT: SkillsCliGlobalSnapshot = {
+  skills: FIXTURE_SKILLS,
+  canonicalRoot: "/Users/fixture/.agents",
+  lockPath: "/Users/fixture/.agents/skills.lock",
+};
 
 const FIXTURE_TARGETS: SkillsCliInstallTarget[] = [
   {
@@ -50,7 +59,7 @@ const FIXTURE_DOCTOR: SkillsCliDoctorReport = {
 export function registerSkillsCliFixtures(): void {
   registerIpcFixtures({
     skills_cli_doctor: () => FIXTURE_DOCTOR,
-    skills_cli_list_global: () => FIXTURE_SKILLS,
+    skills_cli_list_global: () => FIXTURE_SNAPSHOT,
     skills_cli_install_targets: () => FIXTURE_TARGETS,
     skills_cli_preview_source: ({ source }) => ({
       ...FIXTURE_PREVIEW,

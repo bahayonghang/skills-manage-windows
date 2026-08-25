@@ -35,6 +35,11 @@ const skills = [
     source: "owner/repo",
   },
 ];
+const listGlobal = {
+  skills,
+  canonicalRoot: "/tmp/agents",
+  lockPath: "/tmp/agents/skills.lock",
+};
 const targets = [
   {
     id: "cursor",
@@ -55,7 +60,7 @@ const targets = [
 function mockHappyPath() {
   mockIpcCommands({
     skills_cli_doctor: doctor,
-    skills_cli_list_global: skills,
+    skills_cli_list_global: listGlobal,
     skills_cli_install_targets: targets,
     skills_cli_preview_source: {
       source: "owner/repo",
@@ -166,7 +171,7 @@ describe("SkillsCliView", () => {
   it("keeps the uninstall dialog open when remove fails", async () => {
     mockIpcCommands({
       skills_cli_doctor: doctor,
-      skills_cli_list_global: skills,
+      skills_cli_list_global: listGlobal,
       skills_cli_install_targets: targets,
       skills_cli_remove_global: () => {
         throw ipcFixtureError(
@@ -195,7 +200,7 @@ describe("SkillsCliView", () => {
           "The Skills CLI package could not be executed.",
         );
       },
-      skills_cli_list_global: skills,
+      skills_cli_list_global: listGlobal,
       skills_cli_install_targets: targets,
     });
     render(<SkillsCliView />);

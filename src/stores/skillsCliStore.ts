@@ -62,14 +62,14 @@ export const useSkillsCliStore = create<SkillsCliState>((set, get) => ({
   async loadAll() {
     set({ isLoading: true, error: null });
     try {
-      const [doctor, skills, targets] = await Promise.all([
+      const [doctor, snapshot, targets] = await Promise.all([
         invoke("skills_cli_doctor"),
         invoke("skills_cli_list_global"),
         invoke("skills_cli_install_targets"),
       ]);
       set({
         doctor,
-        skills: skills ?? [],
+        skills: snapshot?.skills ?? [],
         targets: targets ?? [],
         isLoading: false,
       });

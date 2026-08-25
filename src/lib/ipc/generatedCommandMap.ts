@@ -62,7 +62,7 @@ export const GENERATED_IPC_COMMANDS = {
   skills_cli_add_global: command<{ jobId: string; source: string; skillNames: string[]; skillportAgentIds: string[] }, SkillsCliAddResult>(),
   skills_cli_doctor: command<undefined, SkillsCliDoctorReport>(),
   skills_cli_install_targets: command<undefined, SkillsCliInstallTarget[]>(),
-  skills_cli_list_global: command<undefined, SkillsCliGlobalSkill[]>(),
+  skills_cli_list_global: command<undefined, SkillsCliGlobalSnapshot>(),
   skills_cli_preview_source: command<{ source: string }, SkillsCliSourcePreview>(),
   skills_cli_remove_global: command<{ jobId: string; skillName: string }, null>(),
   test_ai_connection: command<undefined, AiConnectionTestResult_Serialize>(),
@@ -791,16 +791,27 @@ export type SkillsCliDoctorReport = {
 	npmSpec: string,
 };
 
-/**  One global skill as reported by `skills ls -g --json`. */
+/**  One global skill projected from lock v3 + filesystem (no CLI spawn). */
 export type SkillsCliGlobalSkill = {
 	name: string,
 	path: string | null,
+	installKind: SkillsCliInstallKind,
 	scope: string | null,
 	agents: string[],
 	source: string | null,
 	sourceUrl: string | null,
 	sourceType: string | null,
+	sourceTypeBucket: SkillsCliSourceTypeBucket,
 };
+
+/**  Lock + filesystem snapshot returned by `skills_cli_list_global`. */
+export type SkillsCliGlobalSnapshot = {
+	skills: SkillsCliGlobalSkill[],
+	canonicalRoot: string,
+	lockPath: string,
+};
+
+export type SkillsCliInstallKind = "canonical" | "copy" | "missing";
 
 /**  One detected, mappable Local platform offered by the install flow. */
 export type SkillsCliInstallTarget = {
@@ -819,6 +830,8 @@ export type SkillsCliSourcePreview = {
 	source: string,
 	skills: string[],
 };
+
+export type SkillsCliSourceTypeBucket = "github" | "gitlab" | "git" | "mintlify" | "huggingface" | "local" | "well-known" | "unknown";
 
 /**  Describes a target that was already installed and safely left in place. */
 export type SkippedInstall = {

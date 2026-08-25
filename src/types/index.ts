@@ -119,15 +119,12 @@ export interface SkillsCliDoctorReport {
   npmSpec: string;
 }
 
-export interface SkillsCliGlobalSkill {
-  name: string;
-  path: string | null;
-  scope: string | null;
-  agents: string[];
-  source: string | null;
-  sourceUrl: string | null;
-  sourceType: string | null;
-}
+export type {
+  SkillsCliGlobalSkill,
+  SkillsCliGlobalSnapshot,
+  SkillsCliInstallKind,
+  SkillsCliSourceTypeBucket,
+} from "@/lib/ipc/generatedCommandMap";
 
 export interface SkillsCliInstallTarget {
   id: string;
