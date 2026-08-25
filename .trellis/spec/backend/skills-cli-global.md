@@ -16,7 +16,7 @@ This is **not** SkillPort Central (`~/.skillsmanage/skills/`) and **not** the
 ```rust
 // commands/skills_cli.rs — each command resolve_target_context() first.
 pub async fn skills_cli_doctor() -> IpcResult<SkillsCliDoctorReport>;
-pub async fn skills_cli_list_global() -> IpcResult<Vec<SkillsCliGlobalSkill>>;
+pub async fn skills_cli_list_global() -> IpcResult<SkillsCliGlobalSnapshot>;
 pub async fn skills_cli_install_targets() -> IpcResult<Vec<SkillsCliInstallTarget>>;
 pub async fn skills_cli_preview_source(source: String) -> IpcResult<SkillsCliSourcePreview>;
 pub async fn skills_cli_add_global(
@@ -45,17 +45,30 @@ Renderer job IDs follow `job-correlation-cancellation.md`.
   Never `Command::new("npx.cmd")` or `cmd /c` string concat. Prefix:
   `--yes --package=skills@1.5.23 -- skills`. Add/remove then add skills-layer
   `-g -y` plus at least one `-a` and `-s`. Never default `--all` or `--agent '*'`.
-- **Process**: reuse `ProcessRequest` + Job Object. list/preview = Standard;
-  add/remove = BulkTransfer. stderr cap 1 MiB. stdout/stderr/URLs stay out of
-  `IpcError.message` and unredacted operation-log details.
+- **Inventory read**: `skills_cli_list_global` reads lock v3 + filesystem + the
+  same mapped∩detected platform set as `install_targets`. It must not spawn
+  the CLI. Membership is lock names only. `path` / `installKind` prefer
+  `universal_skills_dir/<name>` when that directory exists; otherwise a copy
+  directory `{agent.global_skills_dir}/<name>` on a mapped detected agent
+  (`canonical` | `copy` | `missing`). Platform `agents` include copy hits even
+  when `classify_local_path_origin` is `Other`. Missing lock or empty lock
+  returns an empty `skills` array with `canonicalRoot` and `lockPath` still
+  set — not an error. List IO maps to `internal.unexpected`, never
+  `skills_cli.cli_unavailable`.
+- **Process**: reuse `ProcessRequest` + Job Object. preview = Standard;
+  add/remove = BulkTransfer; list does not spawn. stderr cap 1 MiB.
+  stdout/stderr/URLs stay out of `IpcError.message` and unredacted
+  operation-log details.
 - **FS mutex vs job family**: exclusive job `skills_cli` is cancel/progress
   only (`exclusive-job-lifecycle.md`). Filesystem writes take
   `acquire_target_mutation_guard` (`central-mutation-lock.md`). Order: lease →
   guard → spawn/delete → drop guard → drop lease.
 - **Leftover**: Local scan sets `cli_lock_protect=true` and excludes lock-owned
-  canonicals and resolved links. Unlocked copies under the Universal root stay
-  eligible. Local leftover apply holds the Local guard for the whole delete
-  loop; remote leftover apply holds that target's guard.
+  canonicals, resolved links, **and** `{mapped_detected_agent.global_skills_dir}/<name>`
+  when the lock contains `name`. Unlocked copies under the Universal root stay
+  eligible. Do not exclude the whole Universal root. Remote leftover must not
+  use this machine's lock. Local leftover apply holds the Local guard for the
+  whole delete loop; remote leftover apply holds that target's guard.
 - **Origin**: Local `get_skills_by_agent` annotates `install_origin` via
   `classify_local_path_origin`. Renderer never reads the lock.
   `link_type === "symlink"` is not automatically Central
@@ -78,7 +91,7 @@ Renderer job IDs follow `job-correlation-cancellation.md`.
 | Target mutation lock or same-family job busy | `skills_cli.busy` | true |
 | Process deadline exceeded | `skills_cli.timeout` | false |
 | Exclusive-job cancel | `skills_cli.cancelled` | false |
-| CLI non-zero, list unparsed, IO, output cap | `internal.unexpected` | false |
+| CLI non-zero (preview/add/remove), lock/FS IO, output cap | `internal.unexpected` | false |
 
 Same-family exclusive-job busy at the registry is `job.skills_cli_busy`; the
 command layer remaps it to `skills_cli.busy` so the UI sees one envelope.
@@ -88,7 +101,8 @@ command layer remaps it to `skills_cli.busy` so the UI sees one envelope.
 - Good: add acquires the `skills_cli` lease, then the Local mutation guard,
   spawns `node` + `npx-cli.js --yes --package=skills@1.5.23 -- skills add … -g -y -a … -s …`,
   and leftover local apply / Central install wait Busy until the guard drops.
-- Base: doctor/list/preview are Local reads: no exclusive job, no mutation lock.
+- Base: doctor/preview are Local reads that may spawn; list is a Local lock+FS
+  read: no exclusive job, no mutation lock, no CLI spawn.
 - Bad: `Command::new("npx.cmd")`; leftover scan skipping every path under
   `~/.agents/skills/`; using the local lock while scanning SSH leftover;
   mixing `active_db()` + `active_target()` when annotating origin.
@@ -99,7 +113,11 @@ command layer remaps it to `skills_cli.busy` so the UI sees one envelope.
 - Mapping closure: every seed builtin id is mapped or unsupported.
 - Doctor: missing node / too old / missing npx JS.
 - Non-Local IPC reject; `cli_lock_protect=false` does not exclude remote leftover.
-- Leftover: lock hit excluded; unlocked Universal-root copy still listed.
+- Leftover: lock canonical/link excluded; lock-named mapped agent copy
+  excluded; unlocked sibling copy still listed; remote scan ignores local lock.
+- Inventory: copy-only (no canonical) still listed with `installKind=copy`;
+  lock name with no directories listed as `missing`; unknown `sourceType` →
+  `sourceTypeBucket=unknown`.
 - Origin: CLI junction/symlink vs Central symlink vs copy.
 - Cancel: fake runner observes cancel flag → `skills_cli.cancelled`.
 - Timeout and stdout cap via `ProcessPolicy::for_tests`.
