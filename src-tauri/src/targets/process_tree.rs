@@ -1,5 +1,7 @@
 use std::io;
 use std::process::Command;
+
+#[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[cfg(test)]
