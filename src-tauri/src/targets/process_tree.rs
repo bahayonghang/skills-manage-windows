@@ -173,16 +173,18 @@ mod prepare_tests {
     use std::time::Duration;
 
     use crate::targets::{CommandRunner, ProcessPolicy, ProcessRequest, ProcessRunner};
+    #[cfg(windows)]
+    use crate::targets::{CREATE_NO_WINDOW, LAST_HIDDEN_CHILD_CREATION_FLAGS};
 
     #[cfg(windows)]
     #[test]
     fn prepare_sets_create_no_window_on_command() {
-        super::LAST_HIDDEN_CHILD_CREATION_FLAGS.store(0, Ordering::SeqCst);
+        LAST_HIDDEN_CHILD_CREATION_FLAGS.store(0, Ordering::SeqCst);
         let mut command = Command::new("cmd");
         let _guard = ProcessTreeGuard::prepare(&mut command).expect("prepare");
         assert_eq!(
-            super::LAST_HIDDEN_CHILD_CREATION_FLAGS.load(Ordering::SeqCst),
-            super::CREATE_NO_WINDOW,
+            LAST_HIDDEN_CHILD_CREATION_FLAGS.load(Ordering::SeqCst),
+            CREATE_NO_WINDOW,
             "prepare must apply CREATE_NO_WINDOW via hide_child_window; Command Debug is {command:?}"
         );
     }
