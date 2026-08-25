@@ -85,6 +85,10 @@ impl SkillsCliRunner for NodeProcessRunner {
     async fn run(&self, request: RunnerRequest<'_>) -> Result<CliOutput, SkillsCliError> {
         let mut command = std::process::Command::new(&request.program);
         command.args(&request.args);
+        command.env("CI", "1");
+        command.env("npm_config_yes", "true");
+        command.env("npm_config_update_notifier", "false");
+        command.env("npm_config_fund", "false");
         let process_request = ProcessRequest::new(command, request.policy)
             .with_cancellation(ProcessCancellation::from(request.cancel));
         let output: StdOutput = ProcessRunner
