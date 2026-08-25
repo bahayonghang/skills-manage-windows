@@ -179,14 +179,27 @@ impl NodeLauncher {
 
 /// Candidate npm layouts relative to the resolved `node` directory, plus
 /// well-known global roots. Ordered by likelihood.
-fn npx_js_candidates(node_dir: &Path) -> Vec<PathBuf> {
-    vec![
+pub(crate) fn npx_js_candidates(node_dir: &Path) -> Vec<PathBuf> {
+    let mut candidates = vec![
         node_dir.join("node_modules/npm/bin/npx-cli.js"),
         node_dir.join("lib/node_modules/npm/bin/npx-cli.js"),
+        node_dir.join("../npm/node_modules/npm/bin/npx-cli.js"),
         PathBuf::from("/usr/lib/node_modules/npm/bin/npx-cli.js"),
         PathBuf::from("/usr/local/lib/node_modules/npm/bin/npx-cli.js"),
         PathBuf::from("/opt/homebrew/lib/node_modules/npm/bin/npx-cli.js"),
-    ]
+    ];
+    if let Some(program_files) = std::env::var_os("ProgramFiles") {
+        candidates.push(
+            std::path::PathBuf::from(program_files)
+                .join("nodejs/node_modules/npm/bin/npx-cli.js"),
+        );
+    }
+    if let Some(appdata) = std::env::var_os("APPDATA") {
+        candidates.push(
+            std::path::PathBuf::from(appdata).join("npm/node_modules/npm/bin/npx-cli.js"),
+        );
+    }
+    candidates
 }
 
 /// Locate `node` on the given PATH-style search path without invoking a
@@ -219,11 +232,21 @@ pub(crate) fn resolve_node_launcher_from_dirs(
         .ok_or(super::SkillsCliError::NodeMissing)?
         .to_path_buf();
 
-    npx_js_candidates(&node_dir)
-        .into_iter()
+    let candidates = npx_js_candidates(&node_dir);
+    match candidates
+        .iter()
         .find(|candidate| candidate.is_file())
-        .map(|npx_js| NodeLauncher { program, npx_js })
-        .ok_or(super::SkillsCliError::CliUnavailable)
+        .cloned()
+    {
+        Some(npx_js) => Ok(NodeLauncher { program, npx_js }),
+        None => {
+            tracing::warn!(
+                candidates = ?candidates,
+                "Skills CLI npx-cli.js was not found beside node"
+            );
+            Err(super::SkillsCliError::CliUnavailable)
+        }
+    }
 }
 
 /// Parse `vMAJOR.MINOR.PATCH` from `node --version` output.

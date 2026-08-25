@@ -25,8 +25,8 @@ use super::runner::{
 };
 use super::{
     add_global, add_global_with_lock_at, doctor_with_launcher, ensure_local_target,
-    install_targets, list_global_with_launcher, preview_source_with_launcher, AddGlobalLockRequest,
-    SKILLS_CLI_AGENT_MAP, SKILLS_CLI_UNSUPPORTED,
+    install_targets, list_global_at, preview_source_with_launcher, AddGlobalLockRequest,
+    SkillsCliInstallKind, SkillsCliSourceTypeBucket, SKILLS_CLI_AGENT_MAP, SKILLS_CLI_UNSUPPORTED,
 };
 use crate::db::{self, SkillForAgent};
 use crate::ipc_error::{public_message_for_code, IpcError};
@@ -525,7 +525,7 @@ async fn ac13_timeout_and_stdout_cap_without_huge_buffers() {
     assert!(matches!(timeout_err, SkillsCliError::Timeout(_)));
 
     runner.push_err(SkillsCliError::OutputLimitExceeded { stream: "stdout" });
-    let cap_err = list_global_with_launcher(&runner, &fake_launcher())
+    let cap_err = preview_source_with_launcher(&runner, &fake_launcher(), "owner/repo")
         .await
         .unwrap_err();
     assert!(matches!(
@@ -641,4 +641,115 @@ async fn ac15_default_lock_holder_blocks_leftover_apply_and_target_guard() {
         ),
         "{guard_err:?}"
     );
+}
+
+#[test]
+fn ac4_copy_without_canonical_is_listed_with_agents() {
+    let ownership = super::lock::parse_lock_content(
+        r#"{"version":3,"skills":{"demo":{"source":"owner/repo","sourceUrl":"https://github.com/owner/repo","sourceType":"github"}}}"#,
+    );
+    let temp = TempDir::new().unwrap();
+    let canonical_root = temp.path().join("universal");
+    std::fs::create_dir_all(&canonical_root).unwrap();
+    let cursor_dir = temp.path().join("cursor");
+    let copy = cursor_dir.join("demo");
+    std::fs::create_dir_all(&copy).unwrap();
+    let skills = super::inventory::project_global_inventory(
+        &ownership,
+        &canonical_root,
+        &[super::inventory::InventoryPlatform {
+            display_name: "Cursor".to_string(),
+            global_skills_dir: cursor_dir,
+        }],
+    );
+    assert_eq!(skills.len(), 1);
+    assert_eq!(skills[0].install_kind, SkillsCliInstallKind::Copy);
+    assert_eq!(skills[0].path.as_deref(), Some(copy.to_str().unwrap()));
+    assert_eq!(skills[0].agents, vec!["Cursor"]);
+    assert_eq!(skills[0].source_type_bucket, SkillsCliSourceTypeBucket::Github);
+}
+
+#[test]
+fn ac5_lock_name_without_directories_is_missing_not_empty_inventory() {
+    let ownership = super::lock::parse_lock_content(r#"{"version":3,"skills":{"ghost":{}}}"#);
+    let temp = TempDir::new().unwrap();
+    let canonical_root = temp.path().join("universal");
+    std::fs::create_dir_all(&canonical_root).unwrap();
+    let skills = super::inventory::project_global_inventory(&ownership, &canonical_root, &[]);
+    assert_eq!(skills.len(), 1);
+    assert_eq!(skills[0].name, "ghost");
+    assert_eq!(skills[0].install_kind, SkillsCliInstallKind::Missing);
+    assert!(skills[0].path.is_none());
+    assert!(skills[0].agents.is_empty());
+}
+
+#[test]
+fn ac6_unknown_source_type_maps_to_unknown_bucket() {
+    let ownership = super::lock::parse_lock_content(
+        r#"{"version":3,"skills":{"demo":{"sourceType":"not-a-real-type"}}}"#,
+    );
+    let entry = ownership.entry("demo").unwrap();
+    assert_eq!(entry.source_type.as_deref(), Some("not-a-real-type"));
+    assert_eq!(
+        super::inventory::source_type_bucket(entry.source_type.as_deref()),
+        SkillsCliSourceTypeBucket::Unknown
+    );
+}
+
+#[tokio::test]
+async fn ac4_list_global_at_reads_lock_copy_without_spawn() {
+    let pool = mem_pool().await;
+    let temp = TempDir::new().unwrap();
+    let canonical_root = temp.path().join("universal");
+    std::fs::create_dir_all(&canonical_root).unwrap();
+    let cursor_dir = temp.path().join("cursor-skills");
+    let copy = cursor_dir.join("demo");
+    std::fs::create_dir_all(&copy).unwrap();
+    set_agent_dir(&pool, "cursor", &cursor_dir).await;
+    let lock_path = temp.path().join(".skill-lock.json");
+    std::fs::write(
+        &lock_path,
+        r#"{"version":3,"skills":{"demo":{"sourceType":"github"}}}"#,
+    )
+    .unwrap();
+    let snapshot = list_global_at(&pool, &canonical_root, &lock_path)
+        .await
+        .unwrap();
+    assert_eq!(snapshot.skills.len(), 1);
+    assert_eq!(snapshot.skills[0].install_kind, SkillsCliInstallKind::Copy);
+    assert!(snapshot.skills[0].agents.iter().any(|name| name == "Cursor"));
+    assert_eq!(snapshot.lock_path, lock_path.to_string_lossy().into_owned());
+}
+
+#[test]
+fn ac15_resolves_npx_js_from_sibling_npm_layout() {
+    let temp = TempDir::new().unwrap();
+    let node_dir = temp.path().join("node");
+    let npx_js = temp.path().join("npm/node_modules/npm/bin/npx-cli.js");
+    std::fs::create_dir_all(npx_js.parent().unwrap()).unwrap();
+    std::fs::write(&npx_js, b"").unwrap();
+    std::fs::create_dir_all(&node_dir).unwrap();
+    let node_bin = node_dir.join(if cfg!(windows) { "node.exe" } else { "node" });
+    std::fs::write(&node_bin, b"").unwrap();
+    let launcher = resolve_node_launcher_from_dirs(&[node_dir]).unwrap();
+    assert!(launcher.npx_js.ends_with("npx-cli.js"));
+}
+
+#[test]
+fn ac15_missing_npx_js_public_message_omits_candidate_paths() {
+    let temp = TempDir::new().unwrap();
+    let node_dir = temp.path().join("node");
+    std::fs::create_dir_all(&node_dir).unwrap();
+    std::fs::write(
+        node_dir.join(if cfg!(windows) { "node.exe" } else { "node" }),
+        b"",
+    )
+    .unwrap();
+    let err = resolve_node_launcher_from_dirs(&[node_dir]).unwrap_err();
+    assert!(matches!(err, SkillsCliError::CliUnavailable));
+    let planted = temp.path().to_string_lossy().into_owned();
+    let message = public_message_for_code(err.ipc_code())
+        .unwrap_or("The operation failed. See runtime logs for details.");
+    assert!(!message.contains(&planted), "{message}");
+    assert!(!err.to_string().contains(&planted), "{err}");
 }

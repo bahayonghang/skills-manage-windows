@@ -20,7 +20,7 @@ use crate::services::exclusive_job::ExclusiveJobError;
 use crate::services::skills_cli as domain;
 use crate::services::skills_cli::{
     NodeProcessRunner, SkillsCliAddResult, SkillsCliDoctorReport, SkillsCliError,
-    SkillsCliGlobalSkill, SkillsCliInstallTarget, SkillsCliRunner, SkillsCliSourcePreview,
+    SkillsCliGlobalSnapshot, SkillsCliInstallTarget, SkillsCliRunner, SkillsCliSourcePreview,
 };
 use crate::AppState;
 
@@ -76,10 +76,11 @@ pub async fn skills_cli_doctor(
 #[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn skills_cli_list_global(
     state: State<'_, AppState>,
-) -> crate::ipc_error::IpcResult<Vec<SkillsCliGlobalSkill>> {
+) -> crate::ipc_error::IpcResult<SkillsCliGlobalSnapshot> {
     let context = state.resolve_target_context().await?;
     domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
-    domain::list_global(domain_runner().as_ref())
+    let pool = context.db().clone();
+    domain::list_global(&pool)
         .await
         .map_err(|error| to_ipc_error(&error))
 }

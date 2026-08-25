@@ -8,6 +8,7 @@
 mod agent_map;
 mod argv;
 mod error;
+mod inventory;
 mod lock;
 mod runner;
 
@@ -24,9 +25,9 @@ pub use argv::{
 pub use error::SkillsCliError;
 pub use lock::{
     annotate_platform_install_origins, annotate_platform_install_origins_with,
-    classify_local_path_origin, is_path_inside_owned_canonical, load_cli_lock_ownership,
-    resolved_link_target, skills_cli_lock_path, skills_cli_lock_path_from_env, CliLockOwnership,
-    LinkOrigin,
+    classify_local_path_origin, is_mapped_agent_lock_copy, is_path_inside_owned_canonical,
+    load_cli_lock_ownership, resolved_link_target, skills_cli_lock_path,
+    skills_cli_lock_path_from_env, CliLockEntry, CliLockOwnership, LinkOrigin,
 };
 pub(crate) use runner::{
     bulk_transfer_policy, standard_policy, NodeProcessRunner, SkillsCliRunner,
@@ -60,18 +61,53 @@ pub struct SkillsCliDoctorReport {
     pub npm_spec: String,
 }
 
-/// One global skill as reported by `skills ls -g --json`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
+#[serde(rename_all = "lowercase")]
+pub enum SkillsCliInstallKind {
+    Canonical,
+    Copy,
+    Missing,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
+#[serde(rename_all = "kebab-case")]
+pub enum SkillsCliSourceTypeBucket {
+    Github,
+    Gitlab,
+    Git,
+    Mintlify,
+    Huggingface,
+    Local,
+    WellKnown,
+    Unknown,
+}
+
+/// One global skill projected from lock v3 + filesystem (no CLI spawn).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[serde(rename_all = "camelCase")]
 pub struct SkillsCliGlobalSkill {
     pub name: String,
     pub path: Option<String>,
+    pub install_kind: SkillsCliInstallKind,
     pub scope: Option<String>,
     pub agents: Vec<String>,
     pub source: Option<String>,
     pub source_url: Option<String>,
     pub source_type: Option<String>,
+    pub source_type_bucket: SkillsCliSourceTypeBucket,
+}
+
+/// Lock + filesystem snapshot returned by `skills_cli_list_global`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
+pub struct SkillsCliGlobalSnapshot {
+    pub skills: Vec<SkillsCliGlobalSkill>,
+    pub canonical_root: String,
+    pub lock_path: String,
 }
 
 /// One detected, mappable Local platform offered by the install flow.
@@ -219,74 +255,47 @@ pub(crate) async fn doctor_with_launcher(
 
 // ─── List ────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
-struct LsJsonEntry {
-    #[serde(default)]
-    name: Option<serde_json::Value>,
-    #[serde(default)]
-    path: Option<String>,
-    #[serde(default)]
-    scope: Option<String>,
-    #[serde(default)]
-    agents: Option<Vec<String>>,
-    #[serde(default)]
-    source: Option<String>,
-    #[serde(default)]
-    source_url: Option<String>,
-    #[serde(default)]
-    source_type: Option<String>,
+/// List global Skills CLI skills from lock v3 + filesystem. Does not spawn.
+pub(crate) async fn list_global(
+    pool: &DbPool,
+) -> Result<SkillsCliGlobalSnapshot, SkillsCliError> {
+    let home = crate::paths::resolve_home_dir();
+    list_global_at(
+        pool,
+        &crate::paths::universal_skills_dir(),
+        &skills_cli_lock_path(&home),
+    )
+    .await
 }
 
-fn parse_ls_json(stdout: &[u8]) -> Result<Vec<SkillsCliGlobalSkill>, SkillsCliError> {
-    let text = String::from_utf8_lossy(stdout);
-    let trimmed = text.trim();
-    // Tolerate status lines printed before the JSON array.
-    let json_start = trimmed.find('[').ok_or(SkillsCliError::ListUnparsed)?;
-    let entries: Vec<LsJsonEntry> =
-        serde_json::from_str(&trimmed[json_start..]).map_err(|_| SkillsCliError::ListUnparsed)?;
-
-    let mut skills = Vec::with_capacity(entries.len());
-    for entry in entries {
-        let name = match entry.name {
-            Some(serde_json::Value::String(name)) if !name.trim().is_empty() => name,
-            _ => return Err(SkillsCliError::ListUnparsed),
+pub(crate) async fn list_global_at(
+    pool: &DbPool,
+    canonical_root: &std::path::Path,
+    lock_path: &std::path::Path,
+) -> Result<SkillsCliGlobalSnapshot, SkillsCliError> {
+    let ownership = load_cli_lock_ownership(lock_path)?;
+    let targets = install_targets(pool).await?;
+    let agents = crate::db::get_all_agents(pool)
+        .await
+        .map_err(|error| SkillsCliError::Io {
+            context: "read platforms",
+            source: std::io::Error::other(error.to_string()),
+        })?;
+    let mut platforms = Vec::new();
+    for target in &targets {
+        let Some(agent) = agents.iter().find(|agent| agent.id == target.id) else {
+            continue;
         };
-        skills.push(SkillsCliGlobalSkill {
-            name,
-            path: entry.path,
-            scope: entry.scope,
-            agents: entry.agents.unwrap_or_default(),
-            source: entry.source,
-            source_url: entry.source_url,
-            source_type: entry.source_type,
+        platforms.push(inventory::InventoryPlatform {
+            display_name: target.display_name.clone(),
+            global_skills_dir: std::path::PathBuf::from(&agent.global_skills_dir),
         });
     }
-    Ok(skills)
-}
-
-/// List global Skills CLI skills through the frozen-version CLI.
-pub(crate) async fn list_global(
-    runner: &dyn SkillsCliRunner,
-) -> Result<Vec<SkillsCliGlobalSkill>, SkillsCliError> {
-    list_global_with_launcher(runner, &resolve_launcher()?).await
-}
-
-pub(crate) async fn list_global_with_launcher(
-    runner: &dyn SkillsCliRunner,
-    launcher: &NodeLauncher,
-) -> Result<Vec<SkillsCliGlobalSkill>, SkillsCliError> {
-    let output = run_cli(
-        runner,
-        launcher,
-        build_list_global_argv(launcher),
-        standard_policy(),
-        None,
-    )
-    .await?;
-    if !output.status_success {
-        return Err(SkillsCliError::CliUnavailable);
-    }
-    parse_ls_json(&output.stdout)
+    Ok(SkillsCliGlobalSnapshot {
+        skills: inventory::project_global_inventory(&ownership, canonical_root, &platforms),
+        canonical_root: canonical_root.to_string_lossy().into_owned(),
+        lock_path: lock_path.to_string_lossy().into_owned(),
+    })
 }
 
 // ─── Install targets ─────────────────────────────────────────────────────────

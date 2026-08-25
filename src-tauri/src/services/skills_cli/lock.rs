@@ -6,25 +6,33 @@
 //! CLI-owned only when the lock proves it — never merely because it lives
 //! under `~/.agents/skills/`.
 
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use super::error::SkillsCliError;
+use super::cli_agent_for_skillport_id;
 
 /// Lock schema version the PIN package writes. Older versions are treated as
 /// "no lock" exactly like the CLI itself does.
 const LOCK_SCHEMA_VERSION: u64 = 3;
 
+/// One v3 lock row. Source fields are optional; missing values stay `None`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CliLockEntry {
+    pub source: Option<String>,
+    pub source_url: Option<String>,
+    pub source_type: Option<String>,
+}
+
 /// Parsed ownership evidence for one machine.
 #[derive(Debug, Clone, Default)]
 pub struct CliLockOwnership {
-    /// Sanitized skill names present in a version-3 lock.
-    owned_names: BTreeSet<String>,
+    entries: BTreeMap<String, CliLockEntry>,
 }
 
 impl CliLockOwnership {
     pub fn is_empty(&self) -> bool {
-        self.owned_names.is_empty()
+        self.entries.is_empty()
     }
 
     /// Canonical directory the CLI owns for this entry:
@@ -34,11 +42,19 @@ impl CliLockOwnership {
     }
 
     pub fn contains_name(&self, name: &str) -> bool {
-        self.owned_names.contains(name)
+        self.entries.contains_key(name)
     }
 
     pub fn names(&self) -> impl Iterator<Item = &str> {
-        self.owned_names.iter().map(String::as_str)
+        self.entries.keys().map(String::as_str)
+    }
+
+    pub fn entry(&self, name: &str) -> Option<&CliLockEntry> {
+        self.entries.get(name)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &CliLockEntry)> {
+        self.entries.iter().map(|(name, entry)| (name.as_str(), entry))
     }
 }
 
@@ -96,12 +112,31 @@ pub(crate) fn parse_lock_content(content: &str) -> CliLockOwnership {
         },
     };
 
-    CliLockOwnership {
-        owned_names: entries
-            .keys()
-            .filter(|key| key != &"version")
-            .cloned()
-            .collect(),
+    let mut parsed = BTreeMap::new();
+    for (key, value) in entries {
+        if key == "version" {
+            continue;
+        }
+        parsed.insert(key.clone(), lock_entry_from_value(value));
+    }
+    CliLockOwnership { entries: parsed }
+}
+
+fn json_string(value: &serde_json::Value, camel: &str, snake: &str) -> Option<String> {
+    value
+        .get(camel)
+        .or_else(|| value.get(snake))
+        .and_then(|item| item.as_str())
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(str::to_string)
+}
+
+fn lock_entry_from_value(value: &serde_json::Value) -> CliLockEntry {
+    CliLockEntry {
+        source: json_string(value, "source", "source"),
+        source_url: json_string(value, "sourceUrl", "source_url"),
+        source_type: json_string(value, "sourceType", "source_type"),
     }
 }
 
@@ -219,4 +254,28 @@ pub fn annotate_platform_install_origins_with(
             LinkOrigin::Other => "standalone".to_string(),
         };
     }
+}
+
+/// Local leftover protection for PIN copy installs: lock contains `name` and
+/// `path` is `{mapped_agent.global_skills_dir}/<name>`. Does not use
+/// [`classify_local_path_origin`] (copy directories are `Other`).
+pub fn is_mapped_agent_lock_copy(
+    path: &Path,
+    agent_global_skills_dir: &Path,
+    agent_id: &str,
+    ownership: &CliLockOwnership,
+) -> bool {
+    if cli_agent_for_skillport_id(agent_id).is_none() {
+        return false;
+    }
+    let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+        return false;
+    };
+    if !ownership.contains_name(name) {
+        return false;
+    }
+    let Some(parent) = path.parent() else {
+        return false;
+    };
+    normalized(parent) == normalized(agent_global_skills_dir)
 }
