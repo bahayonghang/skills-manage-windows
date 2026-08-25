@@ -782,6 +782,49 @@ async fn ac9_ac10_lock_owned_canonical_is_excluded_unlocked_copy_still_listed() 
 }
 
 #[tokio::test]
+async fn ac16_lock_named_mapped_copy_is_excluded_sibling_copy_still_listed() {
+    let pool = crate::test_support::mem_pool().await;
+    let temp = TempDir::new().unwrap();
+    let universal = temp.path().join("universal");
+    std::fs::create_dir_all(&universal).unwrap();
+    let cursor_dir = temp.path().join("cursor-skills");
+    let copy = cursor_dir.join("demo");
+    let sibling = cursor_dir.join("other");
+    std::fs::create_dir_all(&copy).unwrap();
+    std::fs::create_dir_all(&sibling).unwrap();
+    crate::test_support::set_agent_dir(&pool, "cursor", &cursor_dir).await;
+    seed_leftover_observation(&pool, "cursor", "demo", &copy).await;
+    seed_leftover_observation(&pool, "cursor", "other", &sibling).await;
+
+    let lock_path = temp.path().join(".skill-lock.json");
+    std::fs::write(&lock_path, r#"{"version":3,"skills":{"demo":{}}}"#).unwrap();
+    let ownership = crate::services::skills_cli::load_cli_lock_ownership(&lock_path).unwrap();
+
+    let protected = scan_deleted_platform_copies_with_ownership(
+        &pool,
+        Some(vec!["cursor".to_string()]),
+        Some(&ownership),
+        &universal,
+    )
+    .await
+    .unwrap();
+    assert_eq!(protected.len(), 1);
+    assert_eq!(protected[0].skill_id, "other");
+
+    let remote = scan_deleted_platform_copies_with_ownership(
+        &pool,
+        Some(vec!["cursor".to_string()]),
+        None,
+        &universal,
+    )
+    .await
+    .unwrap();
+    let remote_ids: Vec<&str> = remote.iter().map(|group| group.skill_id.as_str()).collect();
+    assert!(remote_ids.contains(&"demo"));
+    assert!(remote_ids.contains(&"other"));
+}
+
+#[tokio::test]
 async fn ac2_remote_scan_does_not_use_local_lock_exclusion() {
     let pool = crate::test_support::mem_pool().await;
     let temp = TempDir::new().unwrap();

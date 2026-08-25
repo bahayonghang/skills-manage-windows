@@ -89,7 +89,7 @@ pub(crate) async fn scan_deleted_platform_copies_with_ownership(
         .into_iter()
         .map(|skill| skill.id)
         .collect::<HashSet<_>>();
-    let is_cli_protected = |path: &str| {
+    let is_cli_protected = |path: &str, agent: &crate::db::Agent| {
         let Some(ownership) = cli_ownership else {
             return false;
         };
@@ -98,6 +98,12 @@ pub(crate) async fn scan_deleted_platform_copies_with_ownership(
             universal_skills_dir,
             ownership,
         ) == crate::services::skills_cli::LinkOrigin::SkillsCli
+            || crate::services::skills_cli::is_mapped_agent_lock_copy(
+                std::path::Path::new(path),
+                std::path::Path::new(&agent.global_skills_dir),
+                &agent.id,
+                ownership,
+            )
     };
     let mut grouped: HashMap<(String, String), (String, Vec<String>)> = HashMap::new();
     for agent in agents {
@@ -113,7 +119,7 @@ pub(crate) async fn scan_deleted_platform_copies_with_ownership(
             if !is_candidate_path_within_agent_root(&agent, &obs.dir_path) {
                 continue;
             }
-            if is_cli_protected(&obs.dir_path) {
+            if is_cli_protected(&obs.dir_path, &agent) {
                 continue;
             }
             if !is_candidate_entry_deletable_shape(&obs.dir_path) {
@@ -143,7 +149,7 @@ pub(crate) async fn scan_deleted_platform_copies_with_ownership(
             if !is_candidate_path_within_agent_root(&agent, &installation.installed_path) {
                 continue;
             }
-            if is_cli_protected(&installation.installed_path) {
+            if is_cli_protected(&installation.installed_path, &agent) {
                 continue;
             }
             if !is_candidate_entry_deletable_shape(&installation.installed_path) {
