@@ -190,14 +190,12 @@ pub(crate) fn npx_js_candidates(node_dir: &Path) -> Vec<PathBuf> {
     ];
     if let Some(program_files) = std::env::var_os("ProgramFiles") {
         candidates.push(
-            std::path::PathBuf::from(program_files)
-                .join("nodejs/node_modules/npm/bin/npx-cli.js"),
+            std::path::PathBuf::from(program_files).join("nodejs/node_modules/npm/bin/npx-cli.js"),
         );
     }
     if let Some(appdata) = std::env::var_os("APPDATA") {
-        candidates.push(
-            std::path::PathBuf::from(appdata).join("npm/node_modules/npm/bin/npx-cli.js"),
-        );
+        candidates
+            .push(std::path::PathBuf::from(appdata).join("npm/node_modules/npm/bin/npx-cli.js"));
     }
     candidates
 }

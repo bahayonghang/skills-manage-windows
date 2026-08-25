@@ -7,9 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use super::lock::CliLockOwnership;
-use super::{
-    SkillsCliGlobalSkill, SkillsCliInstallKind, SkillsCliSourceTypeBucket,
-};
+use super::{SkillsCliGlobalSkill, SkillsCliInstallKind, SkillsCliSourceTypeBucket};
 
 /// One mapped ∩ detected platform used while attributing copy directories.
 #[derive(Debug, Clone)]

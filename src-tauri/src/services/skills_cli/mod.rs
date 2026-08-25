@@ -256,9 +256,7 @@ pub(crate) async fn doctor_with_launcher(
 // ─── List ────────────────────────────────────────────────────────────────────
 
 /// List global Skills CLI skills from lock v3 + filesystem. Does not spawn.
-pub(crate) async fn list_global(
-    pool: &DbPool,
-) -> Result<SkillsCliGlobalSnapshot, SkillsCliError> {
+pub(crate) async fn list_global(pool: &DbPool) -> Result<SkillsCliGlobalSnapshot, SkillsCliError> {
     let home = crate::paths::resolve_home_dir();
     list_global_at(
         pool,

@@ -9,8 +9,8 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use super::error::SkillsCliError;
 use super::cli_agent_for_skillport_id;
+use super::error::SkillsCliError;
 
 /// Lock schema version the PIN package writes. Older versions are treated as
 /// "no lock" exactly like the CLI itself does.
@@ -54,7 +54,9 @@ impl CliLockOwnership {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&str, &CliLockEntry)> {
-        self.entries.iter().map(|(name, entry)| (name.as_str(), entry))
+        self.entries
+            .iter()
+            .map(|(name, entry)| (name.as_str(), entry))
     }
 }
 

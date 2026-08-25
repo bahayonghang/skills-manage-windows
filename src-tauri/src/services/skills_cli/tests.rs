@@ -666,7 +666,10 @@ fn ac4_copy_without_canonical_is_listed_with_agents() {
     assert_eq!(skills[0].install_kind, SkillsCliInstallKind::Copy);
     assert_eq!(skills[0].path.as_deref(), Some(copy.to_str().unwrap()));
     assert_eq!(skills[0].agents, vec!["Cursor"]);
-    assert_eq!(skills[0].source_type_bucket, SkillsCliSourceTypeBucket::Github);
+    assert_eq!(
+        skills[0].source_type_bucket,
+        SkillsCliSourceTypeBucket::Github
+    );
 }
 
 #[test]
@@ -717,7 +720,10 @@ async fn ac4_list_global_at_reads_lock_copy_without_spawn() {
         .unwrap();
     assert_eq!(snapshot.skills.len(), 1);
     assert_eq!(snapshot.skills[0].install_kind, SkillsCliInstallKind::Copy);
-    assert!(snapshot.skills[0].agents.iter().any(|name| name == "Cursor"));
+    assert!(snapshot.skills[0]
+        .agents
+        .iter()
+        .any(|name| name == "Cursor"));
     assert_eq!(snapshot.lock_path, lock_path.to_string_lossy().into_owned());
 }
 
