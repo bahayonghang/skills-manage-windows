@@ -1,5 +1,9 @@
 use std::io;
 use std::process::Command;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+#[cfg(test)]
+pub(super) static PREPARE_CALLS: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(windows)]
 mod platform {
@@ -147,6 +151,10 @@ pub(super) struct ProcessTreeGuard(platform::Guard);
 
 impl ProcessTreeGuard {
     pub(super) fn prepare(command: &mut Command) -> io::Result<Self> {
+        #[cfg(test)]
+        PREPARE_CALLS.fetch_add(1, Ordering::SeqCst);
+        #[cfg(windows)]
+        super::hide_child_window(command);
         platform::Guard::prepare(command).map(Self)
     }
 
@@ -156,5 +164,47 @@ impl ProcessTreeGuard {
 
     pub(super) fn terminate(&mut self) -> io::Result<()> {
         self.0.terminate()
+    }
+}
+
+#[cfg(test)]
+mod prepare_tests {
+    use super::*;
+    use std::time::Duration;
+
+    use crate::targets::{CommandRunner, ProcessPolicy, ProcessRequest, ProcessRunner};
+
+    #[cfg(windows)]
+    #[test]
+    fn prepare_sets_create_no_window_on_command() {
+        super::LAST_HIDDEN_CHILD_CREATION_FLAGS.store(0, Ordering::SeqCst);
+        let mut command = Command::new("cmd");
+        let _guard = ProcessTreeGuard::prepare(&mut command).expect("prepare");
+        assert_eq!(
+            super::LAST_HIDDEN_CHILD_CREATION_FLAGS.load(Ordering::SeqCst),
+            super::CREATE_NO_WINDOW,
+            "prepare must apply CREATE_NO_WINDOW via hide_child_window; Command Debug is {command:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn process_runner_run_goes_through_prepare() {
+        PREPARE_CALLS.store(0, Ordering::SeqCst);
+        let command = if cfg!(windows) {
+            let mut command = Command::new("cmd");
+            command.args(["/C", "exit", "0"]);
+            command
+        } else {
+            Command::new("true")
+        };
+        let request = ProcessRequest::new(
+            command,
+            ProcessPolicy::for_tests(Duration::from_secs(5), 64, 64),
+        );
+        let _ = ProcessRunner.run(request).await;
+        assert!(
+            PREPARE_CALLS.load(Ordering::SeqCst) >= 1,
+            "ProcessRunner::run must call ProcessTreeGuard::prepare"
+        );
     }
 }
