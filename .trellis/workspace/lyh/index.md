@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 107
-- **Last Active**: 2026-08-24
+- **Total Sessions**: 108
+- **Last Active**: 2026-08-25
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1509 | Active |
+| `journal-2.md` | ~1550 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 108 | 2026-08-25 | Skills CLI 库存读路径与无窗口 spawn | `d73958a066945813cc708d4e860586f93af83c13`, `2de1a2808bc4fa2b53f9b0116150bbc7321b44c8`, `2a28ce5b86d067fbfd847f04d16e127e12d5e52e`, `bffffc0957546537e9c58ff3448eda90656c97a2`, `c1be555cbd2d8403ca5106d75e4f07d46477a217` | `dev` |
 | 107 | 2026-08-24 | Skills CLI global Local 管理 | `436e6c9b` | `feat/npx-skills-global-manage` |
 | 106 | 2026-08-23 | 归档 Basic Memory 八客户端接入任务 | `a1dab5bb` | `dev` |
 | 105 | 2026-08-18 | Scripts subfolder reorg | `65adfef4` | `dev` |

@@ -1507,3 +1507,44 @@ SSH/WSL Platform leftover apply now validates paths, deletes unique POSIX paths 
 ### Next Steps
 
 - 未做实机 Tauri 走查、Windows Job Object 与 live junction 证据；需要时从 feat/npx-skills-global-manage 向 dev 开 PR
+
+
+## Session 108: Skills CLI 库存读路径与无窗口 spawn
+
+**Date**: 2026-08-25
+**Task**: Skills CLI 库存读路径与无窗口 spawn
+**Branch**: `dev`
+
+### Summary
+
+后端改为 lock+文件系统投影全局库存，Windows spawn 隐藏控制台并抑制 npm 交互，leftover 保护 lock 名下 mapped copy。前端库存页、ipc:codegen 与 just ci 未纳入本轮。
+
+### Main Changes
+
+- 规范：list 改为 lock+FS 快照，prepare 必须 CREATE_NO_WINDOW
+- ProcessTreeGuard::prepare 调用 hide_child_window，并记录实际 applied flags
+- NodeProcessRunner 设置 CI/npm 非交互环境变量
+- skills_cli_list_global 返回 snapshot；copy/missing 投影；补齐 npx-cli.js 候选
+- Local leftover 排除 lock 名下 mapped agent copy
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d73958a066945813cc708d4e860586f93af83c13` | (see git log) |
+| `2de1a2808bc4fa2b53f9b0116150bbc7321b44c8` | (see git log) |
+| `2a28ce5b86d067fbfd847f04d16e127e12d5e52e` | (see git log) |
+| `bffffc0957546537e9c58ff3448eda90656c97a2` | (see git log) |
+| `c1be555cbd2d8403ca5106d75e4f07d46477a217` | (see git log) |
+
+### Testing
+
+- [OK] process_tree::prepare_tests 初跑失败后改为 flags 记录断言；库存与 leftover 单测未复跑；未跑 ipc:codegen 与 just ci
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 补前端库存页、ipc:codegen、docs:gen，再跑 just ci
