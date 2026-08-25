@@ -33,9 +33,9 @@ function allSteps() {
 
 describe("developer and PR experience contract", () => {
   it("declares one Node/pnpm/Rust toolchain", () => {
-    expect(nodeVersion).toBe("22");
+    expect(nodeVersion).toBe("26");
     expect(packageJson.packageManager).toBe("pnpm@10.12.3");
-    expect(packageJson.engines?.node).toBe("22.x");
+    expect(packageJson.engines?.node).toBe("26.x");
     expect(rustToolchain).toContain('channel = "1.97.0"');
     expect(rustToolchain).toContain('components = ["rustfmt", "clippy"]');
   });
@@ -48,7 +48,7 @@ describe("developer and PR experience contract", () => {
 
     const nodeSetupSteps = steps.filter((step) => step.uses?.startsWith("actions/setup-node@"));
     expect(nodeSetupSteps.length).toBeGreaterThan(0);
-    expect(nodeSetupSteps.every((step) => step.with?.["node-version"] === "22")).toBe(true);
+    expect(nodeSetupSteps.every((step) => step.with?.["node-version"] === "26")).toBe(true);
 
     const rustSetupSteps = steps.filter((step) => step.uses?.startsWith("dtolnay/rust-toolchain@"));
     expect(rustSetupSteps.length).toBeGreaterThan(0);
@@ -106,7 +106,7 @@ describe("developer and PR experience contract", () => {
     const quality = readFileSync(".trellis/spec/quality/ci-quality-gate.md", "utf8");
 
     for (const document of [english, chinese, contributing, agents, quality]) {
-      expect(document).toContain("Node 22");
+      expect(document).toContain("Node 26");
       expect(document).toContain("pnpm 10.12.3");
       expect(document).toContain("Rust 1.97.0");
       expect(document).toContain("just doctor");

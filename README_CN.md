@@ -186,12 +186,12 @@ xattr -dr com.apple.quarantine "/Applications/SkillPort.app"
 
 ### 前置依赖
 
-- [Node.js](https://nodejs.org/) 22 LTS（见 `.node-version`）
+- [Node.js](https://nodejs.org/) 26（见 `.node-version`）
 - [pnpm](https://pnpm.io/) 10.12.3
 - [Rust toolchain](https://rustup.rs/) 1.97.0（见 `rust-toolchain.toml`）
 - Tauri v2 系统依赖：<https://v2.tauri.app/start/prerequisites/>
 
-仓库工具链固定为 Node 22、pnpm 10.12.3 和 Rust 1.97.0。
+仓库工具链固定为 Node 26、pnpm 10.12.3 和 Rust 1.97.0。
 
 ### 安装依赖
 

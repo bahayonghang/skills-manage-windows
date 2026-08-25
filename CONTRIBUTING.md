@@ -14,7 +14,7 @@ Thanks for your interest in improving `skills-manage`.
 
 | Tool | Notes |
 |------|-------|
-| Node.js | Node 22 LTS, pinned by `.node-version` and `package.json` |
+| Node.js | Node 26, pinned by `.node-version` and `package.json` |
 | pnpm | pnpm 10.12.3, pinned by `package.json` |
 | Rust | Rust 1.97.0 with `rustfmt` and `clippy`, pinned by `rust-toolchain.toml` |
 | Tauri prerequisites | Install the system dependencies listed in the [Tauri v2 prerequisites](https://v2.tauri.app/start/prerequisites/) guide |

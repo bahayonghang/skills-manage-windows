@@ -7,7 +7,7 @@ import { resolveRepoRoot } from "../lib/repo-root.mjs";
 const repoRoot = resolveRepoRoot(import.meta.url);
 
 export const TOOLCHAIN = Object.freeze({
-  nodeMajor: 22,
+  nodeMajor: 26,
   pnpm: "10.12.3",
   rust: "1.97.0",
 });
@@ -189,7 +189,7 @@ export function collectDoctorChecks({
       args: ["--version"],
       expected: TOOLCHAIN.nodeMajor,
       mode: "major",
-      hint: "use Node.js 22 LTS for this repository",
+      hint: "use Node.js 26 for this repository",
     }, options),
     checkVersion({
       id: "pnpm",

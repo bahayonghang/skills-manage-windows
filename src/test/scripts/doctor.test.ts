@@ -31,7 +31,7 @@ const { collectDoctorChecks, redactSecrets, runDoctor, TOOLCHAIN } = (await impo
 
 function commandResults(overrides: Record<string, CommandResult> = {}) {
   const defaults: Record<string, CommandResult> = {
-    [process.execPath]: { status: 0, stdout: "v22.12.0\n" },
+    [process.execPath]: { status: 0, stdout: "v26.7.0\n" },
     pnpm: { status: 0, stdout: `${TOOLCHAIN.pnpm}\n` },
     rustc: { status: 0, stdout: `rustc ${TOOLCHAIN.rust} (stable)\n` },
     cargo: { status: 0, stdout: `cargo ${TOOLCHAIN.rust} (stable)\n` },

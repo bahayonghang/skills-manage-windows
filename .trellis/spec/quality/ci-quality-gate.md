@@ -24,7 +24,7 @@ just audit
   -> pnpm audit --prod --json + cargo audit --json
 
 Toolchain:
-  .node-version / package.json engines -> Node 22 LTS
+  .node-version / package.json engines -> Node 26
   package.json packageManager         -> pnpm 10.12.3
   rust-toolchain.toml                 -> Rust 1.97.0 + rustfmt + clippy
 

@@ -6,7 +6,7 @@
   "type": "module",
   "packageManager": "pnpm@10.12.3",
   "engines": {
-    "node": "22.x"
+    "node": "26.x"
   },
   "scripts": {
     "dev": "node scripts/build/dev-server.mjs",
@@ -68,12 +68,12 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.0",
+    "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/cli": "^2.11.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^25.9.1",
+    "@types/node": "^26.3.0",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^8.60.0",
@@ -84,7 +84,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "jsdom": "^29.1.1",
     "shadcn": "^4.15.0",
-    "tailwindcss": "^4.3.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "~6.0.3",
     "vite": "^8.0.14",
     "vitepress": "^1.6.4",

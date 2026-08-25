@@ -1,7 +1,7 @@
 # Build And Test
 
 Use the repository root as the working directory. The toolchain is pinned by `.node-version`,
-`package.json`, and `rust-toolchain.toml`: Node 22 LTS, pnpm 10.12.3, and Rust 1.97.0.
+`package.json`, and `rust-toolchain.toml`: Node 26, pnpm 10.12.3, and Rust 1.97.0.
 
 ## Fast Feedback
 
