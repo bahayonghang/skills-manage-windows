@@ -1,0 +1,22 @@
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "List currently spawn-bound; this task changes inventory to lock+FS and splits doctor from list errors"}
+{"file": ".trellis/spec/backend/process-supervision.md", "reason": "CREATE_NO_WINDOW is missing on ProcessRunner; local node must use the same hidden-window rule as SSH/WSL"}
+{"file": ".trellis/spec/backend/path-policy.md", "reason": "Canonical CLI skills live under Universal Agents; Central path must stay distinct"}
+{"file": ".trellis/spec/backend/central-mutation-lock.md", "reason": "add/remove keep Local target mutation guard; inventory reads must not take it"}
+{"file": ".trellis/spec/backend/exclusive-job-lifecycle.md", "reason": "skills_cli job family remains cancel-only; list/doctor are not jobs"}
+{"file": ".trellis/spec/backend/target-context.md", "reason": "Non-Local IPC still fail-closed before lock reads or spawn"}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "Stop mapping list failures to CliUnavailable; keep thiserror variants"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "npx stdout/stderr and registry URLs stay out of IPC messages"}
+{"file": ".trellis/spec/frontend/dashboard-data-contract.md", "reason": "Charts are hand-drawn SVG, no recharts/d3, no backdrop-filter, no fake time windows"}
+{"file": ".trellis/spec/frontend/skill-card-scenarios.md", "reason": "Keep UnifiedSkillCard variant skillsCli; do not invent a second card"}
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "Store-only invoke; commandMap + fixture snapshot shape"}
+{"file": ".trellis/spec/frontend/job-correlation-cancellation.md", "reason": "add/remove jobId correlation unchanged; refresh is not a job"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "Doctor warning vs inventory error; formatBackendError; no duplicate alerts"}
+{"file": ".trellis/spec/frontend/platform-origin-classification.md", "reason": "Agent link counts must use skills_cli origin, not symlink=central"}
+{"file": ".trellis/spec/frontend/typography-tokens.md", "reason": "Path footer is text-ui-meta; KPI labels are text-xs"}
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "just ci; task PRs target dev"}
+{"file": ".trellis/tasks/08-24-skills-cli-inventory-ux/prd.md", "reason": "R1-R11 and AC1-AC17 including copy-mode and inventoryError"}
+{"file": ".trellis/tasks/08-24-skills-cli-inventory-ux/design.md", "reason": "Lock snapshot, ProcessRunner hide, store split, SVG census"}
+{"file": ".trellis/tasks/08-24-skills-cli-inventory-ux/research/inventory-page-root-cause.md", "reason": "File:line evidence for empty inventory, console flash, cli_unavailable"}
+{"file": ".trellis/tasks/08-24-skills-cli-inventory-ux/research/copy-mode-ownership.md", "reason": "PIN 1.5.23 default copy skips canonical; inventory and leftover must attribute agent copies"}
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "ipc:codegen writes generatedCommandMap.ts; do not hand-edit"}
+{"file": ".trellis/tasks/archive/2026-08/08-24-npx-skills-global-manage/research/npx-skills-global-feasibility.md", "reason": "Path A lock+FS listing was already validated; PIN and argv rules still apply"}
