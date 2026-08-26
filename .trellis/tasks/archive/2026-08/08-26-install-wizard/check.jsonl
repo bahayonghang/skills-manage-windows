@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "检查组件无 invoke、recent store named mock、generated type 与 fixture seam 无漂移"}
+{"file": ".trellis/spec/frontend/async-ui-test-stability.md", "reason": "检查 dialog 内查询、late settle 与重复运行没有全局 timeout 掩盖"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "检查 preview/install/follow-up 各自可见且 raw backend details 不进入 DOM/toast"}
+{"file": ".trellis/spec/frontend/job-correlation-cancellation.md", "reason": "检查 jobId 与 session/request correlation，旧 promise 不覆盖当前状态"}
+{"file": ".trellis/spec/frontend/platform-grouping.md", "reason": "检查无内联平台 ID 列表、无第二套 multi-select grid、默认选择语义正确"}
+{"file": ".trellis/spec/frontend/icon-control-hit-area.md", "reason": "检查小型图标热区、相邻中心距和 keyboard focus 可见"}
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "检查 command preview/payload 与真实 source/argv/target mapping 一致且无未验证 flag"}
+{"file": ".trellis/tasks/08-26-skills-cli-redesign/research/design-contract.md", "reason": "检查 recent source 先 preview、Base UI Escape、toast 2800ms 与 native evidence 边界"}
+{"file": ".trellis/spec/quality/test-suite-layout.md", "reason": "检查安装测试路径与 Vitest 发现规则"}
