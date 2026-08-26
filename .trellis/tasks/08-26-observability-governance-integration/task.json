@@ -12,7 +12,7 @@
   "assignee": "lyh",
   "createdAt": "2026-08-26",
   "completedAt": null,
-  "branch": null,
+  "branch": "codex/observability-logging-system",
   "base_branch": "dev",
   "worktree_path": null,
   "commit": null,
@@ -30,5 +30,7 @@
     "docs/architecture/_generated/"
   ],
   "notes": "Depends on all six implementation children. It is the only child authorized to remove compatibility adapters and declare integrated readiness.",
-  "meta": {}
+  "meta": {
+    "verification_status": "Implementation and scoped gates PASS; just ci blocked by seven pre-existing size-budget violations; native Windows GUI and abnormal-termination evidence UNVERIFIED."
+  }
 }

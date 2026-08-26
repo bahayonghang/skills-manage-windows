@@ -12,7 +12,7 @@
   "assignee": "lyh",
   "createdAt": "2026-08-26",
   "completedAt": null,
-  "branch": null,
+  "branch": "codex/observability-logging-system",
   "base_branch": "dev",
   "worktree_path": null,
   "commit": null,
@@ -47,5 +47,7 @@
     "docs/architecture/runtime-observability.md"
   ],
   "notes": "Planning only. The reported SSH incident was caused by an incorrectly entered address and is explicitly excluded. The directory id is retained for task continuity; the task scope is now repository-wide logging and observability hardening.",
-  "meta": {}
+  "meta": {
+    "verification_status": "AC1-AC9 PASS; AC10 remains open because just ci is blocked by seven pre-existing size-budget violations; native Windows GUI and abnormal-termination evidence UNVERIFIED."
+  }
 }
