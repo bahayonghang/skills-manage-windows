@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/index.md","reason":"父级集成审查需要覆盖 Skills CLI、迁移、路径、错误和恢复等后端规范。"}
+{"file":".trellis/spec/frontend/index.md","reason":"父级集成审查需要覆盖卡片、IPC、异步错误、响应式交互与 Dashboard 规范。"}
+{"file":".trellis/spec/quality/index.md","reason":"父级最终 gate 需要按仓库质量与测试布局规范执行。"}
+{"file":".trellis/spec/backend/skills-cli-global.md","reason":"核对 CLI ownership、inventory 与 mutation 的共享契约。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"检查 Rust IPC、store、view model 和 UI 的端到端数据流。"}
+{"file":".trellis/tasks/08-26-skills-cli-redesign/research/design-contract.md","reason":"八区块、placement、update、Esc、toast、token 与证据边界的任务内设计依据。"}
