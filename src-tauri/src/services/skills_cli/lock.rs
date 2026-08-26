@@ -22,6 +22,10 @@ pub struct CliLockEntry {
     pub source: Option<String>,
     pub source_url: Option<String>,
     pub source_type: Option<String>,
+    pub skill_path: Option<String>,
+    pub skill_folder_hash: Option<String>,
+    pub installed_at: Option<String>,
+    pub updated_at: Option<String>,
 }
 
 /// Parsed ownership evidence for one machine.
@@ -139,6 +143,10 @@ fn lock_entry_from_value(value: &serde_json::Value) -> CliLockEntry {
         source: json_string(value, "source", "source"),
         source_url: json_string(value, "sourceUrl", "source_url"),
         source_type: json_string(value, "sourceType", "source_type"),
+        skill_path: json_string(value, "skillPath", "skill_path"),
+        skill_folder_hash: json_string(value, "skillFolderHash", "skill_folder_hash"),
+        installed_at: json_string(value, "installedAt", "installed_at"),
+        updated_at: json_string(value, "updatedAt", "updated_at"),
     }
 }
 
@@ -280,4 +288,47 @@ pub fn is_mapped_agent_lock_copy(
         return false;
     };
     normalized(parent) == normalized(agent_global_skills_dir)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lock_accepts_camel_snake_empty_and_missing_fields() {
+        let camel = parse_lock_content(
+            r#"{"version":3,"skills":{"demo":{"sourceUrl":"https://github.com/owner/repo","sourceType":"github","skillPath":"/tmp/demo","skillFolderHash":"abc","installedAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-02T00:00:00Z"}}}"#,
+        );
+        let entry = camel.entry("demo").unwrap();
+        assert_eq!(
+            entry.source_url.as_deref(),
+            Some("https://github.com/owner/repo")
+        );
+        assert_eq!(entry.source_type.as_deref(), Some("github"));
+        assert_eq!(entry.skill_path.as_deref(), Some("/tmp/demo"));
+        assert_eq!(entry.skill_folder_hash.as_deref(), Some("abc"));
+        assert_eq!(entry.installed_at.as_deref(), Some("2026-01-01T00:00:00Z"));
+        assert_eq!(entry.updated_at.as_deref(), Some("2026-01-02T00:00:00Z"));
+
+        let snake = parse_lock_content(
+            r#"{"version":3,"skills":{"demo":{"source_url":"https://github.com/owner/repo","source_type":"github","skill_path":"/tmp/demo","skill_folder_hash":"abc","installed_at":"t1","updated_at":"t2"}}}"#,
+        );
+        let entry = snake.entry("demo").unwrap();
+        assert_eq!(
+            entry.source_url.as_deref(),
+            Some("https://github.com/owner/repo")
+        );
+        assert_eq!(entry.skill_path.as_deref(), Some("/tmp/demo"));
+        assert_eq!(entry.skill_folder_hash.as_deref(), Some("abc"));
+
+        let empty = parse_lock_content(
+            r#"{"version":3,"skills":{"demo":{"sourceUrl":"","skillPath":"   ","folderHash":null}}}"#,
+        );
+        let entry = empty.entry("demo").unwrap();
+        assert!(entry.source_url.is_none());
+        assert!(entry.skill_path.is_none());
+        assert!(entry.skill_folder_hash.is_none());
+        assert!(entry.source.is_none());
+        assert!(entry.installed_at.is_none());
+    }
 }

@@ -20,7 +20,8 @@ use crate::services::exclusive_job::ExclusiveJobError;
 use crate::services::skills_cli as domain;
 use crate::services::skills_cli::{
     NodeProcessRunner, SkillsCliAddResult, SkillsCliDoctorReport, SkillsCliError,
-    SkillsCliGlobalSnapshot, SkillsCliInstallTarget, SkillsCliRunner, SkillsCliSourcePreview,
+    SkillsCliGlobalSnapshot, SkillsCliInstallTarget, SkillsCliPlacement, SkillsCliRemovePlan,
+    SkillsCliRemoveResult, SkillsCliRunner, SkillsCliSkillDoc, SkillsCliSourcePreview,
 };
 use crate::AppState;
 
@@ -58,6 +59,45 @@ fn job_lease_error(error: ExclusiveJobError) -> IpcError {
 
 fn domain_runner() -> Arc<dyn SkillsCliRunner> {
     Arc::new(NodeProcessRunner)
+}
+
+fn mutation_log_details(skill_name: &str, agent_id: Option<&str>) -> serde_json::Value {
+    match agent_id {
+        Some(agent) => json!({
+            "skillName": skill_name,
+            "agentId": agent,
+        }),
+        None => json!({
+            "skillName": skill_name,
+        }),
+    }
+}
+
+async fn record_placement_mutation_log(
+    pool: &crate::db::DbPool,
+    active_target: &crate::targets::ActiveTarget,
+    action: &'static str,
+    skill_name: &str,
+    agent_id: &str,
+    succeeded: bool,
+    started_at: Instant,
+) {
+    let status = if succeeded { "succeeded" } else { "failed" };
+    let summary = if succeeded {
+        format!("Updated Skills CLI platform placement for {skill_name}")
+    } else {
+        format!("Failed to update Skills CLI platform placement for {skill_name}")
+    };
+    let event = OperationLogEvent::new("skills_cli", action, status, summary)
+        .subject("skill", skill_name, skill_name)
+        .details(mutation_log_details(skill_name, Some(agent_id)))
+        .duration_ms(started_at.elapsed().as_millis() as i64);
+    record_operation_log_best_effort(
+        pool,
+        target_context_from_active_target(active_target),
+        event,
+    )
+    .await;
 }
 
 #[tauri::command]
@@ -173,7 +213,7 @@ pub async fn skills_cli_remove_global(
     state: State<'_, AppState>,
     job_id: String,
     skill_name: String,
-) -> crate::ipc_error::IpcResult<()> {
+) -> crate::ipc_error::IpcResult<SkillsCliRemoveResult> {
     let lease = state
         .skills_cli_jobs
         .acquire(&job_id)
@@ -184,12 +224,7 @@ pub async fn skills_cli_remove_global(
     domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
 
     let started_at = Instant::now();
-    let result = domain::remove_global(
-        domain_runner().as_ref(),
-        &skill_name,
-        Some(lease.cancel_flag()),
-    )
-    .await;
+    let result = domain::remove_global(&pool, &skill_name, Some(lease.cancel_flag())).await;
 
     let status = if result.is_ok() {
         "succeeded"
@@ -197,11 +232,12 @@ pub async fn skills_cli_remove_global(
         "failed"
     };
     let summary = match &result {
-        Ok(()) => format!("Uninstalled Skills CLI global skill {skill_name}"),
+        Ok(_) => format!("Uninstalled Skills CLI global skill {skill_name}"),
         Err(_) => "Failed to uninstall Skills CLI global skill".to_string(),
     };
     let event = OperationLogEvent::new("skills_cli", "skills_cli.remove", status, summary)
         .subject("skill", &skill_name, &skill_name)
+        .details(mutation_log_details(&skill_name, None))
         .duration_ms(started_at.elapsed().as_millis() as i64);
     record_operation_log_best_effort(
         &pool,
@@ -211,6 +247,134 @@ pub async fn skills_cli_remove_global(
     .await;
 
     result.map_err(|error| to_ipc_error(&error))
+}
+
+#[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn skills_cli_read_skill_md(
+    state: State<'_, AppState>,
+    skill_name: String,
+) -> crate::ipc_error::IpcResult<SkillsCliSkillDoc> {
+    let context = state.resolve_target_context().await?;
+    domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+    domain::read_skill_md(&skill_name)
+        .await
+        .map_err(|error| to_ipc_error(&error))
+}
+
+#[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn skills_cli_reveal_skill_folder(
+    state: State<'_, AppState>,
+    skill_name: String,
+) -> crate::ipc_error::IpcResult<()> {
+    let context = state.resolve_target_context().await?;
+    domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+    domain::reveal_skill_folder(&skill_name).map_err(|error| to_ipc_error(&error))
+}
+
+#[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn skills_cli_link_platform(
+    state: State<'_, AppState>,
+    job_id: String,
+    skill_name: String,
+    skillport_agent_id: String,
+) -> crate::ipc_error::IpcResult<SkillsCliPlacement> {
+    let lease = state
+        .skills_cli_jobs
+        .acquire(&job_id)
+        .map_err(job_lease_error)?;
+    let context = state.resolve_target_context().await?;
+    let active_target = context.target().clone();
+    let pool = context.db().clone();
+    domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
+
+    let started_at = Instant::now();
+    let result = domain::link_platform(
+        &pool,
+        &skill_name,
+        &skillport_agent_id,
+        Some(lease.cancel_flag()),
+    )
+    .await;
+    record_placement_mutation_log(
+        &pool,
+        &active_target,
+        "skills_cli.link",
+        &skill_name,
+        &skillport_agent_id,
+        result.is_ok(),
+        started_at,
+    )
+    .await;
+    result.map_err(|error| to_ipc_error(&error))
+}
+
+#[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn skills_cli_unlink_platform(
+    state: State<'_, AppState>,
+    job_id: String,
+    skill_name: String,
+    skillport_agent_id: String,
+) -> crate::ipc_error::IpcResult<SkillsCliPlacement> {
+    let lease = state
+        .skills_cli_jobs
+        .acquire(&job_id)
+        .map_err(job_lease_error)?;
+    let context = state.resolve_target_context().await?;
+    let active_target = context.target().clone();
+    let pool = context.db().clone();
+    domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
+
+    let started_at = Instant::now();
+    let result = domain::unlink_platform(
+        &pool,
+        &skill_name,
+        &skillport_agent_id,
+        Some(lease.cancel_flag()),
+    )
+    .await;
+    record_placement_mutation_log(
+        &pool,
+        &active_target,
+        "skills_cli.unlink",
+        &skill_name,
+        &skillport_agent_id,
+        result.is_ok(),
+        started_at,
+    )
+    .await;
+    result.map_err(|error| to_ipc_error(&error))
+}
+
+#[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn skills_cli_preview_remove_global(
+    state: State<'_, AppState>,
+    skill_name: String,
+) -> crate::ipc_error::IpcResult<SkillsCliRemovePlan> {
+    let context = state.resolve_target_context().await?;
+    domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+    let pool = context.db().clone();
+    domain::preview_remove_global(&pool, &skill_name)
+        .await
+        .map_err(|error| to_ipc_error(&error))
+}
+
+#[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn skills_cli_export_inventory(
+    state: State<'_, AppState>,
+    path: String,
+    json: String,
+) -> crate::ipc_error::IpcResult<()> {
+    let context = state.resolve_target_context().await?;
+    domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+    domain::export_inventory(std::path::PathBuf::from(path), json)
+        .await
+        .map_err(|error| to_ipc_error(&error))
 }
 
 #[tauri::command]
@@ -225,4 +389,23 @@ pub async fn cancel_skills_cli_job(
         .skills_cli_jobs
         .cancel(&job_id)
         .map_err(job_lease_error)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mutation_log_details;
+
+    #[test]
+    fn mutation_log_details_omit_paths_and_argv() {
+        let details = mutation_log_details("demo-skill", Some("cursor"));
+        let serialized = serde_json::to_string(&details).unwrap();
+        assert_eq!(details["skillName"], "demo-skill");
+        assert_eq!(details["agentId"], "cursor");
+        assert!(!serialized.contains('\\'));
+        assert!(!serialized.contains("--force"));
+        assert!(!serialized.contains("--keep-links"));
+        assert!(!serialized.contains("C:"));
+        assert!(!details.as_object().unwrap().contains_key("targetPath"));
+        assert!(!details.as_object().unwrap().contains_key("path"));
+    }
 }

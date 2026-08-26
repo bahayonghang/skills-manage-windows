@@ -34,6 +34,11 @@ function skill(overrides: Partial<SkillsCliGlobalSkill>): SkillsCliGlobalSkill {
     sourceUrl: null,
     sourceType: null,
     sourceTypeBucket: "unknown",
+    canonicalPath: null,
+    folderHash: null,
+    installedAt: null,
+    updatedAt: null,
+    placements: [],
     ...overrides,
   };
 }

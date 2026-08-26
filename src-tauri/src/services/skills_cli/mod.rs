@@ -1,15 +1,19 @@
 //! Skills CLI global management service.
 //!
 //! Wraps the official `skills` npm package (PIN: [`SKILLS_CLI_NPM_SPEC`]) for
-//! the `-g` lifecycle on the Local target only. The CLI owns add/remove/lock
-//! writes; this service validates input, supervises the process, and derives
-//! lock-based ownership evidence for leftover protection.
+//! the `-g` lifecycle on the Local target only. Add still supervises the CLI;
+//! list/read/link/unlink/reveal/export/remove use lock + filesystem ownership.
 
 mod agent_map;
 mod argv;
 mod error;
+mod export;
+mod files;
 mod inventory;
+mod link;
 mod lock;
+mod placement;
+mod remove;
 mod runner;
 
 pub use agent_map::{
@@ -23,12 +27,16 @@ pub use argv::{
     SKILLS_CLI_MIN_NODE_DISPLAY, SKILLS_CLI_NPM_SPEC,
 };
 pub use error::SkillsCliError;
+pub(crate) use export::export_inventory;
+pub(crate) use files::{read_skill_md, reveal_skill_folder};
+pub(crate) use link::{link_platform, unlink_platform};
 pub use lock::{
     annotate_platform_install_origins, annotate_platform_install_origins_with,
     classify_local_path_origin, is_mapped_agent_lock_copy, is_path_inside_owned_canonical,
     load_cli_lock_ownership, resolved_link_target, skills_cli_lock_path,
     skills_cli_lock_path_from_env, CliLockEntry, CliLockOwnership, LinkOrigin,
 };
+pub(crate) use remove::{preview_remove_global, remove_global};
 pub(crate) use runner::{
     bulk_transfer_policy, standard_policy, NodeProcessRunner, SkillsCliRunner,
 };
@@ -98,6 +106,11 @@ pub struct SkillsCliGlobalSkill {
     pub source_url: Option<String>,
     pub source_type: Option<String>,
     pub source_type_bucket: SkillsCliSourceTypeBucket,
+    pub canonical_path: Option<String>,
+    pub folder_hash: Option<String>,
+    pub installed_at: Option<String>,
+    pub updated_at: Option<String>,
+    pub placements: Vec<SkillsCliPlacement>,
 }
 
 /// Lock + filesystem snapshot returned by `skills_cli_list_global`.
@@ -143,6 +156,84 @@ pub struct SkillsCliAddResult {
     pub targeted_platforms: u32,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
+#[serde(rename_all = "snake_case")]
+pub enum SkillsCliPlacementState {
+    ManagedLink,
+    DirectCopy,
+    Missing,
+    Conflict,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
+#[serde(rename_all = "snake_case")]
+pub enum SkillsCliManagedLinkKind {
+    WindowsJunction,
+    Symlink,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
+pub struct SkillsCliPlacement {
+    pub agent_id: String,
+    pub display_name: String,
+    pub target_path: String,
+    pub state: SkillsCliPlacementState,
+    pub managed_link_kind: Option<SkillsCliManagedLinkKind>,
+    pub reason_code: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
+pub struct SkillsCliSkillDoc {
+    pub skill_name: String,
+    pub content: String,
+    pub byte_size: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
+pub struct SkillsCliRemovePlacementSummary {
+    pub agent_id: String,
+    pub display_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
+pub struct SkillsCliPlacementConflict {
+    pub agent_id: String,
+    pub display_name: String,
+    pub reason_code: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
+pub struct SkillsCliRemovePlan {
+    pub skill_name: String,
+    pub owned_canonical: bool,
+    pub managed_placements: Vec<SkillsCliRemovePlacementSummary>,
+    pub retained_direct_copies: Vec<SkillsCliRemovePlacementSummary>,
+    pub conflicts: Vec<SkillsCliPlacementConflict>,
+    pub confirmable: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
+pub struct SkillsCliRemoveResult {
+    pub removed_canonical: bool,
+    pub removed_managed_agent_ids: Vec<String>,
+    pub retained_direct_copy_agent_ids: Vec<String>,
+}
+
 // ─── Target gate ─────────────────────────────────────────────────────────────
 
 /// Every `skills_cli_*` command rejects non-Local targets before any spawn or
@@ -184,7 +275,7 @@ async fn run_cli(
         .await
 }
 
-fn map_guard_error(error: CentralMutationError) -> SkillsCliError {
+pub(crate) fn map_guard_error(error: CentralMutationError) -> SkillsCliError {
     match error {
         CentralMutationError::Busy { .. } | CentralMutationError::Timeout { .. } => {
             SkillsCliError::Busy
@@ -280,28 +371,38 @@ pub(crate) async fn list_global_at(
     lock_path: &std::path::Path,
 ) -> Result<SkillsCliGlobalSnapshot, SkillsCliError> {
     let ownership = load_cli_lock_ownership(lock_path)?;
-    let targets = install_targets(pool).await?;
     let agents = crate::db::get_all_agents(pool)
         .await
         .map_err(|error| SkillsCliError::Io {
             context: "read platforms",
             source: std::io::Error::other(error.to_string()),
         })?;
-    let mut platforms = Vec::new();
-    for target in &targets {
-        let Some(agent) = agents.iter().find(|agent| agent.id == target.id) else {
-            continue;
-        };
-        platforms.push(inventory::InventoryPlatform {
-            display_name: target.display_name.clone(),
-            global_skills_dir: std::path::PathBuf::from(&agent.global_skills_dir),
-        });
-    }
+    let platforms = mapped_inventory_platforms(&agents);
     Ok(SkillsCliGlobalSnapshot {
         skills: inventory::project_global_inventory(&ownership, canonical_root, &platforms),
         canonical_root: canonical_root.to_string_lossy().into_owned(),
         lock_path: lock_path.to_string_lossy().into_owned(),
     })
+}
+
+pub(crate) fn mapped_inventory_platforms(
+    agents: &[crate::db::Agent],
+) -> Vec<inventory::InventoryPlatform> {
+    let mut platforms = Vec::new();
+    for (id, _) in SKILLS_CLI_AGENT_MAP {
+        let Some(agent) = agents.iter().find(|agent| agent.id == *id) else {
+            continue;
+        };
+        platforms.push(inventory::InventoryPlatform {
+            agent_id: agent.id.clone(),
+            display_name: agent.display_name.clone(),
+            global_skills_dir: std::path::PathBuf::from(&agent.global_skills_dir),
+            is_enabled: agent.is_enabled,
+            is_detected: is_platform_detected(&agent.global_skills_dir),
+            supports_local_placement: cfg!(any(unix, windows)),
+        });
+    }
+    platforms
 }
 
 // ─── Install targets ─────────────────────────────────────────────────────────
@@ -420,9 +521,16 @@ pub(crate) async fn preview_source_with_launcher(
 // ─── Add / remove ────────────────────────────────────────────────────────────
 
 const INSTALL_LOCK_OPERATION: &str = "Skills CLI global install";
-const REMOVE_LOCK_OPERATION: &str = "Skills CLI global remove";
 
-fn is_valid_skill_token(name: &str) -> bool {
+pub(crate) fn check_cancel(cancel: Option<&AtomicBool>) -> Result<(), SkillsCliError> {
+    if cancel.is_some_and(|flag| flag.load(std::sync::atomic::Ordering::Relaxed)) {
+        Err(SkillsCliError::Cancelled)
+    } else {
+        Ok(())
+    }
+}
+
+pub(crate) fn is_valid_skill_token(name: &str) -> bool {
     !name.trim().is_empty()
         && name.len() <= 128
         && name
@@ -536,71 +644,6 @@ pub(crate) async fn add_global_with_lock_at(
         request.cancel,
     )
     .await
-}
-
-async fn remove_global_locked(
-    runner: &dyn SkillsCliRunner,
-    launcher: &NodeLauncher,
-    skill_name: &str,
-    cancel: Option<&AtomicBool>,
-) -> Result<(), SkillsCliError> {
-    let output = run_cli(
-        runner,
-        launcher,
-        build_remove_global_argv(launcher, skill_name),
-        bulk_transfer_policy(),
-        cancel,
-    )
-    .await?;
-    if !output.status_success {
-        return Err(SkillsCliError::CliFailed);
-    }
-    Ok(())
-}
-
-/// Fully uninstall one global skill (canonical + platform links + lock row).
-pub(crate) async fn remove_global(
-    runner: &dyn SkillsCliRunner,
-    skill_name: &str,
-    cancel: Option<&AtomicBool>,
-) -> Result<(), SkillsCliError> {
-    if !is_valid_skill_token(skill_name) {
-        return Err(SkillsCliError::SourceInvalid);
-    }
-    let launcher = resolve_launcher()?;
-
-    let _guard = acquire_target_mutation_guard(
-        &ActiveTarget::Local,
-        REMOVE_LOCK_OPERATION,
-        DEFAULT_CENTRAL_MUTATION_TIMEOUT,
-    )
-    .await
-    .map_err(map_guard_error)?;
-
-    remove_global_locked(runner, &launcher, skill_name, cancel).await
-}
-
-/// Test seam mirroring [`remove_global`] against an isolated lock file.
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) async fn remove_global_with_lock_at(
-    lock_path: PathBuf,
-    runner: &dyn SkillsCliRunner,
-    launcher: &NodeLauncher,
-    skill_name: &str,
-    cancel: Option<&AtomicBool>,
-    timeout: std::time::Duration,
-) -> Result<(), SkillsCliError> {
-    if !is_valid_skill_token(skill_name) {
-        return Err(SkillsCliError::SourceInvalid);
-    }
-
-    let _guard: CentralMutationGuard =
-        acquire_central_mutation_guard_at(lock_path, REMOVE_LOCK_OPERATION, timeout)
-            .await
-            .map_err(map_guard_error)?;
-
-    remove_global_locked(runner, launcher, skill_name, cancel).await
 }
 
 #[cfg(test)]

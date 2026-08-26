@@ -124,6 +124,14 @@ export type {
   SkillsCliGlobalSnapshot,
   SkillsCliInstallKind,
   SkillsCliSourceTypeBucket,
+  SkillsCliPlacement,
+  SkillsCliPlacementState,
+  SkillsCliManagedLinkKind,
+  SkillsCliSkillDoc,
+  SkillsCliRemovePlan,
+  SkillsCliRemoveResult,
+  SkillsCliRemovePlacementSummary,
+  SkillsCliPlacementConflict,
 } from "@/lib/ipc/generatedCommandMap";
 
 export interface SkillsCliInstallTarget {

@@ -2,7 +2,7 @@
 
 ## 1. Scope / Trigger
 
-Apply this contract to operations that finalize writes under a Central skill root, relocate that root, recover a pending Central operation, copy the legacy Universal Central store into the private Local store, or write platform skill directories that share those roots. Holders of the Local target guard include Central install/uninstall, Skills CLI global add/remove, and leftover **local** apply (the delete loop). Remote leftover apply takes that remote target's guard. GUI and CLI must share the same Local lock; Local/SSH/WSL delete and update also use a target-derived lease so mutations and recovery for one target serialize across processes.
+Apply this contract to operations that finalize writes under a Central skill root, relocate that root, recover a pending Central operation, copy the legacy Universal Central store into the private Local store, or write platform skill directories that share those roots. Holders of the Local target guard include Central install/uninstall, Skills CLI global add/remove/link/unlink, and leftover **local** apply (the delete loop). Remote leftover apply takes that remote target's guard. GUI and CLI must share the same Local lock; Local/SSH/WSL delete and update also use a target-derived lease so mutations and recovery for one target serialize across processes.
 
 Skills CLI exclusive job family `skills_cli` is **not** this lock. Acquire order when both exist: exclusive job lease → `acquire_target_mutation_guard` → spawn/delete. See `skills-cli-global.md` and `exclusive-job-lifecycle.md`.
 

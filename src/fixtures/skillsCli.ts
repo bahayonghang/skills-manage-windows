@@ -18,6 +18,20 @@ const FIXTURE_SKILLS: SkillsCliGlobalSkill[] = [
     sourceUrl: null,
     sourceType: null,
     sourceTypeBucket: "github",
+    canonicalPath: null,
+    folderHash: null,
+    installedAt: null,
+    updatedAt: null,
+    placements: [
+      {
+        agentId: "cursor",
+        displayName: "Cursor",
+        targetPath: "/Users/fixture/.cursor/skills/demo-skill",
+        state: "direct_copy",
+        managedLinkKind: null,
+        reasonCode: null,
+      },
+    ],
   },
 ];
 
@@ -69,7 +83,42 @@ export function registerSkillsCliFixtures(): void {
       installedSkills: 1,
       targetedPlatforms: 1,
     }),
-    skills_cli_remove_global: () => null,
+    skills_cli_remove_global: () => ({
+      removedCanonical: true,
+      removedManagedAgentIds: ["cursor"],
+      retainedDirectCopyAgentIds: [],
+    }),
+    skills_cli_read_skill_md: ({ skillName }) => ({
+      skillName,
+      content: "# Demo",
+      byteSize: 6,
+    }),
+    skills_cli_link_platform: ({ skillportAgentId }) => ({
+      agentId: skillportAgentId,
+      displayName: "Cursor",
+      targetPath: "/Users/fixture/.cursor/skills/demo-skill",
+      state: "managed_link",
+      managedLinkKind: "windows_junction",
+      reasonCode: null,
+    }),
+    skills_cli_unlink_platform: ({ skillportAgentId }) => ({
+      agentId: skillportAgentId,
+      displayName: "Cursor",
+      targetPath: "/Users/fixture/.cursor/skills/demo-skill",
+      state: "missing",
+      managedLinkKind: null,
+      reasonCode: null,
+    }),
+    skills_cli_reveal_skill_folder: () => null,
+    skills_cli_export_inventory: () => null,
+    skills_cli_preview_remove_global: ({ skillName }) => ({
+      skillName,
+      ownedCanonical: true,
+      managedPlacements: [{ agentId: "cursor", displayName: "Cursor" }],
+      retainedDirectCopies: [],
+      conflicts: [],
+      confirmable: true,
+    }),
     cancel_skills_cli_job: () => true,
   });
 }

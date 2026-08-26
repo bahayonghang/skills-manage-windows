@@ -179,6 +179,7 @@ fn retryable_for_code(code: &str) -> bool {
             | "github_import.transport_failed"
             | "github_import.archive_unavailable"
             | "skills_cli.busy"
+            | "skills_cli.recovery_required"
     )
 }
 
@@ -426,6 +427,22 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
         "skills_cli.busy" => Some("Another skill operation is using this target."),
         "skills_cli.timeout" => Some("The Skills CLI command timed out."),
         "skills_cli.cancelled" => Some("The operation was cancelled."),
+        "skills_cli.skill_not_owned" => Some("That skill is not managed by Skills CLI."),
+        "skills_cli.canonical_missing" => Some("The skill folder is missing."),
+        "skills_cli.skill_doc_missing" => Some("The SKILL.md file is missing."),
+        "skills_cli.skill_doc_too_large" => Some("The SKILL.md file is too large to open."),
+        "skills_cli.skill_doc_invalid_utf8" => Some("The SKILL.md file is not valid text."),
+        "skills_cli.direct_copy_not_toggleable" => {
+            Some("A copied skill folder cannot be linked or unlinked.")
+        }
+        "skills_cli.placement_conflict" => Some("The platform folder is in conflict."),
+        "skills_cli.placement_unavailable" => Some("The platform folder is unavailable."),
+        "skills_cli.export_invalid" => Some("The inventory export is invalid."),
+        "skills_cli.export_failed" => Some("The inventory export could not be saved."),
+        "skills_cli.reveal_failed" => Some("The skill folder could not be revealed."),
+        "skills_cli.recovery_required" => {
+            Some("A previous Skills CLI remove needs recovery.")
+        }
         "startup.rebuild_unavailable" => Some("Database rebuild is not available."),
         _ => None,
     }
@@ -726,6 +743,79 @@ mod tests {
             assert_eq!(error.code, code);
             assert_eq!(error.message, "This Central skill could not be deleted.");
             assert!(!serde_json::to_string(&error).unwrap().contains("yao-meta"));
+        }
+    }
+
+    #[test]
+    fn skills_cli_contract_codes_keep_reviewed_public_messages() {
+        for (code, message, retryable) in [
+            (
+                "skills_cli.skill_not_owned",
+                "That skill is not managed by Skills CLI.",
+                false,
+            ),
+            (
+                "skills_cli.canonical_missing",
+                "The skill folder is missing.",
+                false,
+            ),
+            (
+                "skills_cli.skill_doc_missing",
+                "The SKILL.md file is missing.",
+                false,
+            ),
+            (
+                "skills_cli.skill_doc_too_large",
+                "The SKILL.md file is too large to open.",
+                false,
+            ),
+            (
+                "skills_cli.skill_doc_invalid_utf8",
+                "The SKILL.md file is not valid text.",
+                false,
+            ),
+            (
+                "skills_cli.direct_copy_not_toggleable",
+                "A copied skill folder cannot be linked or unlinked.",
+                false,
+            ),
+            (
+                "skills_cli.placement_conflict",
+                "The platform folder is in conflict.",
+                false,
+            ),
+            (
+                "skills_cli.placement_unavailable",
+                "The platform folder is unavailable.",
+                false,
+            ),
+            (
+                "skills_cli.export_invalid",
+                "The inventory export is invalid.",
+                false,
+            ),
+            (
+                "skills_cli.export_failed",
+                "The inventory export could not be saved.",
+                false,
+            ),
+            (
+                "skills_cli.reveal_failed",
+                "The skill folder could not be revealed.",
+                false,
+            ),
+            (
+                "skills_cli.recovery_required",
+                "A previous Skills CLI remove needs recovery.",
+                true,
+            ),
+        ] {
+            let error = IpcError::from(format!("{code}:C:\\\\Users\\\\secret\\\\SKILL.md"));
+            assert_eq!(error.code, code);
+            assert_eq!(error.message, message);
+            assert_eq!(error.retryable, retryable);
+            assert!(!error.message.contains("Users"));
+            assert!(!serde_json::to_string(&error).unwrap().contains("secret"));
         }
     }
 }

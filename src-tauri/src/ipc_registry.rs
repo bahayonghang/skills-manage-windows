@@ -203,6 +203,12 @@ macro_rules! __skillport_runtime_commands {
             skills_cli_preview_source => commands::skills_cli::skills_cli_preview_source,
             skills_cli_add_global => commands::skills_cli::skills_cli_add_global,
             skills_cli_remove_global => commands::skills_cli::skills_cli_remove_global,
+            skills_cli_read_skill_md => commands::skills_cli::skills_cli_read_skill_md,
+            skills_cli_link_platform => commands::skills_cli::skills_cli_link_platform,
+            skills_cli_unlink_platform => commands::skills_cli::skills_cli_unlink_platform,
+            skills_cli_reveal_skill_folder => commands::skills_cli::skills_cli_reveal_skill_folder,
+            skills_cli_export_inventory => commands::skills_cli::skills_cli_export_inventory,
+            skills_cli_preview_remove_global => commands::skills_cli::skills_cli_preview_remove_global,
             cancel_skills_cli_job => commands::skills_cli::cancel_skills_cli_job,
         }
     };
@@ -262,6 +268,12 @@ macro_rules! __skillport_generated_commands {
             skills_cli_preview_source => commands::skills_cli::skills_cli_preview_source,
             skills_cli_add_global => commands::skills_cli::skills_cli_add_global,
             skills_cli_remove_global => commands::skills_cli::skills_cli_remove_global,
+            skills_cli_read_skill_md => commands::skills_cli::skills_cli_read_skill_md,
+            skills_cli_link_platform => commands::skills_cli::skills_cli_link_platform,
+            skills_cli_unlink_platform => commands::skills_cli::skills_cli_unlink_platform,
+            skills_cli_reveal_skill_folder => commands::skills_cli::skills_cli_reveal_skill_folder,
+            skills_cli_export_inventory => commands::skills_cli::skills_cli_export_inventory,
+            skills_cli_preview_remove_global => commands::skills_cli::skills_cli_preview_remove_global,
             cancel_skills_cli_job => commands::skills_cli::cancel_skills_cli_job,
         }
     };

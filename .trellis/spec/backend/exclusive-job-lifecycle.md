@@ -20,7 +20,7 @@ Affected IPC commands require camelCase `jobId: string`:
 | --- | --- | --- |
 | Central update | `check_central_skill_updates`, `check_central_repository_sync`, `update_central_skills`, `apply_skill_update_decisions` | `cancel_central_skill_updates` |
 | Portability | `export_skillport_state`, `preview_skillport_state_import`, `preview_skillport_state_import_file`, `import_skillport_state` | `cancel_skillport_state_portability` |
-| Skills CLI global | `skills_cli_add_global`, `skills_cli_remove_global` | `cancel_skills_cli_job` |
+| Skills CLI global | `skills_cli_add_global`, `skills_cli_remove_global`, `skills_cli_link_platform`, `skills_cli_unlink_platform` | `cancel_skills_cli_job` |
 
 ## 3. Contracts
 
@@ -55,7 +55,7 @@ Commands keep the existing `Result<T, String>` IPC boundary and stringify these 
 
 - Assert exact busy envelopes, same-family exclusion, cross-family independence, pending-cancel idempotence, stale pending discard, exact-ID cancellation, RAII release, stale-lease isolation, invalid IDs, and poison fail-closed behavior.
 - Structurally assert production code has no `central_update_cancel` or `portable_state_cancel` fallback.
-- Assert all ten start commands and three cancel commands serialize `jobId`, and all progress payloads contain the same ID.
+- Assert all twelve start commands and three cancel commands serialize `jobId`, and all progress payloads contain the same ID.
 - Run affected Rust/Vitest tests plus locked Clippy/tests and default-concurrency `just ci`.
 
 ## 7. Wrong vs Correct

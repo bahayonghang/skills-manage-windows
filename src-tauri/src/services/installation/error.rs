@@ -166,6 +166,21 @@ pub enum InstallationError {
         label: &'static str,
         message: String,
     },
+
+    #[error("Managed directory links are not supported on this platform")]
+    ManagedDirectoryLinkUnsupported,
+
+    #[error("Failed to create a managed directory link")]
+    ManagedDirectoryLinkCreate(#[source] std::io::Error),
+
+    #[error("Failed to inspect a managed directory link")]
+    ManagedDirectoryLinkInspect(#[source] std::io::Error),
+
+    #[error("Failed to remove a managed directory link")]
+    ManagedDirectoryLinkRemove(#[source] std::io::Error),
+
+    #[error("The directory link did not resolve to the expected target")]
+    ManagedDirectoryLinkTargetMismatch,
 }
 
 impl InstallationError {

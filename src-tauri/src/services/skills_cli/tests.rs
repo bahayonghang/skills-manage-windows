@@ -29,7 +29,6 @@ use super::{
 };
 use crate::db::{self, SkillForAgent};
 use crate::ipc_error::{public_message_for_code, IpcError};
-use crate::paths::central_mutation_lock_path;
 use crate::services::central_mutation::{
     acquire_central_mutation_guard_at, acquire_target_mutation_guard,
 };
@@ -255,6 +254,17 @@ fn ac4_argv_prefix_and_forbidden_tokens() {
     assert_npx_prefix(&remove, &launcher);
     assert!(remove.contains(&"--global".to_string()));
     assert!(remove.contains(&"-y".to_string()));
+    assert!(
+        !remove
+            .iter()
+            .any(|arg| arg == "--force" || arg == "--keep-links"),
+        "unverified remove flags must stay out of argv: {remove:?}"
+    );
+    assert!(
+        !add.iter()
+            .any(|arg| arg == "--force" || arg == "--keep-links"),
+        "unverified add flags must stay out of argv: {add:?}"
+    );
 
     let version = build_node_version_argv(&launcher);
     assert_eq!(version, vec!["--version".to_string()]);
@@ -652,8 +662,8 @@ async fn ac15_default_lock_holder_blocks_leftover_apply_and_target_guard() {
     std::fs::create_dir_all(&leftover).unwrap();
     set_agent_dir(&pool, "cursor", &cursor_dir).await;
 
-    let _holder = acquire_central_mutation_guard_at(
-        central_mutation_lock_path(),
+    let _holder = acquire_target_mutation_guard(
+        &ActiveTarget::Local,
         "hold default lock",
         Duration::from_secs(5),
     )
@@ -710,10 +720,9 @@ fn ac4_copy_without_canonical_is_listed_with_agents() {
     let skills = super::inventory::project_global_inventory(
         &ownership,
         &canonical_root,
-        &[super::inventory::InventoryPlatform {
-            display_name: "Cursor".to_string(),
-            global_skills_dir: cursor_dir,
-        }],
+        &[super::inventory::InventoryPlatform::for_test(
+            "cursor", "Cursor", cursor_dir,
+        )],
     );
     assert_eq!(skills.len(), 1);
     assert_eq!(skills[0].install_kind, SkillsCliInstallKind::Copy);

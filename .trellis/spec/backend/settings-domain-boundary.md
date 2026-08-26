@@ -27,7 +27,7 @@ async fn get_target_config_quarantine_status(
 
 ## 3. Contracts
 
-- Generic writes use the explicit allowlist in `commands/settings_policy.rs`: platform category visibility, Central update mode, the exact font key families, and non-secret AI preferences.
+- Generic writes use the explicit allowlist in `commands/settings_policy.rs`: platform category visibility, Central update mode, the exact font key families, non-secret AI preferences, and the exact Skills CLI key `skills_cli.recent_sources` (`SettingCategory::SkillsCli`).
 - A batch validates every key and value before making one transactional `db::set_settings` call.
 - Settings operation logs contain only category set, key count, status, and `valueStored`; they never contain caller keys or values.
 - The target snapshot reads `ssh_targets_v1`, `wsl_targets_v1`, `active_target_id_v1`, and `target_config_quarantine_v1` together. SSH and WSL validate independently and use all-or-nothing recovery per domain.

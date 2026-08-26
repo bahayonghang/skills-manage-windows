@@ -796,4 +796,55 @@ mod tests {
         assert!(!serialized.contains(raw_unknown_key));
         assert!(!serialized.contains("caller-secret"));
     }
+
+    #[tokio::test]
+    async fn skills_cli_recent_sources_roundtrip_and_zero_write() {
+        let pool = setup_test_db().await;
+        let value = r#"["owner/repo"]"#;
+        set_setting_impl(&pool, "skills_cli.recent_sources", value)
+            .await
+            .unwrap();
+        assert_eq!(
+            get_setting_impl(&pool, "skills_cli.recent_sources")
+                .await
+                .unwrap()
+                .as_deref(),
+            Some(value)
+        );
+
+        let secret = r#"["https://user:token@github.com/owner/repo"]"#;
+        let error = set_setting_impl(&pool, "skills_cli.recent_sources", secret)
+            .await
+            .unwrap_err();
+        assert!(error.starts_with("setting_value_invalid:"));
+        assert!(!error.contains("token"));
+        assert_eq!(
+            get_setting_impl(&pool, "skills_cli.recent_sources")
+                .await
+                .unwrap()
+                .as_deref(),
+            Some(value)
+        );
+
+        let values = HashMap::from([
+            ("font_scale_v1".to_string(), "1".to_string()),
+            (
+                "skills_cli.recent_sources".to_string(),
+                r#"["owner/repo","owner/repo"]"#.to_string(),
+            ),
+        ]);
+        let batch_error = set_settings_impl(&pool, &values).await.unwrap_err();
+        assert_eq!(
+            batch_error,
+            "setting_value_invalid: The setting value is invalid."
+        );
+        assert_eq!(db::get_setting(&pool, "font_scale_v1").await.unwrap(), None);
+        assert_eq!(
+            get_setting_impl(&pool, "skills_cli.recent_sources")
+                .await
+                .unwrap()
+                .as_deref(),
+            Some(value)
+        );
+    }
 }

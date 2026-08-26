@@ -90,7 +90,21 @@ async fn acquire_default_mutation_guard_at(
     operation: &'static str,
     timeout: Duration,
 ) -> Result<CentralMutationGuard, CentralMutationError> {
-    let test_guard = DEFAULT_LOCK_TEST_MUTEX.lock().await;
+    let test_guard = if timeout.is_zero() {
+        DEFAULT_LOCK_TEST_MUTEX
+            .try_lock()
+            .map_err(|_| CentralMutationError::Busy { operation })?
+    } else {
+        match tokio::time::timeout(timeout, DEFAULT_LOCK_TEST_MUTEX.lock()).await {
+            Ok(guard) => guard,
+            Err(_) => {
+                return Err(CentralMutationError::Timeout {
+                    operation,
+                    timeout_ms: timeout.as_millis(),
+                });
+            }
+        }
+    };
     let mut guard = acquire_central_mutation_guard_at(path, operation, timeout).await?;
     guard._test_guard = Some(test_guard);
     Ok(guard)

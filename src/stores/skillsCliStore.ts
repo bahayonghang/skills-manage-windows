@@ -6,6 +6,9 @@ import type {
   SkillsCliDoctorReport,
   SkillsCliGlobalSkill,
   SkillsCliInstallTarget,
+  SkillsCliPlacement,
+  SkillsCliRemovePlan,
+  SkillsCliSkillDoc,
   SkillsCliSourcePreview,
 } from "@/types";
 
@@ -47,6 +50,18 @@ interface SkillsCliState {
     skillportAgentIds: string[];
   }) => Promise<SkillsCliAddResult | null>;
   removeGlobal: (skillName: string) => Promise<boolean>;
+  previewRemoveGlobal: (skillName: string) => Promise<SkillsCliRemovePlan | null>;
+  readSkillMd: (skillName: string) => Promise<SkillsCliSkillDoc | null>;
+  revealSkillFolder: (skillName: string) => Promise<boolean>;
+  linkPlatform: (
+    skillName: string,
+    skillportAgentId: string,
+  ) => Promise<SkillsCliPlacement | null>;
+  unlinkPlatform: (
+    skillName: string,
+    skillportAgentId: string,
+  ) => Promise<SkillsCliPlacement | null>;
+  exportInventory: (path: string, json: string) => Promise<boolean>;
   cancelJob: () => Promise<void>;
   resetForTargetChange: () => void;
 }
@@ -186,6 +201,110 @@ export const useSkillsCliStore = create<SkillsCliState>((set, get) => ({
         isMutating: false,
         jobId: null,
       });
+      return false;
+    }
+  },
+
+  async previewRemoveGlobal(skillName) {
+    set({ actionError: null });
+    try {
+      return await invoke("skills_cli_preview_remove_global", { skillName });
+    } catch (error) {
+      set({ actionError: backendErrorStateValue(error) });
+      return null;
+    }
+  },
+
+  async readSkillMd(skillName) {
+    set({ actionError: null });
+    try {
+      return await invoke("skills_cli_read_skill_md", { skillName });
+    } catch (error) {
+      set({ actionError: backendErrorStateValue(error) });
+      return null;
+    }
+  },
+
+  async revealSkillFolder(skillName) {
+    set({ actionError: null });
+    try {
+      await invoke("skills_cli_reveal_skill_folder", { skillName });
+      return true;
+    } catch (error) {
+      set({ actionError: backendErrorStateValue(error) });
+      return false;
+    }
+  },
+
+  async linkPlatform(skillName, skillportAgentId) {
+    if (get().isMutating || get().isCancelling) {
+      throw new Error(BUSY_ENVELOPE);
+    }
+    const jobId = newJobId();
+    set({ isMutating: true, actionError: null, jobId });
+    try {
+      const result = await invoke("skills_cli_link_platform", {
+        jobId,
+        skillName,
+        skillportAgentId,
+      });
+      if (get().jobId !== jobId) {
+        return result;
+      }
+      set({ isMutating: false, jobId: null });
+      await get().loadAll();
+      return result;
+    } catch (error) {
+      if (get().jobId !== jobId) {
+        return null;
+      }
+      set({
+        actionError: backendErrorStateValue(error),
+        isMutating: false,
+        jobId: null,
+      });
+      return null;
+    }
+  },
+
+  async unlinkPlatform(skillName, skillportAgentId) {
+    if (get().isMutating || get().isCancelling) {
+      throw new Error(BUSY_ENVELOPE);
+    }
+    const jobId = newJobId();
+    set({ isMutating: true, actionError: null, jobId });
+    try {
+      const result = await invoke("skills_cli_unlink_platform", {
+        jobId,
+        skillName,
+        skillportAgentId,
+      });
+      if (get().jobId !== jobId) {
+        return result;
+      }
+      set({ isMutating: false, jobId: null });
+      await get().loadAll();
+      return result;
+    } catch (error) {
+      if (get().jobId !== jobId) {
+        return null;
+      }
+      set({
+        actionError: backendErrorStateValue(error),
+        isMutating: false,
+        jobId: null,
+      });
+      return null;
+    }
+  },
+
+  async exportInventory(path, json) {
+    set({ actionError: null });
+    try {
+      await invoke("skills_cli_export_inventory", { path, json });
+      return true;
+    } catch (error) {
+      set({ actionError: backendErrorStateValue(error) });
       return false;
     }
   },

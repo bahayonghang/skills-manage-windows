@@ -223,6 +223,23 @@ pub fn central_mutation_lock_path() -> PathBuf {
     app_data_dir().join("locks").join("central-mutation.lock")
 }
 
+/// App-data directory for Skills CLI domain-local recovery manifests.
+///
+/// This is SkillPort-owned recovery state, not the official CLI lock and not
+/// the Central `fs_db_operations` journal.
+pub const SKILLS_CLI_DIR_NAME: &str = "skills-cli";
+pub const SKILLS_CLI_REMOVE_RECOVERY_DIR_NAME: &str = "remove-recovery";
+
+pub fn skills_cli_remove_recovery_dir() -> PathBuf {
+    skills_cli_remove_recovery_dir_from_app_data(&app_data_dir())
+}
+
+pub fn skills_cli_remove_recovery_dir_from_app_data(app_data: &Path) -> PathBuf {
+    app_data
+        .join(SKILLS_CLI_DIR_NAME)
+        .join(SKILLS_CLI_REMOVE_RECOVERY_DIR_NAME)
+}
+
 pub fn expand_home_path(path: &str) -> PathBuf {
     expand_home_path_with_home(path, &resolve_home_dir())
 }
@@ -684,6 +701,17 @@ mod tests {
         assert_eq!(TARGETS_CACHE_DIR_NAME, "targets");
         assert_eq!(UNIVERSAL_AGENTS_DIR_NAME, ".agents");
         assert_eq!(UNIVERSAL_SKILLS_REL, ".agents/skills");
+        assert_eq!(SKILLS_CLI_DIR_NAME, "skills-cli");
+        assert_eq!(SKILLS_CLI_REMOVE_RECOVERY_DIR_NAME, "remove-recovery");
+    }
+
+    #[test]
+    fn skills_cli_remove_recovery_dir_is_under_app_data() {
+        let app_data = Path::new("/tmp/.skillsmanage");
+        assert_eq!(
+            skills_cli_remove_recovery_dir_from_app_data(app_data),
+            Path::new("/tmp/.skillsmanage/skills-cli/remove-recovery")
+        );
     }
 
     #[test]

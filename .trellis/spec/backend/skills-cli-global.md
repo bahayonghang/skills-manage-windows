@@ -25,12 +25,32 @@ pub async fn skills_cli_add_global(
     skill_names: Vec<String>,
     skillport_agent_ids: Vec<String>,
 ) -> IpcResult<SkillsCliAddResult>;
-pub async fn skills_cli_remove_global(job_id: String, skill_name: String) -> IpcResult<()>;
+pub async fn skills_cli_remove_global(
+    job_id: String,
+    skill_name: String,
+) -> IpcResult<SkillsCliRemoveResult>;
+pub async fn skills_cli_preview_remove_global(
+    skill_name: String,
+) -> IpcResult<SkillsCliRemovePlan>;
+pub async fn skills_cli_read_skill_md(skill_name: String) -> IpcResult<SkillsCliSkillDoc>;
+pub async fn skills_cli_reveal_skill_folder(skill_name: String) -> IpcResult<()>;
+pub async fn skills_cli_link_platform(
+    job_id: String,
+    skill_name: String,
+    skillport_agent_id: String,
+) -> IpcResult<SkillsCliPlacement>;
+pub async fn skills_cli_unlink_platform(
+    job_id: String,
+    skill_name: String,
+    skillport_agent_id: String,
+) -> IpcResult<SkillsCliPlacement>;
+pub async fn skills_cli_export_inventory(path: String, json: String) -> IpcResult<()>;
 pub async fn cancel_skills_cli_job(job_id: String) -> IpcResult<bool>;
 ```
 
 Frontend: only `src/stores/skillsCliStore.ts` may `invoke` these commands.
-Renderer job IDs follow `job-correlation-cancellation.md`.
+Renderer job IDs follow `job-correlation-cancellation.md`. Reveal does not accept a path.
+Export writer owns atomic persist; the renderer never receives filesystem write authority.
 
 ## 3. Contracts
 
@@ -50,19 +70,37 @@ Renderer job IDs follow `job-correlation-cancellation.md`.
   the CLI. Membership is lock names only. `path` / `installKind` prefer
   `universal_skills_dir/<name>` when that directory exists; otherwise a copy
   directory `{agent.global_skills_dir}/<name>` on a mapped detected agent
-  (`canonical` | `copy` | `missing`). Platform `agents` include copy hits even
+  (`canonical` | `copy` | `missing`). Authoritative platform state is
+  `placements` (`managed_link` | `direct_copy` | `missing` | `conflict` |
+  `unavailable`). Do not add parallel `agentIds` / `linkTargets` arrays.
+  Compatibility `agents` is derived only from `managed_link` and `direct_copy`
+  display names. Platform `agents` include copy hits even
   when `classify_local_path_origin` is `Other`. Missing lock or empty lock
   returns an empty `skills` array with `canonicalRoot` and `lockPath` still
   set — not an error. List IO maps to `internal.unexpected`, never
   `skills_cli.cli_unavailable`.
+- **Directory links**: Skills CLI managed links are Windows junctions (reparse
+  API, no `cmd.exe`/`mklink`/symlink privilege/copy fallback) or Unix directory
+  symlinks. Never auto-convert `direct_copy` into a junction/symlink. Never
+  delete an ordinary directory or call `remove_dir_all` on a platform path.
+- **Remove recovery**: `skills_cli_remove_global` does not spawn `skills remove`
+  and never uses unverified `--force`/`--keep-links`. Domain-local manifests live
+  under `skills_cli_remove_recovery_dir()`. Phases: prepared → staged →
+  metadata_committed → cleanup. Lock fingerprint CAS. Conflict is zero-write.
+  Direct copies are byte-preserved and never entered in the mutation path.
+- **Settings**: exact generic key `skills_cli.recent_sources` with
+  `SettingCategory::SkillsCli`. Array, 0–8 items, 16 KiB serialized, 2048-byte
+  item, no control chars, exact-trim, BTreeSet dedupe, Skills CLI source
+  validation without URL credentials/query/fragment.
 - **Process**: reuse `ProcessRequest` + Job Object. preview = Standard;
-  add/remove = BulkTransfer; list does not spawn. stderr cap 1 MiB.
+  add = BulkTransfer; list/read/preview-remove do not spawn. stderr cap 1 MiB.
   stdout/stderr/URLs stay out of `IpcError.message` and unredacted
   operation-log details.
 - **FS mutex vs job family**: exclusive job `skills_cli` is cancel/progress
   only (`exclusive-job-lifecycle.md`). Filesystem writes take
   `acquire_target_mutation_guard` (`central-mutation-lock.md`). Order: lease →
-  guard → spawn/delete → drop guard → drop lease.
+  guard → under-guard ownership/placement recheck → FS/lock mutation → drop
+  guard → drop lease. Link/unlink/remove follow this order.
 - **Leftover**: Local scan sets `cli_lock_protect=true` and excludes lock-owned
   canonicals, resolved links, **and** `{mapped_detected_agent.global_skills_dir}/<name>`
   when the lock contains `name`. Unlocked copies under the Universal root stay
@@ -91,7 +129,15 @@ Renderer job IDs follow `job-correlation-cancellation.md`.
 | Target mutation lock or same-family job busy | `skills_cli.busy` | true |
 | Process deadline exceeded | `skills_cli.timeout` | false |
 | Exclusive-job cancel | `skills_cli.cancelled` | false |
-| CLI non-zero (preview/add/remove), lock/FS IO, output cap | `internal.unexpected` | false |
+| CLI non-zero (preview/add), lock/FS IO, output cap | `internal.unexpected` | false |
+| Lock does not own the name | `skills_cli.skill_not_owned` | false |
+| Canonical missing / not a directory | `skills_cli.canonical_missing` | false |
+| SKILL.md missing / too large / invalid UTF-8 | `skills_cli.skill_doc_missing` / `skills_cli.skill_doc_too_large` / `skills_cli.skill_doc_invalid_utf8` | false |
+| Direct copy cannot be linked or unlinked | `skills_cli.direct_copy_not_toggleable` | false |
+| Placement conflict / unavailable | `skills_cli.placement_conflict` / `skills_cli.placement_unavailable` | false |
+| Export schema / persist | `skills_cli.export_invalid` / `skills_cli.export_failed` | false |
+| Reveal spawn failure | `skills_cli.reveal_failed` | false |
+| Remove recovery required | `skills_cli.recovery_required` | true |
 
 Same-family exclusive-job busy at the registry is `job.skills_cli_busy`; the
 command layer remaps it to `skills_cli.busy` so the UI sees one envelope.
@@ -117,7 +163,18 @@ command layer remaps it to `skills_cli.busy` so the UI sees one envelope.
   excluded; unlocked sibling copy still listed; remote scan ignores local lock.
 - Inventory: copy-only (no canonical) still listed with `installKind=copy`;
   lock name with no directories listed as `missing`; unknown `sourceType` →
-  `sourceTypeBucket=unknown`.
+  `sourceTypeBucket=unknown`; `placements` five-state table; compatible `agents`
+  derived only from managed_link + direct_copy.
+- Lock parse: camelCase and snake_case optional fields; empty/missing → `None`.
+- Bounded SKILL.md: exact 1 MiB, growth, UTF-8, missing, escape, non-directory,
+  reveal spawn failure. Shared `limit + 1` opened-handle reader.
+- Link/unlink: Missing↔ManagedLink only; ordinary directory / conflict zero-write;
+  cancel before guard; busy; partial-create cleanup; operation-log redaction.
+- Safe remove: preview has no paths/argv; conflict zero-write; copy byte
+  preservation; prepared/fingerprint recovery; never spawn `skills remove`.
+- Export: v1 envelope exact keys; old target preserved; temp cleanup.
+- Settings: `skills_cli.recent_sources` single/batch zero-write, audit redaction,
+  restart roundtrip.
 - Origin: CLI junction/symlink vs Central symlink vs copy.
 - Cancel: fake runner observes cancel flag → `skills_cli.cancelled`.
 - Timeout and stdout cap via `ProcessPolicy::for_tests`.

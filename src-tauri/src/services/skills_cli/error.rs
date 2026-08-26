@@ -83,6 +83,42 @@ pub enum SkillsCliError {
         label: &'static str,
         message: String,
     },
+
+    #[error("That skill is not owned by the Skills CLI lock")]
+    SkillNotOwned,
+
+    #[error("The Skills CLI canonical folder is missing")]
+    CanonicalMissing,
+
+    #[error("The SKILL.md file is missing")]
+    SkillDocMissing,
+
+    #[error("The SKILL.md file is too large")]
+    SkillDocTooLarge,
+
+    #[error("The SKILL.md file is not valid UTF-8")]
+    SkillDocInvalidUtf8,
+
+    #[error("A copied skill folder cannot be linked or unlinked")]
+    DirectCopyNotToggleable,
+
+    #[error("The platform folder is in conflict")]
+    PlacementConflict,
+
+    #[error("The platform folder is unavailable")]
+    PlacementUnavailable,
+
+    #[error("The inventory export is invalid")]
+    ExportInvalid,
+
+    #[error("The inventory export could not be saved")]
+    ExportFailed,
+
+    #[error("The skill folder could not be revealed")]
+    RevealFailed,
+
+    #[error("A Skills CLI remove operation needs recovery")]
+    RecoveryRequired,
 }
 
 impl SkillsCliError {
@@ -104,10 +140,26 @@ impl SkillsCliError {
                 "internal.unexpected"
             }
             Self::Io { .. } | Self::TaskJoin { .. } => "internal.unexpected",
+            Self::SkillNotOwned => "skills_cli.skill_not_owned",
+            Self::CanonicalMissing => "skills_cli.canonical_missing",
+            Self::SkillDocMissing => "skills_cli.skill_doc_missing",
+            Self::SkillDocTooLarge => "skills_cli.skill_doc_too_large",
+            Self::SkillDocInvalidUtf8 => "skills_cli.skill_doc_invalid_utf8",
+            Self::DirectCopyNotToggleable => "skills_cli.direct_copy_not_toggleable",
+            Self::PlacementConflict => "skills_cli.placement_conflict",
+            Self::PlacementUnavailable => "skills_cli.placement_unavailable",
+            Self::ExportInvalid => "skills_cli.export_invalid",
+            Self::ExportFailed => "skills_cli.export_failed",
+            Self::RevealFailed => "skills_cli.reveal_failed",
+            Self::RecoveryRequired => "skills_cli.recovery_required",
         }
     }
 
     pub fn retryable(&self) -> bool {
-        matches!(self, Self::Busy)
+        matches!(self, Self::Busy | Self::RecoveryRequired)
+    }
+
+    pub(crate) fn task_join(label: &'static str, message: String) -> Self {
+        Self::TaskJoin { label, message }
     }
 }

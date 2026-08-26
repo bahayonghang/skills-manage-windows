@@ -173,7 +173,7 @@ it("keeps the generated IPC dictionary equal to the runtime registry", () => {
   );
   const runtime = collectRegistryCommands("__skillport_runtime_commands");
 
-  expect(documented).toHaveLength(198);
+  expect(documented).toHaveLength(204);
   expect(new Set(documented).size).toBe(documented.length);
   expect([...documented].sort()).toEqual([...runtime].sort());
 });

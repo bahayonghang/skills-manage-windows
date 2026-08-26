@@ -61,10 +61,16 @@ export const GENERATED_IPC_COMMANDS = {
   set_github_pat: command<{ value: string }, GitHubPatState_Serialize>(),
   skills_cli_add_global: command<{ jobId: string; source: string; skillNames: string[]; skillportAgentIds: string[] }, SkillsCliAddResult>(),
   skills_cli_doctor: command<undefined, SkillsCliDoctorReport>(),
+  skills_cli_export_inventory: command<{ path: string; json: string }, null>(),
   skills_cli_install_targets: command<undefined, SkillsCliInstallTarget[]>(),
+  skills_cli_link_platform: command<{ jobId: string; skillName: string; skillportAgentId: string }, SkillsCliPlacement>(),
   skills_cli_list_global: command<undefined, SkillsCliGlobalSnapshot>(),
+  skills_cli_preview_remove_global: command<{ skillName: string }, SkillsCliRemovePlan>(),
   skills_cli_preview_source: command<{ source: string }, SkillsCliSourcePreview>(),
-  skills_cli_remove_global: command<{ jobId: string; skillName: string }, null>(),
+  skills_cli_read_skill_md: command<{ skillName: string }, SkillsCliSkillDoc>(),
+  skills_cli_remove_global: command<{ jobId: string; skillName: string }, SkillsCliRemoveResult>(),
+  skills_cli_reveal_skill_folder: command<{ skillName: string }, null>(),
+  skills_cli_unlink_platform: command<{ jobId: string; skillName: string; skillportAgentId: string }, SkillsCliPlacement>(),
   test_ai_connection: command<undefined, AiConnectionTestResult_Serialize>(),
   test_github_pat: command<undefined, GitHubPatTestResult>(),
   unassign_skill_tags: command<{ skillId: string; tagIds: string[] }, null>(),
@@ -114,10 +120,16 @@ export const GENERATED_IPC_COMMAND_NAMES = [
   "set_github_pat",
   "skills_cli_add_global",
   "skills_cli_doctor",
+  "skills_cli_export_inventory",
   "skills_cli_install_targets",
+  "skills_cli_link_platform",
   "skills_cli_list_global",
+  "skills_cli_preview_remove_global",
   "skills_cli_preview_source",
+  "skills_cli_read_skill_md",
   "skills_cli_remove_global",
+  "skills_cli_reveal_skill_folder",
+  "skills_cli_unlink_platform",
   "test_ai_connection",
   "test_github_pat",
   "unassign_skill_tags",
@@ -802,6 +814,11 @@ export type SkillsCliGlobalSkill = {
 	sourceUrl: string | null,
 	sourceType: string | null,
 	sourceTypeBucket: SkillsCliSourceTypeBucket,
+	canonicalPath: string | null,
+	folderHash: string | null,
+	installedAt: string | null,
+	updatedAt: string | null,
+	placements: SkillsCliPlacement[],
 };
 
 /**  Lock + filesystem snapshot returned by `skills_cli_list_global`. */
@@ -823,6 +840,51 @@ export type SkillsCliInstallTarget = {
 	/**  SkillPort enablement state; drives the default selection. */
 	isEnabled: boolean,
 	defaultSelected: boolean,
+};
+
+export type SkillsCliManagedLinkKind = "windows_junction" | "symlink";
+
+export type SkillsCliPlacement = {
+	agentId: string,
+	displayName: string,
+	targetPath: string,
+	state: SkillsCliPlacementState,
+	managedLinkKind: SkillsCliManagedLinkKind | null,
+	reasonCode: string | null,
+};
+
+export type SkillsCliPlacementConflict = {
+	agentId: string,
+	displayName: string,
+	reasonCode: string,
+};
+
+export type SkillsCliPlacementState = "managed_link" | "direct_copy" | "missing" | "conflict" | "unavailable";
+
+export type SkillsCliRemovePlacementSummary = {
+	agentId: string,
+	displayName: string,
+};
+
+export type SkillsCliRemovePlan = {
+	skillName: string,
+	ownedCanonical: boolean,
+	managedPlacements: SkillsCliRemovePlacementSummary[],
+	retainedDirectCopies: SkillsCliRemovePlacementSummary[],
+	conflicts: SkillsCliPlacementConflict[],
+	confirmable: boolean,
+};
+
+export type SkillsCliRemoveResult = {
+	removedCanonical: boolean,
+	removedManagedAgentIds: string[],
+	retainedDirectCopyAgentIds: string[],
+};
+
+export type SkillsCliSkillDoc = {
+	skillName: string,
+	content: string,
+	byteSize: number,
 };
 
 /**  Parsed result of `skills add <source> --list`. */

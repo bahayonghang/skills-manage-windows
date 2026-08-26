@@ -38,6 +38,11 @@ const skills = [
     sourceUrl: "https://github.com/owner/repo",
     sourceType: "github",
     sourceTypeBucket: "github",
+    canonicalPath: "/tmp/demo-skill",
+    folderHash: null,
+    installedAt: null,
+    updatedAt: null,
+    placements: [],
   },
 ];
 const listGlobal = {
@@ -77,7 +82,11 @@ function mockHappyPath() {
       skills: ["demo-skill", "helper-skill"],
     },
     skills_cli_add_global: { installedSkills: 1, targetedPlatforms: 1 },
-    skills_cli_remove_global: undefined,
+    skills_cli_remove_global: {
+      removedCanonical: true,
+      removedManagedAgentIds: [],
+      retainedDirectCopyAgentIds: [],
+    },
     cancel_skills_cli_job: true,
   });
 }
