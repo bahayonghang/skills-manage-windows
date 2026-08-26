@@ -1,8 +1,16 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Terminal } from "lucide-react";
 
 import { SkillsCliBatchBar } from "@/components/skillsCli/SkillsCliBatchBar";
+import { SkillsCliDetailDrawer } from "@/components/skillsCli/SkillsCliDetailDrawer";
 import { SkillsCliGroupHeader } from "@/components/skillsCli/SkillsCliGroupHeader";
 import { SkillsCliHeader } from "@/components/skillsCli/SkillsCliHeader";
 import {
@@ -14,16 +22,21 @@ import { SkillsCliUninstallDialog } from "@/components/skillsCli/SkillsCliUninst
 import { showSkillsCliActionToast } from "@/components/skillsCli/skillsCliActionToast";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { Button } from "@/components/ui/button";
-import { formatBackendError } from "@/lib/backendError";
+import { formatBackendError, parseBackendError } from "@/lib/backendError";
 import { isEditableEventTarget } from "@/lib/keyboardShortcuts";
 import { isLocalTarget } from "@/lib/targetKind";
 import { cn } from "@/lib/utils";
 import {
+  emptyPlacementOutcome,
   reconcileSelectedNames,
   selectedHasManagedLink,
   summarizeLinkTargets,
   type PlacementMutationOutcome,
 } from "@/pages/skillsCliBatchModel";
+import {
+  buildSkillsCliDetailRows,
+  summarizeDetailPlacements,
+} from "@/pages/skillsCliDetailModel";
 import { exportSkillsCliInventory } from "@/pages/skillsCliExport";
 import {
   SKILLS_CLI_CONTENT_CONTAINER_CLASS,
@@ -73,6 +86,7 @@ export function SkillsCliView() {
   const loadAll = useSkillsCliStore((state) => state.loadAll);
   const previewRemoveGlobal = useSkillsCliStore((state) => state.previewRemoveGlobal);
   const removeGlobalBatch = useSkillsCliStore((state) => state.removeGlobalBatch);
+  const docState = useSkillsCliStore((state) => state.docState);
 
   const [query, setQuery] = useState("");
   const [groupBy, setGroupBy] = useState<SkillsCliGroupBy>("repo");
@@ -91,6 +105,7 @@ export function SkillsCliView() {
   const [isExporting, setIsExporting] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const installButtonRef = useRef<HTMLButtonElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!isLocal) {
@@ -165,6 +180,31 @@ export function SkillsCliView() {
     [skills, selectedCardNames, targets],
   );
   const unlinkEnabled = selectedHasManagedLink(skills, selectedCardNames);
+  const detailName =
+    activeSurface?.kind === "detail" ? activeSurface.skillName : null;
+  const detailFocus =
+    activeSurface?.kind === "detail" ? activeSurface.focus : null;
+  const detailSkill =
+    detailName == null
+      ? null
+      : (skills.find((skill) => skill.name === detailName) ?? null);
+
+  useEffect(() => {
+    if (detailName == null) {
+      useSkillsCliStore.getState().clearSkillDoc();
+      return;
+    }
+    void useSkillsCliStore.getState().readSkillDoc(detailName);
+  }, [detailName]);
+
+  const handleFocusConsumed = useCallback(() => {
+    setActiveSurface((current) => {
+      if (current?.kind !== "detail" || current.focus == null) {
+        return current;
+      }
+      return { kind: "detail", skillName: current.skillName, focus: null };
+    });
+  }, []);
 
   if (!isLocal) {
     return (
@@ -315,6 +355,71 @@ export function SkillsCliView() {
       }
       return next;
     });
+  }
+
+  function captureReturnFocus(target: EventTarget | null) {
+    if (target instanceof HTMLElement) {
+      returnFocusRef.current = target;
+    }
+  }
+
+  function handleDetailClose() {
+    setActiveSurface((current) =>
+      current?.kind === "detail" ? closeSkillsCliSurface() : current,
+    );
+  }
+
+  async function handleDetailToggle(agentId: string, next: boolean) {
+    if (!detailSkill) {
+      return;
+    }
+    if (next) {
+      await useSkillsCliStore.getState().linkPlatform(detailSkill.name, agentId);
+      return;
+    }
+    await useSkillsCliStore.getState().unlinkPlatform(detailSkill.name, agentId);
+  }
+
+  async function handleDetailLinkAll() {
+    if (!detailSkill) {
+      return;
+    }
+    const rows = buildSkillsCliDetailRows(detailSkill, targets);
+    const { missingAgentIds } = summarizeDetailPlacements(rows, targets);
+    const outcome = emptyPlacementOutcome();
+    for (const agentId of missingAgentIds) {
+      try {
+        await useSkillsCliStore
+          .getState()
+          .linkPlatform(detailSkill.name, agentId);
+        outcome.succeeded.push({ skillName: detailSkill.name, agentId });
+      } catch (error) {
+        outcome.failed.push({
+          skillName: detailSkill.name,
+          agentId,
+          errorCode: parseBackendError(error).code ?? "internal.unexpected",
+        });
+      }
+    }
+    toastPlacementOutcome(outcome, "link");
+    const failed = outcome.failed[0];
+    if (failed) {
+      throw new Error(`${failed.errorCode}:`);
+    }
+  }
+
+  async function handleDetailUnlinkAll() {
+    if (!detailSkill) {
+      return;
+    }
+    const outcome = await useSkillsCliStore
+      .getState()
+      .unlinkManagedBatch([detailSkill.name]);
+    toastPlacementOutcome(outcome, "unlink");
+    const failed = outcome.failed[0];
+    if (failed) {
+      throw new Error(`${failed.errorCode}:`);
+    }
   }
 
   function toggleCollapsed(id: string) {
@@ -471,17 +576,24 @@ export function SkillsCliView() {
                                     }
                                   : undefined
                               }
-                              onDetail={() =>
-                                setActiveSurface(openSkillsCliDetail(skill.name, null))
-                              }
-                              onManageLinks={() =>
+                              onDetail={(event) => {
+                                captureReturnFocus(event.currentTarget);
+                                setActiveSurface(
+                                  openSkillsCliDetail(skill.name, null),
+                                );
+                              }}
+                              onManageLinks={() => {
+                                captureReturnFocus(document.activeElement);
                                 setActiveSurface(
                                   openSkillsCliDetail(skill.name, "links"),
-                                )
-                              }
-                              onUninstall={() =>
-                                setActiveSurface(openSkillsCliUninstall([skill.name]))
-                              }
+                                );
+                              }}
+                              onUninstall={() => {
+                                captureReturnFocus(document.activeElement);
+                                setActiveSurface(
+                                  openSkillsCliUninstall([skill.name]),
+                                );
+                              }}
                               isLoading={isMutating || runtimeBlocked}
                             />
                           ))}
@@ -546,6 +658,7 @@ export function SkillsCliView() {
         skillNames={uninstallNames}
         isMutating={isMutating}
         runtimeBlocked={runtimeBlocked}
+        returnFocusRef={returnFocusRef}
         onOpenChange={(open) => {
           if (open && runtimeBlocked) {
             return;
@@ -557,6 +670,43 @@ export function SkillsCliView() {
         previewRemoveGlobal={previewRemoveGlobal}
         removeGlobalBatch={removeGlobalBatch}
         onRemoved={handleUninstalled}
+      />
+
+      <SkillsCliDetailDrawer
+        open={activeSurface?.kind === "detail"}
+        skill={detailSkill}
+        targets={targets}
+        contentWidth={contentWidthPx}
+        docState={docState}
+        updateAvailable={false}
+        focusSection={detailFocus}
+        runtimeBlocked={runtimeBlocked}
+        isMutating={isMutating}
+        returnFocusRef={returnFocusRef}
+        onClose={handleDetailClose}
+        onFocusConsumed={handleFocusConsumed}
+        onToggleLink={handleDetailToggle}
+        onLinkAll={handleDetailLinkAll}
+        onUnlinkAll={handleDetailUnlinkAll}
+        onRetryDoc={() => {
+          if (detailName) {
+            void useSkillsCliStore.getState().readSkillDoc(detailName);
+          }
+        }}
+        onRevealFolder={() => {
+          if (!detailSkill) {
+            return;
+          }
+          return useSkillsCliStore
+            .getState()
+            .revealSkillFolder(detailSkill.name);
+        }}
+        onUninstall={() => {
+          if (!detailSkill) {
+            return;
+          }
+          setActiveSurface(openSkillsCliUninstall([detailSkill.name]));
+        }}
       />
     </div>
   );

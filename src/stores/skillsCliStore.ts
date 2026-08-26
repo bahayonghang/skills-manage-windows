@@ -9,6 +9,10 @@ import {
   type PlacementMutationOutcome,
   type PlacementPartitionItem,
 } from "@/pages/skillsCliBatchModel";
+import {
+  applySkillDocResponse,
+  type SkillsCliDocState,
+} from "@/pages/skillsCliDetailModel";
 import type {
   SkillsCliAddResult,
   SkillsCliDoctorReport,
@@ -19,6 +23,8 @@ import type {
   SkillsCliSkillDoc,
   SkillsCliSourcePreview,
 } from "@/types";
+
+export type { SkillsCliDocState };
 
 export type { PlacementMutationOutcome };
 
@@ -64,6 +70,7 @@ interface SkillsCliState {
   inventoryError: string | null;
   /** preview/add/remove failure: toast + inline in the install section. */
   actionError: string | null;
+  docState: SkillsCliDocState;
 
   loadAll: () => Promise<void>;
   previewSource: (source: string) => Promise<SkillsCliSourcePreview | null>;
@@ -71,7 +78,9 @@ interface SkillsCliState {
   removeGlobal: (skillName: string) => Promise<boolean>;
   previewRemoveGlobal: (skillName: string) => Promise<SkillsCliRemovePlan | null>;
   readSkillMd: (skillName: string) => Promise<SkillsCliSkillDoc | null>;
-  revealSkillFolder: (skillName: string) => Promise<boolean>;
+  readSkillDoc: (skillName: string) => Promise<void>;
+  clearSkillDoc: (skillName?: string) => void;
+  revealSkillFolder: (skillName: string) => Promise<void>;
   linkPlatform: (skillName: string, agentId: string) => Promise<void>;
   unlinkPlatform: (skillName: string, agentId: string) => Promise<void>;
   linkPlatformBatch: (
@@ -269,6 +278,7 @@ const emptyState = {
   runtimeError: null as string | null,
   inventoryError: null as string | null,
   actionError: null as string | null,
+  docState: { status: "idle" } as SkillsCliDocState,
 };
 
 export const useSkillsCliStore = create<SkillsCliState>((set, get) => ({
@@ -391,15 +401,42 @@ export const useSkillsCliStore = create<SkillsCliState>((set, get) => ({
     }
   },
 
-  async revealSkillFolder(skillName) {
-    set({ actionError: null });
+  async readSkillDoc(skillName) {
+    const requestId = newJobId();
+    set({
+      docState: { status: "loading", skillName, requestId },
+    });
     try {
-      await invoke("skills_cli_reveal_skill_folder", { skillName });
-      return true;
+      const doc = await invoke("skills_cli_read_skill_md", { skillName });
+      const next = applySkillDocResponse(get().docState, requestId, skillName, {
+        ok: true,
+        content: doc?.content ?? "",
+        byteSize: doc?.byteSize ?? 0,
+      });
+      set({ docState: next });
     } catch (error) {
-      set({ actionError: backendErrorStateValue(error) });
-      return false;
+      const next = applySkillDocResponse(get().docState, requestId, skillName, {
+        ok: false,
+        errorCode: errorCodeFrom(error),
+      });
+      set({ docState: next });
     }
+  },
+
+  clearSkillDoc(skillName) {
+    const current = get().docState;
+    if (
+      skillName &&
+      current.status !== "idle" &&
+      current.skillName !== skillName
+    ) {
+      return;
+    }
+    set({ docState: { status: "idle" } });
+  },
+
+  async revealSkillFolder(skillName) {
+    await invoke("skills_cli_reveal_skill_folder", { skillName });
   },
 
   async linkPlatform(skillName, agentId) {

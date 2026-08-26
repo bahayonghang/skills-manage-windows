@@ -116,6 +116,12 @@ function mockHappyPath() {
       confirmable: true,
     }),
     skills_cli_export_inventory: null,
+    skills_cli_read_skill_md: ({ skillName }: { skillName: string }) => ({
+      skillName,
+      content: "---\nname: demo\n---\n# Demo",
+      byteSize: 25,
+    }),
+    skills_cli_reveal_skill_folder: null,
     cancel_skills_cli_job: true,
   });
 }
@@ -138,6 +144,7 @@ describe("SkillsCliView", () => {
       runtimeError: null,
       inventoryError: null,
       actionError: null,
+      docState: { status: "idle" },
     });
     showSkillsCliActionToast.mockClear();
     saveMock.mockReset();
@@ -442,10 +449,16 @@ describe("SkillsCliView", () => {
   });
 
   it("opens detail with null focus, links focus, and uninstall payload, then resets", async () => {
+    const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView");
     mockHappyPath();
     render(<SkillsCliView />);
     await screen.findByText("demo-skill");
     fireEvent.click(screen.getByRole("button", { name: "查看 demo-skill 的详情" }));
+    const drawer = await screen.findByRole(
+      "dialog",
+      { name: "demo-skill" },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
     expect(screen.getByTestId("skills-cli-active-surface")).toHaveAttribute(
       "data-kind",
       "detail",
@@ -454,12 +467,39 @@ describe("SkillsCliView", () => {
       "data-focus",
       "null",
     );
-    fireEvent.click(screen.getByRole("button", { name: "管理 demo-skill 的链接" }));
-    expect(screen.getByTestId("skills-cli-active-surface")).toHaveAttribute(
-      "data-focus",
-      "links",
+    expect(within(drawer).queryByTestId("skills-cli-detail-update")).not.toBeInTheDocument();
+    fireEvent.click(within(drawer).getByTestId("skills-cli-detail-close"));
+    await waitFor(
+      () => {
+        expect(screen.queryByTestId("skills-cli-detail-drawer")).not.toBeInTheDocument();
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
     );
-    fireEvent.click(screen.getByRole("button", { name: "卸载 demo-skill" }));
+    scrollIntoView.mockClear();
+
+    fireEvent.click(screen.getByRole("button", { name: "管理 demo-skill 的链接" }));
+    const linksDrawer = await screen.findByRole(
+      "dialog",
+      { name: "demo-skill" },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    await waitFor(
+      () => {
+        expect(scrollIntoView).toHaveBeenCalled();
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    await waitFor(
+      () => {
+        expect(screen.getByTestId("skills-cli-active-surface")).toHaveAttribute(
+          "data-focus",
+          "null",
+        );
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+
+    fireEvent.click(within(linksDrawer).getByTestId("skills-cli-detail-uninstall"));
     expect(screen.getByTestId("skills-cli-active-surface")).toHaveAttribute(
       "data-kind",
       "uninstall",
@@ -468,7 +508,19 @@ describe("SkillsCliView", () => {
       "data-uninstall",
       "demo-skill",
     );
-    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    await waitFor(
+      () => {
+        expect(screen.queryByTestId("skills-cli-detail-drawer")).not.toBeInTheDocument();
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    const uninstall = await screen.findByRole(
+      "dialog",
+      { name: /卸载 demo-skill/ },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    fireEvent.click(within(uninstall).getByRole("button", { name: "取消" }));
     expect(screen.getByTestId("skills-cli-active-surface")).toHaveAttribute(
       "data-kind",
       "none",
@@ -477,6 +529,19 @@ describe("SkillsCliView", () => {
       "data-focus",
       "",
     );
+    scrollIntoView.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "查看 demo-skill 的详情" }));
+    await screen.findByRole(
+      "dialog",
+      { name: "demo-skill" },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    expect(screen.getByTestId("skills-cli-active-surface")).toHaveAttribute(
+      "data-focus",
+      "null",
+    );
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    scrollIntoView.mockRestore();
   });
 
   it("clears selection on bubbling Escape only when no surface is open and the event was not prevented", async () => {
@@ -706,5 +771,144 @@ describe("SkillsCliView", () => {
       semantic: "success",
       message: "已导出选定技能。",
     });
+  });
+
+  it("reveals the owned folder by skill name and keeps the card/drawer on one snapshot", async () => {
+    const missingSkill = {
+      ...skills[0],
+      placements: [
+        {
+          agentId: "cursor",
+          displayName: "Cursor",
+          targetPath: "/tmp/cursor/skills/demo-skill",
+          state: "missing" as const,
+          managedLinkKind: null,
+          reasonCode: null,
+        },
+      ],
+    };
+    const linkedPlacement = {
+      agentId: "cursor",
+      displayName: "Cursor",
+      targetPath: "/tmp/cursor/skills/demo-skill",
+      state: "managed_link",
+      managedLinkKind: "windows_junction",
+      reasonCode: null,
+    };
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: { ...listGlobal, skills: [missingSkill] },
+      skills_cli_install_targets: targets,
+      skills_cli_read_skill_md: {
+        skillName: "demo-skill",
+        content: "---\nname: demo\n---\n",
+        byteSize: 18,
+      },
+      skills_cli_reveal_skill_folder: null,
+      skills_cli_link_platform: linkedPlacement,
+    });
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+    fireEvent.click(screen.getByRole("button", { name: "查看 demo-skill 的详情" }));
+    const drawer = await screen.findByRole(
+      "dialog",
+      { name: "demo-skill" },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    fireEvent.click(within(drawer).getByTestId("skills-cli-detail-reveal"));
+    await waitFor(
+      () => {
+        expect(ipcInvokeCalls("skills_cli_reveal_skill_folder")).toHaveLength(1);
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    expect(ipcInvokeCalls("skills_cli_reveal_skill_folder")[0]?.args).toEqual({
+      skillName: "demo-skill",
+    });
+    expect(
+      JSON.stringify(ipcInvokeCalls("skills_cli_reveal_skill_folder")[0]?.args),
+    ).not.toContain("/tmp/demo-skill");
+
+    fireEvent.click(
+      within(drawer).getByRole("switch", { name: "将 demo-skill 链接到 Cursor" }),
+    );
+    await waitFor(
+      () => {
+        expect(ipcInvokeCalls("skills_cli_link_platform")).toHaveLength(1);
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    expect(ipcInvokeCalls("skills_cli_link_platform")[0]?.args).toMatchObject({
+      skillName: "demo-skill",
+      skillportAgentId: "cursor",
+    });
+  });
+
+  it("links only missing placements from the drawer and never mutates a direct copy", async () => {
+    const mixedSkill = {
+      ...skills[0],
+      placements: [
+        {
+          agentId: "cursor",
+          displayName: "Cursor",
+          targetPath: "/tmp/cursor/skills/demo-skill",
+          state: "missing" as const,
+          managedLinkKind: null,
+          reasonCode: null,
+        },
+        {
+          agentId: "amp",
+          displayName: "Amp",
+          targetPath: "/tmp/amp/skills/demo-skill",
+          state: "direct_copy" as const,
+          managedLinkKind: null,
+          reasonCode: "skills_cli.direct_copy_not_toggleable",
+        },
+      ],
+    };
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: { ...listGlobal, skills: [mixedSkill] },
+      skills_cli_install_targets: [
+        { ...targets[0], isEnabled: true },
+        { ...targets[1], isEnabled: true },
+      ],
+      skills_cli_read_skill_md: {
+        skillName: "demo-skill",
+        content: "---\nname: demo\n---\n",
+        byteSize: 18,
+      },
+      skills_cli_link_platform: {
+        agentId: "cursor",
+        displayName: "Cursor",
+        targetPath: "/tmp/cursor/skills/demo-skill",
+        state: "managed_link",
+        managedLinkKind: "windows_junction",
+        reasonCode: null,
+      },
+    });
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+    fireEvent.click(screen.getByRole("button", { name: "查看 demo-skill 的详情" }));
+    const drawer = await screen.findByRole(
+      "dialog",
+      { name: "demo-skill" },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    fireEvent.click(within(drawer).getByRole("switch", { name: /Amp/ }));
+    expect(ipcInvokeCalls("skills_cli_link_platform")).toHaveLength(0);
+    expect(ipcInvokeCalls("skills_cli_unlink_platform")).toHaveLength(0);
+    fireEvent.click(within(drawer).getByTestId("skills-cli-detail-link-all"));
+    await waitFor(
+      () => {
+        expect(ipcInvokeCalls("skills_cli_link_platform")).toHaveLength(1);
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    expect(ipcInvokeCalls("skills_cli_link_platform")[0]?.args).toMatchObject({
+      skillName: "demo-skill",
+      skillportAgentId: "cursor",
+    });
+    expect(ipcInvokeCalls("skills_cli_unlink_platform")).toHaveLength(0);
   });
 });

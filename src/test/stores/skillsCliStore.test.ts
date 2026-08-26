@@ -1,8 +1,10 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { ipcFixtureError } from "@/lib/ipc/errors";
 import { useSkillsCliStore } from "@/stores/skillsCliStore";
-import { ipcInvokeCalls, mockIpcCommand, mockIpcCommands } from "@/test/support/ipcMock";
+import { ipcInvokeCalls, ipcInvokedCommands, mockIpcCommand, mockIpcCommands } from "@/test/support/ipcMock";
 
 const doctor = { nodeVersion: "v22.20.0", npmSpec: "skills@1.5.23" };
 const skills = [
@@ -54,6 +56,7 @@ function resetState() {
     runtimeError: null,
     inventoryError: null,
     actionError: null,
+    docState: { status: "idle" },
   });
 }
 
@@ -599,3 +602,124 @@ describe("skillsCliStore placement mutations", () => {
     );
   });
 });
+
+describe("skillsCliStore doc and reveal", () => {
+  beforeEach(resetState);
+
+  it("reads ready, empty, and error docs and ignores a stale response", async () => {
+    mockIpcCommand("skills_cli_read_skill_md", {
+      skillName: "demo-skill",
+      content: "---\nname: demo\n---\nbody",
+      byteSize: 24,
+    });
+    await useSkillsCliStore.getState().readSkillDoc("demo-skill");
+    expect(ipcInvokeCalls("skills_cli_read_skill_md")[0]?.args).toEqual({
+      skillName: "demo-skill",
+    });
+    expect(useSkillsCliStore.getState().docState).toMatchObject({
+      status: "ready",
+      skillName: "demo-skill",
+      content: "---\nname: demo\n---\nbody",
+      byteSize: 24,
+    });
+
+    mockIpcCommand("skills_cli_read_skill_md", {
+      skillName: "empty-skill",
+      content: "",
+      byteSize: 0,
+    });
+    await useSkillsCliStore.getState().readSkillDoc("empty-skill");
+    expect(useSkillsCliStore.getState().docState).toEqual({
+      status: "empty",
+      skillName: "empty-skill",
+      byteSize: 0,
+    });
+
+    mockIpcCommand("skills_cli_read_skill_md", () => {
+      throw ipcFixtureError(
+        "skills_cli.skill_doc_missing",
+        "SKILL.md was not found in the owned skill folder.",
+      );
+    });
+    await useSkillsCliStore.getState().readSkillDoc("missing-skill");
+    expect(useSkillsCliStore.getState().docState).toEqual({
+      status: "error",
+      skillName: "missing-skill",
+      errorCode: "skills_cli.skill_doc_missing",
+    });
+
+    let releaseAlpha: (() => void) | undefined;
+    mockIpcCommand(
+      "skills_cli_read_skill_md",
+      ({ skillName }: { skillName: string }) => {
+        if (skillName === "alpha") {
+          return new Promise((resolve) => {
+            releaseAlpha = () =>
+              resolve({
+                skillName: "alpha",
+                content: "stale-alpha",
+                byteSize: 11,
+              });
+          });
+        }
+        return {
+          skillName: "beta",
+          content: "beta-doc",
+          byteSize: 8,
+        };
+      },
+    );
+    const alphaDone = useSkillsCliStore.getState().readSkillDoc("alpha");
+    const betaDone = useSkillsCliStore.getState().readSkillDoc("beta");
+    await betaDone;
+    releaseAlpha?.();
+    await alphaDone;
+    expect(useSkillsCliStore.getState().docState).toMatchObject({
+      status: "ready",
+      skillName: "beta",
+      content: "beta-doc",
+    });
+
+    useSkillsCliStore.getState().clearSkillDoc("beta");
+    expect(useSkillsCliStore.getState().docState).toEqual({ status: "idle" });
+  });
+
+  it("reveals by skillName only and keeps typed errors", async () => {
+    mockIpcCommand("skills_cli_reveal_skill_folder", null);
+    await useSkillsCliStore.getState().revealSkillFolder("demo-skill");
+    const args = ipcInvokeCalls("skills_cli_reveal_skill_folder")[0]?.args as Record<
+      string,
+      unknown
+    >;
+    expect(args).toEqual({ skillName: "demo-skill" });
+    expect(args).not.toHaveProperty("path");
+    expect(JSON.stringify(args)).not.toContain("--force");
+    expect(ipcInvokedCommands()).not.toContain("open_in_file_manager");
+
+    mockIpcCommand("skills_cli_reveal_skill_folder", () => {
+      throw ipcFixtureError(
+        "skills_cli.skill_not_owned",
+        "Skills CLI does not own that skill.",
+      );
+    });
+    await expect(
+      useSkillsCliStore.getState().revealSkillFolder("demo-skill"),
+    ).rejects.toMatchObject({ code: "skills_cli.skill_not_owned" });
+  });
+
+  it("does not rewrite batch-owned link actions from the doc/reveal increment", () => {
+    const text = readFileSync(
+      resolve(process.cwd(), "src/stores/skillsCliStore.ts"),
+      "utf8",
+    );
+    expect(text).toContain("async linkPlatform(");
+    expect(text).toContain("async unlinkPlatform(");
+    expect(text).toContain("async linkPlatformBatch(");
+    expect(text).toContain("async unlinkManagedBatch(");
+    expect(text).toContain("async removeGlobalBatch(");
+    expect(text).toContain("async exportInventory(");
+    expect(text).toContain("async readSkillDoc(");
+    expect(text).toContain("async revealSkillFolder(");
+  });
+});
+
