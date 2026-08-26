@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Every owned domain must expose reviewed failures without raw Display."}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Paths, queries, repository data, AI content and imported payloads are forbidden log fields."}
+{"file":".trellis/spec/backend/target-context.md","reason":"Project, agent and Obsidian operations must preserve correct local or active target semantics."}
+{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"Nested collection/project installs must not widen or duplicate Central mutation ownership."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Domain command and integration tests must use canonical ownership and run non-zero."}
+{"file":".trellis/tasks/08-26-observability-core-contracts/design.md","reason":"Use the frozen typed operation interface and lifecycle modes."}
+{"file":".trellis/tasks/08-26-ssh-update-observability-dialog/research/logging-coverage-audit.md","reason":"Coverage gaps for metadata, collection, project, agent and Obsidian domains."}
+{"file": ".trellis/spec/backend/operation-observability.md", "reason": "Consume the frozen command policy, operation lifecycle, correlation, privacy and named-boundary contract."}

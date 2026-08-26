@@ -1,0 +1,7 @@
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Audit stable diagnostics, correlation and adversarial absence across IPC, Operation Log, Runtime Log and DOM."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Check no raw Display or source chain crosses the reviewed diagnostic boundary."}
+{"file":".trellis/spec/backend/fs-db-operation-journal.md","reason":"Check operation lifecycle does not duplicate or leak recovery journal evidence."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Check visible localized rejection and correlation guidance without dynamic error details."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Check registry parity, focused test ownership and zero-test rejection before the full gate."}
+{"file":".trellis/tasks/08-26-ssh-update-observability-dialog/research/logging-coverage-audit.md","reason":"Verify all audited command families and structural gaps are addressed or explicitly classified."}
+{"file": ".trellis/spec/backend/operation-observability.md", "reason": "Verify the frozen observability contract remains exhaustive, correlated, non-duplicative and fail-safe."}

@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Check adversarial repo, path, query, payload and AI content absence."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Check stable domain failure codes and unknown fallback."}
+{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"Check nested install logging does not alter mutation locks or duplicate rows."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Check each owned domain has discoverable focused coverage."}
+{"file":".trellis/tasks/08-26-audit-catalog-project-obsidian/prd.md","reason":"Verify every owned policy entry and acceptance criterion."}
+{"file": ".trellis/spec/backend/operation-observability.md", "reason": "Verify the frozen observability contract remains exhaustive, correlated, non-duplicative and fail-safe."}

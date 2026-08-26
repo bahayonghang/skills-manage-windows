@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Frontend args, global errors and backend Runtime events must use the unified safe envelope."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"IPC failure normalization must preserve reviewed codes and unknown fallback."}
+{"file":".trellis/spec/backend/process-supervision.md","reason":"Runtime failure evidence must not weaken process timeout/cancel/output protections."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Frontend must render reviewed failures while preserving diagnostic correlation."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Runtime/IPC/store tests belong in canonical directories and must run non-zero."}
+{"file":".trellis/tasks/08-26-observability-core-contracts/design.md","reason":"Consume core Operation ID and IpcError correlation semantics."}
+{"file":".trellis/tasks/08-26-ssh-update-observability-dialog/research/logging-coverage-audit.md","reason":"Backend evidence and cross-layer correlation gaps."}
+{"file": ".trellis/spec/backend/operation-observability.md", "reason": "Consume the frozen command policy, operation lifecycle, correlation, privacy and named-boundary contract."}

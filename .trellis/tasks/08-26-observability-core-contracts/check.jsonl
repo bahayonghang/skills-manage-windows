@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Audit adversarial absence across IPC, Operation persistence and Runtime fallback."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Check unknown and reviewed failures preserve stable public semantics."}
+{"file":".trellis/spec/backend/fs-db-operation-journal.md","reason":"Check interrupted audit rows never rewrite or leak recovery journal evidence."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Check parity and lifecycle tests are in canonical locations and actually run."}
+{"file":".trellis/tasks/08-26-observability-core-contracts/prd.md","reason":"Verify every core acceptance criterion before dependent tasks start."}
+{"file": ".trellis/spec/backend/operation-observability.md", "reason": "Verify the frozen observability contract remains exhaustive, correlated, non-duplicative and fail-safe."}
