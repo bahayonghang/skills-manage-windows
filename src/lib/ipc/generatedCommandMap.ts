@@ -538,10 +538,30 @@ export type InstallResult = {
 };
 
 /**  Stable error envelope serialized across the Tauri command boundary. */
-export type IpcError = {
+export type IpcError = IpcError_Serialize | IpcError_Deserialize;
+
+/**  Stable error envelope serialized across the Tauri command boundary. */
+export type IpcError_Deserialize = {
 	code: string,
 	message: string,
 	retryable: boolean,
+	/**
+	 *  Operation Log row UUID used to correlate the rejection with audit and
+	 *  Runtime evidence. Missing for legacy/backend-internal failures.
+	 */
+	correlationId?: string | null,
+};
+
+/**  Stable error envelope serialized across the Tauri command boundary. */
+export type IpcError_Serialize = {
+	code: string,
+	message: string,
+	retryable: boolean,
+	/**
+	 *  Operation Log row UUID used to correlate the rejection with audit and
+	 *  Runtime evidence. Missing for legacy/backend-internal failures.
+	 */
+	correlationId?: string | null,
 };
 
 export type LocalRemoteSyncApplyRequest = {

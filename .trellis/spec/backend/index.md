@@ -33,3 +33,4 @@
 - [Bounded External Text Ingestion Contract](./external-text-ingestion.md)
 - [Recoverable Desktop Startup Contract](./startup-recovery.md)
 - [Update Inventory Retry and Relocation Contract](./update-inventory-retry.md)
+- [Operation Observability And Correlation Contract](./operation-observability.md)

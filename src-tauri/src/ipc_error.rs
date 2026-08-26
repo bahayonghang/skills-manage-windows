@@ -12,6 +12,10 @@ pub struct IpcError {
     pub code: String,
     pub message: String,
     pub retryable: bool,
+    /// Operation Log row UUID used to correlate the rejection with audit and
+    /// Runtime evidence. Missing for legacy/backend-internal failures.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub correlation_id: Option<String>,
 }
 
 pub type IpcResult<T> = Result<T, IpcError>;
@@ -25,6 +29,27 @@ impl IpcError {
             code: code.to_string(),
             message: message.to_string(),
             retryable,
+            correlation_id: None,
+        }
+    }
+
+    /// Attach a pre-generated operation/correlation UUID. Invalid values are
+    /// rejected to avoid turning an untrusted string into diagnostic payload.
+    pub fn with_correlation_id(mut self, correlation_id: &str) -> Self {
+        if let Ok(value) = uuid::Uuid::parse_str(correlation_id) {
+            self.correlation_id = Some(value.to_string());
+        } else {
+            debug_assert!(false, "invalid IPC correlation id: {correlation_id}");
+        }
+        self
+    }
+
+    /// Locale-neutral code safe for allowlisted Runtime diagnostic fields.
+    pub fn safe_code(&self) -> &str {
+        if is_valid_code(&self.code) {
+            &self.code
+        } else {
+            INTERNAL_CODE
         }
     }
 
@@ -45,6 +70,7 @@ impl IpcError {
                     code: code.to_string(),
                     message: message.to_string(),
                     retryable: retryable_for_code(code),
+                    correlation_id: None,
                 })
                 .unwrap_or_else(unexpected);
         }
@@ -180,6 +206,9 @@ fn retryable_for_code(code: &str) -> bool {
             | "github_import.archive_unavailable"
             | "skills_cli.busy"
             | "skills_cli.recovery_required"
+            | "skills_cli.update_stale"
+            | "skills_cli.update_rate_limited"
+            | "skills_cli.update_recovery_required"
     )
 }
 
@@ -443,6 +472,36 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
         "skills_cli.recovery_required" => {
             Some("A previous Skills CLI remove needs recovery.")
         }
+        "skills_cli.update_stale" => {
+            Some("The update is out of date. Refresh, then try again.")
+        }
+        "skills_cli.update_baseline_required" => {
+            Some("This skill has no installed baseline, so it cannot be treated as current.")
+        }
+        "skills_cli.update_unsupported" => {
+            Some("This skill source cannot be updated.")
+        }
+        "skills_cli.update_rate_limited" => {
+            Some("GitHub rate limited the update check. Wait for the limit to reset, then retry.")
+        }
+        "skills_cli.update_check_failed" => {
+            Some("The update check failed for this repository.")
+        }
+        "skills_cli.update_local_modified" => {
+            Some("Local files differ from the installed baseline.")
+        }
+        "skills_cli.update_topology_conflict" => {
+            Some("This skill's platform placement cannot be updated.")
+        }
+        "skills_cli.update_recovery_required" => {
+            Some("A previous Skills CLI update needs recovery.")
+        }
+        "skills_cli.update_integrity" => {
+            Some("The updated files did not pass the integrity check.")
+        }
+        "skills_cli.update_migration" => {
+            Some("The Skills CLI update database is not available.")
+        }
         "startup.rebuild_unavailable" => Some("Database rebuild is not available."),
         _ => None,
     }
@@ -471,6 +530,10 @@ macro_rules! ipc_boundary_async {
 }
 
 #[cfg(test)]
+#[path = "ipc_error/redaction_contract_tests.rs"]
+mod redaction_contract_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -490,6 +553,29 @@ mod tests {
                 "retryable": false
             })
         );
+    }
+
+    #[test]
+    fn correlation_id_is_additive_and_camel_case() {
+        let operation_id = uuid::Uuid::new_v4().to_string();
+        let value = serde_json::to_value(
+            IpcError::new("operation.cancelled", "Operation cancelled", false)
+                .with_correlation_id(&operation_id),
+        )
+        .expect("serialize IPC error");
+        assert_eq!(value["correlationId"], operation_id);
+        assert_eq!(value.as_object().unwrap().len(), 4);
+    }
+
+    #[test]
+    fn legacy_three_field_payload_deserializes_without_correlation() {
+        let value = serde_json::json!({
+            "code": "operation.cancelled",
+            "message": "Operation cancelled",
+            "retryable": false
+        });
+        let error: IpcError = serde_json::from_value(value).expect("deserialize legacy payload");
+        assert!(error.correlation_id.is_none());
     }
 
     #[test]
@@ -659,34 +745,6 @@ mod tests {
     }
 
     #[test]
-    fn arbitrary_diagnostics_always_use_the_fixed_fallback() {
-        let seeds = [
-            r"C:\Users\alice\private\skill.md",
-            r"C:/Users/alice/private/skill.md",
-            r"..\alice\private\skill.md",
-            "/home/alice/private/skill.md",
-            "../alice/private/skill.md",
-            "ssh -i private.pem host -- command",
-            "stdout: first line\nstderr: second line",
-            "ghp_super_secret",
-            "sk-live-secret",
-            "-----BEGIN PRIVATE KEY-----",
-            "file content: private thesis text",
-            "https://example.invalid/path?token=secret",
-            "quoted data: 'private value'",
-            "UNKNOWN_ENV=private-value",
-            "resource not found: relative/private.txt",
-            "request timed out after output=private-value",
-        ];
-        for seed in seeds {
-            let error = IpcError::from(seed);
-            let serialized = serde_json::to_string(&error).expect("serialize");
-            assert_eq!(error, unexpected(), "unexpected classification for {seed}");
-            assert!(!serialized.contains(seed), "leaked seed: {seed}");
-        }
-    }
-
-    #[test]
     fn display_is_only_the_public_message() {
         let error = unexpected();
         assert_eq!(error.to_string(), INTERNAL_MESSAGE);
@@ -743,79 +801,6 @@ mod tests {
             assert_eq!(error.code, code);
             assert_eq!(error.message, "This Central skill could not be deleted.");
             assert!(!serde_json::to_string(&error).unwrap().contains("yao-meta"));
-        }
-    }
-
-    #[test]
-    fn skills_cli_contract_codes_keep_reviewed_public_messages() {
-        for (code, message, retryable) in [
-            (
-                "skills_cli.skill_not_owned",
-                "That skill is not managed by Skills CLI.",
-                false,
-            ),
-            (
-                "skills_cli.canonical_missing",
-                "The skill folder is missing.",
-                false,
-            ),
-            (
-                "skills_cli.skill_doc_missing",
-                "The SKILL.md file is missing.",
-                false,
-            ),
-            (
-                "skills_cli.skill_doc_too_large",
-                "The SKILL.md file is too large to open.",
-                false,
-            ),
-            (
-                "skills_cli.skill_doc_invalid_utf8",
-                "The SKILL.md file is not valid text.",
-                false,
-            ),
-            (
-                "skills_cli.direct_copy_not_toggleable",
-                "A copied skill folder cannot be linked or unlinked.",
-                false,
-            ),
-            (
-                "skills_cli.placement_conflict",
-                "The platform folder is in conflict.",
-                false,
-            ),
-            (
-                "skills_cli.placement_unavailable",
-                "The platform folder is unavailable.",
-                false,
-            ),
-            (
-                "skills_cli.export_invalid",
-                "The inventory export is invalid.",
-                false,
-            ),
-            (
-                "skills_cli.export_failed",
-                "The inventory export could not be saved.",
-                false,
-            ),
-            (
-                "skills_cli.reveal_failed",
-                "The skill folder could not be revealed.",
-                false,
-            ),
-            (
-                "skills_cli.recovery_required",
-                "A previous Skills CLI remove needs recovery.",
-                true,
-            ),
-        ] {
-            let error = IpcError::from(format!("{code}:C:\\\\Users\\\\secret\\\\SKILL.md"));
-            assert_eq!(error.code, code);
-            assert_eq!(error.message, message);
-            assert_eq!(error.retryable, retryable);
-            assert!(!error.message.contains("Users"));
-            assert!(!serde_json::to_string(&error).unwrap().contains("secret"));
         }
     }
 }

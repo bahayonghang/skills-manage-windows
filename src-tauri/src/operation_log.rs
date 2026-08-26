@@ -10,8 +10,8 @@
 //!   subject, error summary, sanitized details, duration and batch id.
 //! - Redact details JSON through the crate-wide redaction policy seam
 //!   (`crate::redaction`) before persistence.
-//! - Summarize free-form error text by collapsing whitespace and truncating
-//!   to a stable maximum width.
+//! - Preserve a temporary compatibility builder for existing reviewed error
+//!   summaries while domain callers migrate to `crate::observability`.
 //! - Map status to log level for the persisted entry.
 //! - Persist entries through a best-effort recorder that never surfaces
 //!   business errors back to the caller.
@@ -152,7 +152,6 @@ pub async fn with_operation_log<'a, F, Fut, R, E>(
 where
     F: FnOnce() -> Fut,
     Fut: Future<Output = Result<R, E>>,
-    E: std::fmt::Display,
 {
     let started_at = Instant::now();
     let result = f().await;
@@ -173,8 +172,10 @@ where
             Ok(value)
         }
         Err(error) => {
-            let error_text = error.to_string();
-            let event = on_failure(&error, duration_ms).error(error_text);
+            // Do not automatically copy `Display` into durable history. The
+            // compatibility failure builder may attach an already-reviewed
+            // summary explicitly; new code uses `crate::observability`.
+            let event = on_failure(&error, duration_ms);
             record_operation_log_best_effort(&state.db, target_context, event).await;
             Err(error)
         }
@@ -434,7 +435,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn with_operation_log_records_failure_and_preserves_error() {
+    async fn with_operation_log_preserves_failure_without_copying_display() {
         let pool = crate::test_support::mem_pool().await;
         let app_state = test_app_state(pool);
 
@@ -453,7 +454,7 @@ mod tests {
                 },
                 |error: &String, duration_ms| {
                     OperationLogEvent::new("test", "test.wrapper", "failed", "Failed")
-                        .error(error)
+                        .details(serde_json::json!({ "reviewed": !error.is_empty() }))
                         .duration_ms(duration_ms)
                 },
             ),
@@ -471,7 +472,8 @@ mod tests {
         assert_eq!(entry.action, "test.wrapper");
         assert_eq!(entry.status, "failed");
         assert_eq!(entry.summary, "Failed");
-        assert_eq!(entry.error_summary.as_deref(), Some("boom boom"));
+        assert!(entry.error_summary.is_none());
+        assert!(!serde_json::to_string(entry).unwrap().contains("boom"));
         assert!(entry.duration_ms.is_some());
     }
 

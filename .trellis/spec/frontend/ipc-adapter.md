@@ -78,17 +78,17 @@ store 是唯一 invoke 层（`src/stores/` 与少数 lib/hook 基础设施）；
 ### 2. Signatures
 
 ```ts
-type IpcErrorPayload = { code: string; message: string; retryable: boolean };
-class IpcInvokeError extends Error { code: string; retryable: boolean }
+type IpcErrorPayload = { code: string; message: string; retryable: boolean; correlationId?: string };
+class IpcInvokeError extends Error { code: string; retryable: boolean; correlationId?: string }
 normalizeIpcRejection(error: unknown): Error
 ```
 
-`IPC_COMMANDS` 合并 88 个 handwritten 条目与 Rust/Serde 生成的 42 个条目；
-`UNTYPED_IPC_COMMANDS` 固定为剩余 47 个。
+typed、generated、untyped 与 backend-only command 的当前数量由 `ipcCommandCoverage.test.ts` 从 registry 和
+command map 计算，不在本规范复制快照。
 
 ### 3. Contracts
 
-- 已有 `IpcInvokeError` 必须原实例透传；有效对象载荷包装为 `IpcInvokeError`。
+- 已有 `IpcInvokeError` 必须原实例透传；有效对象载荷包装为 `IpcInvokeError`，合法 UUID correlationId 原样保留。
 - strict legacy `code:message` 仅用于过渡；未知 rejection 使用固定
   `internal.unexpected`，不得暴露 raw transport 值。
 - `String(error)` 只返回 public message；行为分支读取 `code`，不得嗅探 message。
@@ -101,7 +101,8 @@ normalizeIpcRejection(error: unknown): Error
 | Condition | Required result |
 | --- | --- |
 | existing `IpcInvokeError` | same object returned |
-| valid structured payload | wrapper exposes code/message/retryable |
+| valid structured payload | wrapper exposes code/message/retryable and optional correlationId |
+| malformed correlationId | reject structured shape and fail closed |
 | missing browser fixture | preserve `IpcFixtureMissingError` |
 | unknown/raw sensitive rejection | fixed safe unexpected error |
 | generated/handwritten overlap | contract test fails |
@@ -117,7 +118,7 @@ normalizeIpcRejection(error: unknown): Error
 
 - Adapter tests cover object/coded/plain/unknown rejection, identity pass-through and `String(error)`.
 - Fixture tests use `ipcFixtureError(code, message)` for expected backend failures.
-- Coverage asserts 130 typed / 47 untyped / 177 frontend, 42 generated and seven explicit backend-only handlers.
+- Coverage derives typed/untyped/frontend/generated/backend-only membership from authoritative sources and asserts parity.
 - Run `pnpm ipc:codegen:check` twice after generation to prove determinism.
 
 ### 7. Wrong vs Correct

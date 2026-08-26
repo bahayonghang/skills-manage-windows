@@ -26,13 +26,13 @@
 ### 2. Signatures
 
 ```text
-IpcError { code: String, message: String, retryable: bool }
+IpcError { code: String, message: String, retryable: bool, correlationId?: UUID }
 failure recorder { command, sanitized args, normalized public error }
 ```
 
 ### 3. Contracts
 
-- payload 只允许稳定 code、已审查 public message 和 retryable；不附带 source/details。
+- payload 只允许稳定 code、已审查 public message、retryable 和可选 UUID correlationId；不附带 source/details。
 - PAT、AI key、SSH password/private key、绝对/相对路径、命令/env、stdout/stderr、
   snapshot token/digest 和文件内容不得进入 IPC error、failure recorder 或状态导出。
 - Archive redirect rejection 的 Operation Log 只记录静态

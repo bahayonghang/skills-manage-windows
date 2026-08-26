@@ -8,6 +8,7 @@ pub mod ipc_codegen;
 pub mod ipc_error;
 pub mod ipc_registry;
 pub mod logging;
+pub mod observability;
 pub mod operation_log;
 pub mod paths;
 pub mod redaction;
@@ -251,6 +252,12 @@ async fn install_ready_state(
     }) {
         return Err(services::startup::StartupError::StateAlreadyInstalled);
     }
+
+    // `AppHandle::manage` is the process-local once boundary: only the first
+    // successful state installation may sweep rows left by an older process.
+    // A retry after state installation therefore cannot relabel a current
+    // process operation as interrupted.
+    observability::mark_interrupted_operations_best_effort(&pool).await;
 
     let github_pat_migration_pool = pool.clone();
     let github_pat_migration_secrets = Arc::clone(&secrets);

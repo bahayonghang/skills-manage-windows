@@ -217,6 +217,34 @@ describe("ipc adapter", () => {
       expect(String(direct)).toBe("Historical cancellation message");
     });
 
+    it("preserves a validated correlation id and rejects an unsafe one", async () => {
+      enableTauriRuntime();
+      const correlationId = "123e4567-e89b-42d3-a456-426614174000";
+      mockTauriInvoke.mockRejectedValueOnce({
+        code: "operation.cancelled",
+        message: "The operation was cancelled.",
+        retryable: false,
+        correlationId,
+      });
+
+      const correlated = (await invoke("dangerous_command").catch(
+        (value) => value,
+      )) as IpcInvokeError;
+      expect(correlated.correlationId).toBe(correlationId);
+
+      mockTauriInvoke.mockRejectedValueOnce({
+        code: "operation.cancelled",
+        message: "The operation was cancelled.",
+        retryable: false,
+        correlationId: "C:\\Users\\alice\\private.log",
+      });
+      const rejected = (await invoke("dangerous_command").catch(
+        (value) => value,
+      )) as IpcInvokeError;
+      expect(rejected.code).toBe("internal.unexpected");
+      expect(rejected.correlationId).toBeUndefined();
+    });
+
     it.each([
       [
         "legacy coded string",

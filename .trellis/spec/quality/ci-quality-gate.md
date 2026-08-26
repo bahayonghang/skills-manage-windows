@@ -423,9 +423,8 @@ cargo metadata bins     -> skillport, skillport-cli, release-signature-verifier
 
 ### 3. Contracts
 
-- runtime registry 184；generated registry 42 且为 runtime 子集。
-- frontend 177 = typed 130 + allowlist 47；runtime - frontend 恰为冻结的 backend-only 7。
-- 180 个 fallible command 使用 `IpcResult`；4 个 infallible command 保持原签名。
+- runtime、generated、frontend、typed、allowlist、backend-only 与 fallible/infallible membership 由
+  `ipcCommandCoverage.test.ts` 从权威 registry/map 计算；generated 必须是 runtime 子集，集合必须无重叠或缺口。
 - generator 使用 structured Specta metadata 和 Serde phases；不得以 source regex 证明类型一致性。
 - 对 codegen checker 按字节比较的受控生成文本，必须在 `.gitattributes` 中按路径固定 `text eol=lf`；不得依赖开发者本机的 `core.autocrlf` 设置维持 artifact parity。
 - generated type 必须来自 Rust 字段的真实类型。持久化字段不得用 Specta-only override

@@ -465,6 +465,9 @@ pub struct OperationLogEntry {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OperationLogFilter {
+    /// Exact operation/correlation identifier. This is the existing row UUID,
+    /// not `batch_id`, which continues to represent multi-item grouping.
+    pub operation_id: Option<String>,
     pub query: Option<String>,
     pub target_kind: Option<String>,
     pub target_id: Option<String>,

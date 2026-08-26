@@ -68,6 +68,7 @@ describe("operationLogStore", () => {
     vi.mocked(invoke).mockResolvedValueOnce(mockPage);
 
     await useOperationLogStore.getState().loadLogs({
+      operationId: " 123e4567-e89b-42d3-a456-426614174000 ",
       query: " scan ",
       level: "info",
       status: "",
@@ -75,6 +76,7 @@ describe("operationLogStore", () => {
 
     expect(invoke).toHaveBeenCalledWith("list_operation_logs", {
       filter: {
+        operationId: "123e4567-e89b-42d3-a456-426614174000",
         query: "scan",
         level: "info",
         limit: 100,
