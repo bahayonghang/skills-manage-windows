@@ -1,0 +1,18 @@
+{"file":".trellis/tasks/08-26-skills-cli-redesign/research/design-contract.md","reason":"Canonical task-tree contract for update states, placement semantics, drawer sizing, Base UI Escape, toast, and UNVERIFIED boundaries."}
+{"file":".trellis/tasks/08-26-update-center/research/update-center-evidence.md","reason":"Verified live repository seams, GitHub primary-source facts, derived decisions, and explicit remaining uncertainties."}
+{"file":".trellis/tasks/archive/2026-08/08-26-backend-contract/research/skills-cli-capability-probe.md","reason":"Authoritative per-capability evidence gate for force, pinned full-SHA source, and direct-copy refresh; unsupported or unverified behavior fails closed."}
+{"file":".trellis/spec/backend/skills-cli-global.md","reason":"Skills CLI Local gate, ownership, launcher, process, job family, mutation-lock order, errors, and required tests."}
+{"file":".trellis/spec/backend/database-migrations.md","reason":"Immutable contiguous v7 descriptor, checksum, backup/restore, future-version rejection, and migration fixture requirements."}
+{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"Cross-process Local mutation guard, acquire ordering, scoped recovery, contention, and no-unlocked-fallback contract."}
+{"file":".trellis/spec/backend/process-supervision.md","reason":"Supervised node process, bounded output, Windows Job Object, timeout, process-tree cancellation, and fake-runner tests."}
+{"file":".trellis/spec/backend/spawn-blocking-io.md","reason":"Blocking-thread boundary for exact recursive digests, backups, restore, cleanup, typed join errors, and async ownership."}
+{"file":".trellis/spec/backend/exclusive-job-lifecycle.md","reason":"Existing skills_cli lease/cancel lifecycle, job ID validation, RAII release, pending cancel, and family isolation."}
+{"file":".trellis/spec/backend/fs-db-operation-journal.md","reason":"Recovery-journal invariants and phase/collision/privacy precedent; adapt them explicitly without reusing Central business state."}
+{"file":".trellis/spec/backend/transactional-mutations.md","reason":"Top-level transaction and complete-old-snapshot preservation for repository cache/state replacement."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"SkillsCliError typed service variants, command-only IPC mapping, reviewed rate-limit codes, and redacted diagnostics."}
+{"file":".trellis/spec/frontend/job-correlation-cancellation.md","reason":"Renderer-created job IDs, listen-before-invoke, stale event/promise filtering, busy behavior, and exact cancel correlation."}
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Store-only typed IPC ownership, generated command map, browser fixtures, and command-routed test mocks."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Visible inline plus toast errors, formatBackendError, retry cleanup, and separation of apply from follow-up refresh failures."}
+{"file":".trellis/spec/frontend/async-ui-test-stability.md","reason":"Scoped async drawer tests, repository progress assertions, unsupported visibility, and local timeout budget."}
+{"file":".trellis/spec/frontend/skill-card-scenarios.md","reason":"UnifiedSkillCard skillsCli variant ownership and required positive/negative type contract updates."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Discoverable frontend/Rust test placement, non-zero focused tests, generated contract coverage, and final just ci gate."}
