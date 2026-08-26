@@ -1548,3 +1548,38 @@ SSH/WSL Platform leftover apply now validates paths, deletes unique POSIX paths 
 ### Next Steps
 
 - 补前端库存页、ipc:codegen、docs:gen，再跑 just ci
+
+
+## Session 109: Skills CLI 库存优先页面前端落地与 doctor 非阻塞
+
+**Date**: 2026-08-26
+**Task**: Skills CLI 库存优先页面前端落地与 doctor 非阻塞
+**Branch**: `dev`
+
+### Summary
+
+落地库存清点优先页面布局、KPI 与平台分布统计图，store 拆分 runtimeError 与 inventoryError 错误分轨；doctor 探测失败降级为写路径禁用并记录运行时日志，避免整页报错或清空库存；Node 26 工具链与依赖适配。
+
+### Main Changes
+
+- store 拆分 runtimeError / inventoryError 分轨与 isRefreshing 状态
+- 前端新增 InventoryCensus KPI 与 SVG 平台分布图，SkillsCliView 调整为库存清点优先布局与折叠区
+- doctor 探测非零退出时记录 tracing::warn 日志，禁用安装卸载等写操作但不阻断已有库存渲染
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `83f5a391` | (see git log) |
+| `d1f0380b` | (see git log) |
+| `e01ac92f` | (see git log) |
+| `943b8ef2` | (see git log) |
+
+### Testing
+
+- [OK] vitest 覆盖 skillsCliStore、SkillsCliView 与 InventoryCensus 组件测试
+- [OK] cargo test 覆盖 skills_cli doctor 探测日志与错误处理
+
+### Status
+
+[OK] **Completed**
