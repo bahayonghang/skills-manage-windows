@@ -1,3 +1,5 @@
+import { GENERATED_REVIEWED_IPC_ERROR_CODES } from "./generatedCommandMap";
+
 const CODE_PATTERN = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/;
 const LEGACY_CODED_ERROR_PATTERN =
   /^([a-z][a-z0-9_]*(?:[._-][a-z0-9_]+)+):(.*)$/s;
@@ -5,6 +7,21 @@ const INTERNAL_CODE = "internal.unexpected";
 const INTERNAL_MESSAGE = "The operation failed. See runtime logs for details.";
 const CORRELATION_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const REVIEWED_IPC_ERROR_CODES = new Set<string>(
+  GENERATED_REVIEWED_IPC_ERROR_CODES,
+);
+
+export function isSafeIpcCode(value: unknown): value is string {
+  return typeof value === "string" && CODE_PATTERN.test(value);
+}
+
+export function isReviewedIpcCode(value: unknown): value is string {
+  return typeof value === "string" && REVIEWED_IPC_ERROR_CODES.has(value);
+}
+
+export function isSafeCorrelationId(value: unknown): value is string {
+  return typeof value === "string" && CORRELATION_ID_PATTERN.test(value);
+}
 
 export interface IpcErrorPayload {
   code: string;
@@ -35,13 +52,11 @@ export function isIpcErrorPayload(value: unknown): value is IpcErrorPayload {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<IpcErrorPayload>;
   return (
-    typeof candidate.code === "string" &&
-    CODE_PATTERN.test(candidate.code) &&
+    isSafeIpcCode(candidate.code) &&
     typeof candidate.message === "string" &&
     typeof candidate.retryable === "boolean" &&
     (candidate.correlationId === undefined ||
-      (typeof candidate.correlationId === "string" &&
-        CORRELATION_ID_PATTERN.test(candidate.correlationId)))
+      isSafeCorrelationId(candidate.correlationId))
   );
 }
 

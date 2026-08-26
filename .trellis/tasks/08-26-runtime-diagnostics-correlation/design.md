@@ -9,11 +9,12 @@ instead of serializing command args or source errors.
 ## Frontend View
 
 `invoke.ts` continues to normalize rejection, then calls recorder with command plus normalized envelope. `runtimeLogger`
-uses the backend correlation when present; legacy rejection gets a frontend-only ID and explicit legacy source. Arguments
-are shape-preserved with every string value replaced, matching redaction spec.
+uses the backend correlation when present; legacy rejection gets a frontend-only ID and explicit frontend origin. Arguments
+are nesting-preserved with every object key ordinalized and every string value replaced, matching redaction spec. The
+correlation origin is explicitly `backend` or `frontend`.
 
-Global browser events use static messages. `Error.name`, reviewed `code`, line/column numbers may remain; `message`, stack,
-filename and unknown rejection strings are omitted or replaced before IPC.
+Global browser events use static messages. Only allowlisted `Error.name` and safe line/column numbers may remain;
+`message`, dynamic code, stack, filename and unknown rejection strings are omitted before IPC.
 
 ## Runtime DTO
 

@@ -4,6 +4,6 @@
 {"file":".trellis/spec/backend/fs-db-operation-journal.md","reason":"Audit operation IDs must remain distinct from recovery journal evidence."}
 {"file":".trellis/spec/backend/central-mutation-lock.md","reason":"Logging must not widen or reorder mutation lock scope."}
 {"file":".trellis/spec/backend/redaction-policy.md","reason":"Targets, secrets, paths and recovery details require the unified redaction policy."}
-{"file":".trellis/tasks/08-26-observability-core-contracts/design.md","reason":"Consume the frozen operation interface and lifecycle modes without local variants."}
+{"file":".trellis/tasks/archive/2026-08/08-26-observability-core-contracts/design.md","reason":"Consume the frozen operation interface and lifecycle modes without local variants."}
 {"file":".trellis/tasks/08-26-ssh-update-observability-dialog/research/logging-coverage-audit.md","reason":"Candidate missing domains and raw error evidence for this coverage batch."}
 {"file": ".trellis/spec/backend/operation-observability.md", "reason": "Consume the frozen command policy, operation lifecycle, correlation, privacy and named-boundary contract."}

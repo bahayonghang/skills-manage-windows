@@ -4,6 +4,6 @@
 {"file":".trellis/spec/backend/process-supervision.md","reason":"Skills CLI process lifecycle, timeout and cancellation semantics must not regress."}
 {"file":".trellis/spec/backend/target-context.md","reason":"Imports and CLI actions must retain correct local/active target identity."}
 {"file":".trellis/spec/quality/test-suite-layout.md","reason":"Provider, command, process and privacy tests must be discoverable and non-zero."}
-{"file":".trellis/tasks/08-26-observability-core-contracts/design.md","reason":"Use the frozen typed operation interface and lifecycle modes."}
+{"file":".trellis/tasks/archive/2026-08/08-26-observability-core-contracts/design.md","reason":"Use the frozen typed operation interface and lifecycle modes."}
 {"file":".trellis/tasks/08-26-ssh-update-observability-dialog/research/logging-coverage-audit.md","reason":"Coverage gaps for marketplace, imports, portable state and Skills CLI."}
 {"file": ".trellis/spec/backend/operation-observability.md", "reason": "Consume the frozen command policy, operation lifecycle, correlation, privacy and named-boundary contract."}

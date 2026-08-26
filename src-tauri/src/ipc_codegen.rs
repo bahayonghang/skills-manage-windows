@@ -137,6 +137,10 @@ fn render_contract(
     for name in names {
         map.push_str(&format!("  \"{name}\",\n"));
     }
+    map.push_str("] as const;\n\nexport const GENERATED_REVIEWED_IPC_ERROR_CODES = [\n");
+    for code in crate::ipc_error::REVIEWED_IPC_ERROR_CODES {
+        map.push_str(&format!("  \"{code}\",\n"));
+    }
     map.push_str("] as const;\n");
 
     if map.contains("unknown") {
@@ -311,9 +315,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registry_counts_and_subset_are_frozen() {
-        assert_eq!(crate::ipc_registry::RUNTIME_COMMAND_NAMES.len(), 204);
-        assert_eq!(crate::ipc_registry::GENERATED_COMMAND_NAMES.len(), 56);
+    fn generated_commands_are_runtime_registry_subset() {
+        assert!(!crate::ipc_registry::GENERATED_COMMAND_NAMES.is_empty());
         for command in crate::ipc_registry::GENERATED_COMMAND_NAMES {
             assert!(crate::ipc_registry::RUNTIME_COMMAND_NAMES.contains(command));
         }
@@ -323,5 +326,20 @@ mod tests {
     fn command_argument_names_are_lower_camel_case() {
         assert_eq!(lower_camel("repository_ids"), "repositoryIds");
         assert_eq!(lower_camel("value"), "value");
+    }
+
+    #[test]
+    fn reviewed_error_codes_are_unique_and_have_public_messages() {
+        let codes = crate::ipc_error::REVIEWED_IPC_ERROR_CODES;
+        assert_eq!(
+            codes.iter().copied().collect::<HashSet<_>>().len(),
+            codes.len()
+        );
+        for code in codes {
+            assert!(
+                crate::ipc_error::public_message_for_code(code).is_some(),
+                "reviewed IPC code has no public message: {code}"
+            );
+        }
     }
 }

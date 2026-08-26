@@ -163,6 +163,12 @@ pub struct CommandPolicyEntry {
     pub policy: CommandLogPolicy,
 }
 
+impl From<&'static CommandPolicyEntry> for CommandPolicyEntry {
+    fn from(entry: &'static CommandPolicyEntry) -> Self {
+        *entry
+    }
+}
+
 impl CommandPolicyEntry {
     #[doc(hidden)]
     pub const fn operation(

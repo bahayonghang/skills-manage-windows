@@ -1,7 +1,7 @@
 {"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Localized reviewed failure semantics and stale-error handling must remain consistent."}
 {"file":".trellis/spec/quality/test-suite-layout.md","reason":"Component/page/store/i18n tests must use canonical locations and run non-zero."}
 {"file":".trellis/spec/backend/redaction-policy.md","reason":"DOM, copy and JSON views cannot expose forbidden runtime or operation data."}
-{"file":".trellis/tasks/08-26-observability-core-contracts/design.md","reason":"Operation ID, lifecycle statuses and diagnostic envelope are fixed by core."}
+{"file":".trellis/tasks/archive/2026-08/08-26-observability-core-contracts/design.md","reason":"Operation ID, lifecycle statuses and diagnostic envelope are fixed by core."}
 {"file":".trellis/tasks/08-26-runtime-diagnostics-correlation/design.md","reason":"Runtime operation ID and backend/frontend source semantics are UI inputs."}
 {"file":".trellis/tasks/08-26-ssh-update-observability-dialog/design.md","reason":"Parent defines two-layer navigation and centered detail hierarchy."}
 {"file": ".trellis/spec/backend/operation-observability.md", "reason": "Consume the frozen command policy, operation lifecycle, correlation, privacy and named-boundary contract."}

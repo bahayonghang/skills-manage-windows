@@ -31,6 +31,8 @@ const fixtureLines: RuntimeLogLine[] = [
     timestamp: "2026-06-03T10:02:00Z",
     level: "error",
     source: "window.error",
+    operationId: "123e4567-e89b-42d3-a456-426614174000",
+    eventSource: "frontend",
     message: "Example frontend runtime error",
     raw: "2026-06-03T10:02:00Z ERROR skillport::frontend: Example frontend runtime error source=window.error token=[REDACTED]",
   },
@@ -40,9 +42,17 @@ function fixtureRead(request: RuntimeLogReadRequest): RuntimeLogReadResult {
   const query = request.query?.toLowerCase();
   const source = request.source?.toLowerCase();
   const level = request.level?.toLowerCase();
+  const operationId = request.operationId?.toLowerCase();
+  const eventSource = request.eventSource?.toLowerCase();
   const matched = fixtureLines.filter((line) => {
     if (level && line.level?.toLowerCase() !== level) return false;
     if (source && !line.source.toLowerCase().includes(source)) return false;
+    if (operationId && line.operationId?.toLowerCase() !== operationId) {
+      return false;
+    }
+    if (eventSource && line.eventSource?.toLowerCase() !== eventSource) {
+      return false;
+    }
     if (query) {
       const haystack =
         `${line.source} ${line.message} ${line.raw}`.toLowerCase();

@@ -1,7 +1,7 @@
 {"file":".trellis/tasks/08-26-ssh-update-observability-dialog/research/logging-coverage-audit.md","reason":"Re-run registry exhaustiveness and cross-layer policy checks against the researched coverage gaps."}
 {"file":".trellis/spec/backend/redaction-policy.md","reason":"No secret, path, URL, raw error, stack or args escape the safe envelope."}
 {"file":".trellis/spec/quality/test-suite-layout.md","reason":"All new suites are discoverable, non-zero and run by the documented gates."}
-{"file":".trellis/tasks/08-26-observability-core-contracts/prd.md","reason":"Core contract and compatibility acceptance remain satisfied after integration."}
+{"file":".trellis/tasks/archive/2026-08/08-26-observability-core-contracts/prd.md","reason":"Core contract and compatibility acceptance remain satisfied after integration."}
 {"file":".trellis/tasks/08-26-runtime-diagnostics-correlation/prd.md","reason":"Backend/frontend Runtime evidence remains correlatable and non-recursive."}
 {"file":".trellis/tasks/08-26-observability-console-dialog/prd.md","reason":"Console and centered dialog preserve diagnostic, accessibility and responsive behavior."}
 {"file":".trellis/tasks/08-26-ssh-update-observability-dialog/prd.md","reason":"Every parent acceptance criterion has explicit final evidence or UNVERIFIED status."}

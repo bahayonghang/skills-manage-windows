@@ -14,6 +14,8 @@ interface RuntimeLogFilter {
   query?: string;
   level?: RuntimeLogLevel | "";
   source?: string;
+  operationId?: string;
+  eventSource?: "backend" | "frontend" | "";
 }
 
 interface RuntimeLogState {
@@ -59,6 +61,8 @@ function normalizeReadRequest(
     query: normalizeText(request.query ?? filter.query),
     level: (request.level ?? filter.level) || undefined,
     source: normalizeText(request.source ?? filter.source),
+    operationId: normalizeText(request.operationId ?? filter.operationId),
+    eventSource: (request.eventSource ?? filter.eventSource) || undefined,
     limit: request.limit ?? DEFAULT_RUNTIME_LIMIT,
     offset: request.offset ?? 0,
     tail: request.tail ?? true,

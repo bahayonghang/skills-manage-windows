@@ -450,14 +450,16 @@ pub struct RuntimeFailureContext {
     entry: CommandPolicyEntry,
     operation_id: Option<OperationId>,
     target_kind: Option<OperationTargetKind>,
+    duration_ms: u64,
 }
 
 impl RuntimeFailureContext {
-    pub fn new(entry: &'static CommandPolicyEntry) -> Self {
+    pub fn new(entry: impl Into<CommandPolicyEntry>) -> Self {
         Self {
-            entry: *entry,
+            entry: entry.into(),
             operation_id: None,
             target_kind: None,
+            duration_ms: 0,
         }
     }
 
@@ -468,6 +470,11 @@ impl RuntimeFailureContext {
 
     pub fn target_kind(mut self, target_kind: OperationTargetKind) -> Self {
         self.target_kind = Some(target_kind);
+        self
+    }
+
+    pub fn duration_ms(mut self, duration_ms: u64) -> Self {
+        self.duration_ms = duration_ms;
         self
     }
 }
@@ -496,12 +503,14 @@ pub fn record_runtime_failure(context: RuntimeFailureContext, mut error: IpcErro
     tracing::error!(
         target: "skillport::ipc",
         source = "backend",
+        event_source = "backend",
         command = context.entry.command,
         category,
         phase,
         code = error.safe_code(),
         retryable = error.retryable,
         target_kind,
+        duration_ms = context.duration_ms,
         operation_id = %operation_id,
         "IPC operation failed"
     );

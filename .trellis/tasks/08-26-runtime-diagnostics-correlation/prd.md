@@ -1,6 +1,6 @@
 # Runtime 诊断、IPC 失败保真与去重
 
-状态：**planning**。依赖：`08-26-observability-core-contracts` 完成并冻结 interface。
+状态：**in_progress**。依赖：`08-26-observability-core-contracts` 完成并冻结 interface。
 
 ## Goal
 
@@ -15,8 +15,8 @@ recorder保留同一 correlation并清除 raw message/stack/path风险，同时�
   返回给 frontend，旧 backend 缺失时安全fallback。
 - R3：frontend `ipc.failure`只记录 command名、reviewed error envelope、source与correlation；args内所有字符串
   继续替换，不能记录raw rejection object/source chain。
-- R4：window error/unhandled rejection不记录 filename、stack或任意message/reason；只记录受控source、Error
-  name/code和安全数字，未知字符串固定化。
+- R4：window error/unhandled rejection不记录 filename、stack、动态code或任意message/reason；只记录受控source、
+  allowlisted Error name和安全数字，未知字符串固定化。
 - R5：backend source标记`backend`、frontend source标记`frontend`；Runtime DTO/parser提取operation ID，
   UI可按ID聚合/筛选但不删除任一视角。
 - R6：`record_frontend_runtime_log`绕过failure recorder，self-logging失败不递归；14-day retention、whitelist、

@@ -1,6 +1,13 @@
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
+mod boundary;
+mod reviewed_codes;
+
+#[doc(hidden)]
+pub use boundary::{complete_named_boundary, complete_named_boundary_with_target};
+pub use reviewed_codes::{is_reviewed_ipc_code, REVIEWED_IPC_ERROR_CODES};
+
 const INTERNAL_CODE: &str = "internal.unexpected";
 const INTERNAL_MESSAGE: &str = "The operation failed. See runtime logs for details.";
 
@@ -25,6 +32,10 @@ impl IpcError {
     /// runtime diagnostics from being passed through accidentally.
     pub fn new(code: &'static str, message: &'static str, retryable: bool) -> Self {
         debug_assert!(is_valid_code(code), "invalid IPC error code: {code}");
+        debug_assert!(
+            is_reviewed_ipc_code(code),
+            "unreviewed IPC error code: {code}"
+        );
         Self {
             code: code.to_string(),
             message: message.to_string(),
@@ -46,7 +57,7 @@ impl IpcError {
 
     /// Locale-neutral code safe for allowlisted Runtime diagnostic fields.
     pub fn safe_code(&self) -> &str {
-        if is_valid_code(&self.code) {
+        if is_reviewed_ipc_code(&self.code) {
             &self.code
         } else {
             INTERNAL_CODE
@@ -273,7 +284,7 @@ fn legacy_plain_message(original: &str, lower: &str) -> Option<(&'static str, &'
 /// rows, Operation Log summaries) can show the same reviewed sentence instead
 /// of a domain error's Display text.
 pub fn public_message_for_code(code: &str) -> Option<&'static str> {
-    legacy_code_message(code)
+    reviewed_codes::direct_public_message(code).or_else(|| legacy_code_message(code))
 }
 
 fn legacy_code_message(code: &str) -> Option<&'static str> {
@@ -509,24 +520,6 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
 
 fn unexpected() -> IpcError {
     IpcError::new(INTERNAL_CODE, INTERNAL_MESSAGE, false)
-}
-
-/// Preserve existing command internals and convert only the final Tauri
-/// rejection boundary into [`IpcError`].
-#[macro_export]
-macro_rules! ipc_boundary {
-    ($expression:expr) => {{
-        let result: Result<_, String> = $expression;
-        result.map_err($crate::ipc_error::IpcError::from)
-    }};
-}
-
-#[macro_export]
-macro_rules! ipc_boundary_async {
-    ($body:block) => {{
-        let result: Result<_, String> = (async move $body).await;
-        result.map_err($crate::ipc_error::IpcError::from)
-    }};
 }
 
 #[cfg(test)]

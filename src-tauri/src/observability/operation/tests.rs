@@ -347,12 +347,11 @@ fn runtime_failure_context_supports_runtime_only_and_excluded_policies() {
     assert!(!serde_json::to_string(&error).unwrap().contains(planted));
 
     let excluded = tracing::dispatcher::with_default(&dispatch, || {
-        record_runtime_failure(
-            RuntimeFailureContext::new(
-                crate::ipc_registry::command_policy("record_frontend_runtime_log").unwrap(),
-            ),
-            IpcError::new("internal.unexpected", "The operation failed.", false),
+        crate::ipc_boundary!(
+            "record_frontend_runtime_log",
+            Err::<(), String>(planted.to_string())
         )
+        .unwrap_err()
     });
     assert!(excluded.correlation_id.is_none());
 
@@ -362,6 +361,84 @@ fn runtime_failure_context_supports_runtime_only_and_excluded_policies() {
     assert!(logged.contains("runtime"));
     assert!(logged.contains("command"));
     assert!(logged.contains(correlation_id));
+    assert!(!logged.contains(planted));
+}
+
+#[test]
+fn named_ipc_boundary_records_reviewed_target_kinds_without_raw_error() {
+    let logs = Arc::new(Mutex::new(Vec::new()));
+    let writer = Arc::clone(&logs);
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(move || SharedLogBuffer(Arc::clone(&writer)))
+        .with_ansi(false)
+        .compact()
+        .finish();
+    let dispatch = tracing::Dispatch::new(subscriber);
+    let planted = r"C:\Users\alice\private.log ghp_super_secret";
+
+    let errors = tracing::dispatcher::with_default(&dispatch, || {
+        tracing::callsite::rebuild_interest_cache();
+        [
+            OperationTargetKind::Local,
+            OperationTargetKind::Ssh,
+            OperationTargetKind::Wsl,
+        ]
+        .into_iter()
+        .map(|kind| {
+            crate::ipc_boundary!(
+                "get_central_skills",
+                target_kind = kind,
+                Err::<(), String>(planted.to_string())
+            )
+            .unwrap_err()
+        })
+        .collect::<Vec<_>>()
+    });
+    for error in errors {
+        assert!(error.correlation_id.is_some());
+    }
+
+    let logged = String::from_utf8(logs.lock().unwrap().clone()).unwrap();
+    for expected in ["local", "ssh", "wsl"] {
+        assert!(
+            logged.contains(&format!("target_kind={expected}"))
+                || logged.contains(&format!("target_kind=\"{expected}\"")),
+            "missing target kind {expected}: {logged}"
+        );
+    }
+    assert_eq!(logged.matches("IPC operation failed").count(), 3);
+    assert!(!logged.contains(planted));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn named_async_ipc_boundary_uses_the_same_safe_failure_path() {
+    let logs = Arc::new(Mutex::new(Vec::new()));
+    let writer = Arc::clone(&logs);
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(move || SharedLogBuffer(Arc::clone(&writer)))
+        .with_ansi(false)
+        .compact()
+        .finish();
+    let _guard = tracing::subscriber::set_default(subscriber);
+    tracing::callsite::rebuild_interest_cache();
+    let planted = r"C:\Users\alice\private.log ghp_super_secret";
+    let error = crate::ipc_boundary_async!(
+        "get_central_skills",
+        target_kind = OperationTargetKind::Ssh,
+        { Err::<(), String>(planted.to_string()) }
+    )
+    .unwrap_err();
+
+    assert!(error.correlation_id.is_some());
+    assert_eq!(error.code, "internal.unexpected");
+    assert!(!serde_json::to_string(&error).unwrap().contains(planted));
+
+    let logged = String::from_utf8(logs.lock().unwrap().clone()).unwrap();
+    assert_eq!(logged.matches("IPC operation failed").count(), 1);
+    assert!(
+        logged.contains("target_kind=ssh") || logged.contains("target_kind=\"ssh\""),
+        "missing async SSH target kind: {logged}"
+    );
     assert!(!logged.contains(planted));
 }
 
