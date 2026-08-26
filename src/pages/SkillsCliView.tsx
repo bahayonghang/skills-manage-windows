@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { useTranslation } from "react-i18next";
 import { Terminal } from "lucide-react";
 
+import { SkillsCliBatchBar } from "@/components/skillsCli/SkillsCliBatchBar";
 import { SkillsCliGroupHeader } from "@/components/skillsCli/SkillsCliGroupHeader";
 import { SkillsCliHeader } from "@/components/skillsCli/SkillsCliHeader";
 import {
@@ -9,20 +10,21 @@ import {
   SkillsCliInstallMount,
 } from "@/components/skillsCli/SkillsCliInstallMount";
 import { SkillsCliToolbar } from "@/components/skillsCli/SkillsCliToolbar";
+import { SkillsCliUninstallDialog } from "@/components/skillsCli/SkillsCliUninstallDialog";
 import { showSkillsCliActionToast } from "@/components/skillsCli/skillsCliActionToast";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { formatBackendError } from "@/lib/backendError";
+import { isEditableEventTarget } from "@/lib/keyboardShortcuts";
 import { isLocalTarget } from "@/lib/targetKind";
 import { cn } from "@/lib/utils";
+import {
+  reconcileSelectedNames,
+  selectedHasManagedLink,
+  summarizeLinkTargets,
+  type PlacementMutationOutcome,
+} from "@/pages/skillsCliBatchModel";
+import { exportSkillsCliInventory } from "@/pages/skillsCliExport";
 import {
   SKILLS_CLI_CONTENT_CONTAINER_CLASS,
   SKILLS_CLI_GRID_CLASS,
@@ -37,10 +39,13 @@ import {
   openSkillsCliInstall,
   openSkillsCliUninstall,
   type SkillsCliActiveSurface,
+  type SkillsCliBucket,
   type SkillsCliGroupBy,
 } from "@/pages/skillsCliViewModel";
 import { useSkillsCliStore } from "@/stores/skillsCliStore";
 import { useTargetStore } from "@/stores/targetStore";
+
+const EMPTY_UNINSTALL_NAMES: readonly string[] = [];
 
 function bucketLabel(
   t: (key: string, options?: Record<string, unknown>) => string,
@@ -66,7 +71,8 @@ export function SkillsCliView() {
   const runtimeError = useSkillsCliStore((state) => state.runtimeError);
   const inventoryError = useSkillsCliStore((state) => state.inventoryError);
   const loadAll = useSkillsCliStore((state) => state.loadAll);
-  const removeGlobal = useSkillsCliStore((state) => state.removeGlobal);
+  const previewRemoveGlobal = useSkillsCliStore((state) => state.previewRemoveGlobal);
+  const removeGlobalBatch = useSkillsCliStore((state) => state.removeGlobalBatch);
 
   const [query, setQuery] = useState("");
   const [groupBy, setGroupBy] = useState<SkillsCliGroupBy>("repo");
@@ -81,6 +87,8 @@ export function SkillsCliView() {
   );
   const [activeSurface, setActiveSurface] = useState<SkillsCliActiveSurface>(null);
   const [contentWidthPx, setContentWidthPx] = useState<number | null>(null);
+  const [linkMenuOpen, setLinkMenuOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const installButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -105,6 +113,24 @@ export function SkillsCliView() {
     observer.observe(node);
     return () => observer.disconnect();
   }, [isLocal]);
+
+  useEffect(() => {
+    setSelectedCardNames((current) => {
+      const next = reconcileSelectedNames(
+        current,
+        skills.map((skill) => skill.name),
+      );
+      if (next.size === current.size) {
+        for (const name of next) {
+          if (!current.has(name)) {
+            return next;
+          }
+        }
+        return current;
+      }
+      return next;
+    });
+  }, [skills]);
 
   const runtimeBlocked = runtimeError !== null;
   const showInventoryEmpty = skills.length === 0 && !isLoading && !inventoryError;
@@ -131,11 +157,14 @@ export function SkillsCliView() {
     skills.length > 0 && filtered.length === 0 && !showLoading;
   const layoutBands = deriveSkillsCliLayoutBands(contentWidthPx);
   const uninstallNames =
-    activeSurface?.kind === "uninstall" ? activeSurface.skillNames : [];
-  const uninstallTarget =
-    uninstallNames.length === 1
-      ? skills.find((skill) => skill.name === uninstallNames[0]) ?? null
-      : null;
+    activeSurface?.kind === "uninstall"
+      ? activeSurface.skillNames
+      : EMPTY_UNINSTALL_NAMES;
+  const linkSummaries = useMemo(
+    () => summarizeLinkTargets(skills, selectedCardNames, targets),
+    [skills, selectedCardNames, targets],
+  );
+  const unlinkEnabled = selectedHasManagedLink(skills, selectedCardNames);
 
   if (!isLocal) {
     return (
@@ -150,34 +179,142 @@ export function SkillsCliView() {
     if (event.key !== "Escape") {
       return;
     }
-    if (activeSurface !== null || event.defaultPrevented) {
+    if (
+      activeSurface !== null ||
+      linkMenuOpen ||
+      event.defaultPrevented ||
+      isEditableEventTarget(event.target)
+    ) {
       return;
     }
     setSelectMode(false);
     setSelectedCardNames(new Set());
   }
 
-  async function handleUninstall() {
-    const name = uninstallNames[0];
-    if (!name) return;
-    const ok = await removeGlobal(name);
-    if (ok) {
-      setActiveSurface(closeSkillsCliSurface());
-      showSkillsCliActionToast({
-        semantic: "destructiveSuccess",
-        message: t("skillsCli.removeSuccess", { name }),
-      });
-      return;
+  function handleSelectModeChange(next: boolean) {
+    setSelectMode(next);
+    if (!next) {
+      setSelectedCardNames(new Set());
     }
-    const latest = useSkillsCliStore.getState().actionError;
-    if (latest) {
+  }
+
+  function handleSelectAll(bucket: SkillsCliBucket) {
+    setSelectMode(true);
+    setSelectedCardNames((current) => {
+      const next = new Set(current);
+      for (const skill of bucket.skills) {
+        next.add(skill.name);
+      }
+      return next;
+    });
+  }
+
+  function toastPlacementOutcome(
+    outcome: PlacementMutationOutcome,
+    kind: "link" | "unlink",
+  ) {
+    const allOk = outcome.failed.length === 0 && outcome.skipped.length === 0;
+    const failedMessages = [
+      ...new Set(outcome.failed.map((item) => item.errorCode)),
+    ].map((code) => formatBackendError(`${code}:`, t));
+    showSkillsCliActionToast({
+      semantic: allOk ? "success" : "error",
+      message: allOk
+        ? t(
+            kind === "link"
+              ? "skillsCli.batch.linkSuccess"
+              : "skillsCli.batch.unlinkSuccess",
+            { succeeded: outcome.succeeded.length },
+          )
+        : [
+            t(
+              kind === "link"
+                ? "skillsCli.batch.linkPartial"
+                : "skillsCli.batch.unlinkPartial",
+              {
+                succeeded: outcome.succeeded.length,
+                failed: outcome.failed.length,
+                skipped: outcome.skipped.length,
+              },
+            ),
+            ...failedMessages,
+          ]
+            .join(" ")
+            .trim(),
+    });
+  }
+
+  async function handleExport(scope: "all" | "selected") {
+    setIsExporting(true);
+    try {
+      const result = await exportSkillsCliInventory({
+        scope,
+        skills: useSkillsCliStore.getState().skills,
+        selectedNames: selectedCardNames,
+        targets,
+        exportInventory: (input) =>
+          useSkillsCliStore.getState().exportInventory(input),
+      });
+      if (result === "cancelled") {
+        return;
+      }
       showSkillsCliActionToast({
-        semantic: "destructiveError",
-        message: t("skillsCli.removeError", {
-          error: formatBackendError(latest, t),
+        semantic: "success",
+        message: t(
+          scope === "all"
+            ? "skillsCli.export.successAll"
+            : "skillsCli.export.successSelected",
+        ),
+      });
+    } catch (error) {
+      showSkillsCliActionToast({
+        semantic: "error",
+        message: t("skillsCli.export.error", {
+          error: formatBackendError(error, t),
         }),
       });
+    } finally {
+      setIsExporting(false);
     }
+  }
+
+  async function handleLink(agentId: string) {
+    setLinkMenuOpen(false);
+    try {
+      const outcome = await useSkillsCliStore
+        .getState()
+        .linkPlatformBatch([...selectedCardNames], agentId);
+      toastPlacementOutcome(outcome, "link");
+    } catch (error) {
+      showSkillsCliActionToast({
+        semantic: "error",
+        message: formatBackendError(error, t),
+      });
+    }
+  }
+
+  async function handleUnlink() {
+    try {
+      const outcome = await useSkillsCliStore
+        .getState()
+        .unlinkManagedBatch([...selectedCardNames]);
+      toastPlacementOutcome(outcome, "unlink");
+    } catch (error) {
+      showSkillsCliActionToast({
+        semantic: "error",
+        message: formatBackendError(error, t),
+      });
+    }
+  }
+
+  function handleUninstalled(names: string[]) {
+    setSelectedCardNames((current) => {
+      const next = new Set(current);
+      for (const name of names) {
+        next.delete(name);
+      }
+      return next;
+    });
   }
 
   function toggleCollapsed(id: string) {
@@ -254,8 +391,12 @@ export function SkillsCliView() {
             unlinkedOnly={unlinkedOnly}
             onUnlinkedOnlyChange={setUnlinkedOnly}
             selectMode={selectMode}
-            onSelectModeChange={setSelectMode}
+            onSelectModeChange={handleSelectModeChange}
             targets={targets}
+            onExportAll={
+              skills.length > 0 ? () => void handleExport("all") : undefined
+            }
+            isExporting={isExporting}
           />
 
           {inventoryError && (
@@ -310,6 +451,7 @@ export function SkillsCliView() {
                         expanded={expanded}
                         panelId={panelId}
                         onToggle={() => toggleCollapsed(bucket.id)}
+                        onSelectAll={() => handleSelectAll(bucket)}
                       />
                       {expanded ? (
                         <div id={panelId} className={SKILLS_CLI_GRID_CLASS}>
@@ -365,6 +507,29 @@ export function SkillsCliView() {
         </div>
       </div>
 
+      {selectedCardNames.size > 0 ? (
+        <SkillsCliBatchBar
+          selectedCount={selectedCardNames.size}
+          summaries={linkSummaries}
+          unlinkEnabled={unlinkEnabled}
+          busy={isMutating}
+          runtimeBlocked={runtimeBlocked}
+          exporting={isExporting}
+          linkMenuOpen={linkMenuOpen}
+          onLinkMenuOpenChange={setLinkMenuOpen}
+          onLink={(agentId) => void handleLink(agentId)}
+          onUnlink={() => void handleUnlink()}
+          onExportSelected={() => void handleExport("selected")}
+          onUninstall={() =>
+            setActiveSurface(openSkillsCliUninstall([...selectedCardNames]))
+          }
+          onClear={() => {
+            setSelectMode(false);
+            setSelectedCardNames(new Set());
+          }}
+        />
+      ) : null}
+
       <SkillsCliInstallMount
         open={activeSurface?.kind === "install"}
         onOpenChange={(open) => {
@@ -376,62 +541,23 @@ export function SkillsCliView() {
         contentWidthPx={contentWidthPx}
       />
 
-      <Dialog
+      <SkillsCliUninstallDialog
         open={activeSurface?.kind === "uninstall"}
+        skillNames={uninstallNames}
+        isMutating={isMutating}
+        runtimeBlocked={runtimeBlocked}
         onOpenChange={(open) => {
           if (open && runtimeBlocked) {
             return;
           }
-          if (!open) setActiveSurface(closeSkillsCliSurface());
+          if (!open) {
+            setActiveSurface(closeSkillsCliSurface());
+          }
         }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {t("skillsCli.uninstallTitle", {
-                name: uninstallTarget?.name ?? uninstallNames[0] ?? "",
-              })}
-            </DialogTitle>
-            <DialogDescription>
-              {t("skillsCli.uninstallDescription")}
-            </DialogDescription>
-          </DialogHeader>
-          {uninstallTarget && (
-            <div className="space-y-1 text-sm text-muted-foreground">
-              {uninstallTarget.path && (
-                <p>{t("skillsCli.path", { path: uninstallTarget.path })}</p>
-              )}
-              {uninstallTarget.agents.length > 0 && (
-                <p>
-                  {t("skillsCli.agents", {
-                    agents: uninstallTarget.agents.join(", "),
-                  })}
-                </p>
-              )}
-              {uninstallTarget.source && (
-                <p>{t("skillsCli.source", { source: uninstallTarget.source })}</p>
-              )}
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setActiveSurface(closeSkillsCliSurface())}
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => void handleUninstall()}
-              disabled={isMutating || runtimeBlocked}
-            >
-              {isMutating
-                ? t("skillsCli.uninstalling")
-                : t("skillsCli.uninstallConfirm")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        previewRemoveGlobal={previewRemoveGlobal}
+        removeGlobalBatch={removeGlobalBatch}
+        onRemoved={handleUninstalled}
+      />
     </div>
   );
 }

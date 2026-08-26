@@ -93,9 +93,11 @@ export function SkillCardDenseRow({
       className={cn(
         cardShellClass(checkbox?.checked),
         "group/skill-card relative flex h-auto min-h-[76px] flex-col justify-center gap-1 px-3 py-2",
+        checkbox && "cursor-pointer",
         isLoading && "opacity-50",
         className,
       )}
+      onClick={checkbox ? () => checkbox.onChange() : undefined}
     >
       <div className="flex min-w-0 items-center gap-2">
         {checkbox && (
@@ -112,7 +114,14 @@ export function SkillCardDenseRow({
             />
           </div>
         )}
-        {onDetail ? (
+        {checkbox ? (
+          <h3
+            title={name}
+            className="min-w-0 flex-1 truncate text-sm font-semibold tracking-[-0.01em] text-foreground"
+          >
+            {name}
+          </h3>
+        ) : onDetail ? (
           <button
             type="button"
             className="min-h-7 min-w-0 flex-1 truncate rounded-md text-left text-sm font-semibold tracking-[-0.01em] text-foreground underline-offset-4 transition-[color,box-shadow] hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -144,6 +153,7 @@ export function SkillCardDenseRow({
           className={cn(
             "flex shrink-0 items-center gap-2 opacity-0 transition-opacity duration-150",
             "group-hover/skill-card:opacity-100 group-focus-within/skill-card:opacity-100",
+            "focus-within:opacity-100",
           )}
           onClick={(event) => event.stopPropagation()}
         >

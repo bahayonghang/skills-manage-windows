@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -14,10 +14,18 @@ const { showSkillsCliActionToast } = vi.hoisted(() => ({
   showSkillsCliActionToast: vi.fn(),
 }));
 
+const ASYNC_UI_TIMEOUT_MS = 5_000;
+
 vi.mock("@/components/skillsCli/skillsCliActionToast", () => ({
   showSkillsCliActionToast,
   SKILLS_CLI_ACTION_TOAST_ID: "skills-cli-action",
   SKILLS_CLI_ACTION_TOAST_DURATION_MS: 2800,
+}));
+
+const saveMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  save: (...args: unknown[]) => saveMock(...args),
 }));
 
 vi.mock("@/stores/platformStore", () => ({
@@ -99,6 +107,15 @@ function mockHappyPath() {
       removedManagedAgentIds: [],
       retainedDirectCopyAgentIds: [],
     },
+    skills_cli_preview_remove_global: ({ skillName }: { skillName: string }) => ({
+      skillName,
+      ownedCanonical: true,
+      managedPlacements: [{ agentId: "cursor", displayName: "Cursor" }],
+      retainedDirectCopies: [],
+      conflicts: [],
+      confirmable: true,
+    }),
+    skills_cli_export_inventory: null,
     cancel_skills_cli_job: true,
   });
 }
@@ -123,6 +140,7 @@ describe("SkillsCliView", () => {
       actionError: null,
     });
     showSkillsCliActionToast.mockClear();
+    saveMock.mockReset();
     useTargetStore.setState({
       activeTarget: {
         id: "local",
@@ -148,7 +166,7 @@ describe("SkillsCliView", () => {
     );
     expect(screen.queryByLabelText("库存统计 KPI")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "安装技能" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "导出全部" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "导出全部" })).toBeEnabled();
     expect(screen.getByTestId("skills-cli-layout-bands")).toHaveAttribute(
       "data-grid",
       "twoColumns",
@@ -199,6 +217,7 @@ describe("SkillsCliView", () => {
     ).toBeInTheDocument();
     expect(screen.queryByTestId("skills-cli-install")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "安装技能" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "导出全部" })).toBeDisabled();
     expect(
       screen.queryByTestId("skills-cli-inventory-error"),
     ).not.toBeInTheDocument();
@@ -283,16 +302,31 @@ describe("SkillsCliView", () => {
     render(<SkillsCliView />);
     await screen.findByText("demo-skill");
     fireEvent.click(screen.getByRole("button", { name: "卸载 demo-skill" }));
+    const dialog = await screen.findByRole(
+      "dialog",
+      { name: /卸载 demo-skill/ },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
     expect(
-      screen.getByText(/规范副本、Skills CLI 创建的平台链接，以及 lock 中的对应行/),
+      within(dialog).getByText(/规范副本、Skills CLI 创建的平台链接，以及 lock 中的对应行/),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "卸载" }));
+    const confirm = within(dialog).getByRole("button", { name: "卸载" });
+    await waitFor(() => expect(confirm).toBeEnabled(), {
+      timeout: ASYNC_UI_TIMEOUT_MS,
+    });
+    fireEvent.click(confirm);
     await waitFor(() => {
       expect(ipcInvokeCalls("skills_cli_remove_global")).toHaveLength(1);
     });
     expect(ipcInvokeCalls("skills_cli_remove_global")[0].args).toMatchObject({
       skillName: "demo-skill",
     });
+    expect(JSON.stringify(ipcInvokeCalls("skills_cli_remove_global")[0].args)).not.toContain(
+      "--keep-links",
+    );
+    expect(showSkillsCliActionToast).toHaveBeenCalledWith(
+      expect.objectContaining({ semantic: "destructiveSuccess" }),
+    );
   });
 
   it("keeps the uninstall dialog open when remove fails", async () => {
@@ -300,6 +334,14 @@ describe("SkillsCliView", () => {
       skills_cli_doctor: doctor,
       skills_cli_list_global: listGlobal,
       skills_cli_install_targets: targets,
+      skills_cli_preview_remove_global: ({ skillName }: { skillName: string }) => ({
+        skillName,
+        ownedCanonical: true,
+        managedPlacements: [],
+        retainedDirectCopies: [],
+        conflicts: [],
+        confirmable: true,
+      }),
       skills_cli_remove_global: () => {
         throw ipcFixtureError(
           "skills_cli.cli_unavailable",
@@ -310,13 +352,25 @@ describe("SkillsCliView", () => {
     render(<SkillsCliView />);
     await screen.findByText("demo-skill");
     fireEvent.click(screen.getByRole("button", { name: "卸载 demo-skill" }));
-    fireEvent.click(screen.getByRole("button", { name: "卸载" }));
+    const dialog = await screen.findByRole(
+      "dialog",
+      { name: /卸载 demo-skill/ },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    const confirm = within(dialog).getByRole("button", { name: "卸载" });
+    await waitFor(() => expect(confirm).toBeEnabled(), {
+      timeout: ASYNC_UI_TIMEOUT_MS,
+    });
+    fireEvent.click(confirm);
     await waitFor(() => {
       expect(ipcInvokeCalls("skills_cli_remove_global")).toHaveLength(1);
     });
     expect(
-      screen.getByText(/规范副本、Skills CLI 创建的平台链接，以及 lock 中的对应行/),
+      within(dialog).getByText(/规范副本、Skills CLI 创建的平台链接，以及 lock 中的对应行/),
     ).toBeInTheDocument();
+    expect(showSkillsCliActionToast).toHaveBeenCalledWith(
+      expect.objectContaining({ semantic: "destructiveError" }),
+    );
   });
 
   it("hides the sidebar entry unless ActiveTarget is Local", () => {
@@ -468,6 +522,189 @@ describe("SkillsCliView", () => {
     resolveList?.(listGlobal);
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "刷新" })).toBeEnabled();
+    });
+  });
+
+  it("toggles selection from the card, merges Select all, and shows the batch bar", async () => {
+    mockHappyPath();
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+    fireEvent.click(screen.getByRole("button", { name: "全选" }));
+    expect(screen.getByLabelText("选择技能")).toBeChecked();
+    expect(screen.getByTestId("skills-cli-batch-bar")).toHaveTextContent("已选 1 项");
+    fireEvent.click(screen.getByTestId("skills-cli-dense-card-demo-skill"));
+    expect(screen.getByLabelText("选择技能")).not.toBeChecked();
+    expect(screen.queryByTestId("skills-cli-batch-bar")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("skills-cli-dense-card-demo-skill"));
+    expect(screen.getByLabelText("选择技能")).toBeChecked();
+    expect(screen.getByTestId("skills-cli-active-surface")).toHaveAttribute(
+      "data-kind",
+      "none",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "选择" }));
+    expect(screen.queryByLabelText("选择技能")).not.toBeInTheDocument();
+  });
+
+  it("does not clear selection when Escape originates from a text input", async () => {
+    mockHappyPath();
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+    fireEvent.click(screen.getByRole("button", { name: "选择" }));
+    fireEvent.click(screen.getByLabelText("选择技能"));
+    const search = screen.getByLabelText("搜索技能");
+    search.focus();
+    fireEvent.keyDown(search, { key: "Escape" });
+    expect(screen.getByLabelText("选择技能")).toBeChecked();
+  });
+
+  it("exports the unfiltered inventory and stays silent when the save dialog is cancelled", async () => {
+    mockHappyPath();
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+    fireEvent.change(screen.getByLabelText("搜索技能"), {
+      target: { value: "no-such-skill" },
+    });
+    saveMock.mockResolvedValueOnce(null);
+    fireEvent.click(screen.getByRole("button", { name: "导出全部" }));
+    await waitFor(() => expect(saveMock).toHaveBeenCalled());
+    expect(ipcInvokeCalls("skills_cli_export_inventory")).toHaveLength(0);
+    expect(showSkillsCliActionToast).not.toHaveBeenCalled();
+
+    saveMock.mockResolvedValueOnce("D:/tmp/all.json");
+    fireEvent.click(screen.getByRole("button", { name: "导出全部" }));
+    await waitFor(() => {
+      expect(ipcInvokeCalls("skills_cli_export_inventory")).toHaveLength(1);
+    });
+    const payload = ipcInvokeCalls("skills_cli_export_inventory")[0]?.args as {
+      json: string;
+    };
+    expect(JSON.parse(payload.json).scope).toBe("all");
+    expect(JSON.parse(payload.json).skillCount).toBe(1);
+    expect(JSON.parse(payload.json).skills[0].name).toBe("demo-skill");
+    expect(showSkillsCliActionToast).toHaveBeenCalledWith({
+      semantic: "success",
+      message: "已导出完整 Skills CLI 库存。",
+    });
+  });
+
+  it("links only missing placements and toasts ordinary success semantic", async () => {
+    const missingSkill = {
+      ...skills[0],
+      placements: [
+        {
+          agentId: "cursor",
+          displayName: "Cursor",
+          targetPath: "/tmp/cursor/skills/demo-skill",
+          state: "missing" as const,
+          managedLinkKind: null,
+          reasonCode: null,
+        },
+      ],
+    };
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: { ...listGlobal, skills: [missingSkill] },
+      skills_cli_install_targets: targets,
+      skills_cli_link_platform: {
+        agentId: "cursor",
+        displayName: "Cursor",
+        targetPath: "/tmp/cursor/skills/demo-skill",
+        state: "managed_link",
+        managedLinkKind: "windows_junction",
+        reasonCode: null,
+      },
+    });
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+    fireEvent.click(screen.getByRole("button", { name: "全选" }));
+    fireEvent.click(screen.getByTestId("skills-cli-batch-link"));
+    fireEvent.click(
+      await screen.findByTestId(
+        "skills-cli-batch-link-cursor",
+        {},
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      ),
+    );
+    await waitFor(
+      () => {
+        expect(ipcInvokeCalls("skills_cli_link_platform")).toHaveLength(1);
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    expect(ipcInvokeCalls("skills_cli_link_platform")[0]?.args).toMatchObject({
+      skillName: "demo-skill",
+      skillportAgentId: "cursor",
+    });
+    expect(showSkillsCliActionToast).toHaveBeenCalledWith({
+      semantic: "success",
+      message: "已链接 1 处。",
+    });
+  });
+
+  it("unlinks only managed links with ordinary toast semantic", async () => {
+    const linkedSkill = {
+      ...skills[0],
+      placements: [
+        {
+          agentId: "cursor",
+          displayName: "Cursor",
+          targetPath: "/tmp/cursor/skills/demo-skill",
+          state: "managed_link" as const,
+          managedLinkKind: "windows_junction" as const,
+          reasonCode: null,
+        },
+      ],
+    };
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: { ...listGlobal, skills: [linkedSkill] },
+      skills_cli_install_targets: targets,
+      skills_cli_unlink_platform: {
+        agentId: "cursor",
+        displayName: "Cursor",
+        targetPath: "/tmp/cursor/skills/demo-skill",
+        state: "missing",
+        managedLinkKind: null,
+        reasonCode: null,
+      },
+    });
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+    fireEvent.click(screen.getByRole("button", { name: "全选" }));
+    fireEvent.click(screen.getByRole("button", { name: "取消链接" }));
+    await waitFor(
+      () => {
+        expect(ipcInvokeCalls("skills_cli_unlink_platform")).toHaveLength(1);
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    expect(showSkillsCliActionToast).toHaveBeenCalledWith({
+      semantic: "success",
+      message: "已取消链接 1 处。",
+    });
+  });
+
+  it("exports the current selection in store order", async () => {
+    mockHappyPath();
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+    fireEvent.click(screen.getByRole("button", { name: "全选" }));
+    saveMock.mockResolvedValueOnce("D:/tmp/selected.json");
+    fireEvent.click(screen.getByRole("button", { name: "导出所选" }));
+    await waitFor(
+      () => {
+        expect(ipcInvokeCalls("skills_cli_export_inventory")).toHaveLength(1);
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    const payload = ipcInvokeCalls("skills_cli_export_inventory")[0]?.args as {
+      json: string;
+    };
+    expect(JSON.parse(payload.json).scope).toBe("selected");
+    expect(JSON.parse(payload.json).skillCount).toBe(1);
+    expect(showSkillsCliActionToast).toHaveBeenCalledWith({
+      semantic: "success",
+      message: "已导出选定技能。",
     });
   });
 });

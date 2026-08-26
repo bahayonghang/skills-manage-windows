@@ -1,6 +1,14 @@
 import { create } from "zustand";
 import { invoke } from "@/lib/ipc";
-import { backendErrorStateValue } from "@/lib/backendError";
+import { backendErrorStateValue, parseBackendError } from "@/lib/backendError";
+import {
+  emptyPlacementOutcome,
+  partitionLinkBatch,
+  partitionUnlinkBatch,
+  SKILLS_CLI_SKIP_NO_PLACEMENT,
+  type PlacementMutationOutcome,
+  type PlacementPartitionItem,
+} from "@/pages/skillsCliBatchModel";
 import type {
   SkillsCliAddResult,
   SkillsCliDoctorReport,
@@ -11,6 +19,13 @@ import type {
   SkillsCliSkillDoc,
   SkillsCliSourcePreview,
 } from "@/types";
+
+export type { PlacementMutationOutcome };
+
+export interface SkillsCliExportInventoryInput {
+  path: string;
+  json: string;
+}
 
 export interface SkillsCliAddInput {
   source: string;
@@ -57,17 +72,185 @@ interface SkillsCliState {
   previewRemoveGlobal: (skillName: string) => Promise<SkillsCliRemovePlan | null>;
   readSkillMd: (skillName: string) => Promise<SkillsCliSkillDoc | null>;
   revealSkillFolder: (skillName: string) => Promise<boolean>;
-  linkPlatform: (
-    skillName: string,
-    skillportAgentId: string,
-  ) => Promise<SkillsCliPlacement | null>;
-  unlinkPlatform: (
-    skillName: string,
-    skillportAgentId: string,
-  ) => Promise<SkillsCliPlacement | null>;
-  exportInventory: (path: string, json: string) => Promise<boolean>;
+  linkPlatform: (skillName: string, agentId: string) => Promise<void>;
+  unlinkPlatform: (skillName: string, agentId: string) => Promise<void>;
+  linkPlatformBatch: (
+    skillNames: string[],
+    agentId: string,
+  ) => Promise<PlacementMutationOutcome>;
+  unlinkManagedBatch: (skillNames: string[]) => Promise<PlacementMutationOutcome>;
+  removeGlobalBatch: (skillNames: string[]) => Promise<PlacementMutationOutcome>;
+  exportInventory: (input: SkillsCliExportInventoryInput) => Promise<void>;
   cancelJob: () => Promise<void>;
   resetForTargetChange: () => void;
+}
+
+function errorCodeFrom(error: unknown): string {
+  return parseBackendError(error).code ?? "internal.unexpected";
+}
+
+function replacePlacement(
+  skills: SkillsCliGlobalSkill[],
+  skillName: string,
+  agentId: string,
+  next: SkillsCliPlacement,
+): SkillsCliGlobalSkill[] {
+  return skills.map((skill) => {
+    if (skill.name !== skillName) {
+      return skill;
+    }
+    return {
+      ...skill,
+      placements: skill.placements.map((placement) =>
+        placement.agentId === agentId ? next : placement,
+      ),
+    };
+  });
+}
+
+function omitSkill(
+  skills: SkillsCliGlobalSkill[],
+  skillName: string,
+): SkillsCliGlobalSkill[] {
+  return skills.filter((skill) => skill.name !== skillName);
+}
+
+function restoreSkill(
+  skills: SkillsCliGlobalSkill[],
+  snapshot: SkillsCliGlobalSkill,
+): SkillsCliGlobalSkill[] {
+  if (skills.some((skill) => skill.name === snapshot.name)) {
+    return skills.map((skill) =>
+      skill.name === snapshot.name ? snapshot : skill,
+    );
+  }
+  return [...skills, snapshot];
+}
+
+function throwIfSingleOutcomeFailed(outcome: PlacementMutationOutcome): void {
+  const failed = outcome.failed[0];
+  if (failed) {
+    throw new Error(`${failed.errorCode}:`);
+  }
+  const skipped = outcome.skipped[0];
+  if (skipped && outcome.succeeded.length === 0) {
+    throw new Error(`${skipped.reasonCode}:`);
+  }
+}
+
+function optimisticPlacement(
+  previous: SkillsCliPlacement,
+  kind: "link" | "unlink",
+): SkillsCliPlacement {
+  if (kind === "link") {
+    return {
+      ...previous,
+      state: "managed_link",
+      managedLinkKind: previous.managedLinkKind ?? "windows_junction",
+      reasonCode: null,
+    };
+  }
+  return {
+    ...previous,
+    state: "missing",
+    managedLinkKind: null,
+    reasonCode: null,
+  };
+}
+
+async function runPlacementBatch(
+  get: () => SkillsCliState,
+  set: (patch: Partial<SkillsCliState>) => void,
+  items: PlacementPartitionItem[],
+  kind: "link" | "unlink",
+): Promise<PlacementMutationOutcome> {
+  const outcome = emptyPlacementOutcome();
+  set({ isMutating: true, actionError: null });
+  try {
+    for (const item of items) {
+      const jobId = newJobId();
+      set({ jobId });
+      const previous =
+        get().skills
+          .find((skill) => skill.name === item.skillName)
+          ?.placements.find((placement) => placement.agentId === item.agentId) ??
+        item.placement;
+      set({
+        skills: replacePlacement(
+          get().skills,
+          item.skillName,
+          item.agentId,
+          optimisticPlacement(previous, kind),
+        ),
+      });
+      try {
+        const result =
+          kind === "link"
+            ? await invoke("skills_cli_link_platform", {
+                jobId,
+                skillName: item.skillName,
+                skillportAgentId: item.agentId,
+              })
+            : await invoke("skills_cli_unlink_platform", {
+                jobId,
+                skillName: item.skillName,
+                skillportAgentId: item.agentId,
+              });
+        if (get().jobId === jobId && result) {
+          set({
+            skills: replacePlacement(
+              get().skills,
+              item.skillName,
+              item.agentId,
+              result,
+            ),
+          });
+        }
+        outcome.succeeded.push({
+          skillName: item.skillName,
+          agentId: item.agentId,
+        });
+      } catch (error) {
+        if (get().jobId === jobId) {
+          set({
+            skills: replacePlacement(
+              get().skills,
+              item.skillName,
+              item.agentId,
+              previous,
+            ),
+            actionError: backendErrorStateValue(error),
+          });
+        }
+        outcome.failed.push({
+          skillName: item.skillName,
+          agentId: item.agentId,
+          errorCode: errorCodeFrom(error),
+        });
+      }
+    }
+  } finally {
+    if (get().isMutating) {
+      set({ isMutating: false, jobId: null });
+    }
+    await refreshInventoryAfterMutation(get, set);
+  }
+  return outcome;
+}
+
+async function refreshInventoryAfterMutation(
+  get: () => SkillsCliState,
+  set: (patch: Partial<SkillsCliState>) => void,
+): Promise<void> {
+  try {
+    await get().loadAll();
+  } catch (error) {
+    set({
+      isLoading: false,
+      isRefreshing: false,
+      inventoryError: get().inventoryError ?? backendErrorStateValue(error),
+    });
+  }
 }
 
 const emptyState = {
@@ -181,30 +364,11 @@ export const useSkillsCliStore = create<SkillsCliState>((set, get) => ({
   },
 
   async removeGlobal(skillName) {
-    if (get().isMutating || get().isCancelling) {
-      throw new Error(BUSY_ENVELOPE);
-    }
-    const jobId = newJobId();
-    set({ isMutating: true, actionError: null, jobId });
-    try {
-      await invoke("skills_cli_remove_global", { jobId, skillName });
-      if (get().jobId !== jobId) {
-        return true;
-      }
-      set({ isMutating: false, jobId: null });
-      await get().loadAll();
-      return true;
-    } catch (error) {
-      if (get().jobId !== jobId) {
-        return false;
-      }
-      set({
-        actionError: backendErrorStateValue(error),
-        isMutating: false,
-        jobId: null,
-      });
-      return false;
-    }
+    const outcome = await get().removeGlobalBatch([skillName]);
+    return (
+      outcome.failed.length === 0 &&
+      outcome.succeeded.some((item) => item.skillName === skillName)
+    );
   },
 
   async previewRemoveGlobal(skillName) {
@@ -238,76 +402,123 @@ export const useSkillsCliStore = create<SkillsCliState>((set, get) => ({
     }
   },
 
-  async linkPlatform(skillName, skillportAgentId) {
+  async linkPlatform(skillName, agentId) {
+    const outcome = await get().linkPlatformBatch([skillName], agentId);
+    throwIfSingleOutcomeFailed(outcome);
+  },
+
+  async unlinkPlatform(skillName, agentId) {
     if (get().isMutating || get().isCancelling) {
       throw new Error(BUSY_ENVELOPE);
     }
-    const jobId = newJobId();
-    set({ isMutating: true, actionError: null, jobId });
-    try {
-      const result = await invoke("skills_cli_link_platform", {
-        jobId,
-        skillName,
-        skillportAgentId,
-      });
-      if (get().jobId !== jobId) {
-        return result;
+    const partition = partitionUnlinkBatch(get().skills, [skillName]);
+    const match = partition.allowed.filter((item) => item.agentId === agentId);
+    const skipped = partition.skipped.filter((item) => item.agentId === agentId);
+    const outcome = emptyPlacementOutcome();
+    outcome.skipped.push(...skipped);
+    if (match.length === 0) {
+      if (skipped.length === 0) {
+        outcome.skipped.push({
+          skillName,
+          agentId,
+          reasonCode: SKILLS_CLI_SKIP_NO_PLACEMENT,
+        });
       }
-      set({ isMutating: false, jobId: null });
-      await get().loadAll();
-      return result;
-    } catch (error) {
-      if (get().jobId !== jobId) {
-        return null;
-      }
-      set({
-        actionError: backendErrorStateValue(error),
-        isMutating: false,
-        jobId: null,
-      });
-      return null;
+      throwIfSingleOutcomeFailed(outcome);
+      return;
     }
+    const batchOutcome = await runPlacementBatch(
+      get,
+      set,
+      match,
+      "unlink",
+    );
+    outcome.succeeded.push(...batchOutcome.succeeded);
+    outcome.failed.push(...batchOutcome.failed);
+    throwIfSingleOutcomeFailed(outcome);
   },
 
-  async unlinkPlatform(skillName, skillportAgentId) {
+  async linkPlatformBatch(skillNames, agentId) {
     if (get().isMutating || get().isCancelling) {
       throw new Error(BUSY_ENVELOPE);
     }
-    const jobId = newJobId();
-    set({ isMutating: true, actionError: null, jobId });
-    try {
-      const result = await invoke("skills_cli_unlink_platform", {
-        jobId,
-        skillName,
-        skillportAgentId,
-      });
-      if (get().jobId !== jobId) {
-        return result;
-      }
-      set({ isMutating: false, jobId: null });
-      await get().loadAll();
-      return result;
-    } catch (error) {
-      if (get().jobId !== jobId) {
-        return null;
-      }
-      set({
-        actionError: backendErrorStateValue(error),
-        isMutating: false,
-        jobId: null,
-      });
-      return null;
+    const partition = partitionLinkBatch(get().skills, skillNames, agentId);
+    const outcome = emptyPlacementOutcome();
+    outcome.skipped.push(...partition.skipped);
+    if (partition.allowed.length === 0) {
+      return outcome;
     }
+    const ran = await runPlacementBatch(get, set, partition.allowed, "link");
+    outcome.succeeded.push(...ran.succeeded);
+    outcome.failed.push(...ran.failed);
+    return outcome;
   },
 
-  async exportInventory(path, json) {
+  async unlinkManagedBatch(skillNames) {
+    if (get().isMutating || get().isCancelling) {
+      throw new Error(BUSY_ENVELOPE);
+    }
+    const partition = partitionUnlinkBatch(get().skills, skillNames);
+    const outcome = emptyPlacementOutcome();
+    outcome.skipped.push(...partition.skipped);
+    if (partition.allowed.length === 0) {
+      return outcome;
+    }
+    const ran = await runPlacementBatch(get, set, partition.allowed, "unlink");
+    outcome.succeeded.push(...ran.succeeded);
+    outcome.failed.push(...ran.failed);
+    return outcome;
+  },
+
+  async removeGlobalBatch(skillNames) {
+    if (get().isMutating || get().isCancelling) {
+      throw new Error(BUSY_ENVELOPE);
+    }
+    const outcome = emptyPlacementOutcome();
+    if (skillNames.length === 0) {
+      return outcome;
+    }
+    set({ isMutating: true, actionError: null });
+    try {
+      for (const skillName of skillNames) {
+        const jobId = newJobId();
+        set({ jobId });
+        const snapshot = get().skills.find((skill) => skill.name === skillName);
+        if (snapshot) {
+          set({ skills: omitSkill(get().skills, skillName) });
+        }
+        try {
+          await invoke("skills_cli_remove_global", { jobId, skillName });
+          outcome.succeeded.push({ skillName });
+        } catch (error) {
+          if (get().jobId === jobId && snapshot) {
+            set({ skills: restoreSkill(get().skills, snapshot) });
+          }
+          if (get().jobId === jobId) {
+            set({ actionError: backendErrorStateValue(error) });
+          }
+          outcome.failed.push({
+            skillName,
+            errorCode: errorCodeFrom(error),
+          });
+        }
+      }
+    } finally {
+      if (get().isMutating) {
+        set({ isMutating: false, jobId: null });
+      }
+      await refreshInventoryAfterMutation(get, set);
+    }
+    return outcome;
+  },
+
+  async exportInventory({ path, json }) {
     set({ actionError: null });
     try {
       await invoke("skills_cli_export_inventory", { path, json });
-      return true;
     } catch (error) {
       set({ actionError: backendErrorStateValue(error) });
-      return false;
+      throw error;
     }
   },
 

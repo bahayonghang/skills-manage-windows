@@ -22,6 +22,7 @@ const targets = [
   {
     id: "cursor",
     displayName: "Cursor",
+    iconName: null,
     cliAgent: "cursor",
     isEnabled: true,
     defaultSelected: true,
@@ -29,6 +30,7 @@ const targets = [
   {
     id: "amp",
     displayName: "Amp",
+    iconName: null,
     cliAgent: "amp",
     isEnabled: false,
     defaultSelected: false,
@@ -314,5 +316,286 @@ describe("skillsCliStore", () => {
   it("does not invoke cancel when jobId is null", async () => {
     await useSkillsCliStore.getState().cancelJob();
     expect(ipcInvokeCalls("cancel_skills_cli_job")).toHaveLength(0);
+  });
+});
+
+function placement(
+  agentId: string,
+  state: "managed_link" | "direct_copy" | "missing" | "conflict" | "unavailable",
+  displayName = agentId,
+) {
+  return {
+    agentId,
+    displayName,
+    targetPath: `/tmp/${agentId}/skills/x`,
+    state,
+    managedLinkKind: state === "managed_link" ? ("windows_junction" as const) : null,
+    reasonCode: null,
+  };
+}
+
+function globalSkill(
+  name: string,
+  placements: ReturnType<typeof placement>[],
+) {
+  return {
+    name,
+    path: `/tmp/${name}`,
+    installKind: "canonical" as const,
+    scope: "global",
+    agents: [],
+    source: "owner/repo",
+    sourceUrl: null,
+    sourceType: "github",
+    sourceTypeBucket: "github" as const,
+    canonicalPath: `/tmp/${name}`,
+    folderHash: null,
+    installedAt: null,
+    updatedAt: null,
+    placements,
+  };
+}
+
+const linkedPlacement = {
+  agentId: "cursor",
+  displayName: "Cursor",
+  targetPath: "/tmp/cursor/skills/x",
+  state: "managed_link" as const,
+  managedLinkKind: "windows_junction" as const,
+  reasonCode: null,
+};
+
+const missingPlacement = {
+  ...linkedPlacement,
+  state: "missing" as const,
+  managedLinkKind: null,
+};
+
+describe("skillsCliStore placement mutations", () => {
+  beforeEach(resetState);
+
+  it("skips link/unlink IPC for direct_copy, conflict, and unavailable", async () => {
+    useSkillsCliStore.setState({
+      skills: [
+        globalSkill("copy", [placement("cursor", "direct_copy")]),
+        globalSkill("conflict", [placement("cursor", "conflict")]),
+        globalSkill("gone", [placement("cursor", "unavailable")]),
+      ],
+    });
+    await expect(
+      useSkillsCliStore.getState().linkPlatform("copy", "cursor"),
+    ).rejects.toThrow(/direct_copy_not_toggleable/);
+    await expect(
+      useSkillsCliStore.getState().linkPlatform("conflict", "cursor"),
+    ).rejects.toThrow(/placement_conflict/);
+    await expect(
+      useSkillsCliStore.getState().linkPlatform("gone", "cursor"),
+    ).rejects.toThrow(/placement_unavailable/);
+    await expect(
+      useSkillsCliStore.getState().unlinkPlatform("copy", "cursor"),
+    ).rejects.toThrow(/direct_copy_not_toggleable/);
+    expect(ipcInvokeCalls("skills_cli_link_platform")).toHaveLength(0);
+    expect(ipcInvokeCalls("skills_cli_unlink_platform")).toHaveLength(0);
+  });
+
+  it("links only missing placements serially, rolls back a failed item, and keeps a failed refresh from flipping success", async () => {
+    const missingA = globalSkill("alpha", [placement("cursor", "missing")]);
+    const missingB = globalSkill("beta", [placement("cursor", "missing")]);
+    const copyC = globalSkill("gamma", [placement("cursor", "direct_copy")]);
+    useSkillsCliStore.setState({
+      skills: [missingA, missingB, copyC],
+      targets,
+      doctor,
+    });
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_install_targets: targets,
+      skills_cli_list_global: () => {
+        throw ipcFixtureError("internal.unexpected", "list failed");
+      },
+      skills_cli_link_platform: ({ skillName }: { skillName: string }) => {
+        if (skillName === "beta") {
+          throw ipcFixtureError(
+            "skills_cli.busy",
+            "Another skill operation is using this target.",
+          );
+        }
+        return linkedPlacement;
+      },
+    });
+
+    const outcome = await useSkillsCliStore.getState().linkPlatformBatch(
+      ["alpha", "beta", "gamma"],
+      "cursor",
+    );
+
+    expect(outcome.succeeded).toEqual([{ skillName: "alpha", agentId: "cursor" }]);
+    expect(outcome.failed).toEqual([
+      { skillName: "beta", agentId: "cursor", errorCode: "skills_cli.busy" },
+    ]);
+    expect(outcome.skipped).toEqual([
+      {
+        skillName: "gamma",
+        agentId: "cursor",
+        reasonCode: "skills_cli.direct_copy_not_toggleable",
+      },
+    ]);
+    expect(ipcInvokeCalls("skills_cli_link_platform")).toHaveLength(2);
+    expect(
+      ipcInvokeCalls("skills_cli_link_platform").map(
+        (call) => (call.args as { skillName: string }).skillName,
+      ),
+    ).toEqual(["alpha", "beta"]);
+    const skills = useSkillsCliStore.getState().skills;
+    expect(skills.find((item) => item.name === "alpha")?.placements[0]?.state).toBe(
+      "managed_link",
+    );
+    expect(skills.find((item) => item.name === "beta")?.placements[0]?.state).toBe(
+      "missing",
+    );
+    expect(skills.find((item) => item.name === "gamma")?.placements[0]?.state).toBe(
+      "direct_copy",
+    );
+    expect(useSkillsCliStore.getState().inventoryError).toContain("internal.unexpected");
+    expect(useSkillsCliStore.getState().isMutating).toBe(false);
+  });
+
+  it("keeps a successful mutation outcome when trailing refresh throws", async () => {
+    const missingA = globalSkill("alpha", [placement("cursor", "missing")]);
+    useSkillsCliStore.setState({
+      skills: [missingA],
+      targets,
+      doctor,
+    });
+    mockIpcCommand("skills_cli_link_platform", linkedPlacement);
+    const originalLoadAll = useSkillsCliStore.getState().loadAll;
+    useSkillsCliStore.setState({
+      loadAll: async () => {
+        throw new Error("internal.unexpected:refresh boom");
+      },
+    });
+    try {
+      const outcome = await useSkillsCliStore.getState().linkPlatformBatch(
+        ["alpha"],
+        "cursor",
+      );
+      expect(outcome.succeeded).toEqual([
+        { skillName: "alpha", agentId: "cursor" },
+      ]);
+      expect(outcome.failed).toEqual([]);
+      expect(useSkillsCliStore.getState().inventoryError).toContain(
+        "internal.unexpected",
+      );
+      expect(useSkillsCliStore.getState().isMutating).toBe(false);
+    } finally {
+      useSkillsCliStore.setState({ loadAll: originalLoadAll });
+    }
+  });
+
+  it("unlinks only managed_link placements and does not send force or keep-links flags", async () => {
+    useSkillsCliStore.setState({
+      skills: [
+        globalSkill("linked", [placement("cursor", "managed_link")]),
+        globalSkill("copy", [placement("amp", "direct_copy")]),
+      ],
+      doctor,
+      targets,
+    });
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_install_targets: targets,
+      skills_cli_list_global: listGlobal,
+      skills_cli_unlink_platform: missingPlacement,
+    });
+    const outcome = await useSkillsCliStore.getState().unlinkManagedBatch([
+      "linked",
+      "copy",
+    ]);
+    expect(outcome.succeeded).toEqual([{ skillName: "linked", agentId: "cursor" }]);
+    expect(outcome.skipped[0]?.reasonCode).toBe(
+      "skills_cli.direct_copy_not_toggleable",
+    );
+    expect(ipcInvokeCalls("skills_cli_unlink_platform")).toHaveLength(1);
+    const args = ipcInvokeCalls("skills_cli_unlink_platform")[0]?.args as Record<
+      string,
+      unknown
+    >;
+    expect(args).toMatchObject({
+      skillName: "linked",
+      skillportAgentId: "cursor",
+    });
+    expect(args).not.toHaveProperty("force");
+    expect(args).not.toHaveProperty("keepLinks");
+    expect(JSON.stringify(args)).not.toContain("--force");
+    expect(JSON.stringify(args)).not.toContain("--keep-links");
+  });
+
+  it("removes serially, restores a failed name, and still refreshes afterwards", async () => {
+    const keep = globalSkill("keep", [placement("cursor", "managed_link")]);
+    const drop = globalSkill("drop", [placement("cursor", "managed_link")]);
+    useSkillsCliStore.setState({ skills: [keep, drop], doctor, targets });
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_install_targets: targets,
+      skills_cli_list_global: {
+        skills: [keep],
+        canonicalRoot: "/tmp/agents",
+        lockPath: "/tmp/agents/skills.lock",
+      },
+      skills_cli_remove_global: ({ skillName }: { skillName: string }) => {
+        if (skillName === "keep") {
+          throw ipcFixtureError(
+            "skills_cli.placement_conflict",
+            "Conflict",
+          );
+        }
+        return {
+          removedCanonical: true,
+          removedManagedAgentIds: ["cursor"],
+          retainedDirectCopyAgentIds: [],
+        };
+      },
+    });
+    const outcome = await useSkillsCliStore.getState().removeGlobalBatch([
+      "keep",
+      "drop",
+    ]);
+    expect(outcome.failed).toEqual([
+      { skillName: "keep", errorCode: "skills_cli.placement_conflict" },
+    ]);
+    expect(outcome.succeeded).toEqual([{ skillName: "drop" }]);
+    expect(useSkillsCliStore.getState().skills.map((item) => item.name)).toEqual([
+      "keep",
+    ]);
+    expect(ipcInvokeCalls("skills_cli_remove_global")).toHaveLength(2);
+  });
+
+  it("writes export JSON through IPC and surfaces a coded failure", async () => {
+    mockIpcCommand("skills_cli_export_inventory", null);
+    await useSkillsCliStore.getState().exportInventory({
+      path: "D:/tmp/out.json",
+      json: "{\"schemaVersion\":1}\n",
+    });
+    expect(ipcInvokeCalls("skills_cli_export_inventory")).toEqual([
+      {
+        command: "skills_cli_export_inventory",
+        args: { path: "D:/tmp/out.json", json: "{\"schemaVersion\":1}\n" },
+      },
+    ]);
+    mockIpcCommand("skills_cli_export_inventory", () => {
+      throw ipcFixtureError(
+        "skills_cli.export_failed",
+        "The export could not be written.",
+      );
+    });
+    await expect(
+      useSkillsCliStore.getState().exportInventory({
+        path: "D:/tmp/out.json",
+        json: "{}\n",
+      }),
+    ).rejects.toThrow(/export could not be written|skills_cli.export_failed/);
+    expect(useSkillsCliStore.getState().actionError).toContain(
+      "skills_cli.export_failed",
+    );
   });
 });
