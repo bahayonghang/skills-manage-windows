@@ -1,0 +1,10 @@
+{"file":".trellis/tasks/08-26-skills-cli-redesign/research/design-contract.md","reason":"验收 exact content-width 断点、76px dense 卡片、surface/Escape 与原生证据边界。"}
+{"file":".trellis/spec/frontend/async-ui-test-stability.md","reason":"异步页面和受控浮层测试的局部等待与稳定性。"}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"验证失败保留表面、safe formatter、retry 与 stale error。"}
+{"file":".trellis/spec/frontend/job-correlation-cancellation.md","reason":"验证 add action 当前/stale job 不串写且 cancellation 保持相关性。"}
+{"file":".trellis/spec/frontend/skill-card-scenarios.md","reason":"验证七场景类型互斥和单一卡片所有权。"}
+{"file":".trellis/spec/frontend/icon-control-hit-area.md","reason":"验证图标热区、焦点可见性与 hover/focus 等价。"}
+{"file":".trellis/spec/frontend/dashboard-data-contract.md","reason":"验证 Dashboard 迁移不重算或覆盖 central summary。"}
+{"file":".trellis/spec/quality/jsdom-browser-api-stubs.md","reason":"验证 ResizeObserver/jsdom 替身与 Tailwind container 产物 CSS。"}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"focused checks、build、just ci 与 dev 分支交付门禁。"}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"检查新增测试路径、发现规则与 focused 命令真实可收集。"}

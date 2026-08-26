@@ -1,0 +1,46 @@
+{
+  "id": "page-shell",
+  "name": "page-shell",
+  "title": "Skills CLI 页面骨架与紧凑卡片网格",
+  "description": "重排 /skills-cli 主体为标题行 + 工具栏 + 分组四列紧凑卡片网格 + 页尾，扩展 UnifiedSkillCard 的 skillsCli 紧凑场景，并把 InventoryCensus 迁到 /dashboard。",
+  "status": "completed",
+  "dev_type": "feature",
+  "scope": "frontend",
+  "package": "app",
+  "priority": "P1",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-08-26",
+  "completedAt": "2026-08-26",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "08-26-skills-cli-redesign",
+  "relatedFiles": [
+    "src/pages/SkillsCliView.tsx",
+    "src/pages/skillsCliViewModel.ts",
+    "src/pages/DashboardView.tsx",
+    "src/components/skillsCli/SkillsCliHeader.tsx",
+    "src/components/skillsCli/SkillsCliToolbar.tsx",
+    "src/components/skillsCli/SkillsCliGroupHeader.tsx",
+    "src/components/skillsCli/SkillsCliInstallMount.tsx",
+    "src/components/skillsCli/skillsCliActionToast.tsx",
+    "src/components/skill/UnifiedSkillCard.tsx",
+    "src/components/skill/UnifiedSkillCard.types.ts",
+    "src/stores/skillsCliStore.ts",
+    "src/test/stores/skillsCliStore.test.ts",
+    "src/i18n/locales/en.json",
+    "src/i18n/locales/zh.json"
+  ],
+  "notes": "Planning only. Hard dependency: 08-26-backend-contract must complete and merge to dev before start.",
+  "meta": {
+    "dependencies": [
+      "08-26-backend-contract"
+    ],
+    "normativeDesign": ".trellis/tasks/08-26-skills-cli-redesign/research/design-contract.md"
+  }
+}

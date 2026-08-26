@@ -1,0 +1,11 @@
+{"file":".trellis/tasks/08-26-skills-cli-redesign/research/design-contract.md","reason":"规范性八区布局、dense 卡片、placement、响应式、surface、焦点与 token 契约；静态 HTML 非规范。"}
+{"file":".trellis/spec/frontend/index.md","reason":"前端实现规范索引与适用规范路由。"}
+{"file":".trellis/spec/frontend/skill-card-scenarios.md","reason":"UnifiedSkillCard 判别联合、toModel 单点映射及跨场景负类型测试。"}
+{"file":".trellis/spec/frontend/platform-grouping.md","reason":"平台 registry 顺序、PlatformIcon 与禁止复制平台 ID 列表。"}
+{"file":".trellis/spec/frontend/icon-control-hit-area.md","reason":"小图标按钮热区、hover/focus-visible 和键盘可达性。"}
+{"file":".trellis/spec/frontend/typography-tokens.md","reason":"字体缩放、语义字号、no-growth 与 CJK fallback。"}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"runtime/inventory/action 错误的安全本地化与可见反馈边界。"}
+{"file":".trellis/spec/frontend/job-correlation-cancellation.md","reason":"add mutation-only action 的 job id、busy、cancel 与 stale completion 契约。"}
+{"file":".trellis/spec/frontend/dashboard-data-contract.md","reason":"InventoryCensus 迁移时保持 dashboardCentralSummary 权威。"}
+{"file":".trellis/spec/backend/skills-cli-global.md","reason":"页面消费的 Skills CLI inventory、空库存、独立错误和 Local target 契约。"}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"所有 Vitest 必须位于 src/test 并由仓库 include 规则收集。"}
