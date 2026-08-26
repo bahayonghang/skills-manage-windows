@@ -1,0 +1,7 @@
+{"file":".trellis/spec/frontend/async-ui-test-stability.md","reason":"Drawer integration tests must await the named surface and use bounded local waits."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Check retryable inline errors, safe toast formatting and stale error clearing."}
+{"file":".trellis/spec/frontend/icon-control-hit-area.md","reason":"Review keyboard reachability, focus restoration and small-control hit areas."}
+{"file":".trellis/spec/quality/index.md","reason":"Quality-layer review entrypoint for targeted and final gates."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Keep drawer, store and page tests discoverable in parallel and serial runners."}
+{"file":".trellis/spec/quality/jsdom-browser-api-stubs.md","reason":"Check 719/720 responsive tests without corrupting shared matchMedia behavior."}
+{"file":".trellis/tasks/08-26-skills-cli-redesign/research/design-contract.md","reason":"Acceptance source for exact 720px breakpoint, placement rows, topmost Escape and native evidence boundary."}
