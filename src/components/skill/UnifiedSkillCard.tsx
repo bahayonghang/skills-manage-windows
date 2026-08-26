@@ -19,8 +19,9 @@ import {
   UnifiedSkillCardFooter,
 } from "@/components/skill/UnifiedSkillCardFooter";
 import { CardTagEditor } from "@/components/skill/CardTagEditor";
+import { SkillCardDenseRow } from "@/components/skill/SkillCardDenseRow";
 import { SkillCardMeta } from "@/components/skill/SkillCardMeta";
-import type { CentralSkillUpdateState, ClaudeSourceKind } from "@/types";
+import type { CentralSkillUpdateState, ClaudeSourceKind, SkillsCliPlacement } from "@/types";
 import { cn } from "@/lib/utils";
 import {
   getPlatformTargetInstallAgentIds,
@@ -85,6 +86,11 @@ interface SkillCardModel {
   statusChipLabel?: string;
   editableTags?: SkillCardTypes.SkillCardEditableTags;
   footer?: SkillCardTypes.SkillCardFooter;
+  layout?: "denseRow";
+  path?: string | null;
+  placements?: readonly SkillsCliPlacement[];
+  updateAvailable?: boolean;
+  onManageLinks?: () => void;
 }
 
 /** 场景 → 渲染模型的唯一映射点：每分支只拷贝该场景合法字段。 */
@@ -188,10 +194,14 @@ function toModel(props: SkillCardTypes.UnifiedSkillCardProps): SkillCardModel {
     case "skillsCli":
       return {
         ...core,
-        publisher: props.source ?? undefined,
-        tags: props.agents.map((agent) => ({ key: agent, label: agent })),
+        layout: props.layout,
+        path: props.path,
+        placements: props.placements,
+        checkbox: props.checkbox,
+        updateAvailable: props.updateAvailable,
+        onDetail: props.onDetail,
+        onManageLinks: props.onManageLinks,
         onUninstall: props.onUninstall,
-        uninstallFromLabel: props.uninstallLabel,
         isLoading: props.isLoading,
       };
     default: {
@@ -204,6 +214,27 @@ function toModel(props: SkillCardTypes.UnifiedSkillCardProps): SkillCardModel {
 // ─── UnifiedSkillCard ─────────────────────────────────────────────────────────
 
 function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) {
+  const model = toModel(props);
+  if (model.layout === "denseRow") {
+    return (
+      <SkillCardDenseRow
+        name={model.name}
+        className={model.className}
+        path={model.path}
+        placements={model.placements ?? []}
+        checkbox={model.checkbox}
+        updateAvailable={model.updateAvailable}
+        onDetail={model.onDetail}
+        onManageLinks={model.onManageLinks}
+        onUninstall={model.onUninstall}
+        isLoading={model.isLoading}
+      />
+    );
+  }
+  return <SkillCardStandardCard model={model} />;
+}
+
+function SkillCardStandardCard({ model }: { model: SkillCardModel }) {
   const { t } = useTranslation();
   const {
     name,
@@ -239,7 +270,6 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
     uninstallFromLabel,
     onInstall,
     onRemove,
-    onUninstall,
     isLoading,
     detailButtonRef,
     density: rawDensity = "comfortable",
@@ -247,7 +277,7 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
     statusChipLabel,
     editableTags,
     footer,
-  } = toModel(props);
+  } = model;
 
   // "default" 是旧别名，归一化为 "comfortable"
   const density: Exclude<SkillCardTypes.SkillCardDensity, "default"> =
@@ -279,8 +309,7 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
     onInstallToPlatform ||
     onUninstallFromPlatform ||
     onInstall ||
-    onRemove ||
-    onUninstall
+    onRemove
   );
   const trimmedAiSummary = aiSummary?.trim() ?? "";
   const hasAiSummary = trimmedAiSummary.length > 0;
@@ -553,18 +582,6 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
                     idleAriaLabel={t("collection.removeSkillLabel", { name })}
                     confirmLabel={t("common.confirmDelete")}
                     icon={<X className="size-4" />}
-                  />
-                )}
-
-                {onUninstall && (
-                  <CardActionButton
-                    onClick={onUninstall}
-                    disabled={isLoading}
-                    title={uninstallFromLabel ?? t("common.uninstall")}
-                    ariaLabel={uninstallFromLabel ?? t("common.uninstall")}
-                    testId={`uninstall-skills-cli-${name}`}
-                    danger
-                    icon={<Trash2 className="size-4" />}
                   />
                 )}
 

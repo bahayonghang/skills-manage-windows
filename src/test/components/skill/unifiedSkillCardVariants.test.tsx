@@ -60,8 +60,10 @@ const positiveCases: UnifiedSkillCardProps[] = [
   },
   {
     variant: "skillsCli",
+    layout: "denseRow",
     name: "case-skills-cli",
-    agents: ["cursor"],
+    placements: [],
+    onDetail: noop,
     onUninstall: noop,
   },
 ];
@@ -141,11 +143,36 @@ const negativeCases: UnifiedSkillCardProps[] = [
   },
   {
     variant: "skillsCli",
+    layout: "denseRow",
     name: "bad-skills-cli",
-    agents: ["cursor"],
+    placements: [],
+    onDetail: noop,
     onUninstall: noop,
     // @ts-expect-error 场景互斥：skillsCli 不接受 collection 专属的 onRemove
     onRemove: noop,
+  },
+  {
+    variant: "central",
+    name: "bad-central-layout",
+    checkbox: { checked: false, onChange: noop },
+    onDetail: noop,
+    onInstallTo: noop,
+    onUninstallFromPlatforms: noop,
+    onUpdateCentral: noop,
+    onDeleteFromCentral: noop,
+    // @ts-expect-error 场景互斥：central 不接受 skillsCli 专属的 layout
+    layout: "denseRow",
+  },
+  {
+    variant: "platform",
+    name: "bad-platform-placements",
+    sourceType: "copy",
+    originKind: null,
+    isReadOnly: false,
+    onDetail: noop,
+    uninstallFromLabel: "卸载",
+    // @ts-expect-error 场景互斥：platform 不接受 skillsCli 专属的 placements
+    placements: [],
   },
 ];
 
@@ -154,7 +181,7 @@ const jsxNegativeCase = [
   // @ts-expect-error 场景互斥（JSX 形态）：collection 不接受 central 专属的 statusChipLabel
   <UnifiedSkillCard key="jsx-bad" variant="collection" name="jsx-bad" onDetail={noop} onInstallTo={noop} onRemove={noop} statusChipLabel="可更新" />,
   // @ts-expect-error 场景互斥（JSX 形态）：skillsCli 不接受 marketplace 专属的 onInstall
-  <UnifiedSkillCard key="jsx-skills-cli" variant="skillsCli" name="jsx-cli" agents={[]} onUninstall={noop} onInstall={noop} />,
+  <UnifiedSkillCard key="jsx-skills-cli" variant="skillsCli" layout="denseRow" name="jsx-cli" placements={[]} onDetail={noop} onUninstall={noop} onInstall={noop} />,
 ];
 
 describe("UnifiedSkillCard 场景 interface", () => {
@@ -167,7 +194,7 @@ describe("UnifiedSkillCard 场景 interface", () => {
   });
 
   it("互斥负例仅存在于编译期（运行时对象可构造）", () => {
-    expect(negativeCases).toHaveLength(7);
+    expect(negativeCases).toHaveLength(9);
     expect(jsxNegativeCase).toHaveLength(2);
   });
 });

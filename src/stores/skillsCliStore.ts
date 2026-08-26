@@ -12,8 +12,16 @@ import type {
   SkillsCliSourcePreview,
 } from "@/types";
 
+export interface SkillsCliAddInput {
+  source: string;
+  skillNames: string[];
+  skillportAgentIds: string[];
+}
+
 const BUSY_ENVELOPE =
   "skills_cli.busy:Another skill operation is using this target.";
+const SELECTION_EMPTY_ENVELOPE =
+  "skills_cli.selection_empty:Select at least one skill and one platform.";
 
 function newJobId(): string {
   return (
@@ -44,11 +52,7 @@ interface SkillsCliState {
 
   loadAll: () => Promise<void>;
   previewSource: (source: string) => Promise<SkillsCliSourcePreview | null>;
-  addGlobal: (input: {
-    source: string;
-    skillNames: string[];
-    skillportAgentIds: string[];
-  }) => Promise<SkillsCliAddResult | null>;
+  addGlobal: (input: SkillsCliAddInput) => Promise<SkillsCliAddResult>;
   removeGlobal: (skillName: string) => Promise<boolean>;
   previewRemoveGlobal: (skillName: string) => Promise<SkillsCliRemovePlan | null>;
   readSkillMd: (skillName: string) => Promise<SkillsCliSkillDoc | null>;
@@ -144,8 +148,8 @@ export const useSkillsCliStore = create<SkillsCliState>((set, get) => ({
 
   async addGlobal(input) {
     if (input.skillNames.length === 0 || input.skillportAgentIds.length === 0) {
-      set({ actionError: "skills_cli.selection_empty:Select at least one skill and one platform." });
-      return null;
+      set({ actionError: SELECTION_EMPTY_ENVELOPE });
+      throw new Error(SELECTION_EMPTY_ENVELOPE);
     }
     if (get().isMutating || get().isCancelling) {
       throw new Error(BUSY_ENVELOPE);
@@ -163,18 +167,16 @@ export const useSkillsCliStore = create<SkillsCliState>((set, get) => ({
         return result;
       }
       set({ isMutating: false, jobId: null, preview: null });
-      await get().loadAll();
       return result;
     } catch (error) {
-      if (get().jobId !== jobId) {
-        return null;
+      if (get().jobId === jobId) {
+        set({
+          actionError: backendErrorStateValue(error),
+          isMutating: false,
+          jobId: null,
+        });
       }
-      set({
-        actionError: backendErrorStateValue(error),
-        isMutating: false,
-        jobId: null,
-      });
-      return null;
+      throw error;
     }
   },
 

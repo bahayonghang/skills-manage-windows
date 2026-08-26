@@ -6,6 +6,7 @@ import {
   UnifiedSkillCard,
   type CentralSkillCardProps,
   type PlatformSkillCardProps,
+  type SkillsCliSkillCardProps,
 } from "@/components/skill/UnifiedSkillCard";
 import { useUpdateCenterStore } from "@/stores/updateCenterStore";
 
@@ -309,5 +310,140 @@ describe("UnifiedSkillCard", () => {
     );
     expect(container.querySelector(".bg-warning")).not.toBeNull();
     expect(container.querySelector(".bg-info")).toBeNull();
+  });
+});
+
+const skillsCliBaseProps = {
+  variant: "skillsCli",
+  layout: "denseRow",
+  name: "dense-skill",
+  path: "/canonical/dense-skill",
+  placements: [
+    {
+      agentId: "cursor",
+      displayName: "Cursor",
+      targetPath: "/cursor/dense-skill",
+      state: "managed_link",
+      managedLinkKind: "windows_junction",
+      reasonCode: null,
+    },
+    {
+      agentId: "codex",
+      displayName: "Codex",
+      targetPath: "/codex/dense-skill",
+      state: "managed_link",
+      managedLinkKind: "windows_junction",
+      reasonCode: null,
+    },
+    {
+      agentId: "amp",
+      displayName: "Amp",
+      targetPath: "/amp/dense-skill",
+      state: "managed_link",
+      managedLinkKind: "windows_junction",
+      reasonCode: null,
+    },
+    {
+      agentId: "claude-code",
+      displayName: "Claude Code",
+      targetPath: "/claude/dense-skill",
+      state: "managed_link",
+      managedLinkKind: "windows_junction",
+      reasonCode: null,
+    },
+    {
+      agentId: "opencode",
+      displayName: "OpenCode",
+      targetPath: "/opencode/dense-skill",
+      state: "managed_link",
+      managedLinkKind: "windows_junction",
+      reasonCode: null,
+    },
+  ],
+  onDetail: noop,
+  onUninstall: noop,
+} satisfies SkillsCliSkillCardProps;
+
+describe("UnifiedSkillCard skillsCli dense-row", () => {
+  it("uses the 76px dense-row target and rejects the 168px compact branch", () => {
+    const { container } = render(<UnifiedSkillCard {...skillsCliBaseProps} />);
+    const card = screen.getByTestId("skills-cli-dense-card-dense-skill");
+    expect(card.className).toContain("min-h-[76px]");
+    expect(card.className).toContain("h-auto");
+    expect(card.className).not.toContain("min-h-[168px]");
+    expect(container.querySelector(".min-h-\\[168px\\]")).toBeNull();
+  });
+
+  it("shows at most four placement icons and a +n overflow", () => {
+    render(<UnifiedSkillCard {...skillsCliBaseProps} />);
+    expect(screen.getByText("+1")).toBeInTheDocument();
+    expect(screen.getByText("dense-skill")).toBeInTheDocument();
+    expect(screen.getByText("/canonical/dense-skill")).toBeInTheDocument();
+  });
+
+  it("shows a localized status pill when there is no managed link", () => {
+    render(
+      <UnifiedSkillCard
+        {...skillsCliBaseProps}
+        placements={[
+          {
+            agentId: "cursor",
+            displayName: "Cursor",
+            targetPath: "/cursor/dense-skill",
+            state: "direct_copy",
+            managedLinkKind: null,
+            reasonCode: null,
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText("直接副本")).toBeInTheDocument();
+    expect(screen.queryByText("+1")).not.toBeInTheDocument();
+  });
+
+  it("keeps hover actions visible under focus-within and stops inner clicks", async () => {
+    const onDetail = vi.fn();
+    const onUninstall = vi.fn();
+    const onManageLinks = vi.fn();
+    render(
+      <UnifiedSkillCard
+        {...skillsCliBaseProps}
+        onDetail={onDetail}
+        onUninstall={onUninstall}
+        onManageLinks={onManageLinks}
+      />,
+    );
+    const actions = screen.getByRole("button", { name: "卸载 dense-skill" })
+      .parentElement;
+    expect(actions?.className).toContain("group-hover/skill-card:opacity-100");
+    expect(actions?.className).toContain(
+      "group-focus-within/skill-card:opacity-100",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "卸载 dense-skill" }));
+    expect(onUninstall).toHaveBeenCalledTimes(1);
+    expect(onDetail).not.toHaveBeenCalled();
+    await userEvent.click(
+      screen.getByRole("button", { name: "管理 dense-skill 的链接" }),
+    );
+    expect(onManageLinks).toHaveBeenCalledTimes(1);
+    expect(onDetail).not.toHaveBeenCalled();
+    await userEvent.click(
+      screen.getByRole("button", { name: "查看 dense-skill 的详情" }),
+    );
+    expect(onDetail).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders a keyboard-accessible checkbox in select mode", async () => {
+    const onChange = vi.fn();
+    render(
+      <UnifiedSkillCard
+        {...skillsCliBaseProps}
+        checkbox={{ checked: false, onChange }}
+      />,
+    );
+    const checkbox = screen.getByLabelText("选择技能");
+    expect(checkbox.className).toContain("after:size-10");
+    await userEvent.click(checkbox);
+    expect(onChange).toHaveBeenCalled();
   });
 });

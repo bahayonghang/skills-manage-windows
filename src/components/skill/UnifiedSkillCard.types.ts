@@ -1,6 +1,11 @@
 import type { MouseEventHandler, Ref } from "react";
 
-import type { AgentWithStatus, CentralSkillUpdateState, ClaudeSourceKind } from "@/types";
+import type {
+  AgentWithStatus,
+  CentralSkillUpdateState,
+  ClaudeSourceKind,
+  SkillsCliPlacement,
+} from "@/types";
 
 /**
  * 卡片视觉密度：
@@ -152,14 +157,17 @@ export interface CollectionSkillCardProps extends SkillCardCoreProps {
   onRemove: () => void;
 }
 
-/** Skills CLI 全局技能卡片：规范路径 + 卸载（确认由页面对话框完成）。 */
+/** Skills CLI 全局技能卡片：dense-row 布局，卸载确认由页面完成。 */
 export interface SkillsCliSkillCardProps extends SkillCardCoreProps {
   variant: "skillsCli";
+  layout: "denseRow";
   path?: string | null;
-  agents: string[];
-  source?: string | null;
+  placements: readonly SkillsCliPlacement[];
+  checkbox?: SkillCardCheckbox;
+  updateAvailable?: boolean;
+  onDetail: MouseEventHandler<HTMLButtonElement>;
+  onManageLinks?: () => void;
   onUninstall: () => void;
-  uninstallLabel?: string;
   isLoading?: boolean;
 }
 
