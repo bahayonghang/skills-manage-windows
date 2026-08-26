@@ -244,6 +244,14 @@ pub(crate) async fn doctor_with_launcher(
     )
     .await?;
     if !probe.status_success {
+        // Diagnostics stay in the runtime log: stderr never reaches IPC.
+        let stderr_summary = String::from_utf8_lossy(&probe.stderr);
+        let stderr_summary: String = stderr_summary.chars().take(400).collect();
+        tracing::warn!(
+            status_success = probe.status_success,
+            stderr = %stderr_summary,
+            "Skills CLI doctor probe failed"
+        );
         return Err(SkillsCliError::CliUnavailable);
     }
 

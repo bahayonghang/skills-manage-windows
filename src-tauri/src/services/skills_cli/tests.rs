@@ -1,13 +1,12 @@
 //! Table-driven Skills CLI service tests. Node/npx never leave this process:
 //! every spawn goes through [`FakeCliRunner`].
 
+use async_trait::async_trait;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
-
-use async_trait::async_trait;
 use tempfile::TempDir;
 
 use super::argv::{
@@ -93,6 +92,10 @@ impl FakeCliRunner {
 
     fn push_err(&self, error: SkillsCliError) {
         self.next.lock().unwrap().push_back(Err(error));
+    }
+
+    fn push_output(&self, output: CliOutput) {
+        self.next.lock().unwrap().push_back(Ok(output));
     }
 
     fn recorded(&self) -> Vec<RecordedRun> {
@@ -318,6 +321,56 @@ fn ac14_ipc_message_never_contains_stderr() {
         assert!(!ipc.message.contains("npm ERR!"));
         assert!(!error.to_string().contains(planted));
     }
+}
+
+/// `io::Write` adapter appending into a shared test log buffer.
+struct SharedLogBuffer(Arc<Mutex<Vec<u8>>>);
+
+impl std::io::Write for SharedLogBuffer {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn ac10_doctor_probe_failure_warns_and_keeps_public_message() {
+    let logs: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+    let log_buffer = logs.clone();
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(move || SharedLogBuffer(log_buffer.clone()))
+        .with_ansi(false)
+        .compact()
+        .finish();
+    let _guard = tracing::subscriber::set_default(subscriber);
+
+    let runner = FakeCliRunner::new();
+    runner.push_ok("v26.7.0\n");
+    runner.push_output(CliOutput {
+        status_success: false,
+        stdout: Vec::new(),
+        stderr: b"npm ERR! SECRET_STDERR_TOKEN".to_vec(),
+    });
+
+    let error = doctor_with_launcher(&runner, &fake_launcher())
+        .await
+        .unwrap_err();
+    assert!(matches!(error, SkillsCliError::CliUnavailable));
+
+    let code = error.ipc_code();
+    let message = public_message_for_code(code)
+        .unwrap_or("The operation failed. See runtime logs for details.");
+    let ipc = IpcError::new(code, message, error.retryable());
+    assert_eq!(ipc.message, "The Skills CLI package could not be executed.");
+    assert!(!ipc.message.contains("SECRET_STDERR_TOKEN"));
+
+    let logged = String::from_utf8(logs.lock().unwrap().clone()).unwrap();
+    assert!(logged.contains("Skills CLI doctor probe failed"));
+    assert!(logged.contains("SECRET_STDERR_TOKEN"));
 }
 
 #[test]
