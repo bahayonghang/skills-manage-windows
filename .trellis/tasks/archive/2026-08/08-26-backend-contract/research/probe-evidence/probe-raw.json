@@ -1,0 +1,86 @@
+{
+  "pin": "skills@1.5.23",
+  "platform": "win32",
+  "node_program": "D:\\GreenSoftware\\node\\node.exe",
+  "npx_js": "<NODE_INSTALL>/node_modules/npm/bin/npx-cli.js",
+  "temp_root": "<TEMP_ROOT>",
+  "records": [
+    {
+      "id": "node_version",
+      "result": {
+        "started_utc": "2026-08-26T09:44:11Z",
+        "finished_utc": "2026-08-26T09:44:11Z",
+        "argv": [
+          "D:\\GreenSoftware\\node\\node.exe",
+          "--version"
+        ],
+        "returncode": 0,
+        "stdout": "v26.7.0\r\n",
+        "stderr": "",
+        "timed_out": false
+      }
+    },
+    {
+      "id": "skills_help",
+      "result": {
+        "started_utc": "2026-08-26T09:44:11Z",
+        "finished_utc": "2026-08-26T09:44:17Z",
+        "argv": [
+          "D:\\GreenSoftware\\node\\node.exe",
+          "D:\\GreenSoftware\\node\\node_modules\\npm\\bin\\npx-cli.js",
+          "--yes",
+          "--package=skills@1.5.23",
+          "--",
+          "skills",
+          "--help"
+        ],
+        "returncode": 0,
+        "stdout": "\n\u001b[1mUsage:\u001b[0m skills <command> [options]\n\n\u001b[1mManage Skills:\u001b[0m\n  add <package>        Add a skill package (alias: a)\n                       e.g. vercel-labs/agent-skills\n                            https://github.com/vercel-labs/agent-skills\n  use <package>@<skill>\n                       Generate a prompt for using one skill without installing it\n  remove [skills]      Remove installed skills\n  list, ls             List installed skills\n  find [query]         Search for skills interactively\n\n\u001b[1mFind Options:\u001b[0m\n  --owner <owner>        Search only repositories from a GitHub owner\n\n\u001b[1mUpdates:\u001b[0m\n  update [skills...]   Update skills to latest versions (alias: upgrade)\n\n\u001b[1mUpdate Options:\u001b[0m\n  -g, --global           Update global skills only\n  -p, --project          Update project skills only\n  -y, --yes              Skip scope prompt (auto-detect: project if in a project, else global)\n\n\u001b[1mProject:\u001b[0m\n  experimental_install Restore skills from skills-lock.json\n  init [name]          Initialize a skill (creates <name>/SKILL.md or ./SKILL.md)\n  experimental_sync    Sync skills from node_modules into agent directories\n\n\u001b[1mAdd Options:\u001b[0m\n  -g, --global           Install skill globally (user-level) instead of project-level\n  -a, --agent <agents>   Specify agents to install to (use '*' for all agents)\n  -s, --skill <skills>   Specify skill names to install (use '*' for all skills)\n  -l, --list             List available skills in the repository without installing\n  -y, --yes              Skip confirmation prompts\n  --copy                 Copy files instead of symlinking to agent directories\n  --metadata <json>      Attach valid JSON to the install telemetry event\n  --subagent <names>     Install to Eve subagents (use 'root' for the root agent)\n  --all                  Shorthand for --skill '*' --agent '*' -y\n  --full-depth           Search all subdirectories even when a root SKILL.md exists\n\n\u001b[1mUse Options:\u001b[0m\n  -s, --skill <skill>    Specify the skill to use\n  -a, --agent <agent>    Start one supported agent interactively\n  --full-depth           Search all subdirectories even when a root SKILL.md exists\n\n\u001b[1mRemove Options:\u001b[0m\n  -g, --global           Remove from global scope\n  -a, --agent <agents>   Remove from specific agents (omit to clean all agent links)\n  -s, --skill <skills>   Specify skills to remove (use '*' for all skills)\n  -y, --yes              Skip confirmation prompts\n  --all                  Remove every installed skill (-y implied). Do not combine with named skills.\n  \n\u001b[1mExperimental Sync Options:\u001b[0m\n  -a, --agent <agents>   Specify agents to install to (use '*' for all agents)\n  -y, --yes              Skip confirmation prompts\n\n\u001b[1mList Options:\u001b[0m\n  -g, --global           List global skills (default: project)\n  -a, --agent <agents>   Filter by specific agents\n  --json                 Output as JSON (machine-readable, no ANSI codes)\n\n\u001b[1mOptions:\u001b[0m\n  --help, -h        Show this help message\n  --version, -v     Show version number\n\n\u001b[1mExamples:\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills add vercel-labs/agent-skills\n  \u001b[38;5;102m$\u001b[0m skills use vercel-labs/agent-skills@vercel-optimize | claude\n  \u001b[38;5;102m$\u001b[0m skills use vercel-labs/agent-skills --skill vercel-optimize --agent claude-code\n  \u001b[38;5;102m$\u001b[0m skills add vercel-labs/agent-skills -g\n  \u001b[38;5;102m$\u001b[0m skills add vercel-labs/agent-skills --agent claude-code cursor\n  \u001b[38;5;102m$\u001b[0m skills add vercel-labs/agent-skills --skill pr-review commit\n  \u001b[38;5;102m$\u001b[0m skills remove                        \u001b[38;5;102m# interactive remove\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills remove web-design             \u001b[38;5;102m# remove by name\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills rm --global frontend-design\n  \u001b[38;5;102m$\u001b[0m skills list                          \u001b[38;5;102m# list project skills\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills ls -g                         \u001b[38;5;102m# list global skills\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills ls -a claude-code             \u001b[38;5;102m# filter by agent\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills ls --json                      \u001b[38;5;102m# JSON output\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills find                          \u001b[38;5;102m# interactive search\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills find typescript               \u001b[38;5;102m# search by keyword\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills find react --owner vercel     \u001b[38;5;102m# search within an owner\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills update\n  \u001b[38;5;102m$\u001b[0m skills update my-skill             \u001b[38;5;102m# update a single skill\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills update -g                    \u001b[38;5;102m# update global skills only\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills experimental_install            \u001b[38;5;102m# restore from skills-lock.json\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills init my-skill\n  \u001b[38;5;102m$\u001b[0m skills experimental_sync              \u001b[38;5;102m# sync from node_modules\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills experimental_sync -y           \u001b[38;5;102m# sync without prompts\u001b[0m\n\nDiscover more skills at \u001b[38;5;145mhttps://skills.sh/\u001b[0m\n\n",
+        "stderr": "npm error config prefix cannot be changed from project config: <USER_PROFILE>\\.npmrc.\n",
+        "timed_out": false
+      }
+    },
+    {
+      "id": "skills_add_help",
+      "result": {
+        "started_utc": "2026-08-26T09:44:17Z",
+        "finished_utc": "2026-08-26T09:44:18Z",
+        "argv": [
+          "D:\\GreenSoftware\\node\\node.exe",
+          "D:\\GreenSoftware\\node\\node_modules\\npm\\bin\\npx-cli.js",
+          "--yes",
+          "--package=skills@1.5.23",
+          "--",
+          "skills",
+          "add",
+          "--help"
+        ],
+        "returncode": 0,
+        "stdout": "\n\u001b[1mUsage:\u001b[0m skills <command> [options]\n\n\u001b[1mManage Skills:\u001b[0m\n  add <package>        Add a skill package (alias: a)\n                       e.g. vercel-labs/agent-skills\n                            https://github.com/vercel-labs/agent-skills\n  use <package>@<skill>\n                       Generate a prompt for using one skill without installing it\n  remove [skills]      Remove installed skills\n  list, ls             List installed skills\n  find [query]         Search for skills interactively\n\n\u001b[1mFind Options:\u001b[0m\n  --owner <owner>        Search only repositories from a GitHub owner\n\n\u001b[1mUpdates:\u001b[0m\n  update [skills...]   Update skills to latest versions (alias: upgrade)\n\n\u001b[1mUpdate Options:\u001b[0m\n  -g, --global           Update global skills only\n  -p, --project          Update project skills only\n  -y, --yes              Skip scope prompt (auto-detect: project if in a project, else global)\n\n\u001b[1mProject:\u001b[0m\n  experimental_install Restore skills from skills-lock.json\n  init [name]          Initialize a skill (creates <name>/SKILL.md or ./SKILL.md)\n  experimental_sync    Sync skills from node_modules into agent directories\n\n\u001b[1mAdd Options:\u001b[0m\n  -g, --global           Install skill globally (user-level) instead of project-level\n  -a, --agent <agents>   Specify agents to install to (use '*' for all agents)\n  -s, --skill <skills>   Specify skill names to install (use '*' for all skills)\n  -l, --list             List available skills in the repository without installing\n  -y, --yes              Skip confirmation prompts\n  --copy                 Copy files instead of symlinking to agent directories\n  --metadata <json>      Attach valid JSON to the install telemetry event\n  --subagent <names>     Install to Eve subagents (use 'root' for the root agent)\n  --all                  Shorthand for --skill '*' --agent '*' -y\n  --full-depth           Search all subdirectories even when a root SKILL.md exists\n\n\u001b[1mUse Options:\u001b[0m\n  -s, --skill <skill>    Specify the skill to use\n  -a, --agent <agent>    Start one supported agent interactively\n  --full-depth           Search all subdirectories even when a root SKILL.md exists\n\n\u001b[1mRemove Options:\u001b[0m\n  -g, --global           Remove from global scope\n  -a, --agent <agents>   Remove from specific agents (omit to clean all agent links)\n  -s, --skill <skills>   Specify skills to remove (use '*' for all skills)\n  -y, --yes              Skip confirmation prompts\n  --all                  Remove every installed skill (-y implied). Do not combine with named skills.\n  \n\u001b[1mExperimental Sync Options:\u001b[0m\n  -a, --agent <agents>   Specify agents to install to (use '*' for all agents)\n  -y, --yes              Skip confirmation prompts\n\n\u001b[1mList Options:\u001b[0m\n  -g, --global           List global skills (default: project)\n  -a, --agent <agents>   Filter by specific agents\n  --json                 Output as JSON (machine-readable, no ANSI codes)\n\n\u001b[1mOptions:\u001b[0m\n  --help, -h        Show this help message\n  --version, -v     Show version number\n\n\u001b[1mExamples:\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills add vercel-labs/agent-skills\n  \u001b[38;5;102m$\u001b[0m skills use vercel-labs/agent-skills@vercel-optimize | claude\n  \u001b[38;5;102m$\u001b[0m skills use vercel-labs/agent-skills --skill vercel-optimize --agent claude-code\n  \u001b[38;5;102m$\u001b[0m skills add vercel-labs/agent-skills -g\n  \u001b[38;5;102m$\u001b[0m skills add vercel-labs/agent-skills --agent claude-code cursor\n  \u001b[38;5;102m$\u001b[0m skills add vercel-labs/agent-skills --skill pr-review commit\n  \u001b[38;5;102m$\u001b[0m skills remove                        \u001b[38;5;102m# interactive remove\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills remove web-design             \u001b[38;5;102m# remove by name\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills rm --global frontend-design\n  \u001b[38;5;102m$\u001b[0m skills list                          \u001b[38;5;102m# list project skills\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills ls -g                         \u001b[38;5;102m# list global skills\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills ls -a claude-code             \u001b[38;5;102m# filter by agent\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills ls --json                      \u001b[38;5;102m# JSON output\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills find                          \u001b[38;5;102m# interactive search\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills find typescript               \u001b[38;5;102m# search by keyword\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills find react --owner vercel     \u001b[38;5;102m# search within an owner\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills update\n  \u001b[38;5;102m$\u001b[0m skills update my-skill             \u001b[38;5;102m# update a single skill\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills update -g                    \u001b[38;5;102m# update global skills only\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills experimental_install            \u001b[38;5;102m# restore from skills-lock.json\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills init my-skill\n  \u001b[38;5;102m$\u001b[0m skills experimental_sync              \u001b[38;5;102m# sync from node_modules\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills experimental_sync -y           \u001b[38;5;102m# sync without prompts\u001b[0m\n\nDiscover more skills at \u001b[38;5;145mhttps://skills.sh/\u001b[0m\n\n",
+        "stderr": "npm error config prefix cannot be changed from project config: <USER_PROFILE>\\.npmrc.\n",
+        "timed_out": false
+      }
+    },
+    {
+      "id": "skills_remove_help",
+      "result": {
+        "started_utc": "2026-08-26T09:44:18Z",
+        "finished_utc": "2026-08-26T09:44:19Z",
+        "argv": [
+          "D:\\GreenSoftware\\node\\node.exe",
+          "D:\\GreenSoftware\\node\\node_modules\\npm\\bin\\npx-cli.js",
+          "--yes",
+          "--package=skills@1.5.23",
+          "--",
+          "skills",
+          "remove",
+          "--help"
+        ],
+        "returncode": 0,
+        "stdout": "\n\u001b[1mUsage:\u001b[0m skills remove [skills...] [options]\n\n\u001b[1mDescription:\u001b[0m\n  Remove installed skills from agents. If no skill names are provided,\n  an interactive selection menu will be shown.\n\n\u001b[1mArguments:\u001b[0m\n  skills            Optional skill names to remove (space-separated)\n\n\u001b[1mOptions:\u001b[0m\n  -g, --global       Remove from global scope (~/) instead of project scope\n  -a, --agent        Remove from specific agents (omit to clean all agent links)\n  -s, --skill        Specify skills to remove (use '*' for all skills)\n  -y, --yes          Skip confirmation prompts\n  --all              Remove every installed skill (-y implied). Do not combine with named skills.\n\n\u001b[1mExamples:\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills remove                           \u001b[38;5;102m# interactive selection\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills remove my-skill                   \u001b[38;5;102m# remove specific skill\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills remove skill1 skill2 -y           \u001b[38;5;102m# remove multiple skills\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills remove --global my-skill          \u001b[38;5;102m# remove from global scope\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills rm --agent claude-code my-skill   \u001b[38;5;102m# remove from specific agent\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills remove --all                      \u001b[38;5;102m# remove all skills\u001b[0m\n  \u001b[38;5;102m$\u001b[0m skills remove --skill '*' -a cursor      \u001b[38;5;102m# remove all skills from cursor\u001b[0m\n\nDiscover more skills at \u001b[38;5;145mhttps://skills.sh/\u001b[0m\n\n",
+        "stderr": "npm error config prefix cannot be changed from project config: <USER_PROFILE>\\.npmrc.\n",
+        "timed_out": false
+      }
+    }
+  ]
+}

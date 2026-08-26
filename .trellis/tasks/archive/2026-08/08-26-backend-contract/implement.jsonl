@@ -1,0 +1,12 @@
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "实施 Skills CLI ownership、Local gate、IPC、inventory、job 与测试的权威契约"}
+{"file": ".trellis/spec/backend/external-text-ingestion.md", "reason": "SKILL.md 必须使用 1 MiB opened-handle bounded reader并覆盖 growth/UTF-8"}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "新增 service 失败保持 SkillsCliError 与结构化安全 IPC code"}
+{"file": ".trellis/spec/backend/central-mutation-lock.md", "reason": "link/unlink/remove 遵守 exclusive lease 到 Local target guard 的锁序"}
+{"file": ".trellis/spec/backend/exclusive-job-lifecycle.md", "reason": "link/unlink/remove 使用 Skills CLI family 的 jobId、cancel 与 RAII lease"}
+{"file": ".trellis/spec/backend/spawn-blocking-io.md", "reason": "bounded read、junction、atomic export/remove FS 单元不得阻塞 async executor"}
+{"file": ".trellis/spec/backend/settings-domain-boundary.md", "reason": "recent sources 只能经 exact allowlist、完整 value validation 与安全 audit"}
+{"file": ".trellis/spec/backend/path-policy.md", "reason": "canonical、platform、recovery 与 reveal 路径必须从单点常量构造并做 containment"}
+{"file": ".trellis/spec/backend/fs-db-operation-journal.md", "reason": "safe remove 的 prepared/staged/commit/recovery 设计复用可恢复 mutation 原则但不冒充 Central DB journal"}
+{"file": ".trellis/spec/frontend/renderer-authority-boundary.md", "reason": "renderer 只传 save path/typed payload，后端拥有文件写入与原子持久化"}
+{"file": ".trellis/tasks/08-26-skills-cli-redesign/research/design-contract.md", "reason": "五态 placement、卸载保留 copy、toast/export 与 UNVERIFIED 边界的任务内权威设计"}
+{"file": ".trellis/tasks/08-26-backend-contract/research/skills-cli-capability-probe.md", "reason": "实现前在隔离临时 HOME 中采集 pinned CLI help、full-SHA source 与 direct-copy refresh 的逐项真实能力证据"}

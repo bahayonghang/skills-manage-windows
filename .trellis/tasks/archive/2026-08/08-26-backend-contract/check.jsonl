@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "检查命令签名、ownership、placement、Local gate、错误矩阵与测试清单全部同步"}
+{"file": ".trellis/spec/backend/external-text-ingestion.md", "reason": "检查 exactly-limit/growth/invalid UTF-8 且错误不泄漏路径或正文"}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "检查 services 无新增 Result<T,String>、message sniffing 或 raw IPC details"}
+{"file": ".trellis/spec/backend/central-mutation-lock.md", "reason": "检查 lease→guard→recheck→mutation 锁序且无 unlocked fallback"}
+{"file": ".trellis/spec/backend/exclusive-job-lifecycle.md", "reason": "检查 jobId、cancel、busy、RAII release 与 command registry 一致"}
+{"file": ".trellis/spec/backend/settings-domain-boundary.md", "reason": "检查 exact recent-source key、非法 batch 零写入和 audit 无 caller value"}
+{"file": ".trellis/spec/backend/path-policy.md", "reason": "检查 reveal/recovery/platform path 无字面量漂移或 canonical escape"}
+{"file": ".trellis/spec/backend/fs-db-operation-journal.md", "reason": "检查 remove 每个 destructive phase 都可回滚或留有可恢复证据"}
+{"file": ".trellis/spec/frontend/renderer-authority-boundary.md", "reason": "检查 export 不给 renderer 文件系统 authority，atomic failure 保留旧目标"}
+{"file": ".trellis/tasks/08-26-skills-cli-redesign/research/design-contract.md", "reason": "检查五态、copy 保留、conflict 阻断、Windows/CLI 外部证据仍诚实标记"}
+{"file": ".trellis/tasks/08-26-backend-contract/research/skills-cli-capability-probe.md", "reason": "检查三类 CLI 能力均有原始证据与三态结论，未验证或不支持能力不会进入产品 argv"}
