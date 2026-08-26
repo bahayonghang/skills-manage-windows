@@ -321,9 +321,10 @@
   },
   "skillsCli": {
     "title": "Skills CLI 全局",
-    "subtitle": "在本机安装和卸载官方 Skills CLI 全局技能。固定版本：skills@1.5.23。SkillPort 并不拥有整个 ~/.agents/skills/ 目录。",
+    "subtitle": "在本机安装和卸载官方 Skills CLI 全局技能。",
     "localOnly": "Skills CLI 全局管理仅可在本机 Local 目标上使用。",
     "refresh": "刷新",
+    "refreshing": "正在刷新…",
     "empty": "尚未安装 Skills CLI 全局技能。",
     "doctorOk": "Node {{version}} · {{spec}}",
     "doctorChecking": "正在检查 Node.js 与固定版本的 Skills CLI…",
@@ -351,7 +352,36 @@
     "addError": "{{error}}",
     "removeError": "{{error}}",
     "addSuccess": "已将 {{count}} 个技能安装到 {{platforms}} 个平台。",
-    "removeSuccess": "已卸载 {{name}}。"
+    "removeSuccess": "已卸载 {{name}}。",
+    "installHeading": "从技能来源安装",
+    "runtimeBlocked": "运行时检查未通过，安装与卸载已停用。请先处理上方的运行时状态，再刷新。",
+    "pathsCanonical": "规范根目录：{{root}}",
+    "pathsLock": "Lock 文件：{{lock}}",
+    "ownershipNote": "SkillPort 并不拥有整个 ~/.agents/skills/ 目录。",
+    "census": {
+      "kpiAria": "库存统计 KPI",
+      "kpiInstalled": "已装技能",
+      "kpiLinked": "已链接平台",
+      "kpiSourceKinds": "来源种类",
+      "platformHeading": "各平台技能数",
+      "sourceHeading": "各来源类型技能数",
+      "platformAria": "各平台已装技能柱状图，共 {{count}} 个平台",
+      "donutAria": "按来源类型的已装技能饼图，共 {{count}} 个",
+      "donutTitle": "{{label}}：{{count}}（{{percent}}%）",
+      "donutCenterLabel": "技能",
+      "barTitle": "{{label}}：{{count}}",
+      "empty": "安装技能后即可查看库存统计。",
+      "bucket": {
+        "github": "GitHub",
+        "gitlab": "GitLab",
+        "git": "Git",
+        "mintlify": "Mintlify",
+        "huggingface": "Hugging Face",
+        "local": "本地",
+        "wellKnown": "Well-known",
+        "unknown": "未知"
+      }
+    }
   },
   "skillUsage": {
     "title": "技能使用",

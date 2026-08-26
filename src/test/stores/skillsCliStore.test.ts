@@ -35,23 +35,30 @@ const targets = [
   },
 ];
 
-describe("skillsCliStore", () => {
-  beforeEach(() => {
-    useSkillsCliStore.setState({
-      skills: [],
-      targets: [],
-      preview: null,
-      doctor: null,
-      isLoading: false,
-      isPreviewing: false,
-      isMutating: false,
-      isCancelling: false,
-      jobId: null,
-      error: null,
-    });
+function resetState() {
+  useSkillsCliStore.setState({
+    skills: [],
+    targets: [],
+    preview: null,
+    doctor: null,
+    canonicalRoot: null,
+    lockPath: null,
+    isLoading: false,
+    isRefreshing: false,
+    isPreviewing: false,
+    isMutating: false,
+    isCancelling: false,
+    jobId: null,
+    runtimeError: null,
+    inventoryError: null,
+    actionError: null,
   });
+}
 
-  it("loads doctor, list, and install targets", async () => {
+describe("skillsCliStore", () => {
+  beforeEach(resetState);
+
+  it("loads doctor, list, and install targets with snapshot paths", async () => {
     mockIpcCommands({
       skills_cli_doctor: doctor,
       skills_cli_list_global: listGlobal,
@@ -66,6 +73,68 @@ describe("skillsCliStore", () => {
     expect(useSkillsCliStore.getState().skills).toEqual(skills);
     expect(useSkillsCliStore.getState().targets).toEqual(targets);
     expect(useSkillsCliStore.getState().doctor).toEqual(doctor);
+    expect(useSkillsCliStore.getState().canonicalRoot).toBe("/tmp/agents");
+    expect(useSkillsCliStore.getState().lockPath).toBe("/tmp/agents/skills.lock");
+    expect(useSkillsCliStore.getState().runtimeError).toBeNull();
+    expect(useSkillsCliStore.getState().inventoryError).toBeNull();
+  });
+
+  it("keeps the inventory when doctor rejects cli_unavailable", async () => {
+    mockIpcCommand("skills_cli_doctor", () => {
+      throw ipcFixtureError(
+        "skills_cli.cli_unavailable",
+        "The Skills CLI package could not be executed.",
+      );
+    });
+    mockIpcCommand("skills_cli_list_global", listGlobal);
+    mockIpcCommand("skills_cli_install_targets", targets);
+
+    await useSkillsCliStore.getState().loadAll();
+
+    expect(useSkillsCliStore.getState().runtimeError).toContain(
+      "skills_cli.cli_unavailable",
+    );
+    expect(useSkillsCliStore.getState().runtimeError).not.toContain("npm ERR!");
+    expect(useSkillsCliStore.getState().inventoryError).toBeNull();
+    expect(useSkillsCliStore.getState().skills).toEqual(skills);
+    expect(useSkillsCliStore.getState().doctor).toBeNull();
+  });
+
+  it("keeps stale skills and surfaces inventoryError when list fails on refresh", async () => {
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: listGlobal,
+      skills_cli_install_targets: targets,
+    });
+    await useSkillsCliStore.getState().loadAll();
+
+    mockIpcCommand("skills_cli_list_global", () => {
+      throw ipcFixtureError("internal.unexpected", "list failed");
+    });
+    await useSkillsCliStore.getState().loadAll();
+
+    expect(useSkillsCliStore.getState().inventoryError).toContain(
+      "internal.unexpected",
+    );
+    expect(useSkillsCliStore.getState().skills).toEqual(skills);
+    expect(useSkillsCliStore.getState().doctor).toEqual(doctor);
+    expect(useSkillsCliStore.getState().runtimeError).toBeNull();
+    expect(useSkillsCliStore.getState().isRefreshing).toBe(false);
+  });
+
+  it("reports a failed first load as inventoryError without fabricating skills", async () => {
+    mockIpcCommand("skills_cli_list_global", () => {
+      throw ipcFixtureError("internal.unexpected", "list failed");
+    });
+    mockIpcCommand("skills_cli_install_targets", targets);
+    mockIpcCommand("skills_cli_doctor", doctor);
+
+    await useSkillsCliStore.getState().loadAll();
+
+    expect(useSkillsCliStore.getState().skills).toEqual([]);
+    expect(useSkillsCliStore.getState().inventoryError).toContain(
+      "internal.unexpected",
+    );
   });
 
   it("refuses empty add selections without invoking", async () => {
@@ -76,7 +145,9 @@ describe("skillsCliStore", () => {
     });
     expect(result).toBeNull();
     expect(ipcInvokeCalls("skills_cli_add_global")).toHaveLength(0);
-    expect(useSkillsCliStore.getState().error).toContain("skills_cli.selection_empty");
+    expect(useSkillsCliStore.getState().actionError).toContain(
+      "skills_cli.selection_empty",
+    );
   });
 
   it("sends jobId and the changed selection payload on add", async () => {
@@ -123,21 +194,5 @@ describe("skillsCliStore", () => {
   it("does not invoke cancel when jobId is null", async () => {
     await useSkillsCliStore.getState().cancelJob();
     expect(ipcInvokeCalls("cancel_skills_cli_job")).toHaveLength(0);
-  });
-
-  it("surfaces doctor errors without leaking stderr", async () => {
-    mockIpcCommand("skills_cli_doctor", () => {
-      throw ipcFixtureError(
-        "skills_cli.cli_unavailable",
-        "The Skills CLI package could not be executed.",
-      );
-    });
-    mockIpcCommand("skills_cli_list_global", listGlobal);
-    mockIpcCommand("skills_cli_install_targets", targets);
-
-    await useSkillsCliStore.getState().loadAll();
-
-    expect(useSkillsCliStore.getState().error).toContain("skills_cli.cli_unavailable");
-    expect(useSkillsCliStore.getState().error).not.toContain("npm ERR!");
   });
 });

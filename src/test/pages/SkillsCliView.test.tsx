@@ -31,12 +31,22 @@ const skills = [
   {
     name: "demo-skill",
     path: "/tmp/demo-skill",
-    agents: ["cursor"],
+    installKind: "canonical",
+    scope: "global",
+    agents: ["Cursor"],
     source: "owner/repo",
+    sourceUrl: "https://github.com/owner/repo",
+    sourceType: "github",
+    sourceTypeBucket: "github",
   },
 ];
 const listGlobal = {
   skills,
+  canonicalRoot: "/tmp/agents",
+  lockPath: "/tmp/agents/skills.lock",
+};
+const emptyList = {
+  skills: [],
   canonicalRoot: "/tmp/agents",
   lockPath: "/tmp/agents/skills.lock",
 };
@@ -79,12 +89,17 @@ describe("SkillsCliView", () => {
       targets: [],
       preview: null,
       doctor: null,
+      canonicalRoot: null,
+      lockPath: null,
       isLoading: false,
+      isRefreshing: false,
       isPreviewing: false,
       isMutating: false,
       isCancelling: false,
       jobId: null,
-      error: null,
+      runtimeError: null,
+      inventoryError: null,
+      actionError: null,
     });
     useTargetStore.setState({
       activeTarget: {
@@ -96,13 +111,125 @@ describe("SkillsCliView", () => {
     });
   });
 
-  it("lists Skills CLI global skills", async () => {
+  it("lists Skills CLI global skills with doctor status and paths", async () => {
     mockHappyPath();
     render(<SkillsCliView />);
     expect(await screen.findByText("demo-skill")).toBeInTheDocument();
     expect(screen.getByTestId("skills-cli-doctor")).toHaveTextContent(
       "skills@1.5.23",
     );
+    expect(screen.getByTestId("skills-cli-paths")).toHaveTextContent(
+      "/tmp/agents",
+    );
+    expect(screen.getByTestId("skills-cli-paths")).toHaveTextContent(
+      "/tmp/agents/skills.lock",
+    );
+  });
+
+  it("orders inventory before the collapsed install section", async () => {
+    mockHappyPath();
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+
+    const inventory = screen.getByTestId("skills-cli-inventory");
+    const install = screen.getByTestId("skills-cli-install");
+    expect(
+      inventory.compareDocumentPosition(install) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(install).not.toHaveAttribute("open");
+    expect(document.querySelector("svg[role='img']")).not.toBeNull();
+  });
+
+  it("shows the empty state with an open install section on an empty lock", async () => {
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: emptyList,
+      skills_cli_install_targets: targets,
+    });
+    render(<SkillsCliView />);
+
+    // The empty text exists before the first load settles; wait for the
+    // post-load commit via the install section's open attribute.
+    await waitFor(() => {
+      expect(screen.getByTestId("skills-cli-install")).toHaveAttribute("open");
+    });
+    expect(screen.getByTestId("skills-cli-census-empty")).toBeInTheDocument();
+    expect(screen.queryByText("demo-skill")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("尚未安装 Skills CLI 全局技能。"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("skills-cli-inventory-error"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the inventory rendered once when doctor reports cli_unavailable", async () => {
+    mockIpcCommands({
+      skills_cli_doctor: () => {
+        throw ipcFixtureError(
+          "skills_cli.cli_unavailable",
+          "The Skills CLI package could not be executed.",
+        );
+      },
+      skills_cli_list_global: listGlobal,
+      skills_cli_install_targets: targets,
+    });
+    render(<SkillsCliView />);
+
+    await screen.findByText("demo-skill");
+    expect(
+      screen.getAllByText("无法执行 Skills CLI 软件包。"),
+    ).toHaveLength(1);
+    expect(screen.getByTestId("skills-cli-doctor")).toHaveTextContent(
+      "无法执行 Skills CLI 软件包。",
+    );
+    expect(screen.getByRole("button", { name: "安装所选" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "卸载 demo-skill" }),
+    ).toBeDisabled();
+  });
+
+  it("keeps the stale list visible when a refresh fails", async () => {
+    const failingList = vi
+      .fn()
+      .mockReturnValueOnce(listGlobal)
+      .mockImplementation(() => {
+        throw ipcFixtureError("internal.unexpected", "list failed");
+      });
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: failingList,
+      skills_cli_install_targets: targets,
+    });
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+
+    fireEvent.click(screen.getByRole("button", { name: "刷新" }));
+
+    expect(
+      await screen.findByTestId("skills-cli-inventory-error"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("demo-skill")).toBeInTheDocument();
+  });
+
+  it("shows the inventory error instead of the empty state on first-load failure", async () => {
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: () => {
+        throw ipcFixtureError("internal.unexpected", "list failed");
+      },
+      skills_cli_install_targets: targets,
+    });
+    render(<SkillsCliView />);
+
+    expect(
+      await screen.findByTestId("skills-cli-inventory-error"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("尚未安装 Skills CLI 全局技能。"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("skills-cli-install")).not.toHaveAttribute("open");
   });
 
   it("defaults preview skill and enabled platform checkboxes", async () => {
@@ -190,23 +317,6 @@ describe("SkillsCliView", () => {
     expect(
       screen.getByText(/规范副本、Skills CLI 创建的平台链接，以及 lock 中的对应行/),
     ).toBeInTheDocument();
-  });
-
-  it("shows npx missing as a localized doctor error", async () => {
-    mockIpcCommands({
-      skills_cli_doctor: () => {
-        throw ipcFixtureError(
-          "skills_cli.cli_unavailable",
-          "The Skills CLI package could not be executed.",
-        );
-      },
-      skills_cli_list_global: listGlobal,
-      skills_cli_install_targets: targets,
-    });
-    render(<SkillsCliView />);
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "无法执行 Skills CLI 软件包。",
-    );
   });
 
   it("hides the sidebar entry unless ActiveTarget is Local", () => {

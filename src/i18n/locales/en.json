@@ -321,9 +321,10 @@
   },
   "skillsCli": {
     "title": "Skills CLI global",
-    "subtitle": "Install and remove official Skills CLI global skills on this machine. Pin: skills@1.5.23. SkillPort does not own all of ~/.agents/skills/.",
+    "subtitle": "Install and remove official Skills CLI global skills on this machine.",
     "localOnly": "Skills CLI global management is available only on the Local target.",
     "refresh": "Refresh",
+    "refreshing": "Refreshing…",
     "empty": "No Skills CLI global skills are installed.",
     "doctorOk": "Node {{version}} · {{spec}}",
     "doctorChecking": "Checking Node.js and the pinned Skills CLI…",
@@ -351,7 +352,36 @@
     "addError": "{{error}}",
     "removeError": "{{error}}",
     "addSuccess": "Installed {{count}} skill(s) onto {{platforms}} platform(s).",
-    "removeSuccess": "Uninstalled {{name}}."
+    "removeSuccess": "Uninstalled {{name}}.",
+    "installHeading": "Install from a skill source",
+    "runtimeBlocked": "The runtime check has not passed, so install and uninstall are disabled. Resolve the runtime status above, then refresh.",
+    "pathsCanonical": "Canonical root: {{root}}",
+    "pathsLock": "Lock file: {{lock}}",
+    "ownershipNote": "SkillPort does not own all of ~/.agents/skills/.",
+    "census": {
+      "kpiAria": "Inventory census KPIs",
+      "kpiInstalled": "Installed skills",
+      "kpiLinked": "Linked to platforms",
+      "kpiSourceKinds": "Source types",
+      "platformHeading": "Skills per platform",
+      "sourceHeading": "Skills per source type",
+      "platformAria": "Bar chart of installed skills per platform, {{count}} platforms",
+      "donutAria": "Donut chart of installed skills by source type, {{count}} in total",
+      "donutTitle": "{{label}}: {{count}} ({{percent}}%)",
+      "donutCenterLabel": "skills",
+      "barTitle": "{{label}}: {{count}}",
+      "empty": "Install a skill to see inventory statistics.",
+      "bucket": {
+        "github": "GitHub",
+        "gitlab": "GitLab",
+        "git": "Git",
+        "mintlify": "Mintlify",
+        "huggingface": "Hugging Face",
+        "local": "Local",
+        "wellKnown": "Well-known",
+        "unknown": "Unknown"
+      }
+    }
   },
   "skillUsage": {
     "title": "Skill Usage",

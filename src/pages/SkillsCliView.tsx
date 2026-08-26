@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Terminal } from "lucide-react";
 import { toast } from "sonner";
 
+import { InventoryCensus } from "@/components/skillsCli/InventoryCensus";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,11 +40,16 @@ export function SkillsCliView() {
   const targets = useSkillsCliStore((state) => state.targets);
   const preview = useSkillsCliStore((state) => state.preview);
   const doctor = useSkillsCliStore((state) => state.doctor);
+  const canonicalRoot = useSkillsCliStore((state) => state.canonicalRoot);
+  const lockPath = useSkillsCliStore((state) => state.lockPath);
   const isLoading = useSkillsCliStore((state) => state.isLoading);
+  const isRefreshing = useSkillsCliStore((state) => state.isRefreshing);
   const isPreviewing = useSkillsCliStore((state) => state.isPreviewing);
   const isMutating = useSkillsCliStore((state) => state.isMutating);
   const jobId = useSkillsCliStore((state) => state.jobId);
-  const error = useSkillsCliStore((state) => state.error);
+  const runtimeError = useSkillsCliStore((state) => state.runtimeError);
+  const inventoryError = useSkillsCliStore((state) => state.inventoryError);
+  const actionError = useSkillsCliStore((state) => state.actionError);
   const loadAll = useSkillsCliStore((state) => state.loadAll);
   const previewSource = useSkillsCliStore((state) => state.previewSource);
   const addGlobal = useSkillsCliStore((state) => state.addGlobal);
@@ -77,10 +83,12 @@ export function SkillsCliView() {
     setSelectedSkillNames(preselectedSkillFromSource(preview.source, preview.skills));
   }, [preview]);
 
-  const visibleError = useMemo(
-    () => (error ? formatBackendError(error, t) : null),
-    [error, t],
-  );
+  // Write paths stay disabled while the runtime check (doctor) has failed.
+  const runtimeBlocked = runtimeError !== null;
+  // Install section defaults open only for a successful empty inventory.
+  const installOpen = !inventoryError && skills.length === 0 && !isLoading;
+  const showInventoryEmpty =
+    skills.length === 0 && !isLoading && !inventoryError;
 
   if (!isLocal) {
     return (
@@ -93,12 +101,15 @@ export function SkillsCliView() {
 
   async function handlePreview() {
     const result = await previewSource(source.trim());
-    if (!result && useSkillsCliStore.getState().error) {
-      toast.error(
-        t("skillsCli.previewError", {
-          error: formatBackendError(useSkillsCliStore.getState().error, t),
-        }),
-      );
+    if (!result) {
+      const latest = useSkillsCliStore.getState().actionError;
+      if (latest) {
+        toast.error(
+          t("skillsCli.previewError", {
+            error: formatBackendError(latest, t),
+          }),
+        );
+      }
     }
   }
 
@@ -122,7 +133,7 @@ export function SkillsCliView() {
         setSource("");
         return;
       }
-      const latest = useSkillsCliStore.getState().error;
+      const latest = useSkillsCliStore.getState().actionError;
       if (latest) {
         toast.error(
           t("skillsCli.addError", { error: formatBackendError(latest, t) }),
@@ -142,7 +153,7 @@ export function SkillsCliView() {
       toast.success(t("skillsCli.removeSuccess", { name }));
       return;
     }
-    const latest = useSkillsCliStore.getState().error;
+    const latest = useSkillsCliStore.getState().actionError;
     if (latest) {
       toast.error(
         t("skillsCli.removeError", { error: formatBackendError(latest, t) }),
@@ -169,6 +180,7 @@ export function SkillsCliView() {
   const canAdd =
     selectedSkillNames.length > 0 &&
     selectedPlatformIds.length > 0 &&
+    !runtimeBlocked &&
     !isMutating &&
     !isPreviewing;
 
@@ -185,9 +197,9 @@ export function SkillsCliView() {
           <Button
             variant="outline"
             onClick={() => void loadAll()}
-            disabled={isLoading || isMutating}
+            disabled={isLoading || isRefreshing || isMutating}
           >
-            {t("skillsCli.refresh")}
+            {isRefreshing ? t("skillsCli.refreshing") : t("skillsCli.refresh")}
           </Button>
         </div>
         <p className="mt-2 text-xs text-muted-foreground" data-testid="skills-cli-doctor">
@@ -198,100 +210,29 @@ export function SkillsCliView() {
                   version: doctor.nodeVersion,
                   spec: doctor.npmSpec,
                 })
-              : visibleError}
+              : runtimeError
+                ? formatBackendError(runtimeError, t)
+                : null}
         </p>
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
-        {visibleError && (
-          <p role="alert" className="text-sm text-destructive-text">
-            {visibleError}
+        {inventoryError && (
+          <p
+            role="alert"
+            data-testid="skills-cli-inventory-error"
+            className="text-sm text-destructive-text"
+          >
+            {formatBackendError(inventoryError, t)}
           </p>
         )}
 
-        <section className="space-y-3 rounded-lg border border-border p-4">
-          <label className="text-sm font-medium" htmlFor="skills-cli-source">
-            {t("skillsCli.sourceLabel")}
-          </label>
-          <div className="flex flex-wrap gap-2">
-            <Input
-              id="skills-cli-source"
-              value={source}
-              onChange={(event) => setSource(event.target.value)}
-              placeholder={t("skillsCli.sourcePlaceholder")}
-              disabled={isPreviewing || isMutating}
-            />
-            <Button
-              onClick={() => void handlePreview()}
-              disabled={!source.trim() || isPreviewing || isMutating}
-            >
-              {isPreviewing ? t("skillsCli.previewing") : t("skillsCli.preview")}
-            </Button>
-          </div>
+        {(!inventoryError || skills.length > 0) && (
+          <InventoryCensus skills={skills} targets={targets} />
+        )}
 
-          {preview && (
-            <div className="grid gap-4 md:grid-cols-2">
-              <fieldset>
-                <legend className="mb-2 text-sm font-medium">
-                  {t("skillsCli.skillsHeading")}
-                </legend>
-                <div className="space-y-1.5">
-                  {preview.skills.map((name) => (
-                    <label
-                      key={name}
-                      className="flex items-center gap-2 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedSkillNames.includes(name)}
-                        onChange={() => toggleSkill(name)}
-                        aria-label={t("skillsCli.selectSkill", { name })}
-                      />
-                      {name}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-              <fieldset>
-                <legend className="mb-2 text-sm font-medium">
-                  {t("skillsCli.platformsHeading")}
-                </legend>
-                <div className="space-y-1.5">
-                  {targets.map((target) => (
-                    <label
-                      key={target.id}
-                      className="flex items-center gap-2 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedPlatformIds.includes(target.id)}
-                        onChange={() => togglePlatform(target.id)}
-                        aria-label={t("skillsCli.selectPlatform", {
-                          name: target.displayName,
-                        })}
-                      />
-                      {target.displayName}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-            </div>
-          )}
-
-          <div className="flex gap-2">
-            <Button onClick={() => void handleAdd()} disabled={!canAdd}>
-              {isMutating ? t("skillsCli.adding") : t("skillsCli.add")}
-            </Button>
-            {jobId && (
-              <Button variant="outline" onClick={() => void cancelJob()}>
-                {t("skillsCli.cancel")}
-              </Button>
-            )}
-          </div>
-        </section>
-
-        <section className="space-y-3">
-          {skills.length === 0 && !isLoading ? (
+        <section className="space-y-3" data-testid="skills-cli-inventory">
+          {showInventoryEmpty ? (
             <p className="text-sm text-muted-foreground">{t("skillsCli.empty")}</p>
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
@@ -310,17 +251,131 @@ export function SkillsCliView() {
                   source={skill.source}
                   onUninstall={() => setUninstallTarget(skill)}
                   uninstallLabel={t("skillsCli.uninstall", { name: skill.name })}
-                  isLoading={isMutating}
+                  isLoading={isMutating || runtimeBlocked}
                 />
               ))}
             </div>
           )}
         </section>
+
+        <details
+          data-testid="skills-cli-install"
+          className="rounded-lg border border-border p-4"
+          open={installOpen}
+        >
+          <summary className="cursor-pointer text-sm font-medium">
+            {t("skillsCli.installHeading")}
+          </summary>
+          <div className="mt-3 space-y-3">
+            {actionError && (
+              <p role="alert" className="text-sm text-destructive-text">
+                {formatBackendError(actionError, t)}
+              </p>
+            )}
+            {runtimeBlocked && (
+              <p className="text-sm text-muted-foreground">
+                {t("skillsCli.runtimeBlocked")}
+              </p>
+            )}
+            <label className="text-sm font-medium" htmlFor="skills-cli-source">
+              {t("skillsCli.sourceLabel")}
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                id="skills-cli-source"
+                value={source}
+                onChange={(event) => setSource(event.target.value)}
+                placeholder={t("skillsCli.sourcePlaceholder")}
+                disabled={isPreviewing || isMutating}
+              />
+              <Button
+                onClick={() => void handlePreview()}
+                disabled={!source.trim() || isPreviewing || isMutating}
+              >
+                {isPreviewing ? t("skillsCli.previewing") : t("skillsCli.preview")}
+              </Button>
+            </div>
+
+            {preview && (
+              <div className="grid gap-4 md:grid-cols-2">
+                <fieldset>
+                  <legend className="mb-2 text-sm font-medium">
+                    {t("skillsCli.skillsHeading")}
+                  </legend>
+                  <div className="space-y-1.5">
+                    {preview.skills.map((name) => (
+                      <label
+                        key={name}
+                        className="flex items-center gap-2 text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedSkillNames.includes(name)}
+                          onChange={() => toggleSkill(name)}
+                          aria-label={t("skillsCli.selectSkill", { name })}
+                        />
+                        {name}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                <fieldset>
+                  <legend className="mb-2 text-sm font-medium">
+                    {t("skillsCli.platformsHeading")}
+                  </legend>
+                  <div className="space-y-1.5">
+                    {targets.map((target) => (
+                      <label
+                        key={target.id}
+                        className="flex items-center gap-2 text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedPlatformIds.includes(target.id)}
+                          onChange={() => togglePlatform(target.id)}
+                          aria-label={t("skillsCli.selectPlatform", {
+                            name: target.displayName,
+                          })}
+                        />
+                        {target.displayName}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <Button onClick={() => void handleAdd()} disabled={!canAdd}>
+                {isMutating ? t("skillsCli.adding") : t("skillsCli.add")}
+              </Button>
+              {jobId && (
+                <Button variant="outline" onClick={() => void cancelJob()}>
+                  {t("skillsCli.cancel")}
+                </Button>
+              )}
+            </div>
+          </div>
+        </details>
+
+        {canonicalRoot && lockPath && (
+          <div
+            data-testid="skills-cli-paths"
+            className="space-y-0.5 text-ui-meta text-muted-foreground"
+          >
+            <p>{t("skillsCli.pathsCanonical", { root: canonicalRoot })}</p>
+            <p>{t("skillsCli.pathsLock", { lock: lockPath })}</p>
+            <p>{t("skillsCli.ownershipNote")}</p>
+          </div>
+        )}
       </div>
 
       <Dialog
         open={uninstallTarget !== null}
         onOpenChange={(open) => {
+          if (open && runtimeBlocked) {
+            return;
+          }
           if (!open) setUninstallTarget(null);
         }}
       >
@@ -359,7 +414,7 @@ export function SkillsCliView() {
             <Button
               variant="destructive"
               onClick={() => void handleUninstall()}
-              disabled={isMutating}
+              disabled={isMutating || runtimeBlocked}
             >
               {isMutating
                 ? t("skillsCli.uninstalling")
