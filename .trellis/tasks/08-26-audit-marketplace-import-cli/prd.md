@@ -22,11 +22,11 @@ job 和外部副作用审计，同时维持严格的 URL/token/path/content/outp
 
 ## Acceptance Criteria
 
-- [ ] 本 child 的所有 operation policy entries 有唯一 owning row；成功读取/preview 不产生 Operation row。
-- [ ] GitHub/AI credentials 的 set/clear/test只记录是否配置/测试结果，不含 secret或远端 identity。
-- [ ] imports/portable state/Skills CLI 的 success/failure/partial/cancel与started/interrupted有 focused tests。
-- [ ] URL/ref/SHA/path/manifest/content/command/output/AI prompt-response对抗种子不出现在任何日志/导出。
-- [ ] nested Marketplace/import/install helper不产生重复用户 operation，既有 progress/job semantics不变。
+- [x] 本 child 的所有 operation policy entries 有唯一 owning row；成功读取/preview 不产生 Operation row。
+- [x] GitHub/AI credentials 的 set/clear/test只记录是否配置/测试结果，不含 secret或远端 identity。
+- [x] imports/portable state/Skills CLI 的 success/failure/partial/cancel与started/interrupted有 focused tests。
+- [x] URL/ref/SHA/path/manifest/content/command/output/AI prompt-response对抗种子不出现在任何日志/导出。
+- [x] nested Marketplace/import/install helper不产生重复用户 operation，既有 progress/job semantics不变。
 
 ## Out of Scope
 

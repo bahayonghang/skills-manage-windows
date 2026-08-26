@@ -1,20 +1,25 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   Bug,
   Copy,
   Download,
   FileText,
   Loader2,
+  MonitorSmartphone,
   RefreshCw,
   RotateCcw,
   Search,
+  Server,
   ShieldCheck,
-  Terminal,
   Trash2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import {
+  formatLogUiError,
+  safeCorrelationId,
+} from "@/components/logs/logDiagnostics";
 import { Button } from "@/components/ui/button";
 import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
 import { Input } from "@/components/ui/input";
@@ -74,6 +79,14 @@ function RuntimeLineRow({
   selected: boolean;
   onSelect: (line: RuntimeLogLine) => void;
 }) {
+  const { t } = useTranslation();
+  const sourceKind = line.eventSource ?? "legacy";
+  const SourceIcon =
+    sourceKind === "backend"
+      ? Server
+      : sourceKind === "frontend"
+        ? MonitorSmartphone
+        : FileText;
   return (
     <button
       type="button"
@@ -86,20 +99,36 @@ function RuntimeLineRow({
       <div>
         <span
           className={`inline-flex rounded-full border px-2 py-0.5 font-mono text-xs uppercase ${runtimeLevelClass(
-            line.level
+            line.level,
           )}`}
         >
           {line.level ?? "log"}
         </span>
       </div>
-      <div className="truncate font-mono text-muted-foreground">{line.source}</div>
-      <div className="truncate font-mono text-foreground">{line.message || line.raw}</div>
+      <div className="min-w-0">
+        <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-ui-meta text-muted-foreground">
+          <SourceIcon className="size-3" />
+          {t(`logs.runtime.sources.${sourceKind}`)}
+        </span>
+        <div className="mt-1 truncate font-mono text-muted-foreground">
+          {line.source}
+        </div>
+      </div>
+      <div className="truncate font-mono text-foreground">
+        {line.message || line.raw}
+      </div>
     </button>
   );
 }
 
-export function RuntimeLogsPanel() {
+export function RuntimeLogsPanel({
+  onInspectOperation,
+}: {
+  onInspectOperation?: (operationId: string) => void;
+}) {
   const { t } = useTranslation();
+  const translationRef = useRef(t);
+  translationRef.current = t;
   const files = useRuntimeLogStore((s) => s.files);
   const selectedFileName = useRuntimeLogStore((s) => s.selectedFileName);
   const readResult = useRuntimeLogStore((s) => s.readResult);
@@ -117,6 +146,9 @@ export function RuntimeLogsPanel() {
   const clearLogs = useRuntimeLogStore((s) => s.clearLogs);
   const exportLog = useRuntimeLogStore((s) => s.exportLog);
   const [query, setQuery] = useState(filter.query ?? "");
+  const [operationIdDraft, setOperationIdDraft] = useState(
+    filter.operationId ?? "",
+  );
   const [selectedLine, setSelectedLine] = useState<RuntimeLogLine | null>(null);
 
   useEffect(() => {
@@ -124,9 +156,19 @@ export function RuntimeLogsPanel() {
     loadFiles()
       .then((nextFiles) => {
         if (cancelled || nextFiles.length === 0) return;
-        return readFile({ fileName: nextFiles[0].fileName, tail: true, offset: 0 });
+        return readFile({
+          fileName: nextFiles[0].fileName,
+          tail: true,
+          offset: 0,
+        });
       })
-      .catch((err) => toast.error(String(err)));
+      .catch((err) =>
+        toast.error(
+          translationRef.current("logs.runtime.loadError", {
+            error: formatLogUiError(err, translationRef.current),
+          }),
+        ),
+      );
     return () => {
       cancelled = true;
     };
@@ -136,9 +178,17 @@ export function RuntimeLogsPanel() {
     setSelectedLine(null);
   }, [selectedFileName]);
 
-  const selectedFile = files.find((file) => file.fileName === selectedFileName) ?? null;
+  const selectedFile =
+    files.find((file) => file.fileName === selectedFileName) ?? null;
+  const selectedCorrelationId = safeCorrelationId(selectedLine?.operationId);
   const lines = readResult?.lines ?? [];
-  const hasRuntimeFilters = Boolean(filter.query || filter.level || filter.source);
+  const hasRuntimeFilters = Boolean(
+    filter.query ||
+    filter.level ||
+    filter.source ||
+    filter.operationId ||
+    filter.eventSource,
+  );
 
   function updateRuntimeFilter(partial: Partial<typeof filter>) {
     const nextFilter = { ...filter, ...partial };
@@ -147,14 +197,20 @@ export function RuntimeLogsPanel() {
       query: nextFilter.query,
       level: nextFilter.level,
       source: nextFilter.source,
+      operationId: nextFilter.operationId,
+      eventSource: nextFilter.eventSource,
       offset: 0,
       tail: true,
-    }).catch((err) => toast.error(t("logs.runtime.loadError", { error: String(err) })));
+    }).catch((err) =>
+      toast.error(
+        t("logs.runtime.loadError", { error: formatLogUiError(err, t) }),
+      ),
+    );
   }
 
   function handleRuntimeSearch(event: FormEvent) {
     event.preventDefault();
-    updateRuntimeFilter({ query });
+    updateRuntimeFilter({ query, operationId: operationIdDraft });
   }
 
   async function handleRuntimeExport() {
@@ -164,7 +220,11 @@ export function RuntimeLogsPanel() {
       downloadRuntimeLog(payload, selectedFileName);
       toast.success(t("logs.runtime.exported"));
     } catch (err) {
-      toast.error(t("logs.runtime.exportError", { error: String(err) }));
+      toast.error(
+        t("logs.runtime.exportError", {
+          error: formatLogUiError(err, t),
+        }),
+      );
     }
   }
 
@@ -174,26 +234,42 @@ export function RuntimeLogsPanel() {
       const deleted = await clearLogs({ fileName: selectedFileName });
       toast.success(t("logs.runtime.cleared", { count: deleted }));
     } catch (err) {
-      toast.error(t("logs.runtime.clearError", { error: String(err) }));
+      toast.error(
+        t("logs.runtime.clearError", { error: formatLogUiError(err, t) }),
+      );
     }
   }
 
   function handleRuntimeResetFilters() {
     clearFilters();
     setQuery("");
-    readFile({ query: undefined, level: undefined, source: undefined, offset: 0, tail: true }).catch(
-      (err) => toast.error(t("logs.runtime.loadError", { error: String(err) }))
+    setOperationIdDraft("");
+    readFile({
+      query: undefined,
+      level: undefined,
+      source: undefined,
+      operationId: undefined,
+      eventSource: undefined,
+      offset: 0,
+      tail: true,
+    }).catch((err) =>
+      toast.error(
+        t("logs.runtime.loadError", { error: formatLogUiError(err, t) }),
+      ),
     );
   }
 
-  async function handleCopyRuntimeLine() {
-    if (!selectedLine) return;
+  async function handleCopy(text: string) {
     try {
-      await navigator.clipboard.writeText(selectedLine.raw);
+      await navigator.clipboard.writeText(text);
       toast.success(t("logs.copy.success"));
-    } catch (err) {
-      toast.error(t("logs.copy.failure", { error: String(err) }));
+    } catch {
+      toast.error(t("logs.copy.failure"));
     }
+  }
+
+  function handleCopyRuntimeLine() {
+    if (selectedLine) void handleCopy(selectedLine.raw);
   }
 
   return (
@@ -201,11 +277,7 @@ export function RuntimeLogsPanel() {
       <div className="shrink-0 border-b border-border px-5 py-4">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-xs font-medium text-muted-foreground">
-              <Terminal className="size-3.5" />
-              {t("logs.runtime.eyebrow")}
-            </div>
-            <h2 className="mt-2 text-xl font-semibold tracking-tight">
+            <h2 className="text-xl font-semibold tracking-tight">
               {t("logs.runtime.title")}
             </h2>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
@@ -219,13 +291,24 @@ export function RuntimeLogsPanel() {
               onClick={() => {
                 loadFiles()
                   .then((nextFiles) => {
-                    const nextFileName = selectedFileName ?? nextFiles[0]?.fileName;
+                    const nextFileName =
+                      selectedFileName ?? nextFiles[0]?.fileName;
                     if (nextFileName) {
-                      return readFile({ fileName: nextFileName, tail: true, offset: 0 });
+                      return readFile({
+                        fileName: nextFileName,
+                        tail: true,
+                        offset: 0,
+                      });
                     }
                     return undefined;
                   })
-                  .catch((err) => toast.error(String(err)));
+                  .catch((err) =>
+                    toast.error(
+                      t("logs.runtime.loadError", {
+                        error: formatLogUiError(err, t),
+                      }),
+                    ),
+                  );
               }}
               disabled={isLoadingFiles || isLoadingLines}
             >
@@ -263,9 +346,9 @@ export function RuntimeLogsPanel() {
 
         <form
           onSubmit={handleRuntimeSearch}
-          className="mt-4 grid gap-2 lg:grid-cols-[minmax(15rem,1.2fr)_9rem_minmax(10rem,0.8fr)_auto]"
+          className="mt-4 grid gap-2 sm:grid-cols-2 2xl:grid-cols-[minmax(13rem,1.1fr)_8rem_minmax(9rem,0.7fr)_minmax(13rem,1fr)_9rem_auto]"
         >
-          <div className="relative">
+          <div className="relative sm:col-span-2 2xl:col-span-1">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
@@ -276,7 +359,9 @@ export function RuntimeLogsPanel() {
           </div>
           <select
             value={filter.level ?? ""}
-            onChange={(event) => updateRuntimeFilter({ level: event.target.value as never })}
+            onChange={(event) =>
+              updateRuntimeFilter({ level: event.target.value as never })
+            }
             aria-label={t("logs.filters.level")}
             className="h-8 rounded-lg border border-input bg-background px-2 text-sm"
           >
@@ -289,11 +374,40 @@ export function RuntimeLogsPanel() {
           </select>
           <Input
             value={filter.source ?? ""}
-            onChange={(event) => updateRuntimeFilter({ source: event.target.value })}
+            onChange={(event) =>
+              updateRuntimeFilter({ source: event.target.value })
+            }
             placeholder={t("logs.runtime.sourcePlaceholder")}
             aria-label={t("logs.runtime.sourceLabel")}
           />
-          <Button type="submit" size="sm" disabled={isLoadingLines || !selectedFileName}>
+          <Input
+            value={operationIdDraft}
+            onChange={(event) => setOperationIdDraft(event.target.value)}
+            placeholder={t("logs.runtime.operationIdPlaceholder")}
+            aria-label={t("logs.runtime.operationIdLabel")}
+            className="font-mono"
+          />
+          <select
+            value={filter.eventSource ?? ""}
+            onChange={(event) =>
+              updateRuntimeFilter({
+                eventSource: event.target.value as "backend" | "frontend" | "",
+              })
+            }
+            aria-label={t("logs.runtime.eventSourceLabel")}
+            className="h-8 rounded-lg border border-input bg-background px-2 text-sm"
+          >
+            <option value="">{t("logs.runtime.allEventSources")}</option>
+            <option value="backend">{t("logs.runtime.sources.backend")}</option>
+            <option value="frontend">
+              {t("logs.runtime.sources.frontend")}
+            </option>
+          </select>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={isLoadingLines || !selectedFileName}
+          >
             {t("common.search")}
           </Button>
         </form>
@@ -321,7 +435,9 @@ export function RuntimeLogsPanel() {
 
       {error && (
         <div className="mx-5 mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive-text">
-          {error}
+          {t("logs.runtime.loadError", {
+            error: formatLogUiError(error, t),
+          })}
         </div>
       )}
 
@@ -353,7 +469,11 @@ export function RuntimeLogsPanel() {
                     type="button"
                     onClick={() =>
                       selectFile(file.fileName).catch((err) =>
-                        toast.error(t("logs.runtime.loadError", { error: String(err) }))
+                        toast.error(
+                          t("logs.runtime.loadError", {
+                            error: formatLogUiError(err, t),
+                          }),
+                        ),
                       )
                     }
                     className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
@@ -362,7 +482,9 @@ export function RuntimeLogsPanel() {
                         : "border-transparent hover:border-border hover:bg-muted/50"
                     }`}
                   >
-                    <div className="font-mono text-sm font-semibold">{file.date}</div>
+                    <div className="font-mono text-sm font-semibold">
+                      {file.date}
+                    </div>
                     <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                       <span>{formatBytes(file.sizeBytes)}</span>
                       <span>{formatRuntimeDate(file.modifiedAt)}</span>
@@ -442,15 +564,65 @@ export function RuntimeLogsPanel() {
                   <dt className="text-xs text-muted-foreground">
                     {t("logs.runtime.fields.timestamp")}
                   </dt>
-                  <dd className="mt-1 font-mono">{selectedLine.timestamp ?? "—"}</dd>
+                  <dd className="mt-1 font-mono">
+                    {selectedLine.timestamp ?? "—"}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">
                     {t("logs.runtime.fields.source")}
                   </dt>
-                  <dd className="mt-1 break-all font-mono">{selectedLine.source}</dd>
+                  <dd className="mt-1 break-all font-mono">
+                    {selectedLine.source}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">
+                    {t("logs.runtime.fields.eventSource")}
+                  </dt>
+                  <dd className="mt-1">
+                    {t(
+                      `logs.runtime.sources.${selectedLine.eventSource ?? "legacy"}`,
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">
+                    {t("logs.runtime.fields.operationId")}
+                  </dt>
+                  <dd className="mt-1 flex min-w-0 items-center gap-1 font-mono text-xs">
+                    <span className="min-w-0 break-all">
+                      {selectedCorrelationId ?? t("logs.diagnostics.legacyId")}
+                    </span>
+                    {selectedCorrelationId ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        className="shrink-0"
+                        aria-label={t("logs.copy.id")}
+                        title={t("logs.copy.id")}
+                        onClick={() => void handleCopy(selectedCorrelationId)}
+                        data-testid="runtime-log-copy-operation-id"
+                      >
+                        <Copy />
+                      </Button>
+                    ) : null}
+                  </dd>
                 </div>
               </dl>
+              {selectedCorrelationId && onInspectOperation ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => onInspectOperation(selectedCorrelationId)}
+                  data-testid="runtime-log-view-operation"
+                >
+                  {t("logs.runtime.viewOperation")}
+                </Button>
+              ) : null}
               <pre className="mt-4 min-h-0 flex-1 overflow-auto rounded-lg border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap">
                 {selectedLine.raw}
               </pre>

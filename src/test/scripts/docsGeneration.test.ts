@@ -24,8 +24,9 @@ type GenerateDocs = (options: {
 
 // @ts-expect-error The documentation generator is an ESM Node script outside the TS source tree.
 const ipcModule = await import("../../../scripts/docs/build-ipc-dict.mjs");
-// @ts-expect-error The documentation generator is an ESM Node script outside the TS source tree.
-const schemaModule = await import("../../../scripts/docs/build-schema-table.mjs");
+const schemaModule =
+  // @ts-expect-error The documentation generator is an ESM Node script outside the TS source tree.
+  await import("../../../scripts/docs/build-schema-table.mjs");
 
 const generators: Array<{
   createSource: (sourceDir: string) => void;
@@ -64,11 +65,11 @@ const generators: Array<{
       writeFileSync(
         join(sourceDir, "example.rs"),
         [
-          "const SQL: &str = \"CREATE TABLE IF NOT EXISTS examples (",
+          'const SQL: &str = "CREATE TABLE IF NOT EXISTS examples (',
           "    id TEXT PRIMARY KEY,",
           "    name TEXT NOT NULL DEFAULT 'example',",
           "    CHECK (name != '')",
-          ")\";",
+          ')";',
           "",
         ].join("\n"),
         "utf8",
@@ -77,63 +78,68 @@ const generators: Array<{
   },
 ];
 
-describe.each(generators)("$name documentation generator", ({
-  createSource,
-  generate,
-  outputName,
-}) => {
-  it("produces stable bytes and checks without rewriting", () => {
-    const rootDir = mkdtempSync(join(tmpdir(), "skillport-docs-gen-"));
-    const sourceDir = join(rootDir, "source");
-    const outputFile = join(rootDir, "generated", outputName);
-    const silent = () => undefined;
+describe.each(generators)(
+  "$name documentation generator",
+  ({ createSource, generate, outputName }) => {
+    it("produces stable bytes and checks without rewriting", () => {
+      const rootDir = mkdtempSync(join(tmpdir(), "skillport-docs-gen-"));
+      const sourceDir = join(rootDir, "source");
+      const outputFile = join(rootDir, "generated", outputName);
+      const silent = () => undefined;
 
-    try {
-      createSource(sourceDir);
-      generate({ sourceDir, outputFile, rootDir, log: silent });
-      const first = readFileSync(outputFile);
-      expect(first.toString("utf8")).not.toContain("Last generated:");
-      expect(first.toString("utf8")).not.toContain("| `CHECK` |");
-      expect(first.toString("utf8")).not.toContain(") ->");
+      try {
+        createSource(sourceDir);
+        generate({ sourceDir, outputFile, rootDir, log: silent });
+        const first = readFileSync(outputFile);
+        expect(first.toString("utf8")).not.toContain("Last generated:");
+        expect(first.toString("utf8")).not.toContain("| `CHECK` |");
+        expect(first.toString("utf8")).not.toContain(") ->");
 
-      generate({ sourceDir, outputFile, rootDir, log: silent });
-      expect(readFileSync(outputFile).equals(first)).toBe(true);
+        generate({ sourceDir, outputFile, rootDir, log: silent });
+        expect(readFileSync(outputFile).equals(first)).toBe(true);
 
-      const fixedTime = new Date("2020-01-01T00:00:00.000Z");
-      utimesSync(outputFile, fixedTime, fixedTime);
-      const cleanMtime = statSync(outputFile).mtimeMs;
-      generate({ sourceDir, outputFile, rootDir, check: true, log: silent });
-      expect(readFileSync(outputFile).equals(first)).toBe(true);
-      expect(statSync(outputFile).mtimeMs).toBe(cleanMtime);
-    } finally {
-      rmSync(rootDir, { recursive: true, force: true });
-    }
-  });
+        const fixedTime = new Date("2020-01-01T00:00:00.000Z");
+        utimesSync(outputFile, fixedTime, fixedTime);
+        const cleanMtime = statSync(outputFile).mtimeMs;
+        generate({ sourceDir, outputFile, rootDir, check: true, log: silent });
+        expect(readFileSync(outputFile).equals(first)).toBe(true);
+        expect(statSync(outputFile).mtimeMs).toBe(cleanMtime);
+      } finally {
+        rmSync(rootDir, { recursive: true, force: true });
+      }
+    });
 
-  it("fails on drift without changing the stale file", () => {
-    const rootDir = mkdtempSync(join(tmpdir(), "skillport-docs-drift-"));
-    const sourceDir = join(rootDir, "source");
-    const outputFile = join(rootDir, "generated", outputName);
-    const silent = () => undefined;
+    it("fails on drift without changing the stale file", () => {
+      const rootDir = mkdtempSync(join(tmpdir(), "skillport-docs-drift-"));
+      const sourceDir = join(rootDir, "source");
+      const outputFile = join(rootDir, "generated", outputName);
+      const silent = () => undefined;
 
-    try {
-      createSource(sourceDir);
-      mkdirSync(join(rootDir, "generated"), { recursive: true });
-      writeFileSync(outputFile, "stale\n", "utf8");
-      const fixedTime = new Date("2020-01-01T00:00:00.000Z");
-      utimesSync(outputFile, fixedTime, fixedTime);
-      const staleMtime = statSync(outputFile).mtimeMs;
+      try {
+        createSource(sourceDir);
+        mkdirSync(join(rootDir, "generated"), { recursive: true });
+        writeFileSync(outputFile, "stale\n", "utf8");
+        const fixedTime = new Date("2020-01-01T00:00:00.000Z");
+        utimesSync(outputFile, fixedTime, fixedTime);
+        const staleMtime = statSync(outputFile).mtimeMs;
 
-      expect(() =>
-        generate({ sourceDir, outputFile, rootDir, check: true, log: silent }),
-      ).toThrow(new RegExp(`${outputName}.*pnpm docs:gen`, "s"));
-      expect(readFileSync(outputFile, "utf8")).toBe("stale\n");
-      expect(statSync(outputFile).mtimeMs).toBe(staleMtime);
-    } finally {
-      rmSync(rootDir, { recursive: true, force: true });
-    }
-  });
-});
+        expect(() =>
+          generate({
+            sourceDir,
+            outputFile,
+            rootDir,
+            check: true,
+            log: silent,
+          }),
+        ).toThrow(new RegExp(`${outputName}.*pnpm docs:gen`, "s"));
+        expect(readFileSync(outputFile, "utf8")).toBe("stale\n");
+        expect(statSync(outputFile).mtimeMs).toBe(staleMtime);
+      } finally {
+        rmSync(rootDir, { recursive: true, force: true });
+      }
+    });
+  },
+);
 
 const repositoryRoot = resolve(process.cwd());
 
@@ -151,9 +157,7 @@ function collectRegistryCommands(macroName: string): string[] {
   }
 
   return [
-    ...registry
-      .slice(bodyStart, bodyEnd)
-      .matchAll(/^\s*([a-z0-9_]+)\s*=>/gm),
+    ...registry.slice(bodyStart, bodyEnd).matchAll(/^\s*([a-z0-9_]+)\s*=>/gm),
   ].map((match) => match[1]);
 }
 
@@ -175,13 +179,25 @@ it("keeps the generated IPC dictionary equal to the runtime registry", () => {
 
   expect(new Set(documented).size).toBe(documented.length);
   expect([...documented].sort()).toEqual([...runtime].sort());
+  expect(markdown).toContain("| Command / action | Log policy |");
+  expect(markdown).toContain(
+    "| `clear_operation_logs` | operation | Logs | Database | TerminalOnly |",
+  );
+  expect(markdown).toContain(
+    "| `get_operation_log` | runtime-only | — | — | ReadOnly |",
+  );
+  expect(markdown).toContain(
+    "| `record_frontend_runtime_log` | excluded | — | — | SelfLogging |",
+  );
 });
 
 describe.each(["build-ipc-dict.mjs", "build-schema-table.mjs"])(
   "%s CLI",
   (scriptName) => {
     it("resolves repository paths independently of the current working directory", () => {
-      const outsideDirectory = mkdtempSync(join(tmpdir(), "skillport-docs-cli-"));
+      const outsideDirectory = mkdtempSync(
+        join(tmpdir(), "skillport-docs-cli-"),
+      );
 
       try {
         const result = spawnSync(

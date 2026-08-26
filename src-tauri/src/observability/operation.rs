@@ -683,7 +683,10 @@ fn failure_entry(
     diagnostic: ReviewedDiagnostic,
     duration_ms: i64,
 ) -> NewOperationLogEntry {
-    let status = if diagnostic.code == "operation.cancelled" {
+    let status = if matches!(
+        diagnostic.code,
+        "operation.cancelled" | "skills_cli.cancelled"
+    ) {
         "cancelled"
     } else {
         "failed"

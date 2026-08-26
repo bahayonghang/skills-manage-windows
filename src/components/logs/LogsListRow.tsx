@@ -5,12 +5,16 @@ import {
   AlertTriangle,
   Ban,
   CheckCircle2,
+  Clock3,
   Info,
+  PauseCircle,
   XCircle,
 } from "lucide-react";
 
 import { OperationLogEntry } from "@/types";
 import { cn } from "@/lib/utils";
+import { buildOperationDiagnostic } from "@/components/logs/logDiagnostics";
+import { formatBackendError } from "@/lib/backendError";
 import {
   formatDurationMs,
   formatLogAbsoluteTime,
@@ -22,7 +26,7 @@ export type LogsListDensity = "compact" | "comfortable";
 
 interface LogsListRowProps {
   entry: OperationLogEntry;
-  onOpen: (entry: OperationLogEntry) => void;
+  onOpen: (entry: OperationLogEntry, trigger: HTMLButtonElement) => void;
   density?: LogsListDensity;
   rowIndex?: number;
 }
@@ -40,7 +44,10 @@ function statusVisual(status: string): IconVisual {
         className: "bg-success/10 text-success-foreground",
       };
     case "failed":
-      return { icon: XCircle, className: "bg-destructive/10 text-destructive-text" };
+      return {
+        icon: XCircle,
+        className: "bg-destructive/10 text-destructive-text",
+      };
     case "partial":
       return {
         icon: AlertCircle,
@@ -48,6 +55,13 @@ function statusVisual(status: string): IconVisual {
       };
     case "cancelled":
       return { icon: Ban, className: "bg-muted text-muted-foreground" };
+    case "interrupted":
+      return {
+        icon: PauseCircle,
+        className: "bg-warning/10 text-warning-foreground",
+      };
+    case "started":
+      return { icon: Clock3, className: "bg-info/10 text-info-foreground" };
     default:
       return { icon: Info, className: "bg-muted text-muted-foreground" };
   }
@@ -74,6 +88,25 @@ function rowAccentClass(entry: OperationLogEntry): string {
   return "bg-transparent";
 }
 
+function targetLabelKey(targetKind: string): string {
+  return ["local", "ssh", "wsl"].includes(targetKind)
+    ? `logs.targets.${targetKind}`
+    : "logs.targets.unknown";
+}
+
+function statusLabelKey(status: string): string {
+  return [
+    "started",
+    "succeeded",
+    "failed",
+    "partial",
+    "cancelled",
+    "interrupted",
+  ].includes(status)
+    ? `logs.status.${status}`
+    : "logs.status.unknown";
+}
+
 export function LogsListRow({
   entry,
   onOpen,
@@ -81,8 +114,8 @@ export function LogsListRow({
   rowIndex,
 }: LogsListRowProps) {
   const { t, i18n } = useTranslation();
-  const subjectLabel = entry.subjectLabel ?? entry.subjectId ?? null;
-  const hasError = Boolean(entry.errorSummary);
+  const diagnostic = buildOperationDiagnostic(entry);
+  const hasError = ["failed", "partial", "interrupted"].includes(entry.status);
   const status = statusVisual(entry.status);
   const level = levelVisual(entry.level);
   const StatusIcon = status.icon;
@@ -96,7 +129,7 @@ export function LogsListRow({
       type="button"
       data-logs-row=""
       data-row-index={rowIndex}
-      onClick={() => onOpen(entry)}
+      onClick={(event) => onOpen(entry, event.currentTarget)}
       className={cn(
         "group/log relative grid w-full grid-cols-[9rem_4.5rem_minmax(0,1fr)_minmax(0,1.6fr)_5rem_7rem] items-start gap-3 border-b border-border px-3 text-left text-sm transition-colors last:border-b-0 hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset",
         density === "compact" ? "py-1.5" : "py-2.5",
@@ -123,7 +156,7 @@ export function LogsListRow({
       </span>
       <span className="min-w-0">
         <span className="block truncate text-sm">
-          {entry.targetLabel ?? entry.targetId}
+          {t(targetLabelKey(entry.targetKind))}
         </span>
         <span className="text-xs text-muted-foreground">
           {entry.targetKind}
@@ -132,17 +165,25 @@ export function LogsListRow({
       <span className="min-w-0">
         <span className="block truncate font-mono text-xs">{entry.action}</span>
         <span className="block truncate text-xs text-muted-foreground">
-          {entry.summary}
+          {t(`logs.diagnostics.statusSummaries.${entry.status}`, {
+            defaultValue: t("logs.diagnostics.statusSummaries.default"),
+          })}
         </span>
-        {subjectLabel && (
-          <span className="block truncate text-ui-meta text-muted-foreground">
-            {subjectLabel}
-          </span>
-        )}
         {hasError && (
           <span className="mt-1 line-clamp-2 block rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-xs text-destructive-text">
             <span className="font-medium">{t("logs.errorInline")}</span>
-            <span className="ml-1">{entry.errorSummary}</span>
+            <span className="ml-1">
+              {diagnostic.errorCode
+                ? formatBackendError(
+                    {
+                      code: diagnostic.errorCode,
+                      message: t("logs.diagnostics.reasons.unavailable"),
+                      retryable: diagnostic.retryable ?? false,
+                    },
+                    t,
+                  )
+                : t("logs.diagnostics.reasons.unavailable")}
+            </span>
           </span>
         )}
       </span>
@@ -156,9 +197,7 @@ export function LogsListRow({
         )}
       >
         <StatusIcon className="size-3.5" />
-        <span>
-          {t(`logs.status.${entry.status}`, { defaultValue: entry.status })}
-        </span>
+        <span>{t(statusLabelKey(entry.status))}</span>
       </span>
     </button>
   );

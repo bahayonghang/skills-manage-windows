@@ -119,8 +119,14 @@ pub fn build_usage_metadata(
                 .as_ref()
                 .and_then(|path| content_by_path.get(path).map(|content| (path, content)))
                 .filter(|(path, content)| {
-                    if let Err(error) = budget.reject_file_read_size(path, content.len() as u64) {
-                        tracing::warn!(path, error = %error, "usage Skill.md exceeds resource budget");
+                    if budget
+                        .reject_file_read_size(path, content.len() as u64)
+                        .is_err()
+                    {
+                        tracing::warn!(
+                            file_size = content.len(),
+                            "usage Skill.md exceeds resource budget"
+                        );
                         false
                     } else {
                         true

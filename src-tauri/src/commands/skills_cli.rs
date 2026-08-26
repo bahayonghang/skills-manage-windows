@@ -7,23 +7,22 @@
 //! error envelope.
 
 use std::sync::Arc;
-use std::time::Instant;
 
-use serde_json::json;
 use tauri::{AppHandle, Emitter, State};
 
-use crate::ipc_error::{public_message_for_code, IpcError};
-use crate::operation_log::{
-    record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
+use crate::ipc_error::{public_message_for_code, IpcError, REVIEWED_IPC_ERROR_CODES};
+use crate::observability::{
+    CommandLogPolicy, OperationContext, OperationDefinition, OperationSubjectKind, OperationTarget,
+    ReviewedDiagnostic, ReviewedFailure, SafeDetailKey, SafeIdentifier, SafeOperationResult,
 };
 use crate::services::exclusive_job::ExclusiveJobError;
 use crate::services::github_import;
 use crate::services::skills_cli as domain;
 use crate::services::skills_cli::updates::{
-    apply_updates, load_update_inventory_for_pool, retry_update_recovery, verify_update_baseline_at,
-    ProductionSkillsCliGithub, SkillsCliApplyRecoveryResult, SkillsCliApplyResult,
-    SkillsCliApplyUpdateRequest, SkillsCliUpdateInventory, SkillsCliUpdateProgress,
-    UpdateProgressEmitter, UPDATE_PROGRESS_EVENT,
+    apply_updates, load_update_inventory_for_pool, retry_update_recovery,
+    verify_update_baseline_at, ProductionSkillsCliGithub, SkillsCliApplyRecoveryResult,
+    SkillsCliApplyResult, SkillsCliApplyUpdateRequest, SkillsCliUpdateInventory,
+    SkillsCliUpdateProgress, UpdateProgressEmitter, UPDATE_PROGRESS_EVENT,
 };
 use crate::services::skills_cli::{
     NodeProcessRunner, SkillsCliAddResult, SkillsCliDoctorReport, SkillsCliError,
@@ -68,43 +67,35 @@ fn domain_runner() -> Arc<dyn SkillsCliRunner> {
     Arc::new(NodeProcessRunner)
 }
 
-fn mutation_log_details(skill_name: &str, agent_id: Option<&str>) -> serde_json::Value {
-    match agent_id {
-        Some(agent) => json!({
-            "skillName": skill_name,
-            "agentId": agent,
-        }),
-        None => json!({
-            "skillName": skill_name,
-        }),
+fn operation_definition(command: &'static str) -> OperationDefinition {
+    match crate::ipc_registry::command_policy(command)
+        .expect("Skills CLI command must be registered")
+        .policy
+    {
+        CommandLogPolicy::Operation(definition) => definition,
+        _ => panic!("Skills CLI mutation must use Operation policy"),
     }
 }
 
-async fn record_placement_mutation_log(
-    pool: &crate::db::DbPool,
-    active_target: &crate::targets::ActiveTarget,
-    action: &'static str,
-    skill_name: &str,
-    agent_id: &str,
-    succeeded: bool,
-    started_at: Instant,
-) {
-    let status = if succeeded { "succeeded" } else { "failed" };
-    let summary = if succeeded {
-        format!("Updated Skills CLI platform placement for {skill_name}")
-    } else {
-        format!("Failed to update Skills CLI platform placement for {skill_name}")
-    };
-    let event = OperationLogEvent::new("skills_cli", action, status, summary)
-        .subject("skill", skill_name, skill_name)
-        .details(mutation_log_details(skill_name, Some(agent_id)))
-        .duration_ms(started_at.elapsed().as_millis() as i64);
-    record_operation_log_best_effort(
-        pool,
-        target_context_from_active_target(active_target),
-        event,
-    )
-    .await;
+fn reviewed_failure(definition: OperationDefinition, error: IpcError) -> ReviewedFailure {
+    let code = REVIEWED_IPC_ERROR_CODES
+        .iter()
+        .copied()
+        .find(|code| *code == error.safe_code())
+        .unwrap_or("internal.unexpected");
+    let message = public_message_for_code(code)
+        .unwrap_or("The operation failed. See runtime logs for details.");
+    ReviewedFailure::new(ReviewedDiagnostic::new(
+        code,
+        definition.category().as_str(),
+        definition.default_phase(),
+        message,
+        error.retryable,
+    ))
+}
+
+fn skills_cli_failure(definition: OperationDefinition, error: &SkillsCliError) -> ReviewedFailure {
+    reviewed_failure(definition, to_ipc_error(error))
 }
 
 #[tauri::command]
@@ -112,11 +103,13 @@ async fn record_placement_mutation_log(
 pub async fn skills_cli_doctor(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<SkillsCliDoctorReport> {
-    let context = state.resolve_target_context().await?;
-    domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
-    domain::doctor(domain_runner().as_ref())
-        .await
-        .map_err(|error| to_ipc_error(&error))
+    crate::ipc_boundary_async!("skills_cli_doctor", {
+        let context = state.resolve_target_context().await?;
+        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        domain::doctor(domain_runner().as_ref())
+            .await
+            .map_err(|error| to_ipc_error(&error))
+    })
 }
 
 #[tauri::command]
@@ -124,12 +117,14 @@ pub async fn skills_cli_doctor(
 pub async fn skills_cli_list_global(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<SkillsCliGlobalSnapshot> {
-    let context = state.resolve_target_context().await?;
-    domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
-    let pool = context.db().clone();
-    domain::list_global(&pool)
-        .await
-        .map_err(|error| to_ipc_error(&error))
+    crate::ipc_boundary_async!("skills_cli_list_global", {
+        let context = state.resolve_target_context().await?;
+        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        let pool = context.db().clone();
+        domain::list_global(&pool)
+            .await
+            .map_err(|error| to_ipc_error(&error))
+    })
 }
 
 #[tauri::command]
@@ -137,12 +132,27 @@ pub async fn skills_cli_list_global(
 pub async fn skills_cli_install_targets(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<Vec<SkillsCliInstallTarget>> {
-    let context = state.resolve_target_context().await?;
-    let pool = context.db().clone();
-    domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
-    domain::install_targets(&pool)
+    crate::ipc_boundary_async!("skills_cli_install_targets", {
+        let context = state.resolve_target_context().await?;
+        let pool = context.db().clone();
+        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        let definition = operation_definition("skills_cli_install_targets");
+        crate::observability::run_operation(
+            &state,
+            definition,
+            OperationContext::new(OperationTarget::local()),
+            |targets: &Vec<SkillsCliInstallTarget>| {
+                SafeOperationResult::succeeded("Refreshed Skills CLI install targets.")
+                    .count(SafeDetailKey::AffectedCount, targets.len() as u64)
+            },
+            || async move {
+                domain::install_targets(&pool)
+                    .await
+                    .map_err(|error| skills_cli_failure(definition, &error))
+            },
+        )
         .await
-        .map_err(|error| to_ipc_error(&error))
+    })
 }
 
 #[tauri::command]
@@ -151,11 +161,13 @@ pub async fn skills_cli_preview_source(
     state: State<'_, AppState>,
     source: String,
 ) -> crate::ipc_error::IpcResult<SkillsCliSourcePreview> {
-    let context = state.resolve_target_context().await?;
-    domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
-    domain::preview_source(domain_runner().as_ref(), &source)
-        .await
-        .map_err(|error| to_ipc_error(&error))
+    crate::ipc_boundary_async!("skills_cli_preview_source", {
+        let context = state.resolve_target_context().await?;
+        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        domain::preview_source(domain_runner().as_ref(), &source)
+            .await
+            .map_err(|error| to_ipc_error(&error))
+    })
 }
 
 #[tauri::command]
@@ -167,51 +179,44 @@ pub async fn skills_cli_add_global(
     skill_names: Vec<String>,
     skillport_agent_ids: Vec<String>,
 ) -> crate::ipc_error::IpcResult<SkillsCliAddResult> {
-    let lease = state
-        .skills_cli_jobs
-        .acquire(&job_id)
-        .map_err(job_lease_error)?;
-    let context = state.resolve_target_context().await?;
-    let active_target = context.target().clone();
-    let pool = context.db().clone();
-    domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
-
-    let started_at = Instant::now();
-    let result = domain::add_global(
-        domain_runner().as_ref(),
-        &source,
-        skill_names.clone(),
-        skillport_agent_ids.clone(),
-        Some(lease.cancel_flag()),
-    )
-    .await;
-
-    let status = if result.is_ok() {
-        "succeeded"
-    } else {
-        "failed"
-    };
-    let summary = match &result {
-        Ok(report) => format!(
-            "Installed {} Skills CLI global skill(s) onto {} platform(s)",
-            report.installed_skills, report.targeted_platforms
-        ),
-        Err(_) => "Failed to install Skills CLI global skills".to_string(),
-    };
-    let event = OperationLogEvent::new("skills_cli", "skills_cli.add", status, summary)
-        .details(json!({
-            "skill_count": skill_names.len(),
-            "platform_count": skillport_agent_ids.len(),
-        }))
-        .duration_ms(started_at.elapsed().as_millis() as i64);
-    record_operation_log_best_effort(
-        &pool,
-        target_context_from_active_target(&active_target),
-        event,
-    )
-    .await;
-
-    result.map_err(|error| to_ipc_error(&error))
+    crate::ipc_boundary_async!("skills_cli_add_global", {
+        let lease = state
+            .skills_cli_jobs
+            .acquire(&job_id)
+            .map_err(job_lease_error)?;
+        let context = state.resolve_target_context().await?;
+        let active_target = context.target().clone();
+        domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
+        let definition = operation_definition("skills_cli_add_global");
+        let requested_skills = skill_names.len() as u64;
+        let requested_platforms = skillport_agent_ids.len() as u64;
+        crate::observability::run_operation(
+            &state,
+            definition,
+            OperationContext::new(OperationTarget::local()),
+            |result: &SkillsCliAddResult| {
+                SafeOperationResult::succeeded("Installed Skills CLI global skills.")
+                    .count(SafeDetailKey::RequestedCount, requested_skills)
+                    .count(
+                        SafeDetailKey::SucceededCount,
+                        result.installed_skills as u64,
+                    )
+                    .count(SafeDetailKey::AffectedCount, requested_platforms)
+            },
+            || async move {
+                domain::add_global(
+                    domain_runner().as_ref(),
+                    &source,
+                    skill_names,
+                    skillport_agent_ids,
+                    Some(lease.cancel_flag()),
+                )
+                .await
+                .map_err(|error| skills_cli_failure(definition, &error))
+            },
+        )
+        .await
+    })
 }
 
 #[tauri::command]
@@ -221,39 +226,44 @@ pub async fn skills_cli_remove_global(
     job_id: String,
     skill_name: String,
 ) -> crate::ipc_error::IpcResult<SkillsCliRemoveResult> {
-    let lease = state
-        .skills_cli_jobs
-        .acquire(&job_id)
-        .map_err(job_lease_error)?;
-    let context = state.resolve_target_context().await?;
-    let active_target = context.target().clone();
-    let pool = context.db().clone();
-    domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
-
-    let started_at = Instant::now();
-    let result = domain::remove_global(&pool, &skill_name, Some(lease.cancel_flag())).await;
-
-    let status = if result.is_ok() {
-        "succeeded"
-    } else {
-        "failed"
-    };
-    let summary = match &result {
-        Ok(_) => format!("Uninstalled Skills CLI global skill {skill_name}"),
-        Err(_) => "Failed to uninstall Skills CLI global skill".to_string(),
-    };
-    let event = OperationLogEvent::new("skills_cli", "skills_cli.remove", status, summary)
-        .subject("skill", &skill_name, &skill_name)
-        .details(mutation_log_details(&skill_name, None))
-        .duration_ms(started_at.elapsed().as_millis() as i64);
-    record_operation_log_best_effort(
-        &pool,
-        target_context_from_active_target(&active_target),
-        event,
-    )
-    .await;
-
-    result.map_err(|error| to_ipc_error(&error))
+    crate::ipc_boundary_async!("skills_cli_remove_global", {
+        let lease = state
+            .skills_cli_jobs
+            .acquire(&job_id)
+            .map_err(job_lease_error)?;
+        let context = state.resolve_target_context().await?;
+        let active_target = context.target().clone();
+        let pool = context.db().clone();
+        domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
+        let definition = operation_definition("skills_cli_remove_global");
+        let operation_context = OperationContext::new(OperationTarget::local()).subject(
+            OperationSubjectKind::Skill,
+            SafeIdentifier::new(&skill_name),
+        );
+        crate::observability::run_operation(
+            &state,
+            definition,
+            operation_context,
+            |result: &SkillsCliRemoveResult| {
+                SafeOperationResult::succeeded("Removed a Skills CLI global skill.")
+                    .flag(SafeDetailKey::Changed, result.removed_canonical)
+                    .count(
+                        SafeDetailKey::AffectedCount,
+                        result.removed_managed_agent_ids.len() as u64,
+                    )
+                    .count(
+                        SafeDetailKey::SkippedCount,
+                        result.retained_direct_copy_agent_ids.len() as u64,
+                    )
+            },
+            || async move {
+                domain::remove_global(&pool, &skill_name, Some(lease.cancel_flag()))
+                    .await
+                    .map_err(|error| skills_cli_failure(definition, &error))
+            },
+        )
+        .await
+    })
 }
 
 #[tauri::command]
@@ -262,11 +272,13 @@ pub async fn skills_cli_read_skill_md(
     state: State<'_, AppState>,
     skill_name: String,
 ) -> crate::ipc_error::IpcResult<SkillsCliSkillDoc> {
-    let context = state.resolve_target_context().await?;
-    domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
-    domain::read_skill_md(&skill_name)
-        .await
-        .map_err(|error| to_ipc_error(&error))
+    crate::ipc_boundary_async!("skills_cli_read_skill_md", {
+        let context = state.resolve_target_context().await?;
+        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        domain::read_skill_md(&skill_name)
+            .await
+            .map_err(|error| to_ipc_error(&error))
+    })
 }
 
 #[tauri::command]
@@ -275,9 +287,26 @@ pub async fn skills_cli_reveal_skill_folder(
     state: State<'_, AppState>,
     skill_name: String,
 ) -> crate::ipc_error::IpcResult<()> {
-    let context = state.resolve_target_context().await?;
-    domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
-    domain::reveal_skill_folder(&skill_name).map_err(|error| to_ipc_error(&error))
+    crate::ipc_boundary_async!("skills_cli_reveal_skill_folder", {
+        let context = state.resolve_target_context().await?;
+        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        let definition = operation_definition("skills_cli_reveal_skill_folder");
+        let operation_context = OperationContext::new(OperationTarget::local()).subject(
+            OperationSubjectKind::Skill,
+            SafeIdentifier::new(&skill_name),
+        );
+        crate::observability::run_operation(
+            &state,
+            definition,
+            operation_context,
+            |_| SafeOperationResult::succeeded("Revealed a Skills CLI skill folder."),
+            || async move {
+                domain::reveal_skill_folder(&skill_name)
+                    .map_err(|error| skills_cli_failure(definition, &error))
+            },
+        )
+        .await
+    })
 }
 
 #[tauri::command]
@@ -288,34 +317,44 @@ pub async fn skills_cli_link_platform(
     skill_name: String,
     skillport_agent_id: String,
 ) -> crate::ipc_error::IpcResult<SkillsCliPlacement> {
-    let lease = state
-        .skills_cli_jobs
-        .acquire(&job_id)
-        .map_err(job_lease_error)?;
-    let context = state.resolve_target_context().await?;
-    let active_target = context.target().clone();
-    let pool = context.db().clone();
-    domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
+    crate::ipc_boundary_async!("skills_cli_link_platform", {
+        let lease = state
+            .skills_cli_jobs
+            .acquire(&job_id)
+            .map_err(job_lease_error)?;
+        let context = state.resolve_target_context().await?;
+        let active_target = context.target().clone();
+        let pool = context.db().clone();
+        domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
 
-    let started_at = Instant::now();
-    let result = domain::link_platform(
-        &pool,
-        &skill_name,
-        &skillport_agent_id,
-        Some(lease.cancel_flag()),
-    )
-    .await;
-    record_placement_mutation_log(
-        &pool,
-        &active_target,
-        "skills_cli.link",
-        &skill_name,
-        &skillport_agent_id,
-        result.is_ok(),
-        started_at,
-    )
-    .await;
-    result.map_err(|error| to_ipc_error(&error))
+        let definition = operation_definition("skills_cli_link_platform");
+        let operation_context = OperationContext::new(OperationTarget::local()).subject(
+            OperationSubjectKind::Skill,
+            SafeIdentifier::new(&skill_name),
+        );
+        let logged_agent = SafeIdentifier::new(&skillport_agent_id);
+        crate::observability::run_operation(
+            &state,
+            definition,
+            operation_context,
+            move |_| {
+                SafeOperationResult::succeeded("Linked a Skills CLI platform placement.")
+                    .flag(SafeDetailKey::Changed, true)
+                    .identifier(SafeDetailKey::Identifier, logged_agent)
+            },
+            || async move {
+                domain::link_platform(
+                    &pool,
+                    &skill_name,
+                    &skillport_agent_id,
+                    Some(lease.cancel_flag()),
+                )
+                .await
+                .map_err(|error| skills_cli_failure(definition, &error))
+            },
+        )
+        .await
+    })
 }
 
 #[tauri::command]
@@ -326,34 +365,44 @@ pub async fn skills_cli_unlink_platform(
     skill_name: String,
     skillport_agent_id: String,
 ) -> crate::ipc_error::IpcResult<SkillsCliPlacement> {
-    let lease = state
-        .skills_cli_jobs
-        .acquire(&job_id)
-        .map_err(job_lease_error)?;
-    let context = state.resolve_target_context().await?;
-    let active_target = context.target().clone();
-    let pool = context.db().clone();
-    domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
+    crate::ipc_boundary_async!("skills_cli_unlink_platform", {
+        let lease = state
+            .skills_cli_jobs
+            .acquire(&job_id)
+            .map_err(job_lease_error)?;
+        let context = state.resolve_target_context().await?;
+        let active_target = context.target().clone();
+        let pool = context.db().clone();
+        domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
 
-    let started_at = Instant::now();
-    let result = domain::unlink_platform(
-        &pool,
-        &skill_name,
-        &skillport_agent_id,
-        Some(lease.cancel_flag()),
-    )
-    .await;
-    record_placement_mutation_log(
-        &pool,
-        &active_target,
-        "skills_cli.unlink",
-        &skill_name,
-        &skillport_agent_id,
-        result.is_ok(),
-        started_at,
-    )
-    .await;
-    result.map_err(|error| to_ipc_error(&error))
+        let definition = operation_definition("skills_cli_unlink_platform");
+        let operation_context = OperationContext::new(OperationTarget::local()).subject(
+            OperationSubjectKind::Skill,
+            SafeIdentifier::new(&skill_name),
+        );
+        let logged_agent = SafeIdentifier::new(&skillport_agent_id);
+        crate::observability::run_operation(
+            &state,
+            definition,
+            operation_context,
+            move |_| {
+                SafeOperationResult::succeeded("Unlinked a Skills CLI platform placement.")
+                    .flag(SafeDetailKey::Changed, true)
+                    .identifier(SafeDetailKey::Identifier, logged_agent)
+            },
+            || async move {
+                domain::unlink_platform(
+                    &pool,
+                    &skill_name,
+                    &skillport_agent_id,
+                    Some(lease.cancel_flag()),
+                )
+                .await
+                .map_err(|error| skills_cli_failure(definition, &error))
+            },
+        )
+        .await
+    })
 }
 
 #[tauri::command]
@@ -362,12 +411,14 @@ pub async fn skills_cli_preview_remove_global(
     state: State<'_, AppState>,
     skill_name: String,
 ) -> crate::ipc_error::IpcResult<SkillsCliRemovePlan> {
-    let context = state.resolve_target_context().await?;
-    domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
-    let pool = context.db().clone();
-    domain::preview_remove_global(&pool, &skill_name)
-        .await
-        .map_err(|error| to_ipc_error(&error))
+    crate::ipc_boundary_async!("skills_cli_preview_remove_global", {
+        let context = state.resolve_target_context().await?;
+        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        let pool = context.db().clone();
+        domain::preview_remove_global(&pool, &skill_name)
+            .await
+            .map_err(|error| to_ipc_error(&error))
+    })
 }
 
 #[tauri::command]
@@ -377,11 +428,23 @@ pub async fn skills_cli_export_inventory(
     path: String,
     json: String,
 ) -> crate::ipc_error::IpcResult<()> {
-    let context = state.resolve_target_context().await?;
-    domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
-    domain::export_inventory(std::path::PathBuf::from(path), json)
+    crate::ipc_boundary_async!("skills_cli_export_inventory", {
+        let context = state.resolve_target_context().await?;
+        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        let definition = operation_definition("skills_cli_export_inventory");
+        crate::observability::run_operation(
+            &state,
+            definition,
+            OperationContext::new(OperationTarget::local()),
+            |_| SafeOperationResult::succeeded("Exported the Skills CLI inventory."),
+            || async move {
+                domain::export_inventory(std::path::PathBuf::from(path), json)
+                    .await
+                    .map_err(|error| skills_cli_failure(definition, &error))
+            },
+        )
         .await
-        .map_err(|error| to_ipc_error(&error))
+    })
 }
 
 #[tauri::command]
@@ -390,12 +453,27 @@ pub async fn cancel_skills_cli_job(
     state: State<'_, AppState>,
     job_id: String,
 ) -> crate::ipc_error::IpcResult<bool> {
-    let context = state.resolve_target_context().await?;
-    domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
-    state
-        .skills_cli_jobs
-        .cancel(&job_id)
-        .map_err(job_lease_error)
+    crate::ipc_boundary_async!("cancel_skills_cli_job", {
+        let context = state.resolve_target_context().await?;
+        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        let definition = operation_definition("cancel_skills_cli_job");
+        crate::observability::run_operation(
+            &state,
+            definition,
+            OperationContext::new(OperationTarget::local()),
+            |changed: &bool| {
+                SafeOperationResult::succeeded("Requested Skills CLI cancellation.")
+                    .flag(SafeDetailKey::Changed, *changed)
+            },
+            || async {
+                state
+                    .skills_cli_jobs
+                    .cancel(&job_id)
+                    .map_err(|error| reviewed_failure(definition, job_lease_error(error)))
+            },
+        )
+        .await
+    })
 }
 
 struct AppUpdateProgress {
@@ -408,15 +486,11 @@ impl UpdateProgressEmitter for AppUpdateProgress {
     }
 }
 
-async fn github_from_state(
-    state: &AppState,
-) -> Result<ProductionSkillsCliGithub, IpcError> {
-    let auth = github_import::github_direct_auth_from_secret_store(
-        &state.db,
-        state.secrets.as_ref(),
-    )
-    .await
-    .map_err(|_| to_ipc_error(&SkillsCliError::UpdateCheckFailed))?;
+async fn github_from_state(state: &AppState) -> Result<ProductionSkillsCliGithub, IpcError> {
+    let auth =
+        github_import::github_direct_auth_from_secret_store(&state.db, state.secrets.as_ref())
+            .await
+            .map_err(|_| to_ipc_error(&SkillsCliError::UpdateCheckFailed))?;
     let client = github_import::github_client()
         .map_err(|_| to_ipc_error(&SkillsCliError::UpdateCheckFailed))?;
     Ok(ProductionSkillsCliGithub { client, auth })
@@ -429,53 +503,42 @@ pub async fn skills_cli_check_updates(
     state: State<'_, AppState>,
     job_id: String,
 ) -> crate::ipc_error::IpcResult<SkillsCliUpdateInventory> {
-    let lease = state
-        .skills_cli_jobs
-        .acquire(&job_id)
-        .map_err(job_lease_error)?;
-    let context = state.resolve_target_context().await?;
-    let active_target = context.target().clone();
-    let pool = context.db().clone();
-    domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
-    let github = github_from_state(&state).await?;
-    let home = crate::paths::resolve_home_dir();
-    let started_at = Instant::now();
-    let result = domain::updates::check_updates_at(
-        &pool,
-        &crate::paths::universal_skills_dir(),
-        &domain::skills_cli_lock_path(&home),
-        &github,
-        &AppUpdateProgress { app },
-        &job_id,
-        Some(lease.cancel_flag()),
-    )
-    .await;
-    let status = if result.is_ok() {
-        "succeeded"
-    } else {
-        "failed"
-    };
-    record_operation_log_best_effort(
-        &pool,
-        target_context_from_active_target(&active_target),
-        OperationLogEvent::new(
-            "skills_cli",
-            "skills_cli.check_updates",
-            status,
-            if result.is_ok() {
-                "Checked Skills CLI updates"
-            } else {
-                "Failed to check Skills CLI updates"
+    crate::ipc_boundary_async!("skills_cli_check_updates", {
+        let lease = state
+            .skills_cli_jobs
+            .acquire(&job_id)
+            .map_err(job_lease_error)?;
+        let context = state.resolve_target_context().await?;
+        let active_target = context.target().clone();
+        let pool = context.db().clone();
+        domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
+        let github = github_from_state(&state).await?;
+        let home = crate::paths::resolve_home_dir();
+        let definition = operation_definition("skills_cli_check_updates");
+        crate::observability::run_operation(
+            &state,
+            definition,
+            OperationContext::new(OperationTarget::local()),
+            |inventory: &SkillsCliUpdateInventory| {
+                SafeOperationResult::succeeded("Checked Skills CLI updates.")
+                    .count(SafeDetailKey::AffectedCount, inventory.skills.len() as u64)
+            },
+            || async move {
+                domain::updates::check_updates_at(
+                    &pool,
+                    &crate::paths::universal_skills_dir(),
+                    &domain::skills_cli_lock_path(&home),
+                    &github,
+                    &AppUpdateProgress { app },
+                    &job_id,
+                    Some(lease.cancel_flag()),
+                )
+                .await
+                .map_err(|error| skills_cli_failure(definition, &error))
             },
         )
-        .details(json!({
-            "skillCount": result.as_ref().map(|inventory| inventory.skills.len()).unwrap_or(0),
-            "jobId": job_id,
-        }))
-        .duration_ms(started_at.elapsed().as_millis() as i64),
-    )
-    .await;
-    result.map_err(|error| to_ipc_error(&error))
+        .await
+    })
 }
 
 #[tauri::command]
@@ -483,11 +546,13 @@ pub async fn skills_cli_check_updates(
 pub async fn skills_cli_update_inventory(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<SkillsCliUpdateInventory> {
-    let context = state.resolve_target_context().await?;
-    domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
-    load_update_inventory_for_pool(context.db())
-        .await
-        .map_err(|error| to_ipc_error(&error))
+    crate::ipc_boundary_async!("skills_cli_update_inventory", {
+        let context = state.resolve_target_context().await?;
+        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        load_update_inventory_for_pool(context.db())
+            .await
+            .map_err(|error| to_ipc_error(&error))
+    })
 }
 
 #[tauri::command]
@@ -497,22 +562,40 @@ pub async fn skills_cli_verify_update_baseline(
     job_id: String,
     skill_names: Vec<String>,
 ) -> crate::ipc_error::IpcResult<SkillsCliUpdateInventory> {
-    let lease = state
-        .skills_cli_jobs
-        .acquire(&job_id)
-        .map_err(job_lease_error)?;
-    let context = state.resolve_target_context().await?;
-    domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
-    let home = crate::paths::resolve_home_dir();
-    verify_update_baseline_at(
-        context.db(),
-        &crate::paths::universal_skills_dir(),
-        &domain::skills_cli_lock_path(&home),
-        &skill_names,
-        Some(lease.cancel_flag()),
-    )
-    .await
-    .map_err(|error| to_ipc_error(&error))
+    crate::ipc_boundary_async!("skills_cli_verify_update_baseline", {
+        let lease = state
+            .skills_cli_jobs
+            .acquire(&job_id)
+            .map_err(job_lease_error)?;
+        let context = state.resolve_target_context().await?;
+        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        let home = crate::paths::resolve_home_dir();
+        let pool = context.db().clone();
+        let definition = operation_definition("skills_cli_verify_update_baseline");
+        let requested = skill_names.len() as u64;
+        crate::observability::run_operation(
+            &state,
+            definition,
+            OperationContext::new(OperationTarget::local()),
+            |inventory: &SkillsCliUpdateInventory| {
+                SafeOperationResult::succeeded("Verified Skills CLI update baselines.")
+                    .count(SafeDetailKey::RequestedCount, requested)
+                    .count(SafeDetailKey::AffectedCount, inventory.skills.len() as u64)
+            },
+            || async move {
+                verify_update_baseline_at(
+                    &pool,
+                    &crate::paths::universal_skills_dir(),
+                    &domain::skills_cli_lock_path(&home),
+                    &skill_names,
+                    Some(lease.cancel_flag()),
+                )
+                .await
+                .map_err(|error| skills_cli_failure(definition, &error))
+            },
+        )
+        .await
+    })
 }
 
 #[tauri::command]
@@ -522,43 +605,44 @@ pub async fn skills_cli_apply_updates(
     state: State<'_, AppState>,
     request: SkillsCliApplyUpdateRequest,
 ) -> crate::ipc_error::IpcResult<SkillsCliApplyResult> {
-    let lease = state
-        .skills_cli_jobs
-        .acquire(&request.job_id)
-        .map_err(job_lease_error)?;
-    let context = state.resolve_target_context().await?;
-    let active_target = context.target().clone();
-    let pool = context.db().clone();
-    domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
-    let github = github_from_state(&state).await?;
-    let started_at = Instant::now();
-    let skill_count = request.selections.len();
-    let result = apply_updates(
-        &pool,
-        &github,
-        &AppUpdateProgress { app },
-        &request,
-        Some(lease.cancel_flag()),
-    )
-    .await;
-    record_operation_log_best_effort(
-        &pool,
-        target_context_from_active_target(&active_target),
-        OperationLogEvent::new(
-            "skills_cli",
-            "skills_cli.apply_updates",
-            if result.is_ok() { "succeeded" } else { "failed" },
-            if result.is_ok() {
-                "Applied Skills CLI updates"
-            } else {
-                "Failed to apply Skills CLI updates"
+    crate::ipc_boundary_async!("skills_cli_apply_updates", {
+        let lease = state
+            .skills_cli_jobs
+            .acquire(&request.job_id)
+            .map_err(job_lease_error)?;
+        let context = state.resolve_target_context().await?;
+        let active_target = context.target().clone();
+        let pool = context.db().clone();
+        domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
+        let github = github_from_state(&state).await?;
+        let definition = operation_definition("skills_cli_apply_updates");
+        let requested = request.selections.len() as u64;
+        crate::observability::run_operation(
+            &state,
+            definition,
+            OperationContext::new(OperationTarget::local()),
+            |result: &SkillsCliApplyResult| {
+                SafeOperationResult::succeeded("Applied Skills CLI updates.")
+                    .count(SafeDetailKey::RequestedCount, requested)
+                    .count(
+                        SafeDetailKey::SucceededCount,
+                        result.applied_skill_names.len() as u64,
+                    )
+            },
+            || async move {
+                apply_updates(
+                    &pool,
+                    &github,
+                    &AppUpdateProgress { app },
+                    &request,
+                    Some(lease.cancel_flag()),
+                )
+                .await
+                .map_err(|error| skills_cli_failure(definition, &error))
             },
         )
-        .details(json!({ "skillCount": skill_count, "jobId": request.job_id }))
-        .duration_ms(started_at.elapsed().as_millis() as i64),
-    )
-    .await;
-    result.map_err(|error| to_ipc_error(&error))
+        .await
+    })
 }
 
 #[tauri::command]
@@ -568,43 +652,58 @@ pub async fn skills_cli_retry_update_recovery(
     job_id: String,
     operation_id: String,
 ) -> crate::ipc_error::IpcResult<SkillsCliApplyRecoveryResult> {
-    let lease = state
-        .skills_cli_jobs
-        .acquire(&job_id)
-        .map_err(job_lease_error)?;
-    let context = state.resolve_target_context().await?;
-    domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
-    let home = crate::paths::resolve_home_dir();
-    let _ = lease.cancel_flag();
-    retry_update_recovery(
-        context.db(),
-        &operation_id,
-        &crate::paths::universal_skills_dir(),
-        &domain::skills_cli_lock_path(&home),
-        &crate::paths::skills_cli_update_recovery_dir(),
-        Some(lease.cancel_flag()),
-    )
-    .await
-    .map_err(|error| to_ipc_error(&error))
+    crate::ipc_boundary_async!("skills_cli_retry_update_recovery", {
+        let lease = state
+            .skills_cli_jobs
+            .acquire(&job_id)
+            .map_err(job_lease_error)?;
+        let context = state.resolve_target_context().await?;
+        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        let pool = context.db().clone();
+        let home = crate::paths::resolve_home_dir();
+        let definition = operation_definition("skills_cli_retry_update_recovery");
+        let operation_context = OperationContext::new(OperationTarget::local()).subject(
+            OperationSubjectKind::Operation,
+            SafeIdentifier::new(&operation_id),
+        );
+        crate::observability::run_operation(
+            &state,
+            definition,
+            operation_context,
+            |_| SafeOperationResult::succeeded("Retried Skills CLI update recovery."),
+            || async move {
+                retry_update_recovery(
+                    &pool,
+                    &operation_id,
+                    &crate::paths::universal_skills_dir(),
+                    &domain::skills_cli_lock_path(&home),
+                    &crate::paths::skills_cli_update_recovery_dir(),
+                    Some(lease.cancel_flag()),
+                )
+                .await
+                .map_err(|error| skills_cli_failure(definition, &error))
+            },
+        )
+        .await
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::mutation_log_details;
+    use super::to_ipc_error;
     use crate::services::skills_cli::SkillsCliError;
 
     #[test]
-    fn mutation_log_details_omit_paths_and_argv() {
-        let details = mutation_log_details("demo-skill", Some("cursor"));
-        let serialized = serde_json::to_string(&details).unwrap();
-        assert_eq!(details["skillName"], "demo-skill");
-        assert_eq!(details["agentId"], "cursor");
-        assert!(!serialized.contains('\\'));
-        assert!(!serialized.contains("--force"));
-        assert!(!serialized.contains("--keep-links"));
-        assert!(!serialized.contains("C:"));
-        assert!(!details.as_object().unwrap().contains_key("targetPath"));
-        assert!(!details.as_object().unwrap().contains_key("path"));
+    fn dynamic_process_details_do_not_enter_the_ipc_envelope() {
+        let secret = r"C:\Users\alice\private --force token=ghp_secret";
+        let error = SkillsCliError::TaskJoin {
+            label: "skills-cli",
+            message: secret.to_string(),
+        };
+        let serialized = serde_json::to_string(&to_ipc_error(&error)).unwrap();
+        assert!(serialized.contains("internal.unexpected"));
+        assert!(!serialized.contains(secret));
+        assert!(!serialized.contains("ghp_secret"));
     }
 
     #[test]

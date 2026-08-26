@@ -173,8 +173,8 @@ impl UpdateProgressEmitter for NoopProgress {
     fn emit_update_progress(&self, _payload: &SkillsCliUpdateProgress) {}
 }
 
-pub fn map_db_error(error: sqlx::Error) -> SkillsCliError {
-    tracing::warn!(error = %error, "Skills CLI update database error");
+pub fn map_db_error(_error: sqlx::Error) -> SkillsCliError {
+    tracing::warn!("Skills CLI update database error");
     SkillsCliError::UpdateMigration
 }
 

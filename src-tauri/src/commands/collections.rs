@@ -2,6 +2,10 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::db::{self, Collection, DbPool, Skill};
+use crate::observability::{
+    CommandLogPolicy, OperationContext, OperationSubjectKind, OperationTarget, OperationTargetKind,
+    ReviewedDiagnostic, ReviewedFailure, SafeDetailKey, SafeIdentifier, SafeOperationResult,
+};
 use crate::services::installation::{install_skill, InstallTransport};
 use crate::targets::ActiveTarget;
 use crate::AppState;
@@ -204,9 +208,36 @@ pub async fn create_collection(
     name: String,
     description: Option<String>,
 ) -> crate::ipc_error::IpcResult<Collection> {
-    crate::ipc_boundary_async!({
-        let pool = state.active_db().await?;
-        create_collection_impl(&pool, &name, description.as_deref()).await
+    crate::ipc_boundary_async!("create_collection", {
+        let request_context = state.resolve_target_context().await?;
+        let audit_target = match request_context.target() {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let entry = crate::ipc_registry::command_policy("create_collection")
+            .expect("create_collection must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("create_collection must be auditable")
+        };
+        crate::observability::run_operation(
+            &state,
+            definition,
+            OperationContext::new(audit_target),
+            |collection: &Collection| {
+                SafeOperationResult::succeeded("Collection created.").identifier(
+                    SafeDetailKey::Identifier,
+                    SafeIdentifier::new(&collection.id),
+                )
+            },
+            || async move {
+                create_collection_impl(&pool, &name, description.as_deref())
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
+        .await
     })
 }
 
@@ -215,7 +246,7 @@ pub async fn create_collection(
 pub async fn get_collections(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<Vec<Collection>> {
-    crate::ipc_boundary_async!({
+    crate::ipc_boundary_async!("get_collections", {
         let pool = state.active_db().await?;
         get_collections_impl(&pool).await
     })
@@ -227,7 +258,7 @@ pub async fn get_collection_detail(
     state: State<'_, AppState>,
     collection_id: String,
 ) -> crate::ipc_error::IpcResult<CollectionDetail> {
-    crate::ipc_boundary_async!({
+    crate::ipc_boundary_async!("get_collection_detail", {
         let pool = state.active_db().await?;
         get_collection_detail_impl(&pool, &collection_id).await
     })
@@ -240,9 +271,38 @@ pub async fn add_skill_to_collection(
     collection_id: String,
     skill_id: String,
 ) -> crate::ipc_error::IpcResult<()> {
-    crate::ipc_boundary_async!({
-        let pool = state.active_db().await?;
-        add_skill_to_collection_impl(&pool, &collection_id, &skill_id).await
+    crate::ipc_boundary_async!("add_skill_to_collection", {
+        let request_context = state.resolve_target_context().await?;
+        let audit_target = match request_context.target() {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let entry = crate::ipc_registry::command_policy("add_skill_to_collection")
+            .expect("add_skill_to_collection must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("add_skill_to_collection must be auditable")
+        };
+        let context = OperationContext::new(audit_target).subject(
+            OperationSubjectKind::Collection,
+            SafeIdentifier::new(&collection_id),
+        );
+        crate::observability::run_operation(
+            &state,
+            definition,
+            context,
+            |_| {
+                SafeOperationResult::succeeded("Skill added to collection.")
+                    .count(SafeDetailKey::AffectedCount, 1)
+            },
+            || async move {
+                add_skill_to_collection_impl(&pool, &collection_id, &skill_id)
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
+        .await
     })
 }
 
@@ -254,9 +314,38 @@ pub async fn remove_skill_from_collection(
     collection_id: String,
     skill_id: String,
 ) -> crate::ipc_error::IpcResult<()> {
-    crate::ipc_boundary_async!({
-        let pool = state.active_db().await?;
-        remove_skill_from_collection_impl(&pool, &collection_id, &skill_id).await
+    crate::ipc_boundary_async!("remove_skill_from_collection", {
+        let request_context = state.resolve_target_context().await?;
+        let audit_target = match request_context.target() {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let entry = crate::ipc_registry::command_policy("remove_skill_from_collection")
+            .expect("remove_skill_from_collection must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("remove_skill_from_collection must be auditable")
+        };
+        let context = OperationContext::new(audit_target).subject(
+            OperationSubjectKind::Collection,
+            SafeIdentifier::new(&collection_id),
+        );
+        crate::observability::run_operation(
+            &state,
+            definition,
+            context,
+            |_| {
+                SafeOperationResult::succeeded("Skill removed from collection.")
+                    .count(SafeDetailKey::AffectedCount, 1)
+            },
+            || async move {
+                remove_skill_from_collection_impl(&pool, &collection_id, &skill_id)
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
+        .await
     })
 }
 
@@ -267,9 +356,35 @@ pub async fn delete_collection(
     state: State<'_, AppState>,
     collection_id: String,
 ) -> crate::ipc_error::IpcResult<()> {
-    crate::ipc_boundary_async!({
-        let pool = state.active_db().await?;
-        delete_collection_impl(&pool, &collection_id).await
+    crate::ipc_boundary_async!("delete_collection", {
+        let request_context = state.resolve_target_context().await?;
+        let audit_target = match request_context.target() {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let entry = crate::ipc_registry::command_policy("delete_collection")
+            .expect("delete_collection must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("delete_collection must be auditable")
+        };
+        let context = OperationContext::new(audit_target).subject(
+            OperationSubjectKind::Collection,
+            SafeIdentifier::new(&collection_id),
+        );
+        crate::observability::run_operation(
+            &state,
+            definition,
+            context,
+            |_| SafeOperationResult::succeeded("Collection deleted."),
+            || async move {
+                delete_collection_impl(&pool, &collection_id)
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
+        .await
     })
 }
 
@@ -281,9 +396,35 @@ pub async fn update_collection(
     name: String,
     description: Option<String>,
 ) -> crate::ipc_error::IpcResult<Collection> {
-    crate::ipc_boundary_async!({
-        let pool = state.active_db().await?;
-        update_collection_impl(&pool, &collection_id, &name, description.as_deref()).await
+    crate::ipc_boundary_async!("update_collection", {
+        let request_context = state.resolve_target_context().await?;
+        let audit_target = match request_context.target() {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let entry = crate::ipc_registry::command_policy("update_collection")
+            .expect("update_collection must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("update_collection must be auditable")
+        };
+        let context = OperationContext::new(audit_target).subject(
+            OperationSubjectKind::Collection,
+            SafeIdentifier::new(&collection_id),
+        );
+        crate::observability::run_operation(
+            &state,
+            definition,
+            context,
+            |_| SafeOperationResult::succeeded("Collection updated."),
+            || async move {
+                update_collection_impl(&pool, &collection_id, &name, description.as_deref())
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
+        .await
     })
 }
 
@@ -295,11 +436,51 @@ pub async fn batch_install_collection(
     collection_id: String,
     agent_ids: Vec<String>,
 ) -> crate::ipc_error::IpcResult<BatchInstallResult> {
-    crate::ipc_boundary_async!({
+    crate::ipc_boundary_async!("batch_install_collection", {
         let request_context = state.resolve_target_context().await?;
         let active_target = request_context.target().clone();
+        let audit_target = match &active_target {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
         let pool = request_context.db().clone();
-        batch_install_collection_impl(&pool, &active_target, &collection_id, &agent_ids).await
+        let entry = crate::ipc_registry::command_policy("batch_install_collection")
+            .expect("batch_install_collection must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("batch_install_collection must be auditable")
+        };
+        let context = OperationContext::new(audit_target).subject(
+            OperationSubjectKind::Collection,
+            SafeIdentifier::new(&collection_id),
+        );
+        crate::observability::run_operation(
+            &state,
+            definition,
+            context,
+            move |result: &BatchInstallResult| {
+                let succeeded = result.succeeded.len() as u64;
+                let failed = result.failed.len() as u64;
+                let skipped = result.skipped.len() as u64;
+                let requested_count = succeeded + failed + skipped;
+                let summary = if failed == 0 {
+                    SafeOperationResult::succeeded("Collection installed.")
+                } else {
+                    SafeOperationResult::partial("Collection install partially completed.")
+                };
+                summary
+                    .count(SafeDetailKey::RequestedCount, requested_count)
+                    .count(SafeDetailKey::SucceededCount, succeeded)
+                    .count(SafeDetailKey::FailedCount, failed)
+                    .count(SafeDetailKey::SkippedCount, skipped)
+            },
+            || async move {
+                batch_install_collection_impl(&pool, &active_target, &collection_id, &agent_ids)
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
+        .await
     })
 }
 
@@ -309,9 +490,35 @@ pub async fn export_collection(
     state: State<'_, AppState>,
     collection_id: String,
 ) -> crate::ipc_error::IpcResult<String> {
-    crate::ipc_boundary_async!({
-        let pool = state.active_db().await?;
-        export_collection_impl(&pool, &collection_id).await
+    crate::ipc_boundary_async!("export_collection", {
+        let request_context = state.resolve_target_context().await?;
+        let audit_target = match request_context.target() {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let entry = crate::ipc_registry::command_policy("export_collection")
+            .expect("export_collection must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("export_collection must be auditable")
+        };
+        let context = OperationContext::new(audit_target).subject(
+            OperationSubjectKind::Collection,
+            SafeIdentifier::new(&collection_id),
+        );
+        crate::observability::run_operation(
+            &state,
+            definition,
+            context,
+            |_| SafeOperationResult::succeeded("Collection exported."),
+            || async move {
+                export_collection_impl(&pool, &collection_id)
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
+        .await
     })
 }
 
@@ -322,9 +529,36 @@ pub async fn import_collection(
     state: State<'_, AppState>,
     json: String,
 ) -> crate::ipc_error::IpcResult<Collection> {
-    crate::ipc_boundary_async!({
-        let pool = state.active_db().await?;
-        import_collection_impl(&pool, &json).await
+    crate::ipc_boundary_async!("import_collection", {
+        let request_context = state.resolve_target_context().await?;
+        let audit_target = match request_context.target() {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let entry = crate::ipc_registry::command_policy("import_collection")
+            .expect("import_collection must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("import_collection must be auditable")
+        };
+        crate::observability::run_operation(
+            &state,
+            definition,
+            OperationContext::new(audit_target),
+            |collection: &Collection| {
+                SafeOperationResult::succeeded("Collection imported.").identifier(
+                    SafeDetailKey::Identifier,
+                    SafeIdentifier::new(&collection.id),
+                )
+            },
+            || async move {
+                import_collection_impl(&pool, &json)
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
+        .await
     })
 }
 

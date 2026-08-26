@@ -348,7 +348,7 @@ impl std::io::Write for SharedLogBuffer {
 }
 
 #[tokio::test]
-async fn ac10_doctor_probe_failure_warns_and_keeps_public_message() {
+async fn ac10_doctor_probe_failure_warns_without_stderr_and_keeps_public_message() {
     let logs: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
     let log_buffer = logs.clone();
     let subscriber = tracing_subscriber::fmt()
@@ -380,7 +380,8 @@ async fn ac10_doctor_probe_failure_warns_and_keeps_public_message() {
 
     let logged = String::from_utf8(logs.lock().unwrap().clone()).unwrap();
     assert!(logged.contains("Skills CLI doctor probe failed"));
-    assert!(logged.contains("SECRET_STDERR_TOKEN"));
+    assert!(!logged.contains("SECRET_STDERR_TOKEN"));
+    assert!(!logged.contains("npm ERR!"));
 }
 
 #[test]

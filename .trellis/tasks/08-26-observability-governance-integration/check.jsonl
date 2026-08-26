@@ -2,7 +2,7 @@
 {"file":".trellis/spec/backend/redaction-policy.md","reason":"No secret, path, URL, raw error, stack or args escape the safe envelope."}
 {"file":".trellis/spec/quality/test-suite-layout.md","reason":"All new suites are discoverable, non-zero and run by the documented gates."}
 {"file":".trellis/tasks/archive/2026-08/08-26-observability-core-contracts/prd.md","reason":"Core contract and compatibility acceptance remain satisfied after integration."}
-{"file":".trellis/tasks/08-26-runtime-diagnostics-correlation/prd.md","reason":"Backend/frontend Runtime evidence remains correlatable and non-recursive."}
+{"file":".trellis/tasks/archive/2026-08/08-26-runtime-diagnostics-correlation/prd.md","reason":"Backend/frontend Runtime evidence remains correlatable and non-recursive."}
 {"file":".trellis/tasks/08-26-observability-console-dialog/prd.md","reason":"Console and centered dialog preserve diagnostic, accessibility and responsive behavior."}
 {"file":".trellis/tasks/08-26-ssh-update-observability-dialog/prd.md","reason":"Every parent acceptance criterion has explicit final evidence or UNVERIFIED status."}
 {"file": ".trellis/spec/backend/operation-observability.md", "reason": "Verify the frozen observability contract remains exhaustive, correlated, non-duplicative and fail-safe."}

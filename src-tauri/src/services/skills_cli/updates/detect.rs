@@ -6,13 +6,13 @@ use std::sync::atomic::AtomicBool;
 
 use chrono::Utc;
 
+use crate::db::DbPool;
 use crate::db::{
     self, list_pending_update_operations, list_update_repositories, list_update_states,
     upsert_update_repository_in_transaction, upsert_update_state_in_transaction,
     SkillsCliUpdateOperationRow, SkillsCliUpdateRepositoryRow as PersistedRepository,
     SkillsCliUpdateStateRow as PersistedSkill,
 };
-use crate::db::DbPool;
 use crate::fs_util::run_blocking_fs_with;
 use crate::services::github_import::candidate_content_digest_from_snapshot;
 
@@ -24,9 +24,7 @@ use super::capability::{apply_argv_preview, update_capability_plan};
 use super::digest::digest_skill_directory;
 use super::github::{GithubObserveRequest, SkillsCliUpdateGithub};
 use super::source::parse_github_update_identity;
-use super::status::{
-    classify_successful_check, SkillsCliPersistedUpdateStatus,
-};
+use super::status::{classify_successful_check, SkillsCliPersistedUpdateStatus};
 use super::{
     map_db_error, SkillsCliPendingRecovery, SkillsCliUpdateBlocker, SkillsCliUpdateInventory,
     SkillsCliUpdateProgress, SkillsCliUpdateRepositoryRow, SkillsCliUpdateSkillRow,
@@ -45,10 +43,10 @@ struct ScopedSkill {
     unsupported: bool,
 }
 
-pub(crate) async fn load_update_inventory(pool: &DbPool) -> Result<SkillsCliUpdateInventory, SkillsCliError> {
-    let repositories = list_update_repositories(pool)
-        .await
-        .map_err(map_db_error)?;
+pub(crate) async fn load_update_inventory(
+    pool: &DbPool,
+) -> Result<SkillsCliUpdateInventory, SkillsCliError> {
+    let repositories = list_update_repositories(pool).await.map_err(map_db_error)?;
     let skills = list_update_states(pool).await.map_err(map_db_error)?;
     let pending = list_pending_update_operations(pool)
         .await
@@ -92,9 +90,7 @@ pub(crate) async fn check_updates_at(
     });
 
     let existing_states = list_update_states(pool).await.map_err(map_db_error)?;
-    let existing_repos = list_update_repositories(pool)
-        .await
-        .map_err(map_db_error)?;
+    let existing_repos = list_update_repositories(pool).await.map_err(map_db_error)?;
     let mut repo_rows: Vec<PersistedRepository> = Vec::new();
     let mut skill_rows: Vec<(PersistedSkill, bool, bool)> = Vec::new();
     let mut rate_limited_rest = false;
@@ -136,7 +132,9 @@ pub(crate) async fn check_updates_at(
             for index in indexes {
                 skill_rows.push(stale_skill_row(
                     &scoped[*index],
-                    existing_states.iter().find(|row| row.skill_name == scoped[*index].skill.name),
+                    existing_states
+                        .iter()
+                        .find(|row| row.skill_name == scoped[*index].skill.name),
                     SkillsCliPersistedUpdateStatus::RateLimited,
                     Some("skills_cli.update_rate_limited"),
                 ));
@@ -158,9 +156,10 @@ pub(crate) async fn check_updates_at(
                 if result.rate_limit_remaining == Some(0) {
                     rate_limited_rest = true;
                 }
-                let snapshot_digest = crate::services::github_import::repository_snapshot_digest_from_local(
-                    &result.snapshot,
-                );
+                let snapshot_digest =
+                    crate::services::github_import::repository_snapshot_digest_from_local(
+                        &result.snapshot,
+                    );
                 repo_rows.push(PersistedRepository {
                     repository_key: repository_key.clone(),
                     normalized_source: normalized.clone(),
@@ -186,11 +185,8 @@ pub(crate) async fn check_updates_at(
                         .clone()
                         .filter(|value| !value.is_empty())
                         .unwrap_or_else(|| item.skill.name.clone());
-                    let upstream = candidate_content_digest_from_snapshot(
-                        &result.snapshot,
-                        &skill_path,
-                    )
-                    .ok();
+                    let upstream =
+                        candidate_content_digest_from_snapshot(&result.snapshot, &skill_path).ok();
                     skill_rows.push(successful_skill_row(
                         item,
                         previous,
@@ -220,7 +216,9 @@ pub(crate) async fn check_updates_at(
                 for index in indexes {
                     skill_rows.push(stale_skill_row(
                         &scoped[*index],
-                        existing_states.iter().find(|row| row.skill_name == scoped[*index].skill.name),
+                        existing_states
+                            .iter()
+                            .find(|row| row.skill_name == scoped[*index].skill.name),
                         SkillsCliPersistedUpdateStatus::RateLimited,
                         Some("skills_cli.update_rate_limited"),
                     ));
@@ -238,7 +236,9 @@ pub(crate) async fn check_updates_at(
                 for index in indexes {
                     skill_rows.push(stale_skill_row(
                         &scoped[*index],
-                        existing_states.iter().find(|row| row.skill_name == scoped[*index].skill.name),
+                        existing_states
+                            .iter()
+                            .find(|row| row.skill_name == scoped[*index].skill.name),
                         SkillsCliPersistedUpdateStatus::Failed,
                         Some("skills_cli.update_check_failed"),
                     ));
@@ -594,7 +594,7 @@ fn assemble_inventory(
         .map(|row| {
             let status = SkillsCliPersistedUpdateStatus::from_persisted(&row.status).to_public();
             SkillsCliUpdateSkillRow {
-                argv_preview: apply_argv_preview(&[row.skill_name.clone()]),
+                argv_preview: apply_argv_preview(std::slice::from_ref(&row.skill_name)),
                 blockers: Vec::new(),
                 change_summary: Vec::new(),
                 is_stale: row.is_stale != 0,

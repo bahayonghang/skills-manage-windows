@@ -22,12 +22,12 @@
 
 ## Acceptance Criteria
 
-- [ ] 从failed Operation detail一次动作可切到相同ID的Runtime结果，再返回时保留Operation筛选。
-- [ ] centered Dialog在桌面、窄窗和长内容下不溢出；Close/Escape/overlay/focus restore/copy均通过。
-- [ ] 用户无需展开JSON即可知道发生什么、在哪个phase、是否可重试和下一步。
-- [ ] started/interrupted与backend/frontend source均有图标+文本语义，不能仅靠颜色。
-- [ ] legacy/unknown/invalid JSON与no-correlation fixture不崩溃、不伪造不存在的原因。
-- [ ] component/store/page/i18n tests通过；Windows Tauri视觉与焦点证据单独报告。
+- [x] 从failed Operation detail一次动作可切到相同ID的Runtime结果，再返回时保留Operation筛选。
+- [x] centered Dialog在桌面、窄窗和长内容下不溢出；Close/Escape/overlay/focus restore/copy均通过。
+- [x] 用户无需展开JSON即可知道发生什么、在哪个phase、是否可重试和下一步。
+- [x] started/interrupted与backend/frontend source均有图标+文本语义，不能仅靠颜色。
+- [x] legacy/unknown/invalid JSON与no-correlation fixture不崩溃、不伪造不存在的原因。
+- [x] component/store/page/i18n tests通过；Windows Tauri视觉与焦点证据单独报告。
 
 ## Out of Scope
 

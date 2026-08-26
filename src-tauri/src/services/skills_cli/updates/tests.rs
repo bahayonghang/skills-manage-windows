@@ -14,13 +14,17 @@ use crate::test_support::mem_pool;
 use super::apply::{
     apply_updates_at, retry_update_recovery_at, set_apply_fault, ApplyContext, ApplyFault,
 };
-use super::capability::{apply_argv_preview, argv_contains_forbidden_flags, update_capability_plan, CapabilitySupport};
+use super::capability::{
+    apply_argv_preview, argv_contains_forbidden_flags, update_capability_plan, CapabilitySupport,
+};
 use super::detect::{check_updates_at, load_update_inventory, verify_update_baseline_at};
 use super::digest::digest_skill_directory;
 use super::github::{FakeSkillsCliGithub, GithubObserveResult};
 use super::source::parse_github_update_identity;
 use super::status::classify_successful_check;
-use super::{NoopProgress, SkillsCliApplySelection, SkillsCliApplyUpdateRequest, SkillsCliUpdateStatus};
+use super::{
+    NoopProgress, SkillsCliApplySelection, SkillsCliApplyUpdateRequest, SkillsCliUpdateStatus,
+};
 
 const SHA_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const SHA_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -81,7 +85,9 @@ fn capability_plan_is_fail_closed() {
     assert_eq!(plan.direct_copy_refresh, CapabilitySupport::Unverified);
     let preview = apply_argv_preview(&["demo".to_string()]);
     assert!(!argv_contains_forbidden_flags(&preview));
-    assert!(!preview.iter().any(|item| item == "--force" || item == "--keep-links"));
+    assert!(!preview
+        .iter()
+        .any(|item| item == "--force" || item == "--keep-links"));
     assert!(!preview.iter().any(|item| item.contains('@')));
 }
 
@@ -113,10 +119,7 @@ fn classify_new_install_is_baseline_required() {
         SHA_A,
         "sha256-v1:abc",
     );
-    assert_eq!(
-        result.status.as_str(),
-        "baseline_required"
-    );
+    assert_eq!(result.status.as_str(), "baseline_required");
 }
 
 #[test]
@@ -206,10 +209,9 @@ async fn grouped_check_calls_github_once_per_repo() {
     .unwrap();
     assert_eq!(github.call_keys(), vec!["owner/repo@main".to_string()]);
     assert_eq!(inventory.repositories.len(), 1);
-    assert!(inventory
-        .skills
-        .iter()
-        .any(|row| row.skill_name == "one" && row.status == SkillsCliUpdateStatus::BaselineRequired));
+    assert!(inventory.skills.iter().any(
+        |row| row.skill_name == "one" && row.status == SkillsCliUpdateStatus::BaselineRequired
+    ));
     assert!(inventory.capability.force_flag == CapabilitySupport::VerifiedUnsupported);
 }
 
@@ -248,9 +250,10 @@ async fn rate_limit_skips_remaining_repos() {
     .unwrap();
     assert!(github.call_keys().len() <= 2);
     assert_eq!(github.call_keys(), vec!["owner/one@main".to_string()]);
-    assert!(inventory.skills.iter().any(|row| {
-        row.status == SkillsCliUpdateStatus::RateLimited && row.is_stale
-    }));
+    assert!(inventory
+        .skills
+        .iter()
+        .any(|row| { row.status == SkillsCliUpdateStatus::RateLimited && row.is_stale }));
 }
 
 #[tokio::test]
@@ -572,7 +575,7 @@ async fn apply_fault_after_prepared_is_recoverable() {
         .find(|row| row.skill_name == "demo")
         .unwrap();
     github.set_sha_snapshot(SHA_B, snapshot_with("demo/SKILL.md", "new"));
-    set_apply_fault(Some(ApplyFault::AfterPrepared));
+    set_apply_fault(Some(ApplyFault::Prepared));
     let err = apply_updates_at(ApplyContext {
         pool: &harness.pool,
         canonical_root: &harness.canonical,

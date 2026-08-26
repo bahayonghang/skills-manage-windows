@@ -1,6 +1,6 @@
 {"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Check reason/next action remains localized and safe."}
 {"file":".trellis/spec/backend/redaction-policy.md","reason":"Check adversarial details never reach DOM or clipboard payload."}
 {"file":".trellis/spec/quality/test-suite-layout.md","reason":"Check all state, keyboard, responsive and i18n tests execute."}
-{"file":".trellis/tasks/08-26-runtime-diagnostics-correlation/prd.md","reason":"Check backend/frontend evidence remains distinguishable and correlated."}
+{"file":".trellis/tasks/archive/2026-08/08-26-runtime-diagnostics-correlation/prd.md","reason":"Check backend/frontend evidence remains distinguishable and correlated."}
 {"file":".trellis/tasks/08-26-observability-console-dialog/prd.md","reason":"Verify every UX and accessibility acceptance criterion."}
 {"file": ".trellis/spec/backend/operation-observability.md", "reason": "Verify the frozen observability contract remains exhaustive, correlated, non-duplicative and fail-safe."}

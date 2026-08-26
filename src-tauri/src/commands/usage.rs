@@ -27,6 +27,11 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use crate::ipc_error::{public_message_for_code, IpcError, REVIEWED_IPC_ERROR_CODES};
+use crate::observability::{
+    CommandLogPolicy, OperationContext, OperationDefinition, OperationTarget, OperationTargetKind,
+    ReviewedDiagnostic, ReviewedFailure, SafeDetailKey, SafeOperationResult,
+};
 use crate::services::usage::{
     self,
     aggregate::{RecentSkillCall, SkillUsageDetail, UnusedSkillsReport, UsageOverview},
@@ -45,6 +50,87 @@ struct ActiveUsageTarget {
     target_id: String,
     label: String,
     is_remote: bool,
+}
+
+fn usage_refresh_definition() -> OperationDefinition {
+    match crate::ipc_registry::command_policy("usage_refresh")
+        .expect("usage_refresh must be registered")
+        .policy
+    {
+        CommandLogPolicy::Operation(definition) => definition,
+        _ => unreachable!("usage_refresh must have an operation policy"),
+    }
+}
+
+fn usage_operation_target(target: &ActiveTarget) -> OperationTarget {
+    match target {
+        ActiveTarget::Local => OperationTarget::local(),
+        ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+        ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+    }
+}
+
+fn usage_refresh_failure(
+    definition: OperationDefinition,
+    error: impl Into<IpcError>,
+) -> ReviewedFailure {
+    let error = error.into();
+    let code = REVIEWED_IPC_ERROR_CODES
+        .iter()
+        .copied()
+        .find(|code| *code == error.safe_code())
+        .unwrap_or("internal.unexpected");
+    let message = public_message_for_code(code)
+        .unwrap_or("The operation failed. See runtime logs for details.");
+    ReviewedFailure::new(ReviewedDiagnostic::new(
+        code,
+        definition.category().as_str(),
+        definition.default_phase(),
+        message,
+        error.retryable,
+    ))
+}
+
+fn usage_refresh_operation_result(result: &UsageRefreshResult, force: bool) -> SafeOperationResult {
+    let (mut safe, mode) = if result.refresh_error.is_some() {
+        (
+            SafeOperationResult::partial("Usage refresh fell back to cached data."),
+            "fallback",
+        )
+    } else if result.scanning {
+        (
+            SafeOperationResult::partial("Usage refresh continues in the background."),
+            "background",
+        )
+    } else if result.used_cached_data {
+        (
+            SafeOperationResult::succeeded("Usage refresh used cached data."),
+            "cached",
+        )
+    } else {
+        (
+            SafeOperationResult::succeeded("Usage refresh completed."),
+            "refreshed",
+        )
+    };
+    let scope = if result.scope.is_remote {
+        "remote"
+    } else {
+        "local"
+    };
+    safe = safe
+        .count(
+            SafeDetailKey::AffectedCount,
+            result.summary.calls_written.max(0) as u64,
+        )
+        .count(
+            SafeDetailKey::SucceededCount,
+            result.summary.providers_available.max(0) as u64,
+        )
+        .flag(SafeDetailKey::Changed, force)
+        .stable(SafeDetailKey::Mode, mode)
+        .stable(SafeDetailKey::Scope, scope);
+    safe
 }
 
 async fn active_usage_target(state: &State<'_, AppState>) -> Result<ActiveUsageTarget, String> {
@@ -151,8 +237,8 @@ fn spawn_background_usage_scan(app: &tauri::AppHandle, pool: crate::db::DbPool, 
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let result = usage::refresh(&pool, &Scope::Local, true).await;
-        if let Err(error) = &result {
-            tracing::warn!(error = %error, "background usage rescan failed");
+        if result.is_err() {
+            tracing::warn!("background usage rescan failed");
         }
         USAGE_SCAN_IN_FLIGHT.lock().unwrap().remove(&target_id);
         use tauri::Emitter;
@@ -160,21 +246,12 @@ fn spawn_background_usage_scan(app: &tauri::AppHandle, pool: crate::db::DbPool, 
     });
 }
 
-/// `usage_refresh(force)` —— 触发扫描。
-///
-/// 本地 target 的感知延迟优化：存在过期缓存时立即返回缓存页
-/// （`scanning=true`）并 spawn 后台重扫，完成后 emit
-/// `usage://scan-completed`；首次扫描（无任何缓存）与 force 强刷维持阻塞。
-/// Remote target 的乐观缓存路径不变。
-#[tauri::command]
-pub async fn usage_refresh(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
+async fn usage_refresh_impl(
+    app: &tauri::AppHandle,
+    state: &State<'_, AppState>,
     force: bool,
-) -> crate::ipc_error::IpcResult<UsageRefreshResult> {
-    crate::ipc_boundary!(async move {
-    let target = active_usage_target(&state).await?;
-
+    target: ActiveUsageTarget,
+) -> Result<UsageRefreshResult, String> {
     if target.is_remote && !force {
         if let Some(last_scan_ms) = crate::db::get_last_scan_ms(&state.db, &target.target_id)
             .await
@@ -183,7 +260,7 @@ pub async fn usage_refresh(
             let now_ms = Utc::now().timestamp_millis();
             if now_ms - last_scan_ms < usage::CACHE_TTL_MS {
                 return build_refresh_page(
-                    &state,
+                    state,
                     &target.target_id,
                     RefreshSummary {
                         cached: true,
@@ -214,12 +291,12 @@ pub async fn usage_refresh(
                         // 过期缓存立即返回 + 后台重扫；完成后前端经
                         // `usage://scan-completed` 静默重取。
                         spawn_background_usage_scan(
-                            &app,
+                            app,
                             state.db.clone(),
                             target.target_id.clone(),
                         );
                         return build_refresh_page(
-                            &state,
+                            state,
                             &target.target_id,
                             RefreshSummary {
                                 cached: true,
@@ -240,7 +317,7 @@ pub async fn usage_refresh(
                 .await
                 .map_err(|e| e.to_string())?;
             build_refresh_page(
-                &state,
+                state,
                 &target.target_id,
                 summary.clone(),
                 scope_info_for_target(&target, Some(false)),
@@ -263,7 +340,7 @@ pub async fn usage_refresh(
                         .await
                         .map_err(|e| e.to_string())?;
                     build_refresh_page(
-                        &state,
+                        state,
                         &target.target_id,
                         summary.clone(),
                         scope_info_for_target(&target, Some(true)),
@@ -273,32 +350,62 @@ pub async fn usage_refresh(
                     )
                     .await
                 }
-                Err(error) => {
+                Err(_error) => {
                     tracing::warn!(
-                        target_id = %target.target_id,
-                        error = %error,
                         "Skill Usage: remote refresh failed; returning cached local usage data"
                     );
                     let last_scan_ms = crate::db::get_last_scan_ms(&state.db, &target.target_id)
                         .await
                         .map_err(|e| e.to_string())?;
                     build_refresh_page(
-                        &state,
+                        state,
                         &target.target_id,
                         cached_fallback_summary(last_scan_ms),
                         scope_info_for_target(&target, Some(false)),
                         last_scan_ms.is_some(),
                         false,
-                        Some(error.to_string()),
+                        Some("Remote usage refresh failed.".to_string()),
                     )
                     .await
                 }
             }
         }
     }
+}
 
-    }
-    .await)
+/// `usage_refresh(force)` —— 触发扫描。
+///
+/// 本地 target 的感知延迟优化：存在过期缓存时立即返回缓存页
+/// （`scanning=true`）并 spawn 后台重扫，完成后 emit
+/// `usage://scan-completed`；首次扫描（无任何缓存）与 force 强刷维持阻塞。
+/// Remote target 的乐观缓存路径不变。
+#[tauri::command]
+pub async fn usage_refresh(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    force: bool,
+) -> crate::ipc_error::IpcResult<UsageRefreshResult> {
+    crate::ipc_boundary!(
+        "usage_refresh",
+        async move {
+            let target = active_usage_target(&state).await?;
+            let definition = usage_refresh_definition();
+            let context = OperationContext::new(usage_operation_target(&target.active));
+            crate::observability::run_operation(
+                &state,
+                definition,
+                context,
+                move |result| usage_refresh_operation_result(result, force),
+                || async {
+                    usage_refresh_impl(&app, &state, force, target)
+                        .await
+                        .map_err(|error| usage_refresh_failure(definition, error))
+                },
+            )
+            .await
+        }
+        .await
+    )
 }
 
 #[tauri::command]
@@ -308,6 +415,7 @@ pub async fn usage_get_overview(
     source: Option<String>,
 ) -> crate::ipc_error::IpcResult<UsageOverview> {
     crate::ipc_boundary!(
+        "usage_get_overview",
         async move {
             let target = active_usage_target(&state).await?;
             let limit = top_skills_limit.unwrap_or(0);
@@ -326,6 +434,7 @@ pub async fn usage_get_recent(
     source: Option<String>,
 ) -> crate::ipc_error::IpcResult<Vec<RecentSkillCall>> {
     crate::ipc_boundary!(
+        "usage_get_recent",
         async move {
             let n = limit.unwrap_or(20).max(1);
             let target = active_usage_target(&state).await?;
@@ -342,6 +451,7 @@ pub async fn usage_get_providers(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<Vec<ProviderHealth>> {
     crate::ipc_boundary!(
+        "usage_get_providers",
         async move {
             let target = active_usage_target(&state).await?;
             usage::list_provider_health(&state.db, &target.target_id)
@@ -359,6 +469,7 @@ pub async fn usage_get_skill_detail(
     source: Option<String>,
 ) -> crate::ipc_error::IpcResult<SkillUsageDetail> {
     crate::ipc_boundary!(
+        "usage_get_skill_detail",
         async move {
             let target = active_usage_target(&state).await?;
             usage::build_skill_detail(&state.db, &target.target_id, &skill, source.as_deref())
@@ -378,9 +489,10 @@ pub async fn usage_get_skill_counts(
     days: u32,
 ) -> crate::ipc_error::IpcResult<HashMap<String, i64>> {
     crate::ipc_boundary!(
+        "usage_get_skill_counts",
         async move {
             if skills.is_empty() {
-                return Ok(HashMap::new());
+                return Ok::<_, String>(HashMap::new());
             }
             let target = active_usage_target(&state).await?;
             let cutoff = (Utc::now() - chrono::Duration::days(days as i64)).timestamp_millis();
@@ -445,9 +557,10 @@ pub async fn usage_get_skill_usage_stats(
     days: Option<u32>,
 ) -> crate::ipc_error::IpcResult<HashMap<String, SkillUsageStat>> {
     crate::ipc_boundary!(
+        "usage_get_skill_usage_stats",
         async move {
             if skills.is_empty() {
-                return Ok(HashMap::new());
+                return Ok::<_, String>(HashMap::new());
             }
             let target = active_usage_target(&state).await?;
             let cutoff_ms =
@@ -470,6 +583,7 @@ pub async fn usage_resolve_skill_id(
     skill_name: String,
 ) -> crate::ipc_error::IpcResult<Option<String>> {
     crate::ipc_boundary!(
+        "usage_resolve_skill_id",
         async move {
             let target = active_usage_target(&state).await?;
             usage::resolve_skill_id(&state.db, &target.target_id, &skill_name)
@@ -493,6 +607,7 @@ pub async fn usage_get_unused_skills(
     threshold_days: Option<u32>,
 ) -> crate::ipc_error::IpcResult<UnusedSkillsReport> {
     crate::ipc_boundary!(
+        "usage_get_unused_skills",
         async move {
             let target = active_usage_target(&state).await?;
             let skills_db = state
@@ -543,124 +658,16 @@ pub async fn usage_get_scope_info(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<UsageScopeInfo> {
     crate::ipc_boundary!(
+        "usage_get_scope_info",
         async move {
             let target = active_usage_target(&state).await?;
             // 只读 getter 不做 SSH/WSL 建连；显式 refresh 返回权威 reachability。
-            Ok(scope_info_for_target(&target, None))
+            Ok::<_, String>(scope_info_for_target(&target, None))
         }
         .await
     )
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn scope_info_for_remote_read_paths_is_optimistic() {
-        let target = ActiveUsageTarget {
-            active: ActiveTarget::Local,
-            target_id: "ssh-prod".to_string(),
-            label: "alice@prod".to_string(),
-            is_remote: true,
-        };
-
-        let optimistic = scope_info_for_target(&target, None);
-        assert!(optimistic.remote_reachable);
-
-        let unreachable = scope_info_for_target(&target, Some(false));
-        assert!(!unreachable.remote_reachable);
-    }
-
-    #[test]
-    fn cached_fallback_summary_preserves_last_successful_scan_time() {
-        let summary = cached_fallback_summary(Some(1_700_000_000_000));
-        assert!(summary.cached);
-        assert_eq!(summary.scanned_at_ms, 1_700_000_000_000);
-
-        let empty_summary = cached_fallback_summary(None);
-        assert!(!empty_summary.cached);
-        assert_eq!(empty_summary.scanned_at_ms, 0);
-    }
-
-    #[test]
-    fn background_rescan_only_for_stale_local_cache_without_force() {
-        let now = 10_000_000_i64;
-        let fresh = now - usage::CACHE_TTL_MS + 1;
-        let stale_boundary = now - usage::CACHE_TTL_MS;
-
-        // 首次扫描（无缓存记录）→ 阻塞
-        assert!(!should_background_rescan(false, None, now));
-        // 缓存新鲜 → 由 refresh 内部 TTL 直接命中，不走后台重扫
-        assert!(!should_background_rescan(false, Some(fresh), now));
-        // 过期（含恰好在 TTL 边界）→ 缓存优先 + 后台重扫
-        assert!(should_background_rescan(false, Some(stale_boundary), now));
-        assert!(should_background_rescan(false, Some(1), now));
-        // force 强刷维持阻塞语义
-        assert!(!should_background_rescan(true, Some(1), now));
-        assert!(!should_background_rescan(true, None, now));
-    }
-
-    #[test]
-    fn usage_refresh_result_serializes_scanning_flag() {
-        let result = UsageRefreshResult {
-            summary: RefreshSummary {
-                cached: true,
-                calls_written: 0,
-                providers_available: 0,
-                scanned_at_ms: 1_700_000_000_000,
-            },
-            overview: UsageOverview {
-                kpis: Default::default(),
-                top_skills: Vec::new(),
-                heatmap: Vec::new(),
-                last_scan_ms: Some(1_700_000_000_000),
-            },
-            recent: Vec::new(),
-            providers: Vec::new(),
-            scope: UsageScopeInfo {
-                target_id: "local".to_string(),
-                label: "Local".to_string(),
-                is_remote: false,
-                remote_reachable: false,
-            },
-            used_cached_data: true,
-            scanning: true,
-            refresh_error: None,
-        };
-        let json = serde_json::to_value(&result).unwrap();
-        assert_eq!(json["scanning"], serde_json::json!(true));
-        assert_eq!(json["usedCachedData"], serde_json::json!(true));
-    }
-
-    #[test]
-    fn overlay_skill_usage_stats_prefills_zero_and_empty_list() {
-        let empty = overlay_skill_usage_stats(&[], vec![]);
-        assert!(empty.is_empty());
-
-        let prefilled = overlay_skill_usage_stats(
-            &["review".to_string(), "git-commit".to_string()],
-            vec![crate::db::SkillUsageStatRow {
-                skill: "review".to_string(),
-                count: 4,
-                last_used_ms: Some(9),
-            }],
-        );
-        assert_eq!(prefilled["review"].count, 4);
-        assert_eq!(prefilled["review"].last_used_ms, Some(9));
-        assert_eq!(prefilled["git-commit"].count, 0);
-        assert_eq!(prefilled["git-commit"].last_used_ms, None);
-    }
-
-    #[test]
-    fn skill_usage_stat_serializes_camel_case() {
-        let json = serde_json::to_value(&SkillUsageStat {
-            count: 3,
-            last_used_ms: Some(42),
-        })
-        .unwrap();
-        assert_eq!(json["count"], 3);
-        assert_eq!(json["lastUsedMs"], 42);
-        assert!(json.get("last_used_ms").is_none());
-    }
-}
+#[path = "usage_tests.rs"]
+mod tests;

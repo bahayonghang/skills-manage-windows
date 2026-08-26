@@ -24,12 +24,20 @@ import type { LogsListDensity } from "@/components/logs/LogsListRow";
 import { LogsListSkeleton } from "@/components/logs/LogsListSkeleton";
 import { LogsLoadMore } from "@/components/logs/LogsLoadMore";
 import { LogsQuickFilters } from "@/components/logs/LogsQuickFilters";
-import { OperationLogDetailDrawer } from "@/components/logs/OperationLogDetailDrawer";
+import { OperationLogDetailDialog } from "@/components/logs/OperationLogDetailDialog";
 import {
   aggregateLogsKpi,
   dayBoundsIso,
   groupLogsByDay,
 } from "@/components/logs/logsUtils";
+import {
+  downloadOperationLogs,
+  fromEndDateInput,
+  fromStartDateInput,
+  loadLogDensity,
+  LOG_DENSITY_STORAGE_KEY,
+  toDateInput,
+} from "@/components/logs/logViewUtils";
 import { useLogsKeyboard } from "@/components/logs/useLogsKeyboard";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,55 +51,11 @@ import {
 import { InlineConfirmAction } from "@/components/ui/inline-confirm-action";
 import { Input } from "@/components/ui/input";
 import { RuntimeLogsPanel } from "@/components/logs/RuntimeLogsPanel";
+import { formatLogUiError } from "@/components/logs/logDiagnostics";
 import { useOperationLogStore } from "@/stores/operationLogStore";
+import { useRuntimeLogStore } from "@/stores/runtimeLogStore";
 import { useTargetStore } from "@/stores/targetStore";
 import { OperationLogEntry, OperationLogFilter } from "@/types";
-import { formatBackendError } from "@/lib/backendError";
-
-function downloadText(payload: string, fileName: string, type: string) {
-  const blob = new Blob([payload], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function downloadJson(payload: string) {
-  const now = new Date();
-  const timestamp = now
-    .toISOString()
-    .replace(/[-:]/g, "")
-    .replace(/\.\d{3}Z$/, "");
-  downloadText(
-    payload,
-    `skillport-operation-logs-${timestamp}.json`,
-    "application/json"
-  );
-}
-
-function toDateInput(value?: string): string {
-  return value?.slice(0, 10) ?? "";
-}
-
-function fromStartDateInput(value: string): string | undefined {
-  return value ? `${value}T00:00:00Z` : undefined;
-}
-
-function fromEndDateInput(value: string): string | undefined {
-  return value ? `${value}T23:59:59Z` : undefined;
-}
-
-const LOG_DENSITY_STORAGE_KEY = "skillport.logs.density";
-
-function loadDensity(): LogsListDensity {
-  if (typeof window === "undefined") return "comfortable";
-  const stored = window.localStorage.getItem(LOG_DENSITY_STORAGE_KEY);
-  return stored === "compact" ? "compact" : "comfortable";
-}
 
 function PendingRecoveryBand() {
   const { t } = useTranslation();
@@ -100,18 +64,14 @@ function PendingRecoveryBand() {
   const isLoading = useOperationLogStore(
     (state) => state.isPendingOperationsLoading,
   );
-  const retryingId = useOperationLogStore(
-    (state) => state.retryingOperationId,
-  );
+  const retryingId = useOperationLogStore((state) => state.retryingOperationId);
   const previewingId = useOperationLogStore(
     (state) => state.previewingOperationId,
   );
   const reconcilingId = useOperationLogStore(
     (state) => state.reconcilingOperationId,
   );
-  const preview = useOperationLogStore(
-    (state) => state.reconciliationPreview,
-  );
+  const preview = useOperationLogStore((state) => state.reconciliationPreview);
   const error = useOperationLogStore((state) => state.pendingOperationsError);
   const load = useOperationLogStore((state) => state.loadPendingOperations);
   const retry = useOperationLogStore((state) => state.retryPendingOperation);
@@ -138,7 +98,7 @@ function PendingRecoveryBand() {
     void previewReconciliation(operationId).catch((err) => {
       toast.error(
         t("logs.recovery.reconcileError", {
-          error: formatBackendError(err, t),
+          error: formatLogUiError(err, t),
         }),
       );
     });
@@ -154,7 +114,7 @@ function PendingRecoveryBand() {
       .catch((err) => {
         toast.error(
           t("logs.recovery.reconcileError", {
-            error: formatBackendError(err, t),
+            error: formatLogUiError(err, t),
           }),
         );
       });
@@ -179,10 +139,14 @@ function PendingRecoveryBand() {
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-300" />
           )}
           <div className="min-w-0">
-            <div className="text-sm font-medium">{t("logs.recovery.title")}</div>
+            <div className="text-sm font-medium">
+              {t("logs.recovery.title")}
+            </div>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {error
-                ? t("logs.recovery.error", { error })
+                ? t("logs.recovery.error", {
+                    error: formatLogUiError(error, t),
+                  })
                 : isLoading
                   ? t("logs.recovery.loading")
                   : t("logs.recovery.summary", { count: pending.length })}
@@ -191,7 +155,10 @@ function PendingRecoveryBand() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {pending.map((operation) => (
-            <div key={operation.operationId} className="flex items-center gap-1">
+            <div
+              key={operation.operationId}
+              className="flex items-center gap-1"
+            >
               <Button
                 variant="outline"
                 size="sm"
@@ -204,12 +171,12 @@ function PendingRecoveryBand() {
                   retry(operation.operationId).catch((err) =>
                     toast.error(
                       t("logs.recovery.error", {
-                        error: formatBackendError(err, t),
+                        error: formatLogUiError(err, t),
                       }),
                     ),
                   )
                 }
-                title={operation.errorMessage ?? operation.phase}
+                title={operation.phase}
               >
                 {retryingId === operation.operationId ? (
                   <Loader2 className="size-4 animate-spin" />
@@ -304,7 +271,11 @@ function PendingRecoveryBand() {
   );
 }
 
-function OperationLogsPanel() {
+function OperationLogsPanel({
+  onInspectRuntime,
+}: {
+  onInspectRuntime: (operationId: string) => void;
+}) {
   const { t } = useTranslation();
   const entries = useOperationLogStore((s) => s.entries);
   const total = useOperationLogStore((s) => s.total);
@@ -323,26 +294,38 @@ function OperationLogsPanel() {
   const closeDetail = useOperationLogStore((s) => s.closeDetail);
   const loadMore = useOperationLogStore((s) => s.loadMore);
   const [query, setQuery] = useState(filter.query ?? "");
+  const [operationIdDraft, setOperationIdDraft] = useState(
+    filter.operationId ?? "",
+  );
   const [advancedManual, setAdvancedManual] = useState(false);
   const showAdvanced =
     advancedManual ||
-    Boolean(filter.action || filter.createdAfter || filter.createdBefore);
-  const [density, setDensity] = useState<LogsListDensity>(() => loadDensity());
+    Boolean(
+      filter.operationId ||
+      filter.action ||
+      filter.createdAfter ||
+      filter.createdBefore,
+    );
+  const [density, setDensity] = useState<LogsListDensity>(() =>
+    loadLogDensity(),
+  );
 
   const searchContainerRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const rowsContainerRef = useRef<HTMLDivElement | null>(null);
+  const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   const kpi = useMemo(() => aggregateLogsKpi(entries), [entries]);
   const groups = useMemo(() => groupLogsByDay(entries), [entries]);
   const hasFilters = Boolean(
     filter.query ||
-      filter.targetKind ||
-      filter.level ||
-      filter.status ||
-      filter.action ||
-      filter.createdAfter ||
-      filter.createdBefore,
+    filter.operationId ||
+    filter.targetKind ||
+    filter.level ||
+    filter.status ||
+    filter.action ||
+    filter.createdAfter ||
+    filter.createdBefore,
   );
 
   useEffect(() => {
@@ -364,7 +347,9 @@ function OperationLogsPanel() {
     searchInputRef,
     rowsContainerRef,
     onRefresh: () => {
-      loadLogs().catch((err) => toast.error(String(err)));
+      loadLogs().catch((err) =>
+        toast.error(t("logs.loadError", { error: formatLogUiError(err, t) })),
+      );
     },
     onExport: () => {
       handleExport();
@@ -375,30 +360,34 @@ function OperationLogsPanel() {
     const nextFilter = { ...filter, ...partial, offset: 0 };
     setFilter(partial);
     loadLogs(nextFilter).catch((err) => {
-      toast.error(t("logs.loadError", { error: String(err) }));
+      toast.error(t("logs.loadError", { error: formatLogUiError(err, t) }));
     });
   }
 
   function handleSearch(event: FormEvent) {
     event.preventDefault();
-    updateFilter({ query });
+    updateFilter({ query, operationId: operationIdDraft });
   }
 
-  async function handleOpenDetail(entry: OperationLogEntry) {
+  async function handleOpenDetail(
+    entry: OperationLogEntry,
+    trigger: HTMLButtonElement,
+  ) {
+    detailTriggerRef.current = trigger;
     try {
       await loadLogDetail(entry.id);
     } catch (err) {
-      toast.error(t("logs.detailError", { error: String(err) }));
+      toast.error(t("logs.detailError", { error: formatLogUiError(err, t) }));
     }
   }
 
   async function handleExport() {
     try {
       const payload = await exportLogs();
-      downloadJson(payload);
+      downloadOperationLogs(payload);
       toast.success(t("logs.exported"));
     } catch (err) {
-      toast.error(t("logs.exportError", { error: String(err) }));
+      toast.error(t("logs.exportError", { error: formatLogUiError(err, t) }));
     }
   }
 
@@ -407,15 +396,16 @@ function OperationLogsPanel() {
       const deleted = await clearLogs();
       toast.success(t("logs.cleared", { count: deleted }));
     } catch (err) {
-      toast.error(t("logs.clearError", { error: String(err) }));
+      toast.error(t("logs.clearError", { error: formatLogUiError(err, t) }));
     }
   }
 
   function handleResetFilters() {
     clearFilters();
     setQuery("");
+    setOperationIdDraft("");
     loadLogs({ query: undefined, offset: 0 }).catch((err) => {
-      toast.error(t("logs.loadError", { error: String(err) }));
+      toast.error(t("logs.loadError", { error: formatLogUiError(err, t) }));
     });
   }
 
@@ -425,14 +415,26 @@ function OperationLogsPanel() {
       <div className="shrink-0 border-b border-border px-5 py-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">{t("logs.title")}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{t("logs.description")}</p>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {t("logs.title")}
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t("logs.description")}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => loadLogs().catch((err) => toast.error(String(err)))}
+              onClick={() =>
+                loadLogs().catch((err) =>
+                  toast.error(
+                    t("logs.loadError", {
+                      error: formatLogUiError(err, t),
+                    }),
+                  ),
+                )
+              }
               disabled={isLoading}
             >
               {isLoading ? (
@@ -497,7 +499,9 @@ function OperationLogsPanel() {
           </div>
           <select
             value={filter.targetKind ?? ""}
-            onChange={(event) => updateFilter({ targetKind: event.target.value as never })}
+            onChange={(event) =>
+              updateFilter({ targetKind: event.target.value as never })
+            }
             aria-label={t("logs.filters.target")}
             className="h-8 rounded-lg border border-input bg-background px-2 text-sm"
           >
@@ -508,7 +512,9 @@ function OperationLogsPanel() {
           </select>
           <select
             value={filter.level ?? ""}
-            onChange={(event) => updateFilter({ level: event.target.value as never })}
+            onChange={(event) =>
+              updateFilter({ level: event.target.value as never })
+            }
             aria-label={t("logs.filters.level")}
             className="h-8 rounded-lg border border-input bg-background px-2 text-sm"
           >
@@ -519,15 +525,19 @@ function OperationLogsPanel() {
           </select>
           <select
             value={filter.status ?? ""}
-            onChange={(event) => updateFilter({ status: event.target.value as never })}
+            onChange={(event) =>
+              updateFilter({ status: event.target.value as never })
+            }
             aria-label={t("logs.filters.status")}
             className="h-8 rounded-lg border border-input bg-background px-2 text-sm"
           >
             <option value="">{t("logs.filters.allStatuses")}</option>
+            <option value="started">{t("logs.status.started")}</option>
             <option value="succeeded">{t("logs.status.succeeded")}</option>
             <option value="failed">{t("logs.status.failed")}</option>
             <option value="partial">{t("logs.status.partial")}</option>
             <option value="cancelled">{t("logs.status.cancelled")}</option>
+            <option value="interrupted">{t("logs.status.interrupted")}</option>
           </select>
           <Button type="submit" size="sm" disabled={isLoading}>
             {t("common.search")}
@@ -547,12 +557,23 @@ function OperationLogsPanel() {
             ) : (
               <ChevronDown className="size-3.5" />
             )}
-            {t(showAdvanced ? "logs.advancedFilters.hide" : "logs.advancedFilters.show")}
+            {t(
+              showAdvanced
+                ? "logs.advancedFilters.hide"
+                : "logs.advancedFilters.show",
+            )}
           </button>
         </div>
 
         {showAdvanced && (
-          <div className="mt-3 grid gap-2 lg:grid-cols-3">
+          <div className="mt-3 grid gap-2 lg:grid-cols-4">
+            <Input
+              value={operationIdDraft}
+              onChange={(event) => setOperationIdDraft(event.target.value)}
+              placeholder={t("logs.filters.operationId")}
+              aria-label={t("logs.filters.operationId")}
+              className="font-mono"
+            />
             <Input
               value={filter.action ?? ""}
               onChange={(event) => updateFilter({ action: event.target.value })}
@@ -562,13 +583,21 @@ function OperationLogsPanel() {
             <Input
               type="date"
               value={toDateInput(filter.createdAfter)}
-              onChange={(event) => updateFilter({ createdAfter: fromStartDateInput(event.target.value) })}
+              onChange={(event) =>
+                updateFilter({
+                  createdAfter: fromStartDateInput(event.target.value),
+                })
+              }
               aria-label={t("logs.filters.from")}
             />
             <Input
               type="date"
               value={toDateInput(filter.createdBefore)}
-              onChange={(event) => updateFilter({ createdBefore: fromEndDateInput(event.target.value) })}
+              onChange={(event) =>
+                updateFilter({
+                  createdBefore: fromEndDateInput(event.target.value),
+                })
+              }
               aria-label={t("logs.filters.to")}
             />
           </div>
@@ -588,7 +617,7 @@ function OperationLogsPanel() {
 
       {error && (
         <div className="mx-5 mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive-text">
-          {error}
+          {t("logs.loadError", { error: formatLogUiError(error, t) })}
         </div>
       )}
 
@@ -649,7 +678,11 @@ function OperationLogsPanel() {
                 isLoading={isLoading}
                 onLoadMore={() =>
                   loadMore().catch((err) =>
-                    toast.error(t("logs.loadError", { error: String(err) })),
+                    toast.error(
+                      t("logs.loadError", {
+                        error: formatLogUiError(err, t),
+                      }),
+                    ),
                   )
                 }
               />
@@ -658,17 +691,20 @@ function OperationLogsPanel() {
         </div>
       </div>
 
-      <OperationLogDetailDrawer
+      <OperationLogDetailDialog
         open={selectedEntry !== null}
         entry={selectedEntry}
+        onInspectRuntime={onInspectRuntime}
         onOpenChange={(open) => {
-          if (!open) closeDetail();
+          if (!open) {
+            closeDetail();
+            window.setTimeout(() => detailTriggerRef.current?.focus(), 0);
+          }
         }}
       />
     </div>
   );
 }
-
 
 type LogConsoleMode = "operation" | "runtime";
 
@@ -676,15 +712,32 @@ export function OperationLogsView() {
   const { t } = useTranslation();
   const [mode, setMode] = useState<LogConsoleMode>("operation");
 
+  function inspectRuntime(operationId: string) {
+    useRuntimeLogStore.getState().setFilter({
+      operationId,
+      eventSource: "",
+    });
+    useOperationLogStore.getState().closeDetail();
+    setMode("runtime");
+  }
+
+  function inspectOperation(operationId: string) {
+    const operationStore = useOperationLogStore.getState();
+    operationStore.setFilter({ operationId, offset: 0 });
+    void operationStore.loadLogs({
+      ...operationStore.filter,
+      operationId,
+      offset: 0,
+    });
+    setMode("operation");
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="shrink-0 border-b border-border bg-gradient-to-r from-background via-muted/20 to-background px-5 py-4">
+      <div className="shrink-0 border-b border-border px-5 py-4">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">
-              {t("logs.console.eyebrow")}
-            </div>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+            <h1 className="text-2xl font-semibold tracking-tight">
               {t("logs.console.title")}
             </h1>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
@@ -722,7 +775,11 @@ export function OperationLogsView() {
       </div>
 
       <div className="min-h-0 flex-1">
-        {mode === "operation" ? <OperationLogsPanel /> : <RuntimeLogsPanel />}
+        {mode === "operation" ? (
+          <OperationLogsPanel onInspectRuntime={inspectRuntime} />
+        ) : (
+          <RuntimeLogsPanel onInspectOperation={inspectOperation} />
+        )}
       </div>
     </div>
   );

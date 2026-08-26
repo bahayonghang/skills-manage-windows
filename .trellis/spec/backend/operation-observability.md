@@ -70,14 +70,15 @@ Repository lifecycle entry points are `insert_operation_log_with_id`, `update_op
 
 - Every runtime command is declared once in `__skillport_runtime_commands` with its handler and exactly one log policy.
   Handler, command-name and policy inventories are generated from that declaration. Do not copy command lists or counts
-  into hand-maintained docs; `ipcCommandCoverage.test.ts` and the Rust registry tests report the current inventory.
+  into hand-maintained docs; `ipcCommandCoverage.test.ts`, Rust registry tests and the generated IPC policy matrix report
+  the current inventory. The docs generator must fail on missing or stale policies rather than publishing a partial table.
 - `Operation` is for user-visible writes, state changes and external side effects. `RuntimeOnly` is for successful pure
   reads, previews and reviewed internal refreshes; their failures still receive backend Runtime evidence. `Excluded` is
   limited to typed recursion/readiness reasons and emits no Runtime event.
 - A command boundary must supply its command name or `CommandPolicyEntry`. The legacy `ipc_boundary!(expression)` cannot
-  select an exact policy and is migration-only; new or migrated commands use the named boundary owned by the Runtime
-  failure layer. Target-aware commands also pass typed `OperationTargetKind`; hosts, target IDs and arguments are never
-  accepted by the boundary.
+  select an exact policy and is forbidden in production command modules; the source contract rejects every unnamed
+  sync/async boundary. Target-aware commands also pass typed `OperationTargetKind`; hosts, target IDs and arguments are
+  never accepted by the boundary.
 - The named boundary starts timing before executing the expression/body and emits exactly one safe backend Runtime event
   on rejection. Operation policies reuse an existing correlation ID, Runtime-only policies generate one, and Excluded
   policies remain silent. Debug builds reject unregistered command literals; release builds use the safe Runtime-only
@@ -113,26 +114,34 @@ Repository lifecycle entry points are `insert_operation_log_with_id`, `update_op
   that generated set; a direct domain `IpcError::new` code must enter the reviewed catalog with a fixed public message.
 - Existing Operation rows, missing optional IPC fields, filters and exports remain readable. No schema migration is needed
   because historical operation rows already use UUID IDs.
+- A registered Operation command must use `run_operation` or `record_terminal` as its only lifecycle owner; it must not
+  call the compatibility `OperationLogEvent` recorder. Remaining non-registry CLI/startup/migration compatibility events
+  use static actions/codes, bounded values and the shared redaction boundary, and never supply an IPC command's
+  correlation ID or lifecycle.
+- Runtime text is redacted after complete-line assembly before disk persistence and again on read/export. Key and value
+  inspection fail closed for credentials, locations, provider/process output and raw error/source-chain content. Flushing
+  an incomplete line writes only a redaction marker and discards that logical line's continuation through newline, so
+  split writer calls cannot bypass the sink guard.
 
 ## 4. Validation & Error Matrix
 
-| Condition | Required result |
-| --- | --- |
-| Command missing or duplicating policy | Registry/coverage contract test fails |
-| Successful read or preview | No Operation row |
-| Failed read or preview | Safe backend Runtime event with correlation ID |
-| Target-aware command fails | Event has reviewed `local`, `ssh`, or `wsl` target kind; no host or target ID |
-| Operation succeeds/fails/cancels/partials | One terminal row with the pre-generated row/correlation ID |
-| Process exits after `started` | Next one-time startup sweep marks the row `interrupted` |
-| Started insert fails, operation succeeds | Business success preserved; terminal fallback attempted; static warning visible |
-| Terminal write fails | Business result preserved; static warning visible |
-| Invalid subject/target/identifier | Fixed safe fallback; no dynamic input in log fields |
-| Raw path, host, credential, command output or source error | Absent from IPC, Operation and Runtime evidence |
-| Excluded self-logging command fails | No recursive Runtime event |
-| Legacy IPC rejection lacks `correlationId` | Frontend generates a UUID and marks frontend correlation origin |
-| Recorder write is pending or fails | Later failures still attempt their own write; business flow remains unchanged |
-| Renderer sends dynamic message/code/object key | Fixed message/code fallback and ordinal keys; seed absent on disk |
-| Invalid operation ID filter | Zero matching Runtime rows |
+| Condition                                                  | Required result                                                                 |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Command missing or duplicating policy                      | Registry/coverage contract test fails                                           |
+| Successful read or preview                                 | No Operation row                                                                |
+| Failed read or preview                                     | Safe backend Runtime event with correlation ID                                  |
+| Target-aware command fails                                 | Event has reviewed `local`, `ssh`, or `wsl` target kind; no host or target ID   |
+| Operation succeeds/fails/cancels/partials                  | One terminal row with the pre-generated row/correlation ID                      |
+| Process exits after `started`                              | Next one-time startup sweep marks the row `interrupted`                         |
+| Started insert fails, operation succeeds                   | Business success preserved; terminal fallback attempted; static warning visible |
+| Terminal write fails                                       | Business result preserved; static warning visible                               |
+| Invalid subject/target/identifier                          | Fixed safe fallback; no dynamic input in log fields                             |
+| Raw path, host, credential, command output or source error | Absent from IPC, Operation and Runtime evidence                                 |
+| Excluded self-logging command fails                        | No recursive Runtime event                                                      |
+| Legacy IPC rejection lacks `correlationId`                 | Frontend generates a UUID and marks frontend correlation origin                 |
+| Recorder write is pending or fails                         | Later failures still attempt their own write; business flow remains unchanged   |
+| Renderer sends dynamic message/code/object key             | Fixed message/code fallback and ordinal keys; seed absent on disk               |
+| Invalid operation ID filter                                | Zero matching Runtime rows                                                      |
 
 ## 5. Good / Base / Bad Cases
 

@@ -207,6 +207,7 @@ pub async fn get_skill_counts_summary(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<SkillCountsSummary> {
     crate::ipc_boundary!(
+        "get_skill_counts_summary",
         async move {
             let pool = state.active_db().await?;
             get_skill_counts_summary_impl(&pool).await
@@ -220,6 +221,7 @@ pub async fn get_dashboard_central_summary(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<DashboardCentralSummary> {
     crate::ipc_boundary!(
+        "get_dashboard_central_summary",
         async move {
             let pool = state.active_db().await?;
             get_dashboard_central_summary_impl(&pool).await
@@ -233,6 +235,7 @@ pub async fn get_bootstrap_snapshot(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<BootstrapSnapshot> {
     crate::ipc_boundary!(
+        "get_bootstrap_snapshot",
         async move {
             let pool = state.active_db().await?;
             get_bootstrap_snapshot_impl(&pool).await

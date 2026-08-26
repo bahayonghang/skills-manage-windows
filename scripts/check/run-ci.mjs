@@ -61,6 +61,10 @@ export const CI_LANES = {
   ],
 };
 
+export function selectWindowsCommandCandidate(candidates, fallback) {
+  return candidates[0] ?? fallback;
+}
+
 function resolveCommand(command) {
   if (isWindows) {
     const result = spawnSync("where.exe", [command], {
@@ -74,11 +78,7 @@ function resolveCommand(command) {
         .split(/\r?\n/)
         .map((line) => line.trim())
         .filter(Boolean);
-      return (
-        candidates.find((candidate) => /\.(cmd|bat)$/i.test(candidate))
-        ?? candidates[0]
-        ?? command
-      );
+      return selectWindowsCommandCandidate(candidates, command);
     }
   }
 

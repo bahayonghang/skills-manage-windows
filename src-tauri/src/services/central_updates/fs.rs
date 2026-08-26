@@ -404,7 +404,6 @@ async fn hash_remote_directories(
                     .contains(REMOTE_HASH_UNSUPPORTED_EXIT_CODE) =>
             {
                 tracing::warn!(
-                    error = %error,
                     "Remote target has no sha256 tool; falling back to per-file SSH hashing"
                 );
                 for root in chunk {

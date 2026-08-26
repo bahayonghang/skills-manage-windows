@@ -228,11 +228,9 @@ pub async fn remove_project_impl(
                 } else {
                     std::fs::remove_dir_all(&target)
                 };
-                if let Err(e) = result {
+                if result.is_err() {
                     tracing::warn!(
                         project_id = %project_id_for_log,
-                        path = %target.display(),
-                        error = %e,
                         "Failed to remove project skill on project removal; ignoring"
                     );
                 }

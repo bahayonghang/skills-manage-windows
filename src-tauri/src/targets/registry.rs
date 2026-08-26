@@ -29,8 +29,8 @@ impl TargetRegistry {
     pub(super) fn get_session_password(&self, credential_key: &str) -> Option<String> {
         match self.session_passwords.lock() {
             Ok(passwords) => passwords.get(credential_key).cloned(),
-            Err(error) => {
-                tracing::warn!(error = %error, "SSH session password cache lock is poisoned during read");
+            Err(_error) => {
+                tracing::warn!("SSH session password cache lock is poisoned during read");
                 None
             }
         }
@@ -61,8 +61,8 @@ impl TargetRegistry {
             Ok(mut passwords) => {
                 passwords.remove(credential_key);
             }
-            Err(error) => {
-                tracing::warn!(error = %error, "SSH session password cache lock is poisoned during clear");
+            Err(_error) => {
+                tracing::warn!("SSH session password cache lock is poisoned during clear");
             }
         }
     }
@@ -453,8 +453,8 @@ impl TargetRegistry {
                     return Ok(pool.clone());
                 }
             }
-            Err(error) => {
-                tracing::warn!(target_id = %target_id, error = %error, "Remote DB pool cache lock is poisoned during lookup");
+            Err(_error) => {
+                tracing::warn!("Remote DB pool cache lock is poisoned during lookup");
             }
         }
 
@@ -477,8 +477,8 @@ impl TargetRegistry {
             Ok(mut pools) => {
                 pools.insert(target_id.to_string(), pool.clone());
             }
-            Err(error) => {
-                tracing::warn!(target_id = %target_id, error = %error, "Remote DB pool cache lock is poisoned during insert");
+            Err(_error) => {
+                tracing::warn!("Remote DB pool cache lock is poisoned during insert");
             }
         }
 
@@ -490,8 +490,8 @@ impl TargetRegistry {
             Ok(mut pools) => {
                 pools.remove(target_id);
             }
-            Err(error) => {
-                tracing::warn!(target_id = %target_id, error = %error, "SSH remote DB pool cache lock is poisoned during drop");
+            Err(_error) => {
+                tracing::warn!("SSH remote DB pool cache lock is poisoned during drop");
             }
         }
     }

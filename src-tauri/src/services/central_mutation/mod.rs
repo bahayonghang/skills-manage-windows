@@ -39,8 +39,11 @@ impl CentralMutationGuard {
 
 impl Drop for CentralMutationGuard {
     fn drop(&mut self) {
-        if let Err(error) = FileExt::unlock(&self.file) {
-            tracing::warn!(operation = self.operation, error = %error, "failed to unlock Central mutation file");
+        if FileExt::unlock(&self.file).is_err() {
+            tracing::warn!(
+                operation = self.operation,
+                "failed to unlock Central mutation file"
+            );
         }
     }
 }

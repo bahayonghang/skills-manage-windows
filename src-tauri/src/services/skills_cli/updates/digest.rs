@@ -22,7 +22,12 @@ pub fn collect_skill_files(root: &Path) -> Result<Vec<(String, Vec<u8>)>, Skills
     })?;
     let mut files = Vec::new();
     let mut total_bytes = 0_u64;
-    walk_skill_files(&canonical_root, &canonical_root, &mut files, &mut total_bytes)?;
+    walk_skill_files(
+        &canonical_root,
+        &canonical_root,
+        &mut files,
+        &mut total_bytes,
+    )?;
     files.sort_by(|left, right| left.0.as_bytes().cmp(right.0.as_bytes()));
     Ok(files)
 }
@@ -82,7 +87,9 @@ fn walk_skill_files(
 }
 
 fn relative_posix(root: &Path, file: &Path) -> Result<String, SkillsCliError> {
-    let relative = file.strip_prefix(root).map_err(|_| SkillsCliError::UpdateIntegrity)?;
+    let relative = file
+        .strip_prefix(root)
+        .map_err(|_| SkillsCliError::UpdateIntegrity)?;
     let mut parts = Vec::new();
     for component in relative.components() {
         match component {

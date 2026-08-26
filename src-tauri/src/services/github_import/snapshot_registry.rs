@@ -402,8 +402,11 @@ impl PreviewSnapshotRegistry {
         &self,
         operation: &'static str,
     ) -> Result<std::sync::MutexGuard<'_, PreviewRegistryState>, GithubImportError> {
-        self.state.lock().map_err(|error| {
-            tracing::warn!(error = %error, operation, "GitHub preview snapshot registry lock is poisoned");
+        self.state.lock().map_err(|_error| {
+            tracing::warn!(
+                operation,
+                "GitHub preview snapshot registry lock is poisoned"
+            );
             GithubImportError::PreviewSnapshotMissing
         })
     }

@@ -303,11 +303,10 @@ async fn migration_seven_creates_skills_cli_update_tables_and_reopens() {
     pool.close().await;
 
     let reopened = crate::db::open_database(&database_path).await.unwrap();
-    let reopened_versions =
-        sqlx::query("SELECT version FROM schema_migrations ORDER BY version")
-            .fetch_all(&reopened)
-            .await
-            .unwrap();
+    let reopened_versions = sqlx::query("SELECT version FROM schema_migrations ORDER BY version")
+        .fetch_all(&reopened)
+        .await
+        .unwrap();
     assert_eq!(reopened_versions.len(), 7);
     reopened.close().await;
 }

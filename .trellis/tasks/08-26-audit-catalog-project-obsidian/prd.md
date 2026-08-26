@@ -23,11 +23,11 @@ project/vault 的变更可审计、失败可追踪，且不把名称、路径、
 
 ## Acceptance Criteria
 
-- [ ] 本 child 的所有 operation policy entries 都有 owning recorder，成功纯读取无 Operation row。
-- [ ] CRUD/reorder/assignment/batch 的 success/failure/partial/cancel matrix 有 focused tests且无重复行。
-- [ ] adversarial repo URL/ref, project/vault path, saved query, collection payload, AI prompt/response 不出现在日志/导出。
-- [ ] open Obsidian path记录动作结果但不记录路径；folder picker取消不制造长期 operation noise。
-- [ ] existing domain behavior、sorting/order、job events、project/agent target semantics不变。
+- [x] 本 child 的所有 operation policy entries 都有 owning recorder，成功纯读取无 Operation row。
+- [x] CRUD/reorder/assignment/batch 的 success/failure/partial/cancel matrix 有 focused tests且无重复行。
+- [x] adversarial repo URL/ref, project/vault path, saved query, collection payload, AI prompt/response 不出现在日志/导出。
+- [x] open Obsidian path记录动作结果但不记录路径；folder picker取消不制造长期 operation noise。
+- [x] existing domain behavior、sorting/order、job events、project/agent target semantics不变。
 
 ## Out of Scope
 

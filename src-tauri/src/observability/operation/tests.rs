@@ -225,6 +225,38 @@ async fn reviewed_cancellation_records_cancelled_terminal_state() {
 }
 
 #[tokio::test]
+async fn reviewed_skills_cli_cancellation_records_cancelled_terminal_state() {
+    let pool = crate::test_support::mem_pool().await;
+    let state = test_app_state(pool.clone());
+    let result = run_operation(
+        &state,
+        definition(OperationLifecycle::StartedThenTerminal),
+        OperationTarget::local(),
+        |_| SafeOperationResult::succeeded("Operation completed."),
+        || async {
+            Err::<(), _>(ReviewedFailure::new(ReviewedDiagnostic::new(
+                "skills_cli.cancelled",
+                "skills_cli.operation",
+                OperationPhase::Job,
+                "The Skills CLI operation was cancelled.",
+                false,
+            )))
+        },
+    )
+    .await;
+    let error = result.unwrap_err();
+    assert_eq!(error.code, "skills_cli.cancelled");
+    assert!(error.correlation_id.is_some());
+
+    let page = db::list_operation_logs(&pool, db::OperationLogFilter::default())
+        .await
+        .unwrap();
+    assert_eq!(page.entries.len(), 1);
+    assert_eq!(page.entries[0].status, "cancelled");
+    assert_eq!(page.entries[0].level, "warn");
+}
+
+#[tokio::test]
 async fn startup_sweep_marks_only_started_rows_interrupted() {
     let pool = crate::test_support::mem_pool().await;
     let started_id = OperationId::new();

@@ -119,8 +119,8 @@ impl OperationLogEvent {
         self
     }
 
-    pub fn error(mut self, error: impl AsRef<str>) -> Self {
-        self.error_summary = Some(summarize_error(error.as_ref()));
+    pub fn error(mut self, public_message: &'static str) -> Self {
+        self.error_summary = Some(summarize_error(public_message));
         self
     }
 
@@ -257,8 +257,8 @@ pub async fn record_operation_log_best_effort(
         batch_id: event.batch_id,
     };
 
-    if let Err(error) = db::insert_operation_log(pool, entry).await {
-        tracing::warn!(error = %error, "Failed to record operation log");
+    if db::insert_operation_log(pool, entry).await.is_err() {
+        tracing::warn!("Failed to record operation log");
     }
 }
 
@@ -409,9 +409,9 @@ mod tests {
                     )
                     .duration_ms(duration_ms)
                 },
-                |error: &String, duration_ms| {
+                |_error: &String, duration_ms| {
                     OperationLogEvent::new("test", "test.wrapper", "failed", "Failed")
-                        .error(error)
+                        .error("The operation failed.")
                         .duration_ms(duration_ms)
                 },
             ),

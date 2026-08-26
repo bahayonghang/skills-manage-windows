@@ -176,11 +176,11 @@ where
     Ok(results)
 }
 
-fn counters_snapshot(counters: &Arc<Mutex<AiTagCounters>>, context: &str) -> AiTagCounters {
+fn counters_snapshot(counters: &Arc<Mutex<AiTagCounters>>, _context: &str) -> AiTagCounters {
     match counters.lock() {
         Ok(guard) => guard.clone(),
-        Err(error) => {
-            tracing::warn!(context = %context, error = %error, "AI tag counter mutex poisoned");
+        Err(_error) => {
+            tracing::warn!("AI tag counter mutex poisoned");
             AiTagCounters::default()
         }
     }
@@ -201,8 +201,8 @@ fn update_counters(
             guard.low_confidence_count += result.low_confidence_count;
             guard.clone()
         }
-        Err(error) => {
-            tracing::warn!(error = %error, "AI tag counter mutex poisoned during update");
+        Err(_error) => {
+            tracing::warn!("AI tag counter mutex poisoned during update");
             AiTagCounters::default()
         }
     }

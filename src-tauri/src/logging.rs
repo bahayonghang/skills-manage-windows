@@ -24,20 +24,29 @@ const MAX_RUNTIME_LOG_LIMIT: usize = 1_000;
 #[derive(Debug)]
 struct DailyLogWriter {
     log_dir: PathBuf,
+    pending: Vec<u8>,
+    discard_until_newline: bool,
 }
 
 impl DailyLogWriter {
     fn new(log_dir: PathBuf) -> Self {
-        Self { log_dir }
+        Self {
+            log_dir,
+            pending: Vec::new(),
+            discard_until_newline: false,
+        }
     }
 
     fn current_log_path(&self) -> PathBuf {
         daily_log_path(&self.log_dir)
     }
-}
 
-impl Write for DailyLogWriter {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+    fn append_redacted(&self, bytes: &[u8]) -> io::Result<()> {
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        let raw = String::from_utf8_lossy(bytes);
+        let redacted = crate::redaction::redact_runtime_line(&raw);
         let path = self.current_log_path();
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
@@ -46,11 +55,49 @@ impl Write for DailyLogWriter {
             .create(true)
             .append(true)
             .open(path)?;
-        file.write(buf)
+        file.write_all(redacted.as_bytes())
+    }
+
+    fn persist_completed_lines(&mut self) -> io::Result<()> {
+        while let Some(line_end) = self.pending.iter().position(|byte| *byte == b'\n') {
+            let line = self.pending.drain(..=line_end).collect::<Vec<_>>();
+            self.append_redacted(&line)?;
+        }
+        Ok(())
+    }
+}
+
+impl Write for DailyLogWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let mut remaining = buf;
+        if self.discard_until_newline {
+            let Some(line_end) = remaining.iter().position(|byte| *byte == b'\n') else {
+                return Ok(buf.len());
+            };
+            self.discard_until_newline = false;
+            remaining = &remaining[line_end + 1..];
+        }
+
+        self.pending.extend_from_slice(remaining);
+        self.persist_completed_lines()?;
+        Ok(buf.len())
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        Ok(())
+        // A flush is an observable persistence boundary. An unterminated tail
+        // cannot be safely classified because later writes could turn it into
+        // a sensitive key (`tok` + `en=...`). Persist one marker line, then
+        // discard the rest of that logical input line through its newline.
+        if !self.pending.is_empty() {
+            self.pending.clear();
+            self.discard_until_newline = true;
+            self.append_redacted(crate::redaction::redacted_runtime_fragment_line().as_bytes())?;
+        }
+        let path = self.current_log_path();
+        if !path.exists() {
+            return Ok(());
+        }
+        fs::OpenOptions::new().append(true).open(path)?.flush()
     }
 }
 
@@ -174,16 +221,14 @@ pub fn init_file_logging() -> Result<(), LoggingError> {
         Ok(()) => {
             tracing::info!(
                 target: "skillport::startup",
-                log_dir = %paths::path_to_string(&logs_dir()),
                 "SkillPort file logging initialized"
             );
             Ok(())
         }
-        Err(error) => {
+        Err(_error) => {
             init_stderr_logging()?;
             tracing::warn!(
                 target: "skillport::startup",
-                error = %error,
                 "SkillPort file logging unavailable; using stderr logging"
             );
             Ok(())
@@ -196,15 +241,11 @@ pub fn init_file_logging_with_dir(log_dir: &Path) -> Result<(), LoggingError> {
         return Ok(());
     }
 
-    fs::create_dir_all(log_dir).map_err(|error| {
-        LoggingError::io(
-            format!("Failed to create log directory '{}'", log_dir.display()),
-            error,
-        )
-    })?;
+    fs::create_dir_all(log_dir)
+        .map_err(|error| LoggingError::io("Failed to create runtime log directory", error))?;
 
-    if let Err(error) = cleanup_expired_runtime_logs_in_dir(log_dir, RUNTIME_LOG_RETENTION_DAYS) {
-        eprintln!("Failed to clean expired SkillPort runtime logs: {error}");
+    if cleanup_expired_runtime_logs_in_dir(log_dir, RUNTIME_LOG_RETENTION_DAYS).is_err() {
+        eprintln!("Failed to clean expired SkillPort runtime logs");
     }
 
     let appender = DailyLogWriter::new(log_dir.to_path_buf());
@@ -254,15 +295,9 @@ fn list_runtime_log_files_in_dir(log_dir: &Path) -> Result<Vec<RuntimeLogFile>, 
     }
 
     let mut files = Vec::new();
-    for entry in fs::read_dir(log_dir).map_err(|error| {
-        LoggingError::io(
-            format!(
-                "Failed to read runtime log directory '{}'",
-                log_dir.display()
-            ),
-            error,
-        )
-    })? {
+    for entry in fs::read_dir(log_dir)
+        .map_err(|error| LoggingError::io("Failed to read runtime log directory", error))?
+    {
         let entry = entry?;
         let file_name = entry.file_name().to_string_lossy().into_owned();
         let Some(date) = runtime_log_file_date(&file_name) else {

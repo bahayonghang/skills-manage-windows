@@ -11,20 +11,18 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+use crate::db::DbPool;
 use crate::db::{
     self, insert_update_operation, list_pending_update_operations, transition_update_operation,
     transition_update_operation_in_transaction, upsert_update_state_in_transaction,
     NewSkillsCliUpdateOperation, SkillsCliUpdateStateRow as PersistedSkill,
 };
-use crate::db::DbPool;
 use crate::fs_util::run_blocking_fs_with;
 use crate::services::central_mutation::{
     acquire_central_mutation_guard_at, acquire_target_mutation_guard,
     DEFAULT_CENTRAL_MUTATION_TIMEOUT,
 };
-use crate::services::github_import::{
-    candidate_content_digest_from_snapshot, GitHubRepoSnapshot,
-};
+use crate::services::github_import::{candidate_content_digest_from_snapshot, GitHubRepoSnapshot};
 use crate::targets::ActiveTarget;
 
 use super::super::{
@@ -53,11 +51,11 @@ const PHASE_RECOVERY: &str = "recovery_required";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApplyFault {
-    AfterPrepared,
-    AfterBackups,
-    AfterCliStarted,
-    AfterCliSucceeded,
-    AfterDbCommitted,
+    Prepared,
+    Backups,
+    CliStarted,
+    CliSucceeded,
+    DbCommitted,
 }
 
 #[cfg(test)]
@@ -176,7 +174,8 @@ pub(crate) async fn apply_updates_at(
         if state.is_stale != 0 {
             return Err(SkillsCliError::UpdateStale);
         }
-        if state.pending_revision_sha.as_deref() != Some(selection.expected_pending_revision.as_str())
+        if state.pending_revision_sha.as_deref()
+            != Some(selection.expected_pending_revision.as_str())
             || state.pending_upstream_digest.as_deref()
                 != Some(selection.expected_pending_digest.as_str())
         {
@@ -192,23 +191,18 @@ pub(crate) async fn apply_updates_at(
     }
 
     let identity_parts: Vec<&str> = request.repository_key.split('@').collect();
-    let (owner_repo, branch_unused) = identity_parts.split_first().ok_or(SkillsCliError::UpdateStale)?;
+    let (owner_repo, branch_unused) = identity_parts
+        .split_first()
+        .ok_or(SkillsCliError::UpdateStale)?;
     let _ = branch_unused;
     let mut owner_repo_parts = owner_repo.split('/');
-    let owner = owner_repo_parts
-        .next()
-        .ok_or(SkillsCliError::UpdateStale)?;
-    let repo = owner_repo_parts
-        .next()
-        .ok_or(SkillsCliError::UpdateStale)?;
+    let owner = owner_repo_parts.next().ok_or(SkillsCliError::UpdateStale)?;
+    let repo = owner_repo_parts.next().ok_or(SkillsCliError::UpdateStale)?;
     let sha = &request.selections[0].expected_pending_revision;
     if sha.len() != 40 || !sha.chars().all(|ch| ch.is_ascii_hexdigit()) {
         return Err(SkillsCliError::UpdateStale);
     }
-    let pinned = context
-        .github
-        .snapshot_at_sha(owner, repo, sha)
-        .await?;
+    let pinned = context.github.snapshot_at_sha(owner, repo, sha).await?;
     for selection in &request.selections {
         let digest = candidate_content_digest_from_snapshot(&pinned, &selection.skill_path)
             .map_err(|_| SkillsCliError::UpdateStale)?;
@@ -217,16 +211,18 @@ pub(crate) async fn apply_updates_at(
         }
     }
 
-    context.progress.emit_update_progress(&SkillsCliUpdateProgress {
-        job_id: request.job_id.clone(),
-        phase: "prepare".to_string(),
-        repository_total: 1,
-        repository_completed: 0,
-        current_repository_key: Some(request.repository_key.clone()),
-        selected_total: request.selections.len() as u32,
-        selected_completed: 0,
-        terminal_status: None,
-    });
+    context
+        .progress
+        .emit_update_progress(&SkillsCliUpdateProgress {
+            job_id: request.job_id.clone(),
+            phase: "prepare".to_string(),
+            repository_total: 1,
+            repository_completed: 0,
+            current_repository_key: Some(request.repository_key.clone()),
+            selected_total: request.selections.len() as u32,
+            selected_completed: 0,
+            terminal_status: None,
+        });
 
     let _guard = if let Some(lock_path) = context.mutation_lock_path.clone() {
         acquire_central_mutation_guard_at(
@@ -330,7 +326,7 @@ pub(crate) async fn apply_updates_at(
     )
     .await
     .map_err(map_db_error)?;
-    fail_if(ApplyFault::AfterPrepared)?;
+    fail_if(ApplyFault::Prepared)?;
 
     let recovery_root = context.recovery_root.to_path_buf();
     let canonical_root = context.canonical_root.to_path_buf();
@@ -360,7 +356,7 @@ pub(crate) async fn apply_updates_at(
     )
     .await
     .map_err(map_db_error)?;
-    fail_if(ApplyFault::AfterBackups)?;
+    fail_if(ApplyFault::Backups)?;
     transition_update_operation(
         context.pool,
         &operation_id,
@@ -370,7 +366,7 @@ pub(crate) async fn apply_updates_at(
     )
     .await
     .map_err(map_db_error)?;
-    fail_if(ApplyFault::AfterCliStarted)?;
+    fail_if(ApplyFault::CliStarted)?;
 
     check_cancel(context.cancel)?;
     let refresh_plan = manifest.selections.clone();
@@ -390,7 +386,7 @@ pub(crate) async fn apply_updates_at(
     )
     .await
     .map_err(map_db_error)?;
-    fail_if(ApplyFault::AfterCliSucceeded)?;
+    fail_if(ApplyFault::CliSucceeded)?;
 
     for selection in &request.selections {
         let canonical = context.canonical_root.join(&selection.skill_name);
@@ -435,7 +431,7 @@ pub(crate) async fn apply_updates_at(
     .await
     .map_err(map_db_error)?;
     transaction.commit().await.map_err(map_db_error)?;
-    fail_if(ApplyFault::AfterDbCommitted)?;
+    fail_if(ApplyFault::DbCommitted)?;
 
     let recovery_root = context.recovery_root.to_path_buf();
     let cleanup_id = operation_id.clone();
@@ -475,16 +471,18 @@ pub(crate) async fn apply_updates_at(
     .await
     .map_err(map_db_error)?;
 
-    context.progress.emit_update_progress(&SkillsCliUpdateProgress {
-        job_id: request.job_id.clone(),
-        phase: "completed".to_string(),
-        repository_total: 1,
-        repository_completed: 1,
-        current_repository_key: Some(request.repository_key.clone()),
-        selected_total: request.selections.len() as u32,
-        selected_completed: request.selections.len() as u32,
-        terminal_status: Some("completed".to_string()),
-    });
+    context
+        .progress
+        .emit_update_progress(&SkillsCliUpdateProgress {
+            job_id: request.job_id.clone(),
+            phase: "completed".to_string(),
+            repository_total: 1,
+            repository_completed: 1,
+            current_repository_key: Some(request.repository_key.clone()),
+            selected_total: request.selections.len() as u32,
+            selected_completed: request.selections.len() as u32,
+            terminal_status: Some("completed".to_string()),
+        });
 
     Ok(SkillsCliApplyResult {
         applied_skill_names: request
@@ -591,9 +589,15 @@ async fn recover_one(
         serde_json::from_str(&row.manifest_json).map_err(|_| SkillsCliError::UpdateIntegrity)?;
     match row.phase.as_str() {
         PHASE_PREPARED => {
-            transition_update_operation(pool, operation_id, PHASE_PREPARED, PHASE_ROLLED_BACK, None)
-                .await
-                .map_err(map_db_error)?;
+            transition_update_operation(
+                pool,
+                operation_id,
+                PHASE_PREPARED,
+                PHASE_ROLLED_BACK,
+                None,
+            )
+            .await
+            .map_err(map_db_error)?;
             Ok(SkillsCliApplyRecoveryResult {
                 operation_id: operation_id.to_string(),
                 phase: PHASE_ROLLED_BACK.to_string(),
@@ -667,9 +671,15 @@ async fn settle_old_or_new(
             finalize_new_baseline(pool, phase, manifest, &recovery_for_finalize).await
         }
         SettleFsOutcome::RestoredOld => {
-            transition_update_operation(pool, &manifest.operation_id, phase, PHASE_ROLLED_BACK, None)
-                .await
-                .map_err(map_db_error)?;
+            transition_update_operation(
+                pool,
+                &manifest.operation_id,
+                phase,
+                PHASE_ROLLED_BACK,
+                None,
+            )
+            .await
+            .map_err(map_db_error)?;
             Ok(SkillsCliApplyRecoveryResult {
                 operation_id: manifest.operation_id.clone(),
                 phase: PHASE_ROLLED_BACK.to_string(),

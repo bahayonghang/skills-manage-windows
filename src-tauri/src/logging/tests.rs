@@ -29,6 +29,25 @@ fn daily_log_writer_writes_skillport_dated_log_file() {
 }
 
 #[test]
+fn daily_log_writer_flushes_partial_as_marker_and_discards_only_its_continuation() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut appender = DailyLogWriter::new(temp_dir.path().to_path_buf());
+
+    appender.write_all(b"tok").unwrap();
+    appender.flush().unwrap();
+    appender
+        .write_all(b"en=secret\nINFO source=runtime next complete line\n")
+        .unwrap();
+    appender.flush().unwrap();
+
+    let content = fs::read_to_string(daily_log_path(temp_dir.path())).unwrap();
+    assert!(content.starts_with("[REDACTED]\n"));
+    assert!(!content.contains("tok"));
+    assert!(!content.contains("secret"));
+    assert!(content.contains("INFO source=runtime next complete line\n"));
+}
+
+#[test]
 fn operation_log_failure_warning_enters_daily_log_file() {
     // M6 稳定化：直接测 tracing → DailyLogWriter 集成链路，不经过 sqlx / tokio runtime。
     //
@@ -166,6 +185,105 @@ fn export_runtime_log_file_redacts_sensitive_values() {
     assert!(exported.contains("passphrase=[REDACTED]"));
     assert!(!exported.contains("sk-test"));
     assert!(!exported.contains("pp-secret"));
+}
+
+#[test]
+fn runtime_disk_read_and_export_never_expose_private_diagnostic_seeds() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut appender = DailyLogWriter::new(temp_dir.path().to_path_buf());
+    let seeds = [
+        r"C:\Users\alice\AppData\Roaming\SkillPort\logs",
+        r"D:\private\skills\secret.md",
+        "https://private.example.invalid/repo?token=ghp_private",
+        "private.internal",
+        "ghp_super_secret_value",
+        "raw-error-seed-from-provider",
+        "10.23.45.67",
+        "2001:db8::7",
+        r"C:\Users\Alice Smith\secret\skill.md",
+        "/home/Alice Smith/private/skill.md",
+        "token=secret",
+    ];
+    let line = format!(
+        "2026-06-03T00:03:00Z ERROR skillport::startup: failed log_dir={} path={} url={} host={} secret={} error={}\n",
+        seeds[0], seeds[1], seeds[2], seeds[3], seeds[4], seeds[5]
+    );
+
+    let split = line.find("SkillPort").unwrap() + 4;
+    appender.write_all(&line.as_bytes()[..split]).unwrap();
+    appender.write_all(&line.as_bytes()[split..]).unwrap();
+    appender
+        .write_all(
+            format!(
+                "2026-06-03T00:03:01Z WARN skillport::startup: peers {} {} {} error_code=storage.unavailable\n",
+                seeds[3], seeds[6], seeds[7]
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    appender
+        .write_all(
+            format!(
+                "2026-06-03T00:03:02Z WARN skillport::startup: opened {} error_code=storage.unavailable\n",
+                seeds[8]
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    appender
+        .write_all(
+            format!(
+                "2026-06-03T00:03:03Z WARN skillport::startup: opened {} error_code=storage.unavailable\n",
+                seeds[9]
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    appender.write_all(b"tok").unwrap();
+    appender.flush().unwrap();
+    appender.write_all(b"en=secret\n").unwrap();
+    appender.flush().unwrap();
+
+    let file_name = fs::read_dir(temp_dir.path())
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .into_owned();
+    let disk = fs::read_to_string(temp_dir.path().join(&file_name)).unwrap();
+    let read = read_runtime_log_file_from_dir(
+        temp_dir.path(),
+        RuntimeLogReadRequest {
+            file_name: file_name.clone(),
+            query: None,
+            level: None,
+            source: None,
+            operation_id: None,
+            event_source: None,
+            limit: Some(20),
+            offset: Some(0),
+            tail: false,
+        },
+    )
+    .unwrap();
+    let read_projection = serde_json::to_string(&read.lines).unwrap();
+    let exported = export_runtime_log_file_from_dir(temp_dir.path(), &file_name).unwrap();
+
+    for seed in seeds {
+        assert!(!disk.contains(seed), "disk leaked private seed: {seed}");
+        assert!(
+            !read_projection.contains(seed),
+            "read projection leaked private seed: {seed}"
+        );
+        assert!(
+            !exported.contains(seed),
+            "export leaked private seed: {seed}"
+        );
+    }
+    assert!(disk.contains("[REDACTED]"));
+    assert!(disk.contains("error_code=storage.unavailable"));
 }
 
 #[test]

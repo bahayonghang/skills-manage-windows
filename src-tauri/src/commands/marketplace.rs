@@ -12,7 +12,16 @@ use std::collections::HashMap;
 
 use crate::services::ai_provider;
 use crate::services::marketplace;
+use crate::targets::ActiveTarget;
 use crate::AppState;
+use crate::{
+    ipc_error::{public_message_for_code, IpcError, REVIEWED_IPC_ERROR_CODES},
+    observability::{
+        CommandLogPolicy, OperationContext, OperationDefinition, OperationTarget,
+        OperationTargetKind, ReviewedDiagnostic, ReviewedFailure, SafeDetailKey, SafeIdentifier,
+        SafeOperationResult,
+    },
+};
 
 // Re-export the types frontend code already references via this module path.
 pub use crate::services::ai_provider::{
@@ -24,6 +33,41 @@ pub use crate::services::marketplace::{
     SkillsShSkill, SyncRegistryOptions,
 };
 
+fn operation_definition(command: &'static str) -> OperationDefinition {
+    match crate::ipc_registry::command_policy(command)
+        .expect("Marketplace command must be registered")
+        .policy
+    {
+        CommandLogPolicy::Operation(definition) => definition,
+        _ => panic!("Marketplace mutation must use Operation policy"),
+    }
+}
+
+fn operation_target(target: &ActiveTarget) -> OperationTarget {
+    match target {
+        ActiveTarget::Local => OperationTarget::local(),
+        ActiveTarget::Ssh(_) => OperationTarget::new(OperationTargetKind::Ssh, target.id()),
+        ActiveTarget::Wsl(_) => OperationTarget::new(OperationTargetKind::Wsl, target.id()),
+    }
+}
+
+fn reviewed_failure(definition: OperationDefinition, error: IpcError) -> ReviewedFailure {
+    let code = REVIEWED_IPC_ERROR_CODES
+        .iter()
+        .copied()
+        .find(|code| *code == error.safe_code())
+        .unwrap_or("internal.unexpected");
+    let message = public_message_for_code(code)
+        .unwrap_or("The operation failed. See runtime logs for details.");
+    ReviewedFailure::new(ReviewedDiagnostic::new(
+        code,
+        definition.category().as_str(),
+        definition.default_phase(),
+        message,
+        error.retryable,
+    ))
+}
+
 // ─── Registry CRUD ───────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -31,6 +75,7 @@ pub async fn list_registries(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<Vec<SkillRegistry>> {
     crate::ipc_boundary!(
+        "list_registries",
         async move {
             let pool = state.active_db().await?;
             marketplace::list_registries_impl(&pool)
@@ -49,11 +94,29 @@ pub async fn add_registry(
     url: String,
 ) -> crate::ipc_error::IpcResult<SkillRegistry> {
     crate::ipc_boundary!(
+        "add_registry",
         async move {
-            let pool = state.active_db().await?;
-            marketplace::add_registry_impl(&pool, name, source_type, url, None)
-                .await
-                .map_err(|e| e.to_string())
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let pool = request_context.db().clone();
+            let definition = operation_definition("add_registry");
+            crate::observability::run_operation(
+                &state,
+                definition,
+                OperationContext::new(operation_target(&active_target)),
+                |registry: &SkillRegistry| {
+                    SafeOperationResult::succeeded("Added a Marketplace registry.")
+                        .identifier(SafeDetailKey::Identifier, SafeIdentifier::new(&registry.id))
+                },
+                || async move {
+                    marketplace::add_registry_impl(&pool, name, source_type, url, None)
+                        .await
+                        .map_err(|error| {
+                            reviewed_failure(definition, IpcError::from_display(error))
+                        })
+                },
+            )
+            .await
         }
         .await
     )
@@ -66,11 +129,30 @@ pub async fn remove_registry(
     registry_id: String,
 ) -> crate::ipc_error::IpcResult<()> {
     crate::ipc_boundary!(
+        "remove_registry",
         async move {
-            let pool = state.active_db().await?;
-            marketplace::remove_registry_impl(&pool, registry_id)
-                .await
-                .map_err(|e| e.to_string())
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let pool = request_context.db().clone();
+            let definition = operation_definition("remove_registry");
+            let context = OperationContext::new(operation_target(&active_target)).subject(
+                crate::observability::OperationSubjectKind::Registry,
+                SafeIdentifier::new(&registry_id),
+            );
+            crate::observability::run_operation(
+                &state,
+                definition,
+                context,
+                |_| SafeOperationResult::succeeded("Removed a Marketplace registry."),
+                || async move {
+                    marketplace::remove_registry_impl(&pool, registry_id)
+                        .await
+                        .map_err(|error| {
+                            reviewed_failure(definition, IpcError::from_display(error))
+                        })
+                },
+            )
+            .await
         }
         .await
     )
@@ -82,17 +164,39 @@ pub async fn sync_registry(
     registry_id: String,
 ) -> crate::ipc_error::IpcResult<Vec<MarketplaceSkill>> {
     crate::ipc_boundary!(
+        "sync_registry",
         async move {
-            let pool = state.active_db().await?;
-            marketplace::sync_registry_impl(
-                &pool,
-                &state.db,
-                state.secrets.as_ref(),
-                registry_id,
-                SyncRegistryOptions::default(),
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let pool = request_context.db().clone();
+            let definition = operation_definition("sync_registry");
+            let context = OperationContext::new(operation_target(&active_target)).subject(
+                crate::observability::OperationSubjectKind::Registry,
+                SafeIdentifier::new(&registry_id),
+            );
+            let local_db = state.db.clone();
+            let secrets = std::sync::Arc::clone(&state.secrets);
+            crate::observability::run_operation(
+                &state,
+                definition,
+                context,
+                |skills: &Vec<MarketplaceSkill>| {
+                    SafeOperationResult::succeeded("Synchronized a Marketplace registry.")
+                        .count(SafeDetailKey::AffectedCount, skills.len() as u64)
+                },
+                || async move {
+                    marketplace::sync_registry_impl(
+                        &pool,
+                        &local_db,
+                        secrets.as_ref(),
+                        registry_id,
+                        SyncRegistryOptions::default(),
+                    )
+                    .await
+                    .map_err(|error| reviewed_failure(definition, IpcError::from_display(error)))
+                },
             )
             .await
-            .map_err(|e| e.to_string())
         }
         .await
     )
@@ -105,17 +209,39 @@ pub async fn sync_registry_with_options(
     options: Option<SyncRegistryOptions>,
 ) -> crate::ipc_error::IpcResult<Vec<MarketplaceSkill>> {
     crate::ipc_boundary!(
+        "sync_registry_with_options",
         async move {
-            let pool = state.active_db().await?;
-            marketplace::sync_registry_impl(
-                &pool,
-                &state.db,
-                state.secrets.as_ref(),
-                registry_id,
-                options.unwrap_or_default(),
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let pool = request_context.db().clone();
+            let definition = operation_definition("sync_registry_with_options");
+            let context = OperationContext::new(operation_target(&active_target)).subject(
+                crate::observability::OperationSubjectKind::Registry,
+                SafeIdentifier::new(&registry_id),
+            );
+            let local_db = state.db.clone();
+            let secrets = std::sync::Arc::clone(&state.secrets);
+            crate::observability::run_operation(
+                &state,
+                definition,
+                context,
+                |skills: &Vec<MarketplaceSkill>| {
+                    SafeOperationResult::succeeded("Synchronized a Marketplace registry.")
+                        .count(SafeDetailKey::AffectedCount, skills.len() as u64)
+                },
+                || async move {
+                    marketplace::sync_registry_impl(
+                        &pool,
+                        &local_db,
+                        secrets.as_ref(),
+                        registry_id,
+                        options.unwrap_or_default(),
+                    )
+                    .await
+                    .map_err(|error| reviewed_failure(definition, IpcError::from_display(error)))
+                },
             )
             .await
-            .map_err(|e| e.to_string())
         }
         .await
     )
@@ -128,6 +254,7 @@ pub async fn search_marketplace_skills(
     query: Option<String>,
 ) -> crate::ipc_error::IpcResult<Vec<MarketplaceSkill>> {
     crate::ipc_boundary!(
+        "search_marketplace_skills",
         async move {
             let pool = state.active_db().await?;
             marketplace::search_marketplace_skills_impl(&pool, registry_id, query)
@@ -144,21 +271,42 @@ pub async fn install_marketplace_skill(
     state: State<'_, AppState>,
     skill_id: String,
 ) -> crate::ipc_error::IpcResult<()> {
-    let request_context = state
-        .resolve_target_context()
+    crate::ipc_boundary!(
+        "install_marketplace_skill",
+        async move {
+            let request_context = state.resolve_target_context().await?;
+            let active_target = request_context.target().clone();
+            let pool = request_context.db().clone();
+            let definition = operation_definition("install_marketplace_skill");
+            let context = OperationContext::new(operation_target(&active_target)).subject(
+                crate::observability::OperationSubjectKind::Skill,
+                SafeIdentifier::new(&skill_id),
+            );
+            let local_db = state.db.clone();
+            let secrets = std::sync::Arc::clone(&state.secrets);
+            crate::observability::run_operation(
+                &state,
+                definition,
+                context,
+                |_| SafeOperationResult::succeeded("Installed a Marketplace skill."),
+                || async move {
+                    marketplace::install_marketplace_skill_impl(
+                        &pool,
+                        &local_db,
+                        secrets.as_ref(),
+                        active_target,
+                        skill_id,
+                    )
+                    .await
+                    .map_err(|error| {
+                        reviewed_failure(definition, marketplace_install_ipc_error(error))
+                    })
+                },
+            )
+            .await
+        }
         .await
-        .map_err(crate::ipc_error::IpcError::from)?;
-    let active_target = request_context.target().clone();
-    let pool = request_context.db().clone();
-    marketplace::install_marketplace_skill_impl(
-        &pool,
-        &state.db,
-        state.secrets.as_ref(),
-        active_target,
-        skill_id,
     )
-    .await
-    .map_err(marketplace_install_ipc_error)
 }
 
 fn marketplace_install_ipc_error(
@@ -213,6 +361,7 @@ pub async fn search_skills_sh(
     limit: Option<u32>,
 ) -> crate::ipc_error::IpcResult<Vec<SkillsShSkill>> {
     crate::ipc_boundary!(
+        "search_skills_sh",
         async move {
             marketplace::search_skills_sh_impl(&state.db, state.secrets.as_ref(), query, limit)
                 .await
@@ -229,6 +378,7 @@ pub async fn resolve_skills_sh_url(
     skill_id: String,
 ) -> crate::ipc_error::IpcResult<String> {
     crate::ipc_boundary!(
+        "resolve_skills_sh_url",
         async move {
             marketplace::resolve_skills_sh_url_impl(
                 &state.db,
@@ -250,6 +400,7 @@ pub async fn browse_skills_sh_directory(
     skill_id: String,
 ) -> crate::ipc_error::IpcResult<Vec<SkillsShFileEntry>> {
     crate::ipc_boundary!(
+        "browse_skills_sh_directory",
         async move {
             marketplace::browse_skills_sh_directory_impl(
                 &state.db,
@@ -271,6 +422,7 @@ pub async fn read_skills_sh_file(
     file_path: String,
 ) -> crate::ipc_error::IpcResult<String> {
     crate::ipc_boundary!(
+        "read_skills_sh_file",
         async move {
             marketplace::read_skills_sh_file_impl(
                 &state.db,
@@ -293,19 +445,35 @@ pub async fn install_from_skills_sh(
     skill_id: String,
 ) -> crate::ipc_error::IpcResult<String> {
     crate::ipc_boundary!(
+        "install_from_skills_sh",
         async move {
             let request_context = state.resolve_target_context().await?;
             let active_target = request_context.target().clone();
             let pool = request_context.db().clone();
-            marketplace::install_from_skills_sh_impl(
-                &pool,
-                state.secrets.as_ref(),
-                active_target,
-                source,
-                skill_id,
+            let definition = operation_definition("install_from_skills_sh");
+            let context = OperationContext::new(operation_target(&active_target)).subject(
+                crate::observability::OperationSubjectKind::Skill,
+                SafeIdentifier::new(&skill_id),
+            );
+            let secrets = std::sync::Arc::clone(&state.secrets);
+            crate::observability::run_operation(
+                &state,
+                definition,
+                context,
+                |_| SafeOperationResult::succeeded("Installed a skills.sh skill."),
+                || async move {
+                    marketplace::install_from_skills_sh_impl(
+                        &pool,
+                        secrets.as_ref(),
+                        active_target,
+                        source,
+                        skill_id,
+                    )
+                    .await
+                    .map_err(|error| reviewed_failure(definition, IpcError::from_display(error)))
+                },
             )
             .await
-            .map_err(|e| e.to_string())
         }
         .await
     )
@@ -319,10 +487,25 @@ pub async fn explain_skill(
     content: String,
 ) -> crate::ipc_error::IpcResult<String> {
     crate::ipc_boundary!(
+        "explain_skill",
         async move {
-            ai_provider::explain_skill_impl(&state.db, state.secrets.as_ref(), content)
-                .await
-                .map_err(|e| e.to_string())
+            let definition = operation_definition("explain_skill");
+            let db = state.db.clone();
+            let secrets = std::sync::Arc::clone(&state.secrets);
+            crate::observability::run_operation(
+                &state,
+                definition,
+                OperationContext::new(OperationTarget::local()),
+                |_| SafeOperationResult::succeeded("Generated a skill explanation."),
+                || async move {
+                    ai_provider::explain_skill_impl(&db, secrets.as_ref(), content)
+                        .await
+                        .map_err(|error| {
+                            reviewed_failure(definition, IpcError::from_display(error))
+                        })
+                },
+            )
+            .await
         }
         .await
     )
@@ -334,10 +517,33 @@ pub async fn test_ai_connection(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<AiConnectionTestResult> {
     crate::ipc_boundary!(
+        "test_ai_connection",
         async move {
-            ai_provider::test_ai_connection_impl(&state.db, state.secrets.as_ref())
-                .await
-                .map_err(|e| e.to_string())
+            let definition = operation_definition("test_ai_connection");
+            let db = state.db.clone();
+            let secrets = std::sync::Arc::clone(&state.secrets);
+            crate::observability::run_operation(
+                &state,
+                definition,
+                OperationContext::new(OperationTarget::local()),
+                |result: &AiConnectionTestResult| {
+                    if result.ok {
+                        SafeOperationResult::succeeded("Tested the AI connection successfully.")
+                    } else {
+                        SafeOperationResult::partial(
+                            "The AI connection test completed with a failed result.",
+                        )
+                    }
+                },
+                || async move {
+                    ai_provider::test_ai_connection_impl(&db, secrets.as_ref())
+                        .await
+                        .map_err(|error| {
+                            reviewed_failure(definition, IpcError::from_display(error))
+                        })
+                },
+            )
+            .await
         }
         .await
     )
@@ -350,6 +556,7 @@ pub async fn get_skill_explanation(
     lang: String,
 ) -> crate::ipc_error::IpcResult<Option<String>> {
     crate::ipc_boundary!(
+        "get_skill_explanation",
         async move {
             ai_provider::get_skill_explanation_impl(&state.db, skill_id, lang)
                 .await
@@ -366,6 +573,7 @@ pub async fn get_skill_explanation_summaries(
     lang: String,
 ) -> crate::ipc_error::IpcResult<HashMap<String, String>> {
     crate::ipc_boundary!(
+        "get_skill_explanation_summaries",
         async move {
             ai_provider::get_skill_explanation_summaries_impl(&state.db, skill_ids, lang)
                 .await
@@ -384,17 +592,34 @@ pub async fn explain_skill_stream(
     lang: String,
 ) -> crate::ipc_error::IpcResult<()> {
     crate::ipc_boundary!(
+        "explain_skill_stream",
         async move {
-            ai_provider::explain_skill_stream_impl(
-                &state.db,
-                state.secrets.as_ref(),
-                &app,
-                skill_id,
-                content,
-                lang,
+            let definition = operation_definition("explain_skill_stream");
+            let context = OperationContext::new(OperationTarget::local()).subject(
+                crate::observability::OperationSubjectKind::Skill,
+                SafeIdentifier::new(&skill_id),
+            );
+            let db = state.db.clone();
+            let secrets = std::sync::Arc::clone(&state.secrets);
+            crate::observability::run_operation(
+                &state,
+                definition,
+                context,
+                |_| SafeOperationResult::succeeded("Generated a streamed skill explanation."),
+                || async move {
+                    ai_provider::explain_skill_stream_impl(
+                        &db,
+                        secrets.as_ref(),
+                        &app,
+                        skill_id,
+                        content,
+                        lang,
+                    )
+                    .await
+                    .map_err(|error| reviewed_failure(definition, IpcError::from_display(error)))
+                },
             )
             .await
-            .map_err(|e| e.to_string())
         }
         .await
     )
@@ -409,17 +634,34 @@ pub async fn refresh_skill_explanation(
     lang: String,
 ) -> crate::ipc_error::IpcResult<()> {
     crate::ipc_boundary!(
+        "refresh_skill_explanation",
         async move {
-            ai_provider::refresh_skill_explanation_impl(
-                &state.db,
-                state.secrets.as_ref(),
-                &app,
-                skill_id,
-                content,
-                lang,
+            let definition = operation_definition("refresh_skill_explanation");
+            let context = OperationContext::new(OperationTarget::local()).subject(
+                crate::observability::OperationSubjectKind::Skill,
+                SafeIdentifier::new(&skill_id),
+            );
+            let db = state.db.clone();
+            let secrets = std::sync::Arc::clone(&state.secrets);
+            crate::observability::run_operation(
+                &state,
+                definition,
+                context,
+                |_| SafeOperationResult::succeeded("Refreshed a skill explanation."),
+                || async move {
+                    ai_provider::refresh_skill_explanation_impl(
+                        &db,
+                        secrets.as_ref(),
+                        &app,
+                        skill_id,
+                        content,
+                        lang,
+                    )
+                    .await
+                    .map_err(|error| reviewed_failure(definition, IpcError::from_display(error)))
+                },
             )
             .await
-            .map_err(|e| e.to_string())
         }
         .await
     )

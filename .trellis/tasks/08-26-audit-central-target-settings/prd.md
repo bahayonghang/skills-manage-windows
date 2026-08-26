@@ -24,12 +24,12 @@
 
 ## Acceptance Criteria
 
-- [ ] 本 child policy 中所有 `operation` command 都有 success/failure，适用时有 partial/cancel/started tests。
-- [ ] 现有 Central/update/recovery 日志的 counts、batch 和 safe failure items 不退化，不产生重复 operation rows。
-- [ ] target/secret/settings/log-admin 对抗种子不出现在 IPC、Operation、Runtime read/export 或 test DOM fixture。
-- [ ] clear-all 后仅保留新的 `logs.operation.clear` 事实，count/filter 安全且导出不递归包含自身事件。
-- [ ] deprecated runtime commands 仍被明确委托、审计或受控排除，不能因为“旧入口”静默漏记。
-- [ ] focused Rust tests、existing Central/target/settings regressions、format/clippy 通过。
+- [x] 本 child policy 中所有 `operation` command 都有 success/failure，适用时有 partial/cancel/started tests。
+- [x] 现有 Central/update/recovery 日志的 counts、batch 和 safe failure items 不退化，不产生重复 operation rows。
+- [x] target/secret/settings/log-admin 对抗种子不出现在 IPC、Operation、Runtime read/export 或 test DOM fixture。
+- [x] clear-all 后仅保留新的 `logs.operation.clear` 事实，count/filter 安全且导出不递归包含自身事件。
+- [x] deprecated runtime commands 仍被明确委托、审计或受控排除，不能因为“旧入口”静默漏记。
+- [x] focused Rust tests、existing Central/target/settings regressions、format/clippy 通过。
 
 ## Out of Scope
 

@@ -286,16 +286,12 @@ async fn refresh_with_providers(
             let avail = p.available(scope).await;
             if !avail {
                 // 数据源整体消失 → 清空缓存行，避免目录复活时拿陈旧指纹对错号。
-                if local_scan {
-                    if let Err(error) =
-                        db::delete_file_cache_for_provider(pool, &target_id, p.id()).await
-                    {
-                        tracing::warn!(
-                            provider = p.id(),
-                            error = %error,
-                            "usage file cache cleanup failed"
-                        );
-                    }
+                if local_scan
+                    && db::delete_file_cache_for_provider(pool, &target_id, p.id())
+                        .await
+                        .is_err()
+                {
+                    tracing::warn!(provider = p.id(), "usage file cache cleanup failed");
                 }
                 return (p.id(), p.display_name(), false, Vec::new());
             }
@@ -306,12 +302,8 @@ async fn refresh_with_providers(
             };
             match collected {
                 Ok(calls) => (p.id(), p.display_name(), true, calls),
-                Err(error) => {
-                    tracing::warn!(
-                        provider = p.id(),
-                        error = %error,
-                        "usage provider collect failed"
-                    );
+                Err(_error) => {
+                    tracing::warn!(provider = p.id(), "usage provider collect failed");
                     (p.id(), p.display_name(), false, Vec::new())
                 }
             }
@@ -370,8 +362,8 @@ async fn refresh_with_providers(
     } else {
         match scope.fs_backend().read_many_to_strings(&paths).await {
             Ok(content) => content,
-            Err(error) => {
-                tracing::warn!(error = %error, "usage Skill.md enrichment read failed");
+            Err(_error) => {
+                tracing::warn!("usage Skill.md enrichment read failed");
                 Default::default()
             }
         }

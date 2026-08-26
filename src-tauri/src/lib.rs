@@ -104,8 +104,8 @@ impl AiTagJobRegistry {
             Ok(mut jobs) => {
                 jobs.insert(job_id.to_string(), Arc::clone(&cancel_flag));
             }
-            Err(error) => {
-                tracing::warn!(error = %error, "AI tag job registry lock is poisoned during register");
+            Err(_error) => {
+                tracing::warn!("AI tag job registry lock is poisoned during register");
             }
         }
         cancel_flag
@@ -128,8 +128,8 @@ impl AiTagJobRegistry {
             Ok(mut jobs) => {
                 jobs.remove(job_id);
             }
-            Err(error) => {
-                tracing::warn!(error = %error, "AI tag job registry lock is poisoned during finish");
+            Err(_error) => {
+                tracing::warn!("AI tag job registry lock is poisoned during finish");
             }
         }
     }
@@ -262,26 +262,28 @@ async fn install_ready_state(
     let github_pat_migration_pool = pool.clone();
     let github_pat_migration_secrets = Arc::clone(&secrets);
     tauri::async_runtime::spawn(async move {
-        if let Err(error) = services::github_import::migrate_github_pat_on_startup(
+        if services::github_import::migrate_github_pat_on_startup(
             &github_pat_migration_pool,
             github_pat_migration_secrets.as_ref(),
         )
         .await
+        .is_err()
         {
-            tracing::warn!(error = %error, "Failed to run GitHub token secure-storage migration");
+            tracing::warn!("Failed to run GitHub token secure-storage migration");
         }
     });
 
     let ai_api_key_migration_pool = pool.clone();
     let ai_api_key_migration_secrets = Arc::clone(&secrets);
     tauri::async_runtime::spawn(async move {
-        if let Err(error) = services::ai_provider::migrate_ai_api_key_on_startup(
+        if services::ai_provider::migrate_ai_api_key_on_startup(
             &ai_api_key_migration_pool,
             ai_api_key_migration_secrets.as_ref(),
         )
         .await
+        .is_err()
         {
-            tracing::warn!(error = %error, "Failed to run AI API key secure-storage migration");
+            tracing::warn!("Failed to run AI API key secure-storage migration");
         }
     });
 
@@ -300,7 +302,7 @@ async fn install_ready_state(
                 );
             }
             Err(error) => {
-                tracing::error!(error = %error, "Failed to migrate legacy Central Skills store");
+                tracing::error!("Failed to migrate legacy Central Skills store");
                 let _ = migration_handle.emit(
                     MIGRATION_PROGRESS_EVENT,
                     MigrationProgress::Failed {
@@ -322,10 +324,9 @@ pub(crate) async fn run_startup_attempt(
     let status = match services::startup::attempt_startup(coordinator.db_path()).await {
         Ok(pool) => match install_ready_state(app, pool).await {
             Ok(()) => services::startup::StartupStatus::Ready,
-            Err(error) => {
+            Err(_error) => {
                 tracing::error!(
                     code = services::startup::StartupIssue::DatabaseRecoveryFailed.code(),
-                    error = %error,
                     "Startup application state installation failed"
                 );
                 services::startup::StartupStatus::Fatal {
@@ -337,7 +338,6 @@ pub(crate) async fn run_startup_attempt(
             tracing::error!(
                 code = failure.issue.code(),
                 diagnostic = ?failure.diagnostic,
-                error = %failure.error,
                 "Desktop startup prerequisites failed"
             );
             failure.status(backup_created)

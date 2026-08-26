@@ -2,16 +2,14 @@
 //!
 //! Business logic lives in `crate::services::central_skills`. This module keeps
 //! the existing command names and public type paths stable while translating
-//! `State<AppState>` into service inputs and recording operation logs for
-//! destructive Central operations.
+//! `State<AppState>` into service inputs and routing destructive operations
+//! through the registered observability boundary.
 
-use std::time::Instant;
-
-use serde_json::json;
 use tauri::State;
 
-use crate::operation_log::{
-    record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
+use crate::observability::{
+    CommandLogPolicy, OperationContext, OperationDefinition, OperationTarget, OperationTargetKind,
+    ReviewedDiagnostic, ReviewedFailure, SafeDetailKey, SafeOperationResult,
 };
 use crate::services::central_skills;
 use crate::targets::ActiveTarget;
@@ -36,6 +34,166 @@ pub use crate::services::central_skills::{
     SkillDetail, SkillInstallationDetail, SkillPathAccessContext, SkillWithLinks,
 };
 
+fn operation_definition(command: &'static str) -> OperationDefinition {
+    match crate::ipc_registry::command_policy(command)
+        .expect("Central skill command must be registered")
+        .policy
+    {
+        CommandLogPolicy::Operation(definition) => definition,
+        _ => unreachable!("Central skill command must have an operation policy"),
+    }
+}
+
+fn audit_target(target: &ActiveTarget) -> OperationTarget {
+    match target {
+        ActiveTarget::Local => OperationTarget::local(),
+        ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+        ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+    }
+}
+
+fn bounded_count(value: usize) -> u64 {
+    u64::try_from(value).unwrap_or(u64::MAX)
+}
+
+fn reviewed_central_failure(
+    definition: OperationDefinition,
+    error: &central_skills::CentralSkillsError,
+) -> ReviewedFailure {
+    use central_skills::CentralSkillsError;
+
+    let diagnostic = match error {
+        CentralSkillsError::CentralMutation(_) => ReviewedDiagnostic::new(
+            "central_skills.mutation_lock_failed",
+            "central_skills.central_mutation",
+            definition.default_phase(),
+            "This Central operation could not acquire the mutation lock.",
+            true,
+        ),
+        CentralSkillsError::Remote(_) => ReviewedDiagnostic::new(
+            "central_skills.remote_failed",
+            "central_skills.remote",
+            definition.default_phase(),
+            "This Central operation could not complete on the selected target.",
+            true,
+        ),
+        CentralSkillsError::Db(_) => ReviewedDiagnostic::new(
+            "central_skills.database_failed",
+            "central_skills.db",
+            definition.default_phase(),
+            "This Central operation could not update its records.",
+            false,
+        ),
+        CentralSkillsError::Budget(_) => ReviewedDiagnostic::new(
+            "central_skills.budget_exceeded",
+            "central_skills.budget",
+            definition.default_phase(),
+            "This Central operation exceeded a safety limit.",
+            false,
+        ),
+        CentralSkillsError::ForceDeleteBlocked => ReviewedDiagnostic::new(
+            "central_skills.force_delete_blocked",
+            "central_skills.validation",
+            definition.default_phase(),
+            "Force delete is not available for this Central skill.",
+            false,
+        ),
+        CentralSkillsError::UpdateRecovery { .. } => ReviewedDiagnostic::new(
+            "central_skills.update_recovery_failed",
+            "central_skills.recovery",
+            definition.default_phase(),
+            "A pending Central update could not be recovered before deletion.",
+            false,
+        ),
+        CentralSkillsError::CentralOperation(_) => ReviewedDiagnostic::new(
+            "central_skills.central_operation_failed",
+            "central_skills.central_operation",
+            definition.default_phase(),
+            "This Central operation could not be completed.",
+            false,
+        ),
+        _ => ReviewedDiagnostic::new(
+            "central_skills.delete_failed",
+            error.diagnostic_category(),
+            definition.default_phase(),
+            "This Central skill could not be deleted.",
+            false,
+        ),
+    };
+    ReviewedFailure::new(diagnostic)
+}
+
+fn batch_delete_result(
+    requested: usize,
+    result: &BatchDeleteCentralSkillResult,
+    success_summary: &'static str,
+    partial_summary: &'static str,
+) -> SafeOperationResult {
+    let audit = if result.failed.is_empty() {
+        SafeOperationResult::succeeded(success_summary)
+    } else {
+        SafeOperationResult::partial(partial_summary)
+    };
+    audit
+        .count(SafeDetailKey::RequestedCount, bounded_count(requested))
+        .count(
+            SafeDetailKey::SucceededCount,
+            bounded_count(result.succeeded.len()),
+        )
+        .count(
+            SafeDetailKey::FailedCount,
+            bounded_count(result.failed.len()),
+        )
+}
+
+fn reviewed_file_open_failure(
+    definition: OperationDefinition,
+    error: &central_skills::CentralSkillsError,
+) -> ReviewedFailure {
+    let diagnostic = match error {
+        central_skills::CentralSkillsError::RemoteOpenInFileManagerUnsupported => {
+            ReviewedDiagnostic::new(
+                "central_skills.remote_open_unsupported",
+                "central_skills.validation",
+                definition.default_phase(),
+                "Remote paths cannot be opened in the local file manager.",
+                false,
+            )
+        }
+        central_skills::CentralSkillsError::Remote(_) => ReviewedDiagnostic::new(
+            "central_skills.remote_failed",
+            "central_skills.remote",
+            definition.default_phase(),
+            "The selected target could not be reached.",
+            true,
+        ),
+        _ => ReviewedDiagnostic::new(
+            "central_skills.file_open_failed",
+            "central_skills.file_access",
+            definition.default_phase(),
+            "The skill location could not be opened.",
+            false,
+        ),
+    };
+    ReviewedFailure::new(diagnostic)
+}
+
+fn missing_file_context_failure(definition: OperationDefinition) -> ReviewedFailure {
+    ReviewedFailure::new(ReviewedDiagnostic::new(
+        "central_skills.file_context_required",
+        "central_skills.validation",
+        definition.default_phase(),
+        "A skill context is required for file access.",
+        false,
+    ))
+}
+
+fn open_file_manager_result() -> SafeOperationResult {
+    SafeOperationResult::succeeded("Skill location opened.")
+        .count(SafeDetailKey::AffectedCount, 1)
+        .stable(SafeDetailKey::Mode, "file_manager")
+}
+
 /// Tauri command: return all skills installed for a given agent, including
 /// installation metadata needed by the platform-view skill cards.
 #[tauri::command]
@@ -44,6 +202,7 @@ pub async fn get_skills_by_agent(
     agent_id: String,
 ) -> crate::ipc_error::IpcResult<Vec<SkillForAgent>> {
     crate::ipc_boundary!(
+        "get_skills_by_agent",
         async move {
             let context = state.resolve_target_context().await?;
             let pool = context.db().clone();
@@ -53,7 +212,7 @@ pub async fn get_skills_by_agent(
             if crate::services::skills_cli::is_local_target(context.target()) {
                 crate::services::skills_cli::annotate_platform_install_origins(&mut skills);
             }
-            Ok(skills)
+            Ok::<_, String>(skills)
         }
         .await
     )
@@ -65,6 +224,7 @@ pub async fn get_central_skills(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<Vec<SkillWithLinks>> {
     crate::ipc_boundary!(
+        "get_central_skills",
         async move {
             let pool = state.active_db().await?;
             central_skills::get_central_skills_impl(&pool)
@@ -81,6 +241,7 @@ pub async fn get_central_skills_page(
     request: CentralSkillsPageRequest,
 ) -> crate::ipc_error::IpcResult<CentralSkillsPage> {
     crate::ipc_boundary!(
+        "get_central_skills_page",
         async move {
             let pool = state.active_db().await?;
             central_skills::get_central_skills_page_impl(&pool, request)
@@ -97,6 +258,7 @@ pub async fn preview_delete_central_skills(
     skill_ids: Vec<String>,
 ) -> crate::ipc_error::IpcResult<BatchDeleteCentralSkillPreviewResult> {
     crate::ipc_boundary!(
+        "preview_delete_central_skills",
         async move {
             let request_context = state.resolve_target_context().await?;
             let pool = request_context.db().clone();
@@ -128,64 +290,57 @@ pub async fn delete_central_skill(
     force: Option<bool>,
 ) -> crate::ipc_error::IpcResult<DeleteCentralSkillResult> {
     crate::ipc_boundary!(
+        "delete_central_skill",
         async move {
             let force = force.unwrap_or(false);
             let request_context = state.resolve_target_context().await?;
             let active_target = request_context.target().clone();
-            let target_context = target_context_from_active_target(&active_target);
             let pool = request_context.db().clone();
-            let started_at = Instant::now();
-            let result = match &active_target {
-                ActiveTarget::Local => {
-                    central_skills::delete_central_skill_impl(
-                        &pool,
-                        &skill_id,
-                        &remove_agent_ids,
-                        force,
-                    )
-                    .await
-                }
-                ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
-                    central_skills::delete_central_skill_remote_impl(
-                        &pool,
-                        &active_target,
-                        &skill_id,
-                        &remove_agent_ids,
-                        force,
-                    )
-                    .await
-                }
-            }
-            .map_err(delete_command_error);
-            let status = if result.is_ok() {
-                "succeeded"
-            } else {
-                "failed"
-            };
-            let mut event = OperationLogEvent::new(
-        "delete",
-        "central.delete",
-        status,
-        if result.is_ok() {
-            format!("Deleted Central skill {}", skill_id)
-        } else {
-            format!("Failed to delete Central skill {}", skill_id)
-        },
-    )
-    .subject("skill", &skill_id, &skill_id)
-    .details(json!({
-        "skillId": skill_id,
-        "removeAgentIds": &remove_agent_ids,
-        "force": force,
-        "removedAgentIds": result.as_ref().ok().map(|item| item.removed_agent_ids.clone()),
-        "retainedAgentIds": result.as_ref().ok().map(|item| item.retained_agent_ids.clone()),
-    }))
-    .duration_ms(started_at.elapsed().as_millis() as i64);
-            if let Err(error) = &result {
-                event = event.error(error);
-            }
-            record_operation_log_best_effort(&state.db, target_context, event).await;
-            result
+            let definition = operation_definition("delete_central_skill");
+            let audit_mode = if force { "force" } else { "safe" };
+            crate::observability::run_operation(
+                &state,
+                definition,
+                OperationContext::new(audit_target(&active_target)),
+                |result: &DeleteCentralSkillResult| {
+                    SafeOperationResult::succeeded("Central skill deleted.")
+                        .count(SafeDetailKey::AffectedCount, 1)
+                        .count(
+                            SafeDetailKey::SucceededCount,
+                            bounded_count(result.removed_agent_ids.len()),
+                        )
+                        .count(
+                            SafeDetailKey::SkippedCount,
+                            bounded_count(result.retained_agent_ids.len()),
+                        )
+                        .stable(SafeDetailKey::Mode, audit_mode)
+                },
+                || async {
+                    let result = match &active_target {
+                        ActiveTarget::Local => {
+                            central_skills::delete_central_skill_impl(
+                                &pool,
+                                &skill_id,
+                                &remove_agent_ids,
+                                force,
+                            )
+                            .await
+                        }
+                        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+                            central_skills::delete_central_skill_remote_impl(
+                                &pool,
+                                &active_target,
+                                &skill_id,
+                                &remove_agent_ids,
+                                force,
+                            )
+                            .await
+                        }
+                    };
+                    result.map_err(|error| reviewed_central_failure(definition, &error))
+                },
+            )
+            .await
         }
         .await
     )
@@ -198,77 +353,43 @@ pub async fn delete_central_skills(
     requests: Vec<BatchDeleteCentralSkillRequest>,
 ) -> crate::ipc_error::IpcResult<BatchDeleteCentralSkillResult> {
     crate::ipc_boundary!(
+        "delete_central_skills",
         async move {
             let request_context = state.resolve_target_context().await?;
             let active_target = request_context.target().clone();
-            let target_context = target_context_from_active_target(&active_target);
             let pool = request_context.db().clone();
-            let started_at = Instant::now();
-            let result = match &active_target {
-                ActiveTarget::Local => {
-                    central_skills::delete_central_skills_impl(&pool, &requests).await
-                }
-                ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
-                    central_skills::delete_central_skills_remote_impl(
-                        &pool,
-                        &active_target,
-                        &requests,
+            let definition = operation_definition("delete_central_skills");
+            let requested = requests.len();
+            crate::observability::run_operation(
+                &state,
+                definition,
+                OperationContext::new(audit_target(&active_target)),
+                |result: &BatchDeleteCentralSkillResult| {
+                    batch_delete_result(
+                        requested,
+                        result,
+                        "Central skills deleted.",
+                        "Central skill deletion partially completed.",
                     )
-                    .await
-                }
-            }
-            .map_err(delete_command_error);
-            match &result {
-                Ok(batch_result) => {
-                    let status = match (batch_result.succeeded.len(), batch_result.failed.len()) {
-                        (_, 0) => "succeeded",
-                        (0, _) => "failed",
-                        _ => "partial",
+                },
+                || async {
+                    let result = match &active_target {
+                        ActiveTarget::Local => {
+                            central_skills::delete_central_skills_impl(&pool, &requests).await
+                        }
+                        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+                            central_skills::delete_central_skills_remote_impl(
+                                &pool,
+                                &active_target,
+                                &requests,
+                            )
+                            .await
+                        }
                     };
-                    record_operation_log_best_effort(
-                        &state.db,
-                        target_context,
-                        OperationLogEvent::new(
-                            "delete",
-                            "central.batch_delete",
-                            status,
-                            format!(
-                                "Deleted {} Central skill(s), {} failed",
-                                batch_result.succeeded.len(),
-                                batch_result.failed.len()
-                            ),
-                        )
-                        .subject("batch", "central.batch_delete", "Central batch delete")
-                        .details(json!({
-                            "requestCount": requests.len(),
-                            "succeeded": &batch_result.succeeded,
-                            "failed": &batch_result.failed,
-                        }))
-                        .duration_ms(started_at.elapsed().as_millis() as i64),
-                    )
-                    .await;
-                }
-                Err(error) => {
-                    record_operation_log_best_effort(
-                        &state.db,
-                        target_context,
-                        OperationLogEvent::new(
-                            "delete",
-                            "central.batch_delete",
-                            "failed",
-                            "Failed to delete Central skills",
-                        )
-                        .subject("batch", "central.batch_delete", "Central batch delete")
-                        .error(error)
-                        .details(json!({
-                            "requestCount": requests.len(),
-                        }))
-                        .duration_ms(started_at.elapsed().as_millis() as i64),
-                    )
-                    .await;
-                }
-            }
-            result
+                    result.map_err(|error| reviewed_central_failure(definition, &error))
+                },
+            )
+            .await
         }
         .await
     )
@@ -279,6 +400,7 @@ pub async fn preview_reset_unknown_source_skills(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<ResetUnknownSourceSkillsPreview> {
     crate::ipc_boundary!(
+        "preview_reset_unknown_source_skills",
         async move {
             let request_context = state.resolve_target_context().await?;
             let pool = request_context.db().clone();
@@ -298,92 +420,37 @@ pub async fn reset_unknown_source_skills(
     remove_copy_agent_ids: Vec<String>,
 ) -> crate::ipc_error::IpcResult<BatchDeleteCentralSkillResult> {
     crate::ipc_boundary!(
+        "reset_unknown_source_skills",
         async move {
             let request_context = state.resolve_target_context().await?;
             let active_target = request_context.target().clone();
-            let target_context = target_context_from_active_target(&active_target);
             let pool = request_context.db().clone();
-            let started_at = Instant::now();
-            let target_kind = match &active_target {
-                ActiveTarget::Local => "local",
-                ActiveTarget::Ssh(_) => "ssh",
-                ActiveTarget::Wsl(_) => "wsl",
-            };
-            let result = central_skills::reset_unknown_source_skills_impl(
-                &pool,
-                &active_target,
-                &skill_ids,
-                &remove_copy_agent_ids,
+            let definition = operation_definition("reset_unknown_source_skills");
+            let requested = skill_ids.len();
+            crate::observability::run_operation(
+                &state,
+                definition,
+                OperationContext::new(audit_target(&active_target)),
+                |result: &BatchDeleteCentralSkillResult| {
+                    batch_delete_result(
+                        requested,
+                        result,
+                        "Unknown-source Central skills reset.",
+                        "Unknown-source Central skill reset partially completed.",
+                    )
+                },
+                || async {
+                    central_skills::reset_unknown_source_skills_impl(
+                        &pool,
+                        &active_target,
+                        &skill_ids,
+                        &remove_copy_agent_ids,
+                    )
+                    .await
+                    .map_err(|error| reviewed_central_failure(definition, &error))
+                },
             )
             .await
-            .map_err(reset_command_error);
-            match &result {
-                Ok(batch_result) => {
-                    let attempted = batch_result.succeeded.len() + batch_result.failed.len();
-                    let status = match (batch_result.succeeded.len(), batch_result.failed.len()) {
-                        (_, 0) => "succeeded",
-                        (0, _) => "failed",
-                        _ => "partial",
-                    };
-                    let failed_codes: Vec<String> = batch_result
-                        .failed
-                        .iter()
-                        .filter_map(|item| item.error_code.clone())
-                        .collect();
-                    record_operation_log_best_effort(
-                        &state.db,
-                        target_context,
-                        OperationLogEvent::new(
-                            "delete",
-                            "central.reset_unknown_source",
-                            status,
-                            format!(
-                                "Reset {} unknown-source Central skill(s), {} failed",
-                                batch_result.succeeded.len(),
-                                batch_result.failed.len()
-                            ),
-                        )
-                        .subject(
-                            "batch",
-                            "central.reset_unknown_source",
-                            "Unknown-source Central reset",
-                        )
-                        .details(json!({
-                            "targetKind": target_kind,
-                            "attempted": attempted,
-                            "succeeded": batch_result.succeeded.len(),
-                            "failed": batch_result.failed.len(),
-                            "failedCodes": failed_codes,
-                        }))
-                        .duration_ms(started_at.elapsed().as_millis() as i64),
-                    )
-                    .await;
-                }
-                Err(error) => {
-                    record_operation_log_best_effort(
-                        &state.db,
-                        target_context,
-                        OperationLogEvent::new(
-                            "delete",
-                            "central.reset_unknown_source",
-                            "failed",
-                            "Failed to reset unknown-source Central skills",
-                        )
-                        .subject(
-                            "batch",
-                            "central.reset_unknown_source",
-                            "Unknown-source Central reset",
-                        )
-                        .error(error)
-                        .details(json!({
-                            "targetKind": target_kind,
-                        }))
-                        .duration_ms(started_at.elapsed().as_millis() as i64),
-                    )
-                    .await;
-                }
-            }
-            result
         }
         .await
     )
@@ -395,6 +462,7 @@ pub async fn preview_delete_skill_repository(
     repository_id: String,
 ) -> crate::ipc_error::IpcResult<DeleteSkillRepositoryPreview> {
     crate::ipc_boundary!(
+        "preview_delete_skill_repository",
         async move {
             let request_context = state.resolve_target_context().await?;
             let pool = request_context.db().clone();
@@ -426,88 +494,50 @@ pub async fn delete_skill_repository(
     requests: Vec<BatchDeleteCentralSkillRequest>,
 ) -> crate::ipc_error::IpcResult<DeleteSkillRepositoryResult> {
     crate::ipc_boundary!(
+        "delete_skill_repository",
         async move {
             let request_context = state.resolve_target_context().await?;
             let active_target = request_context.target().clone();
-            let target_context = target_context_from_active_target(&active_target);
             let pool = request_context.db().clone();
-            let started_at = Instant::now();
-            let result = match &active_target {
-                ActiveTarget::Local => {
-                    central_skills::delete_skill_repository_impl(&pool, &repository_id, &requests)
-                        .await
-                }
-                ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
-                    central_skills::delete_skill_repository_remote_impl(
-                        &pool,
-                        &active_target,
-                        &repository_id,
-                        &requests,
+            let definition = operation_definition("delete_skill_repository");
+            let requested = requests.len();
+            crate::observability::run_operation(
+                &state,
+                definition,
+                OperationContext::new(audit_target(&active_target)),
+                |result: &DeleteSkillRepositoryResult| {
+                    batch_delete_result(
+                        requested,
+                        &result.delete_result,
+                        "Central repository deleted.",
+                        "Central repository deletion partially completed.",
                     )
-                    .await
-                }
-            }
-            .map_err(delete_command_error);
-            match &result {
-                Ok(delete_result) => {
-                    let batch_result = &delete_result.delete_result;
-                    let status = match (batch_result.succeeded.len(), batch_result.failed.len()) {
-                        (_, 0) => "succeeded",
-                        (0, _) => "failed",
-                        _ => "partial",
+                    .flag(SafeDetailKey::Changed, result.deleted_repository)
+                },
+                || async {
+                    let result = match &active_target {
+                        ActiveTarget::Local => {
+                            central_skills::delete_skill_repository_impl(
+                                &pool,
+                                &repository_id,
+                                &requests,
+                            )
+                            .await
+                        }
+                        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+                            central_skills::delete_skill_repository_remote_impl(
+                                &pool,
+                                &active_target,
+                                &repository_id,
+                                &requests,
+                            )
+                            .await
+                        }
                     };
-                    record_operation_log_best_effort(
-                        &state.db,
-                        target_context,
-                        OperationLogEvent::new(
-                            "delete",
-                            "central.delete_repository",
-                            status,
-                            format!(
-                                "Deleted repository {} with {} skill(s), {} failed",
-                                delete_result.repository.name,
-                                batch_result.succeeded.len(),
-                                batch_result.failed.len()
-                            ),
-                        )
-                        .subject(
-                            "repository",
-                            &delete_result.repository.id,
-                            &delete_result.repository.name,
-                        )
-                        .details(json!({
-                            "repositoryId": repository_id,
-                            "requestCount": requests.len(),
-                            "deletedRepository": delete_result.deleted_repository,
-                            "succeeded": &batch_result.succeeded,
-                            "failed": &batch_result.failed,
-                        }))
-                        .duration_ms(started_at.elapsed().as_millis() as i64),
-                    )
-                    .await;
-                }
-                Err(error) => {
-                    record_operation_log_best_effort(
-                        &state.db,
-                        target_context,
-                        OperationLogEvent::new(
-                            "delete",
-                            "central.delete_repository",
-                            "failed",
-                            format!("Failed to delete repository {}", repository_id),
-                        )
-                        .subject("repository", &repository_id, &repository_id)
-                        .error(error)
-                        .details(json!({
-                            "repositoryId": repository_id,
-                            "requestCount": requests.len(),
-                        }))
-                        .duration_ms(started_at.elapsed().as_millis() as i64),
-                    )
-                    .await;
-                }
-            }
-            result
+                    result.map_err(|error| reviewed_central_failure(definition, &error))
+                },
+            )
+            .await
         }
         .await
     )
@@ -524,6 +554,7 @@ pub async fn get_skill_detail(
     row_id: Option<String>,
 ) -> crate::ipc_error::IpcResult<SkillDetail> {
     crate::ipc_boundary!(
+        "get_skill_detail",
         async move {
             let pool = state.active_db().await?;
             central_skills::get_skill_detail_with_row_impl(
@@ -546,6 +577,7 @@ pub async fn read_skill_content(
     skill_id: String,
 ) -> crate::ipc_error::IpcResult<String> {
     crate::ipc_boundary!(
+        "read_skill_content",
         async move {
             let request_context = state.resolve_target_context().await?;
             let pool = request_context.db().clone();
@@ -567,6 +599,7 @@ pub async fn read_file_by_path(
     row_id: Option<String>,
 ) -> crate::ipc_error::IpcResult<String> {
     crate::ipc_boundary!(
+        "read_file_by_path",
         async move {
             let request_context = state.resolve_target_context().await?;
             let pool = request_context.db().clone();
@@ -589,19 +622,31 @@ pub async fn open_in_file_manager(
     row_id: Option<String>,
 ) -> crate::ipc_error::IpcResult<()> {
     crate::ipc_boundary!(
+        "open_in_file_manager",
         async move {
             let request_context = state.resolve_target_context().await?;
             let pool = request_context.db().clone();
             let active_target = request_context.target().clone();
-            let access = path_access_context(skill_id, agent_id, row_id)?;
-            central_skills::open_in_file_manager_for_target_impl(
-                &pool,
-                active_target,
-                &path,
-                &access,
+            let definition = operation_definition("open_in_file_manager");
+            crate::observability::run_operation(
+                &state,
+                definition,
+                OperationContext::new(audit_target(&active_target)),
+                |_| open_file_manager_result(),
+                || async {
+                    let access = path_access_context(skill_id, agent_id, row_id)
+                        .map_err(|_| missing_file_context_failure(definition))?;
+                    central_skills::open_in_file_manager_for_target_impl(
+                        &pool,
+                        active_target,
+                        &path,
+                        &access,
+                    )
+                    .await
+                    .map_err(|error| reviewed_file_open_failure(definition, &error))
+                },
             )
             .await
-            .map_err(|e| e.to_string())
         }
         .await
     )
@@ -616,6 +661,7 @@ pub async fn list_directory_tree(
     row_id: Option<String>,
 ) -> crate::ipc_error::IpcResult<Vec<DirectoryTreeEntry>> {
     crate::ipc_boundary!(
+        "list_directory_tree",
         async move {
             let request_context = state.resolve_target_context().await?;
             let pool = request_context.db().clone();
@@ -631,14 +677,6 @@ pub async fn list_directory_tree(
             .map_err(|e| e.to_string())
         }
         .await
-    )
-}
-
-fn delete_command_error(error: central_skills::CentralSkillsError) -> String {
-    format!(
-        "{}:{}",
-        error.stable_delete_error_code(),
-        error.public_delete_message()
     )
 }
 
@@ -666,3 +704,7 @@ fn path_access_context(
         row_id,
     })
 }
+
+#[cfg(test)]
+#[path = "skills_observability_tests.rs"]
+mod observability_tests;

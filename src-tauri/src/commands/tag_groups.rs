@@ -6,6 +6,11 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::db::{self, DbPool, TagGroup};
+use crate::observability::{
+    CommandLogPolicy, OperationContext, OperationSubjectKind, OperationTarget, OperationTargetKind,
+    ReviewedDiagnostic, ReviewedFailure, SafeDetailKey, SafeIdentifier, SafeOperationResult,
+};
+use crate::targets::ActiveTarget;
 use crate::AppState;
 
 use super::serde_helpers::deserialize_optional_optional_string;
@@ -111,6 +116,7 @@ pub async fn list_tag_groups(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<Vec<TagGroup>> {
     crate::ipc_boundary!(
+        "list_tag_groups",
         async move {
             let pool = state.active_db().await?;
             list_tag_groups_impl(&pool).await
@@ -124,13 +130,35 @@ pub async fn create_tag_group(
     state: State<'_, AppState>,
     input: CreateTagGroupInput,
 ) -> crate::ipc_error::IpcResult<TagGroup> {
-    crate::ipc_boundary!(
-        async move {
-            let pool = state.active_db().await?;
-            create_tag_group_impl(&pool, input).await
-        }
+    crate::ipc_boundary_async!("create_tag_group", {
+        let request_context = state.resolve_target_context().await?;
+        let audit_target = match request_context.target() {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let entry = crate::ipc_registry::command_policy("create_tag_group")
+            .expect("create_tag_group must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("create_tag_group must be auditable")
+        };
+        crate::observability::run_operation(
+            &state,
+            definition,
+            OperationContext::new(audit_target),
+            |group: &TagGroup| {
+                SafeOperationResult::succeeded("Tag group created.")
+                    .identifier(SafeDetailKey::Identifier, SafeIdentifier::new(&group.id))
+            },
+            || async move {
+                create_tag_group_impl(&pool, input)
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
         .await
-    )
+    })
 }
 
 #[tauri::command]
@@ -139,13 +167,34 @@ pub async fn update_tag_group(
     id: String,
     input: UpdateTagGroupInput,
 ) -> crate::ipc_error::IpcResult<TagGroup> {
-    crate::ipc_boundary!(
-        async move {
-            let pool = state.active_db().await?;
-            update_tag_group_impl(&pool, &id, input).await
-        }
+    crate::ipc_boundary_async!("update_tag_group", {
+        let request_context = state.resolve_target_context().await?;
+        let audit_target = match request_context.target() {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let entry = crate::ipc_registry::command_policy("update_tag_group")
+            .expect("update_tag_group must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("update_tag_group must be auditable")
+        };
+        let context = OperationContext::new(audit_target)
+            .subject(OperationSubjectKind::TagGroup, SafeIdentifier::new(&id));
+        crate::observability::run_operation(
+            &state,
+            definition,
+            context,
+            |_| SafeOperationResult::succeeded("Tag group updated."),
+            || async move {
+                update_tag_group_impl(&pool, &id, input)
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
         .await
-    )
+    })
 }
 
 #[tauri::command]
@@ -153,13 +202,34 @@ pub async fn delete_tag_group(
     state: State<'_, AppState>,
     id: String,
 ) -> crate::ipc_error::IpcResult<()> {
-    crate::ipc_boundary!(
-        async move {
-            let pool = state.active_db().await?;
-            delete_tag_group_impl(&pool, &id).await
-        }
+    crate::ipc_boundary_async!("delete_tag_group", {
+        let request_context = state.resolve_target_context().await?;
+        let audit_target = match request_context.target() {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let entry = crate::ipc_registry::command_policy("delete_tag_group")
+            .expect("delete_tag_group must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("delete_tag_group must be auditable")
+        };
+        let context = OperationContext::new(audit_target)
+            .subject(OperationSubjectKind::TagGroup, SafeIdentifier::new(&id));
+        crate::observability::run_operation(
+            &state,
+            definition,
+            context,
+            |_| SafeOperationResult::succeeded("Tag group deleted."),
+            || async move {
+                delete_tag_group_impl(&pool, &id)
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
         .await
-    )
+    })
 }
 
 #[tauri::command]
@@ -167,13 +237,36 @@ pub async fn reorder_tag_groups(
     state: State<'_, AppState>,
     ids: Vec<String>,
 ) -> crate::ipc_error::IpcResult<()> {
-    crate::ipc_boundary!(
-        async move {
-            let pool = state.active_db().await?;
-            reorder_tag_groups_impl(&pool, ids).await
-        }
+    crate::ipc_boundary_async!("reorder_tag_groups", {
+        let request_context = state.resolve_target_context().await?;
+        let audit_target = match request_context.target() {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let requested_count = ids.len() as u64;
+        let entry = crate::ipc_registry::command_policy("reorder_tag_groups")
+            .expect("reorder_tag_groups must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("reorder_tag_groups must be auditable")
+        };
+        crate::observability::run_operation(
+            &state,
+            definition,
+            OperationContext::new(audit_target),
+            move |_| {
+                SafeOperationResult::succeeded("Tag groups reordered.")
+                    .count(SafeDetailKey::RequestedCount, requested_count)
+            },
+            || async move {
+                reorder_tag_groups_impl(&pool, ids)
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
         .await
-    )
+    })
 }
 
 #[tauri::command]
@@ -182,13 +275,42 @@ pub async fn set_tag_group(
     tag_id: String,
     group_id: Option<String>,
 ) -> crate::ipc_error::IpcResult<()> {
-    crate::ipc_boundary!(
-        async move {
-            let pool = state.active_db().await?;
-            set_tag_group_impl(&pool, &tag_id, group_id.as_deref()).await
-        }
+    crate::ipc_boundary_async!("set_tag_group", {
+        let request_context = state.resolve_target_context().await?;
+        let audit_target = match request_context.target() {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let entry = crate::ipc_registry::command_policy("set_tag_group")
+            .expect("set_tag_group must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("set_tag_group must be auditable")
+        };
+        let context = OperationContext::new(audit_target)
+            .subject(OperationSubjectKind::Tag, SafeIdentifier::new(&tag_id));
+        let mode = if group_id.is_some() {
+            "assigned"
+        } else {
+            "cleared"
+        };
+        crate::observability::run_operation(
+            &state,
+            definition,
+            context,
+            move |_| {
+                SafeOperationResult::succeeded("Tag group assignment updated.")
+                    .stable(SafeDetailKey::Mode, mode)
+            },
+            || async move {
+                set_tag_group_impl(&pool, &tag_id, group_id.as_deref())
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
         .await
-    )
+    })
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────

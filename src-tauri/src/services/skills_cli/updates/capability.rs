@@ -47,7 +47,9 @@ pub fn apply_argv_preview(skill_names: &[String]) -> Vec<String> {
         preview.push(name.clone());
     }
     debug_assert!(
-        !preview.iter().any(|item| item == "--force" || item == "--keep-links"),
+        !preview
+            .iter()
+            .any(|item| item == "--force" || item == "--keep-links"),
         "capability plan must never advertise unsupported flags"
     );
     preview

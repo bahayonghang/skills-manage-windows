@@ -11,8 +11,8 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 
 use crate::services::github_import::{
-    download_repo_snapshot, pinned_repo_ref, resolve_commit_sha, GithubImportError, GitHubRepoRef,
-    GitHubRepoSnapshot,
+    download_repo_snapshot, pinned_repo_ref, resolve_commit_sha, GitHubRepoRef, GitHubRepoSnapshot,
+    GithubImportError,
 };
 
 use super::super::SkillsCliError;
@@ -64,10 +64,7 @@ impl SkillsCliUpdateGithub for ProductionSkillsCliGithub {
             owner: request.owner.clone(),
             repo: request.repo.clone(),
             branch: request.branch.clone(),
-            normalized_url: format!(
-                "https://github.com/{}/{}",
-                request.owner, request.repo
-            ),
+            normalized_url: format!("https://github.com/{}/{}", request.owner, request.repo),
         };
         let auth = self.auth.as_deref();
         let revision_sha = resolve_commit_sha(&self.client, &repo, auth)
@@ -149,10 +146,10 @@ impl FakeSkillsCliGithub {
     }
 
     pub fn set_failed(&self, repository_key: &str) {
-        self.results.lock().expect("fake github mutex").insert(
-            repository_key.to_string(),
-            FakeOutcome::Failed,
-        );
+        self.results
+            .lock()
+            .expect("fake github mutex")
+            .insert(repository_key.to_string(), FakeOutcome::Failed);
     }
 
     pub fn set_sha_snapshot(&self, sha: &str, snapshot: GitHubRepoSnapshot) {

@@ -64,8 +64,8 @@ pub async fn set_setting(pool: &DbPool, key: &str, value: &str) -> Result<(), sq
 /// via `tracing` instead of propagating, for bookkeeping writes (e.g. scan
 /// state markers) that must not abort the surrounding operation.
 pub async fn set_setting_best_effort(pool: &DbPool, key: &str, value: &str) {
-    if let Err(error) = set_setting(pool, key, value).await {
-        tracing::warn!(key, error = %error, "Failed to persist setting (best-effort)");
+    if set_setting(pool, key, value).await.is_err() {
+        tracing::warn!("Failed to persist setting (best-effort)");
     }
 }
 

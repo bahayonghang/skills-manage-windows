@@ -881,6 +881,7 @@
       "allLevels": "全部级别",
       "status": "结果",
       "allStatuses": "全部结果",
+      "operationId": "精确操作 ID",
       "action": "动作",
       "from": "开始日期",
       "to": "结束日期"
@@ -888,13 +889,17 @@
     "targets": {
       "local": "本机",
       "ssh": "SSH",
-      "wsl": "WSL"
+      "wsl": "WSL",
+      "unknown": "未知目标类型"
     },
     "status": {
+      "started": "进行中",
       "succeeded": "成功",
       "failed": "失败",
       "partial": "部分成功",
-      "cancelled": "已取消"
+      "cancelled": "已取消",
+      "interrupted": "已中断",
+      "unknown": "未知状态"
     },
     "columns": {
       "time": "时间",
@@ -915,6 +920,11 @@
       "subject": "对象",
       "duration": "耗时",
       "batchId": "批次 ID",
+      "operationId": "操作 ID",
+      "errorCode": "错误代码",
+      "errorCategory": "错误分类",
+      "phase": "阶段",
+      "retryable": "可重试",
       "details": "详情 JSON",
       "failures": "失败项"
     },
@@ -967,7 +977,46 @@
       "id": "复制 ID",
       "json": "复制 JSON",
       "success": "已复制到剪贴板",
-      "failure": "复制失败：{{error}}"
+      "failure": "无法复制到剪贴板，请检查系统剪贴板权限后重试。"
+    },
+    "diagnostics": {
+      "title": "诊断键",
+      "reason": "原因",
+      "nextAction": "下一步",
+      "viewRuntime": "查看关联运行证据",
+      "legacyId": "旧版日志，无关联 ID",
+      "retryableYes": "是",
+      "retryableNo": "否",
+      "metadata": "操作元数据",
+      "structuredDetails": "安全结构化详情",
+      "detailsEmpty": "没有记录额外的安全结构化详情。",
+      "detailsInvalid": "存储的详情无法安全解析，因此未予显示。",
+      "failuresTruncated": "有 {{count}} 个额外失败项未在当前有界视图中显示。",
+      "statusSummaries": {
+        "started": "操作正在进行。",
+        "succeeded": "操作已成功完成。",
+        "failed": "操作执行失败。",
+        "partial": "操作仅完成了部分请求内容。",
+        "cancelled": "操作已取消。",
+        "interrupted": "操作在完成前被中断。",
+        "default": "操作已记录结果。"
+      },
+      "reasons": {
+        "succeeded": "操作已完成，未记录失败。",
+        "started": "操作尚未记录终态结果。",
+        "cancelled": "操作在完成前被取消。",
+        "unavailable": "没有记录额外的公开错误原因，请结合诊断键和关联运行日志排查。"
+      },
+      "nextActions": {
+        "succeeded": "无需处理；对照相关事件时请保留操作 ID。",
+        "failed": "重试前先检查错误代码和关联运行证据。",
+        "retryable": "修正已报告的问题后再重试该操作。",
+        "partial": "检查失败项，只重新执行未完成的部分。",
+        "cancelled": "仅在取消并非预期时重新开始该操作。",
+        "started": "等待操作完成；若应用已重启，请检查操作是否转为已中断。",
+        "interrupted": "继续前先检查恢复状态和关联运行证据。",
+        "default": "检查诊断键和关联运行证据。"
+      }
     },
     "emptyCta": "重置筛选条件",
     "console": {
@@ -987,6 +1036,16 @@
       "searchPlaceholder": "搜索原始行、消息、来源或脱敏字段...",
       "sourcePlaceholder": "来源，例如 window.error",
       "sourceLabel": "运行日志来源",
+      "operationIdPlaceholder": "精确操作 ID",
+      "operationIdLabel": "运行日志操作 ID",
+      "eventSourceLabel": "事件来源",
+      "allEventSources": "全部事件来源",
+      "viewOperation": "查看关联操作",
+      "sources": {
+        "backend": "后端",
+        "frontend": "前端",
+        "legacy": "旧版"
+      },
       "files": "日志文件",
       "loadingFiles": "正在加载运行日志文件...",
       "emptyFiles": "暂时没有运行日志文件。",
@@ -1013,7 +1072,9 @@
       },
       "fields": {
         "timestamp": "时间戳",
-        "source": "来源"
+        "source": "来源",
+        "operationId": "操作 ID",
+        "eventSource": "事件来源"
       }
     }
   },

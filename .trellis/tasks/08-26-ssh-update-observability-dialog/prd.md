@@ -124,19 +124,19 @@
 
 ## Acceptance Criteria
 
-- [ ] AC1（R1）：全部 runtime commands（规划快照为 204 个）出现在唯一日志策略清单中，无未分类、
+- [x] AC1（R1）：全部 runtime commands（规划快照为 204 个）出现在唯一日志策略清单中，无未分类、
       重复或无理由排除项。
-- [ ] AC2（R2）：所有被分类为 `operation` 的命令均由统一 recorder 覆盖成功与失败；适用时覆盖
+- [x] AC2（R2）：所有被分类为 `operation` 的命令均由统一 recorder 覆盖成功与失败；适用时覆盖
       partial/cancelled/started/interrupted，契约测试可阻止新增命令绕过。
-- [ ] AC3（R3）：代表性本地、SSH/WSL、DB、文件、HTTP、凭据和后台 job fixture 在 IPC、Operation、
+- [x] AC3（R3）：代表性本地、SSH/WSL、DB、文件、HTTP、凭据和后台 job fixture 在 IPC、Operation、
       Runtime、DOM 中保持同一 stable code/category/phase/correlation。
-- [ ] AC4（R3/R6）：任何 raw `Display`、source chain 或敏感对抗种子均不进入用户日志或导出。
-- [ ] AC5（R4）：新 Operation Log 行有可索引 correlation；两层可按同一值筛选/跳转，旧行仍可查看。
-- [ ] AC6（R5）：每个 fallible backend IPC rejection 都有 backend Runtime evidence；前端 recorder 缺失或
+- [x] AC4（R3/R6）：任何 raw `Display`、source chain 或敏感对抗种子均不进入用户日志或导出。
+- [x] AC5（R4）：新 Operation Log 行有可索引 correlation；两层可按同一值筛选/跳转，旧行仍可查看。
+- [x] AC6（R5）：每个 fallible backend IPC rejection 都有 backend Runtime evidence；前端 recorder 缺失或
       renderer 崩溃时仍可追踪，前后端重复事件来源明确。
-- [ ] AC7（R6）：日志记录失败不改变业务返回值，并产生安全 Runtime warning；清理/导出日志本身可审计。
-- [ ] AC8（R7）：详情在桌面居中紧凑、小视口不溢出；原因与下一步无需阅读 JSON，键盘/焦点/复制不退化。
-- [ ] AC9（R8）：覆盖矩阵与 registry parity、错误保真、redaction、migration、UI 回归测试通过，0 tests 不算通过。
+- [x] AC7（R6）：日志记录失败不改变业务返回值，并产生安全 Runtime warning；清理/导出日志本身可审计。
+- [x] AC8（R7）：详情在桌面居中紧凑、小视口不溢出；原因与下一步无需阅读 JSON，键盘/焦点/复制不退化。
+- [x] AC9（R8）：覆盖矩阵与 registry parity、错误保真、redaction、migration、UI 回归测试通过，0 tests 不算通过。
 - [ ] AC10（R8）：`just ci` 通过；原生 Windows 行为和异常退出证据分别报告 PASS/FAIL/`UNVERIFIED`。
 
 ## Out of Scope

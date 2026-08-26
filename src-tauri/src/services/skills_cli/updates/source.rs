@@ -1,6 +1,8 @@
 //! GitHub source/path normalization for Skills CLI update grouping.
 
-use crate::services::github_import::{github_repository_key_from_source, normalize_github_source_url};
+use crate::services::github_import::{
+    github_repository_key_from_source, normalize_github_source_url,
+};
 
 use super::super::SkillsCliError;
 
@@ -24,9 +26,7 @@ pub fn parse_github_update_identity(
     }
     let (without_skill, shorthand_skill) = split_cli_shorthand_skill(trimmed);
     let normalized = normalize_github_source_url(without_skill)
-        .or_else(|_| {
-            normalize_github_source_url(&format!("https://github.com/{without_skill}"))
-        })
+        .or_else(|_| normalize_github_source_url(&format!("https://github.com/{without_skill}")))
         .map_err(|_| SkillsCliError::UpdateUnsupported)?;
     let (owner, repo, branch) = parse_owner_repo_branch(&normalized)?;
     let skill_path = lock_skill_path

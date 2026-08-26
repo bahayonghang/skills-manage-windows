@@ -25,14 +25,14 @@
 
 ## Acceptance Criteria
 
-- [ ] 当前 registry 的每条命令恰好有一个可验证日志策略，新增命令缺少策略时契约测试失败。
-- [ ] 所有 Operation policy 都有唯一 owner、稳定 action/category、明确 lifecycle 和成功/失败覆盖。
-- [ ] 所有 fallible backend rejection 都留下安全 Runtime evidence；同一失败可用一个 correlation ID 串联
+- [x] 当前 registry 的每条命令恰好有一个可验证日志策略，新增命令缺少策略时契约测试失败。
+- [x] 所有 Operation policy 都有唯一 owner、稳定 action/category、明确 lifecycle 和成功/失败覆盖。
+- [x] 所有 fallible backend rejection 都留下安全 Runtime evidence；同一失败可用一个 correlation ID 串联
   Operation、backend Runtime、frontend Runtime 和界面提示。
-- [ ] 嵌套/批处理不会生成不可解释的重复行，started 行在终止或重启后不会永久悬空。
-- [ ] 对抗种子中的 secret、path、URL、raw error、stack 和 args 不出现在新日志、查询、导出和 DOM fixture。
-- [ ] stable diagnostic 使提示说明发生了什么、目标/阶段在哪里、下一步做什么，同时保留可复制 correlation ID。
-- [ ] spec、架构文档、生成文档和代码一致，未写死易漂移的命令数量或运行状态。
+- [x] 嵌套/批处理不会生成不可解释的重复行，started 行在终止或重启后不会永久悬空。
+- [x] 对抗种子中的 secret、path、URL、raw error、stack 和 args 不出现在新日志、查询、导出和 DOM fixture。
+- [x] stable diagnostic 使提示说明发生了什么、目标/阶段在哪里、下一步做什么，同时保留可复制 correlation ID。
+- [x] spec、架构文档、生成文档和代码一致，未写死易漂移的命令数量或运行状态。
 - [ ] 聚焦检查与 `just ci` 通过；Windows 原生验收有明确证据，无法执行的项目保持 UNVERIFIED。
 
 ## Out of Scope

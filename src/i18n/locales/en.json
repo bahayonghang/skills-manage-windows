@@ -881,6 +881,7 @@
       "allLevels": "All levels",
       "status": "Status",
       "allStatuses": "All statuses",
+      "operationId": "Exact operation ID",
       "action": "Action",
       "from": "From date",
       "to": "To date"
@@ -888,13 +889,17 @@
     "targets": {
       "local": "Local",
       "ssh": "SSH",
-      "wsl": "WSL"
+      "wsl": "WSL",
+      "unknown": "Unknown target kind"
     },
     "status": {
+      "started": "Started",
       "succeeded": "Succeeded",
       "failed": "Failed",
       "partial": "Partial",
-      "cancelled": "Cancelled"
+      "cancelled": "Cancelled",
+      "interrupted": "Interrupted",
+      "unknown": "Unknown status"
     },
     "columns": {
       "time": "Time",
@@ -915,6 +920,11 @@
       "subject": "Subject",
       "duration": "Duration",
       "batchId": "Batch ID",
+      "operationId": "Operation ID",
+      "errorCode": "Error code",
+      "errorCategory": "Error category",
+      "phase": "Phase",
+      "retryable": "Retryable",
       "details": "Details JSON",
       "failures": "Failures"
     },
@@ -967,7 +977,46 @@
       "id": "Copy ID",
       "json": "Copy JSON",
       "success": "Copied to clipboard",
-      "failure": "Copy failed: {{error}}"
+      "failure": "Could not copy to the clipboard. Check system clipboard permissions and try again."
+    },
+    "diagnostics": {
+      "title": "Diagnostic keys",
+      "reason": "Reason",
+      "nextAction": "Next action",
+      "viewRuntime": "View linked runtime evidence",
+      "legacyId": "Legacy entry — no correlation ID",
+      "retryableYes": "Yes",
+      "retryableNo": "No",
+      "metadata": "Operation metadata",
+      "structuredDetails": "Safe structured details",
+      "detailsEmpty": "No additional safe structured details were recorded.",
+      "detailsInvalid": "The stored details could not be safely decoded and were not displayed.",
+      "failuresTruncated": "{{count}} additional failure item(s) were omitted from this bounded view.",
+      "statusSummaries": {
+        "started": "The operation is in progress.",
+        "succeeded": "The operation completed successfully.",
+        "failed": "The operation failed.",
+        "partial": "The operation completed only part of the requested work.",
+        "cancelled": "The operation was cancelled.",
+        "interrupted": "The operation was interrupted before completion.",
+        "default": "The operation recorded a result."
+      },
+      "reasons": {
+        "succeeded": "The operation completed without a recorded failure.",
+        "started": "The operation has not recorded a terminal result yet.",
+        "cancelled": "The operation was cancelled before completion.",
+        "unavailable": "No additional public error reason was recorded. Use the diagnostic keys and linked runtime evidence."
+      },
+      "nextActions": {
+        "succeeded": "No action is required. Keep the operation ID when comparing related events.",
+        "failed": "Review the error code and linked runtime evidence before retrying.",
+        "retryable": "Correct the reported condition, then retry the operation.",
+        "partial": "Review the failed items before rerunning only the incomplete work.",
+        "cancelled": "Start the operation again only if the cancellation was unintended.",
+        "started": "Wait for completion. If the app restarted, check whether the operation became interrupted.",
+        "interrupted": "Review recovery state and linked runtime evidence before continuing.",
+        "default": "Review the diagnostic keys and linked runtime evidence."
+      }
     },
     "emptyCta": "Reset filters",
     "console": {
@@ -987,6 +1036,16 @@
       "searchPlaceholder": "Search raw line, message, source, or redacted field...",
       "sourcePlaceholder": "Source, e.g. window.error",
       "sourceLabel": "Runtime log source",
+      "operationIdPlaceholder": "Exact operation ID",
+      "operationIdLabel": "Runtime operation ID",
+      "eventSourceLabel": "Event source",
+      "allEventSources": "All event sources",
+      "viewOperation": "View linked operation",
+      "sources": {
+        "backend": "Backend",
+        "frontend": "Frontend",
+        "legacy": "Legacy"
+      },
       "files": "Log files",
       "loadingFiles": "Loading runtime log files...",
       "emptyFiles": "No runtime log files are available yet.",
@@ -1013,7 +1072,9 @@
       },
       "fields": {
         "timestamp": "Timestamp",
-        "source": "Source"
+        "source": "Source",
+        "operationId": "Operation ID",
+        "eventSource": "Event source"
       }
     }
   },

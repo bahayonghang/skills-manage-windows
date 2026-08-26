@@ -8,6 +8,7 @@ pub fn mark_import_intent_frontend_ready(
     state: State<'_, ImportIntentState>,
 ) -> crate::ipc_error::IpcResult<()> {
     crate::ipc_boundary!(
+        "mark_import_intent_frontend_ready",
         mark_import_intent_ready(&app, state.inner()).map_err(|error| error.to_string())
     )
 }

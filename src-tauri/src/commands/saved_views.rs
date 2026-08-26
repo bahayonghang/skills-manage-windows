@@ -7,6 +7,11 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::db::{self, DbPool, SavedView};
+use crate::observability::{
+    CommandLogPolicy, OperationContext, OperationSubjectKind, OperationTarget, OperationTargetKind,
+    ReviewedDiagnostic, ReviewedFailure, SafeDetailKey, SafeIdentifier, SafeOperationResult,
+};
+use crate::targets::ActiveTarget;
 use crate::AppState;
 
 use super::serde_helpers::deserialize_optional_optional_string;
@@ -120,6 +125,7 @@ pub async fn list_saved_views(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<Vec<SavedView>> {
     crate::ipc_boundary!(
+        "list_saved_views",
         async move {
             let pool = state.active_db().await?;
             list_saved_views_impl(&pool).await
@@ -133,13 +139,35 @@ pub async fn create_saved_view(
     state: State<'_, AppState>,
     input: CreateSavedViewInput,
 ) -> crate::ipc_error::IpcResult<SavedView> {
-    crate::ipc_boundary!(
-        async move {
-            let pool = state.active_db().await?;
-            create_saved_view_impl(&pool, input).await
-        }
+    crate::ipc_boundary_async!("create_saved_view", {
+        let request_context = state.resolve_target_context().await?;
+        let audit_target = match request_context.target() {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let entry = crate::ipc_registry::command_policy("create_saved_view")
+            .expect("create_saved_view must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("create_saved_view must be auditable")
+        };
+        crate::observability::run_operation(
+            &state,
+            definition,
+            OperationContext::new(audit_target),
+            |view: &SavedView| {
+                SafeOperationResult::succeeded("Saved view created.")
+                    .identifier(SafeDetailKey::Identifier, SafeIdentifier::new(&view.id))
+            },
+            || async move {
+                create_saved_view_impl(&pool, input)
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
         .await
-    )
+    })
 }
 
 #[tauri::command]
@@ -148,13 +176,34 @@ pub async fn update_saved_view(
     id: String,
     input: UpdateSavedViewInput,
 ) -> crate::ipc_error::IpcResult<SavedView> {
-    crate::ipc_boundary!(
-        async move {
-            let pool = state.active_db().await?;
-            update_saved_view_impl(&pool, &id, input).await
-        }
+    crate::ipc_boundary_async!("update_saved_view", {
+        let request_context = state.resolve_target_context().await?;
+        let audit_target = match request_context.target() {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let entry = crate::ipc_registry::command_policy("update_saved_view")
+            .expect("update_saved_view must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("update_saved_view must be auditable")
+        };
+        let context = OperationContext::new(audit_target)
+            .subject(OperationSubjectKind::SavedView, SafeIdentifier::new(&id));
+        crate::observability::run_operation(
+            &state,
+            definition,
+            context,
+            |_| SafeOperationResult::succeeded("Saved view updated."),
+            || async move {
+                update_saved_view_impl(&pool, &id, input)
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
         .await
-    )
+    })
 }
 
 #[tauri::command]
@@ -162,13 +211,34 @@ pub async fn delete_saved_view(
     state: State<'_, AppState>,
     id: String,
 ) -> crate::ipc_error::IpcResult<()> {
-    crate::ipc_boundary!(
-        async move {
-            let pool = state.active_db().await?;
-            delete_saved_view_impl(&pool, &id).await
-        }
+    crate::ipc_boundary_async!("delete_saved_view", {
+        let request_context = state.resolve_target_context().await?;
+        let audit_target = match request_context.target() {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let entry = crate::ipc_registry::command_policy("delete_saved_view")
+            .expect("delete_saved_view must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("delete_saved_view must be auditable")
+        };
+        let context = OperationContext::new(audit_target)
+            .subject(OperationSubjectKind::SavedView, SafeIdentifier::new(&id));
+        crate::observability::run_operation(
+            &state,
+            definition,
+            context,
+            |_| SafeOperationResult::succeeded("Saved view deleted."),
+            || async move {
+                delete_saved_view_impl(&pool, &id)
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
         .await
-    )
+    })
 }
 
 #[tauri::command]
@@ -176,13 +246,36 @@ pub async fn reorder_saved_views(
     state: State<'_, AppState>,
     ids: Vec<String>,
 ) -> crate::ipc_error::IpcResult<()> {
-    crate::ipc_boundary!(
-        async move {
-            let pool = state.active_db().await?;
-            reorder_saved_views_impl(&pool, ids).await
-        }
+    crate::ipc_boundary_async!("reorder_saved_views", {
+        let request_context = state.resolve_target_context().await?;
+        let audit_target = match request_context.target() {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let requested_count = ids.len() as u64;
+        let entry = crate::ipc_registry::command_policy("reorder_saved_views")
+            .expect("reorder_saved_views must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("reorder_saved_views must be auditable")
+        };
+        crate::observability::run_operation(
+            &state,
+            definition,
+            OperationContext::new(audit_target),
+            move |_| {
+                SafeOperationResult::succeeded("Saved views reordered.")
+                    .count(SafeDetailKey::RequestedCount, requested_count)
+            },
+            || async move {
+                reorder_saved_views_impl(&pool, ids)
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
         .await
-    )
+    })
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -192,6 +285,28 @@ mod tests {
     use super::*;
     use crate::db;
     use crate::test_support::mem_pool as setup_test_db;
+
+    fn test_app_state(pool: DbPool) -> AppState {
+        AppState {
+            db: pool,
+            ai_tag_jobs: crate::AiTagJobRegistry::default(),
+            central_update_jobs: crate::services::exclusive_job::ExclusiveJobRegistry::new(
+                "job.central_update_busy",
+                "A Central update job is already running.",
+            ),
+            central_update_snapshots: crate::CentralUpdateSnapshotCache::default(),
+            portable_state_jobs: crate::services::exclusive_job::ExclusiveJobRegistry::new(
+                "job.portability_busy",
+                "A portability job is already running.",
+            ),
+            skills_cli_jobs: crate::services::exclusive_job::ExclusiveJobRegistry::new(
+                "job.skills_cli_busy",
+                "A Skills CLI job is already running.",
+            ),
+            secrets: std::sync::Arc::new(crate::secrets::MockSecretStore::default()),
+            targets: crate::targets::TargetRegistry::default(),
+        }
+    }
 
     fn make_input(name: &str, query: &str) -> CreateSavedViewInput {
         CreateSavedViewInput {
@@ -445,5 +560,77 @@ mod tests {
         let a_row = db::get_saved_view(&pool, &a.id).await.unwrap().unwrap();
         assert_eq!(c_row.sort_order, 0);
         assert_eq!(a_row.sort_order, 1);
+    }
+
+    #[tokio::test]
+    async fn audited_saved_view_success_and_failure_never_persist_name_query_or_icon() {
+        let pool = setup_test_db().await;
+        let state = test_app_state(pool.clone());
+        let entry = crate::ipc_registry::command_policy("create_saved_view").unwrap();
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            panic!("create_saved_view must be auditable")
+        };
+        let planted_name = "private-view-name";
+        let planted_query = r#"{"path":"C:\\Users\\alice\\secret","token":"ghp_private"}"#;
+        let planted_icon = "private-icon";
+        let success_pool = pool.clone();
+        crate::observability::run_operation(
+            &state,
+            definition,
+            OperationTarget::local(),
+            |view: &SavedView| {
+                SafeOperationResult::succeeded("Saved view created.")
+                    .identifier(SafeDetailKey::Identifier, SafeIdentifier::new(&view.id))
+            },
+            || async move {
+                create_saved_view_impl(
+                    &success_pool,
+                    CreateSavedViewInput {
+                        name: planted_name.to_string(),
+                        query: planted_query.to_string(),
+                        icon: Some(planted_icon.to_string()),
+                        pinned: false,
+                    },
+                )
+                .await
+                .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
+        .await
+        .unwrap();
+
+        let failure_pool = pool.clone();
+        let failure = crate::observability::run_operation(
+            &state,
+            definition,
+            OperationTarget::local(),
+            |_| SafeOperationResult::succeeded("Saved view created."),
+            || async move {
+                create_saved_view_impl(
+                    &failure_pool,
+                    CreateSavedViewInput {
+                        name: " ".to_string(),
+                        query: planted_query.to_string(),
+                        icon: Some(planted_icon.to_string()),
+                        pinned: false,
+                    },
+                )
+                .await
+                .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(failure.code, "internal.unexpected");
+        assert!(failure.correlation_id.is_some());
+
+        let page = db::list_operation_logs(&pool, db::OperationLogFilter::default())
+            .await
+            .unwrap();
+        assert_eq!(page.entries.len(), 2, "one terminal row per attempt");
+        let serialized = serde_json::to_string(&page.entries).unwrap();
+        for planted in [planted_name, planted_query, planted_icon, "ghp_private"] {
+            assert!(!serialized.contains(planted));
+        }
     }
 }

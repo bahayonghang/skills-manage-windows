@@ -168,8 +168,8 @@ impl CentralUpdateSnapshotCache {
                     Arc::clone(&cached.snapshot)
                 })
             }
-            Err(error) => {
-                tracing::warn!(error = %error, "Central update snapshot cache lock is poisoned during read");
+            Err(_error) => {
+                tracing::warn!("Central update snapshot cache lock is poisoned during read");
                 None
             }
         }
@@ -254,8 +254,8 @@ impl CentralUpdateSnapshotCache {
                 );
                 Ok(SnapshotCacheInsertOutcome::Cached)
             }
-            Err(error) => {
-                tracing::warn!(error = %error, "Central update snapshot cache lock is poisoned during insert");
+            Err(_error) => {
+                tracing::warn!("Central update snapshot cache lock is poisoned during insert");
                 Ok(SnapshotCacheInsertOutcome::CurrentUseOnly)
             }
         }
@@ -264,8 +264,8 @@ impl CentralUpdateSnapshotCache {
     pub fn clear(&self) {
         match self.state.lock() {
             Ok(mut state) => *state = SnapshotCacheState::default(),
-            Err(error) => {
-                tracing::warn!(error = %error, "Central update snapshot cache lock is poisoned during clear");
+            Err(_error) => {
+                tracing::warn!("Central update snapshot cache lock is poisoned during clear");
             }
         }
     }
