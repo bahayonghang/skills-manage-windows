@@ -54,11 +54,11 @@ pub(super) const PHASE_RECOVERY: &str = "recovery_required";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApplyFault {
-    AfterPrepared,
-    AfterBackups,
-    AfterCliStarted,
-    AfterCliSucceeded,
-    AfterDbCommitted,
+    Prepared,
+    Backups,
+    CliStarted,
+    CliSucceeded,
+    DbCommitted,
 }
 
 #[cfg(test)]
@@ -329,7 +329,7 @@ pub(crate) async fn apply_updates_at(
     )
     .await
     .map_err(map_db_error)?;
-    fail_if(ApplyFault::AfterPrepared)?;
+    fail_if(ApplyFault::Prepared)?;
 
     let recovery_root = context.recovery_root.to_path_buf();
     let canonical_root = context.canonical_root.to_path_buf();
@@ -359,7 +359,7 @@ pub(crate) async fn apply_updates_at(
     )
     .await
     .map_err(map_db_error)?;
-    fail_if(ApplyFault::AfterBackups)?;
+    fail_if(ApplyFault::Backups)?;
     transition_update_operation(
         context.pool,
         &operation_id,
@@ -369,7 +369,7 @@ pub(crate) async fn apply_updates_at(
     )
     .await
     .map_err(map_db_error)?;
-    fail_if(ApplyFault::AfterCliStarted)?;
+    fail_if(ApplyFault::CliStarted)?;
 
     check_cancel(context.cancel)?;
     let refresh_plan = manifest.selections.clone();
@@ -389,7 +389,7 @@ pub(crate) async fn apply_updates_at(
     )
     .await
     .map_err(map_db_error)?;
-    fail_if(ApplyFault::AfterCliSucceeded)?;
+    fail_if(ApplyFault::CliSucceeded)?;
 
     for selection in &request.selections {
         let canonical = context.canonical_root.join(&selection.skill_name);
@@ -434,7 +434,7 @@ pub(crate) async fn apply_updates_at(
     .await
     .map_err(map_db_error)?;
     transaction.commit().await.map_err(map_db_error)?;
-    fail_if(ApplyFault::AfterDbCommitted)?;
+    fail_if(ApplyFault::DbCommitted)?;
 
     let recovery_root = context.recovery_root.to_path_buf();
     let cleanup_id = operation_id.clone();
