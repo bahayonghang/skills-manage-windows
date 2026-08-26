@@ -240,6 +240,18 @@ pub fn skills_cli_remove_recovery_dir_from_app_data(app_data: &Path) -> PathBuf 
         .join(SKILLS_CLI_REMOVE_RECOVERY_DIR_NAME)
 }
 
+pub const SKILLS_CLI_UPDATE_RECOVERY_DIR_NAME: &str = "update-recovery";
+
+pub fn skills_cli_update_recovery_dir() -> PathBuf {
+    skills_cli_update_recovery_dir_from_app_data(&app_data_dir())
+}
+
+pub fn skills_cli_update_recovery_dir_from_app_data(app_data: &Path) -> PathBuf {
+    app_data
+        .join(SKILLS_CLI_DIR_NAME)
+        .join(SKILLS_CLI_UPDATE_RECOVERY_DIR_NAME)
+}
+
 pub fn expand_home_path(path: &str) -> PathBuf {
     expand_home_path_with_home(path, &resolve_home_dir())
 }

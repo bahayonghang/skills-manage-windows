@@ -145,14 +145,14 @@ describe("ipc command coverage ratchet", () => {
     expect(TYPED_IPC_COMMAND_NAMES.length).toBeGreaterThanOrEqual(40);
   });
 
-  it("freezes the 150 typed / 47 untyped / 197 frontend migration counts", () => {
+  it("freezes the 155 typed / 47 untyped / 202 frontend migration counts", () => {
     expect(HANDWRITTEN_IPC_COMMAND_NAMES).toHaveLength(94);
-    expect(GENERATED_IPC_COMMAND_NAMES).toHaveLength(56);
-    expect(TYPED_IPC_COMMAND_NAMES).toHaveLength(150);
+    expect(GENERATED_IPC_COMMAND_NAMES).toHaveLength(61);
+    expect(TYPED_IPC_COMMAND_NAMES).toHaveLength(155);
     expect(UNTYPED_IPC_COMMANDS).toHaveLength(47);
     expect(
       new Set([...TYPED_IPC_COMMAND_NAMES, ...UNTYPED_IPC_COMMANDS]).size,
-    ).toBe(197);
+    ).toBe(202);
   });
 
   it("keeps generated and handwritten command maps disjoint", () => {
@@ -208,7 +208,7 @@ describe("ipc command coverage ratchet", () => {
       ...TYPED_IPC_COMMAND_NAMES,
       ...UNTYPED_IPC_COMMANDS,
     ]);
-    expect(runtime).toHaveLength(204);
+    expect(runtime).toHaveLength(209);
     expect([...frontend].filter((command) => !runtimeSet.has(command))).toEqual(
       [],
     );
@@ -234,8 +234,8 @@ describe("ipc command coverage ratchet", () => {
       .filter(([, result]) => !result?.includes("IpcResult<"))
       .map(([name]) => name)
       .sort();
-    expect(signatures.size).toBe(204);
-    expect(fallible).toHaveLength(200);
+    expect(signatures.size).toBe(209);
+    expect(fallible).toHaveLength(205);
     expect(infallible).toEqual([
       "exit_startup",
       "get_app_runtime_info",

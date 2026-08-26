@@ -9,6 +9,10 @@ import { SKILLS_CLI_GRID_CLASS } from "@/pages/skillsCliViewModel";
 import { useSkillsCliStore } from "@/stores/skillsCliStore";
 import { useTargetStore } from "@/stores/targetStore";
 import { ipcInvokeCalls, mockIpcCommands } from "@/test/support/ipcMock";
+import {
+  EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+  type SkillsCliUpdateInventory,
+} from "@/types";
 
 const { showSkillsCliActionToast } = vi.hoisted(() => ({
   showSkillsCliActionToast: vi.fn(),
@@ -26,6 +30,10 @@ const saveMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   save: (...args: unknown[]) => saveMock(...args),
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async () => () => undefined),
 }));
 
 vi.mock("@/stores/platformStore", () => ({
@@ -68,6 +76,48 @@ const listGlobal = {
   skills,
   canonicalRoot: "/tmp/agents",
   lockPath: "/tmp/agents/skills.lock",
+};
+const pendingUpdateInventory: SkillsCliUpdateInventory = {
+  ...EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+  lastSuccessAt: "2026-08-26T00:00:00.000Z",
+  repositories: [
+    {
+      repositoryKey: "owner/repo@main",
+      normalizedSource: "https://github.com/owner/repo",
+      branch: "main",
+      observedRevisionSha: "bbbbbbb222222222222222222222222222222222",
+      status: "ok",
+      lastCheckedAt: "2026-08-26T00:00:00.000Z",
+      lastErrorCode: null,
+      rateLimitResetAt: null,
+      pendingCount: 1,
+    },
+  ],
+  skills: [
+    {
+      skillName: "demo-skill",
+      repositoryKey: "owner/repo@main",
+      normalizedSource: "https://github.com/owner/repo",
+      skillPath: "demo-skill",
+      status: "update_available",
+      installedRevisionSha: "aaaaaaa111111111111111111111111111111111",
+      observedRevisionSha: "bbbbbbb222222222222222222222222222222222",
+      pendingRevisionSha: "bbbbbbb222222222222222222222222222222222",
+      installedLocalDigest: "sha256-v1:local",
+      observedUpstreamDigest: "sha256-v1:up",
+      pendingUpstreamDigest: "sha256-v1:up",
+      isStale: false,
+      lastErrorCode: null,
+      changeSummary: ["SKILL.md"],
+      blockers: [],
+      argvPreview: [
+        "refresh",
+        "owned-canonical",
+        "from-pinned-github-snapshot",
+        "demo-skill",
+      ],
+    },
+  ],
 };
 const emptyList = {
   skills: [],
@@ -123,6 +173,17 @@ function mockHappyPath() {
     }),
     skills_cli_reveal_skill_folder: null,
     cancel_skills_cli_job: true,
+    skills_cli_update_inventory: pendingUpdateInventory,
+    skills_cli_check_updates: pendingUpdateInventory,
+    skills_cli_apply_updates: {
+      appliedSkillNames: ["demo-skill"],
+      installedRevisionSha: "bbbbbbb222222222222222222222222222222222",
+    },
+    skills_cli_verify_update_baseline: pendingUpdateInventory,
+    skills_cli_retry_update_recovery: {
+      operationId: "op-1",
+      phase: "db_committed",
+    },
   });
 }
 
@@ -145,6 +206,11 @@ describe("SkillsCliView", () => {
       inventoryError: null,
       actionError: null,
       docState: { status: "idle" },
+      updateInventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+      isLoadingUpdateCache: false,
+      updateJob: { jobId: null, phase: null },
+      updateError: null,
+      updateProgress: null,
     });
     showSkillsCliActionToast.mockClear();
     saveMock.mockReset();
@@ -208,6 +274,7 @@ describe("SkillsCliView", () => {
       skills_cli_doctor: doctor,
       skills_cli_list_global: emptyList,
       skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
       get_setting: null,
     });
     render(<SkillsCliView />);
@@ -240,6 +307,7 @@ describe("SkillsCliView", () => {
       },
       skills_cli_list_global: listGlobal,
       skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
     });
     render(<SkillsCliView />);
 
@@ -272,6 +340,7 @@ describe("SkillsCliView", () => {
       skills_cli_doctor: doctor,
       skills_cli_list_global: failingList,
       skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
     });
     render(<SkillsCliView />);
     await screen.findByText("demo-skill");
@@ -291,6 +360,7 @@ describe("SkillsCliView", () => {
         throw ipcFixtureError("internal.unexpected", "list failed");
       },
       skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
     });
     render(<SkillsCliView />);
 
@@ -341,6 +411,7 @@ describe("SkillsCliView", () => {
       skills_cli_doctor: doctor,
       skills_cli_list_global: listGlobal,
       skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
       skills_cli_preview_remove_global: ({ skillName }: { skillName: string }) => ({
         skillName,
         ownedCanonical: true,
@@ -427,6 +498,7 @@ describe("SkillsCliView", () => {
           resolveList = resolve;
         }),
       skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
     });
     render(<SkillsCliView />);
     const skeleton = await screen.findByTestId("skills-cli-skeleton");
@@ -467,7 +539,7 @@ describe("SkillsCliView", () => {
       "data-focus",
       "null",
     );
-    expect(within(drawer).queryByTestId("skills-cli-detail-update")).not.toBeInTheDocument();
+    expect(within(drawer).getByTestId("skills-cli-detail-update")).toBeEnabled();
     fireEvent.click(within(drawer).getByTestId("skills-cli-detail-close"));
     await waitFor(
       () => {
@@ -579,6 +651,7 @@ describe("SkillsCliView", () => {
       skills_cli_doctor: doctor,
       skills_cli_list_global: list,
       skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
     });
     render(<SkillsCliView />);
     await screen.findByText("demo-skill");
@@ -670,6 +743,7 @@ describe("SkillsCliView", () => {
       skills_cli_doctor: doctor,
       skills_cli_list_global: { ...listGlobal, skills: [missingSkill] },
       skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
       skills_cli_link_platform: {
         agentId: "cursor",
         displayName: "Cursor",
@@ -724,6 +798,7 @@ describe("SkillsCliView", () => {
       skills_cli_doctor: doctor,
       skills_cli_list_global: { ...listGlobal, skills: [linkedSkill] },
       skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
       skills_cli_unlink_platform: {
         agentId: "cursor",
         displayName: "Cursor",
@@ -799,6 +874,7 @@ describe("SkillsCliView", () => {
       skills_cli_doctor: doctor,
       skills_cli_list_global: { ...listGlobal, skills: [missingSkill] },
       skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
       skills_cli_read_skill_md: {
         skillName: "demo-skill",
         content: "---\nname: demo\n---\n",
@@ -873,6 +949,7 @@ describe("SkillsCliView", () => {
         { ...targets[0], isEnabled: true },
         { ...targets[1], isEnabled: true },
       ],
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
       skills_cli_read_skill_md: {
         skillName: "demo-skill",
         content: "---\nname: demo\n---\n",
@@ -910,5 +987,76 @@ describe("SkillsCliView", () => {
       skillportAgentId: "cursor",
     });
     expect(ipcInvokeCalls("skills_cli_unlink_platform")).toHaveLength(0);
+  });
+
+  it("keeps Check updates enabled when the runtime is blocked", async () => {
+    mockIpcCommands({
+      skills_cli_doctor: () => {
+        throw ipcFixtureError(
+          "skills_cli.cli_unavailable",
+          "The Skills CLI package could not be executed.",
+        );
+      },
+      skills_cli_list_global: listGlobal,
+      skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+    });
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+    expect(screen.getByTestId("skills-cli-check-updates")).toBeEnabled();
+    expect(screen.getByRole("button", { name: "刷新" })).toBeEnabled();
+  });
+
+  it("opens the update drawer from Update all and from detail Update with the current skill", async () => {
+    mockHappyPath();
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+    fireEvent.click(screen.getByRole("button", { name: "全部更新" }));
+    expect(screen.getByTestId("skills-cli-active-surface")).toHaveAttribute(
+      "data-kind",
+      "update",
+    );
+    expect(screen.getByTestId("skills-cli-active-surface")).toHaveAttribute(
+      "data-update-repo",
+      "owner/repo@main",
+    );
+    const drawer = await screen.findByTestId("skills-cli-update-drawer");
+    expect(drawer).toHaveAttribute("data-width-mode", "fullWidth");
+    expect(screen.getByTestId("skills-cli-update-argv").textContent).not.toContain(
+      "--force",
+    );
+    expect(screen.getByTestId("skills-cli-update-argv").textContent).not.toContain(
+      "--keep-links",
+    );
+    fireEvent.click(screen.getByTestId("skills-cli-update-close"));
+    await waitFor(() => {
+      expect(screen.getByTestId("skills-cli-active-surface")).toHaveAttribute(
+        "data-kind",
+        "none",
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "查看 demo-skill 的详情" }));
+    const detail = await screen.findByRole("dialog", { name: "demo-skill" });
+    fireEvent.click(within(detail).getByTestId("skills-cli-detail-update"));
+    expect(screen.getByTestId("skills-cli-active-surface")).toHaveAttribute(
+      "data-kind",
+      "update",
+    );
+    expect(await screen.findByTestId("skills-cli-update-row-demo-skill")).toBeInTheDocument();
+  });
+
+  it("listens then invokes check updates from the header", async () => {
+    mockHappyPath();
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+    fireEvent.click(screen.getByTestId("skills-cli-check-updates"));
+    await waitFor(() => {
+      expect(ipcInvokeCalls("skills_cli_check_updates")).toHaveLength(1);
+    });
+    const args = ipcInvokeCalls("skills_cli_check_updates")[0]?.args as {
+      jobId: string;
+    };
+    expect(args.jobId).toMatch(/\S/);
   });
 });

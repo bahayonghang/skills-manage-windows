@@ -60,6 +60,8 @@ export const GENERATED_IPC_COMMANDS = {
   set_ai_api_key: command<{ value: string; provider: string | null }, AiApiKeyState_Serialize>(),
   set_github_pat: command<{ value: string }, GitHubPatState_Serialize>(),
   skills_cli_add_global: command<{ jobId: string; source: string; skillNames: string[]; skillportAgentIds: string[] }, SkillsCliAddResult>(),
+  skills_cli_apply_updates: command<{ request: SkillsCliApplyUpdateRequest }, SkillsCliApplyResult>(),
+  skills_cli_check_updates: command<{ jobId: string }, SkillsCliUpdateInventory>(),
   skills_cli_doctor: command<undefined, SkillsCliDoctorReport>(),
   skills_cli_export_inventory: command<{ path: string; json: string }, null>(),
   skills_cli_install_targets: command<undefined, SkillsCliInstallTarget[]>(),
@@ -69,8 +71,11 @@ export const GENERATED_IPC_COMMANDS = {
   skills_cli_preview_source: command<{ source: string }, SkillsCliSourcePreview>(),
   skills_cli_read_skill_md: command<{ skillName: string }, SkillsCliSkillDoc>(),
   skills_cli_remove_global: command<{ jobId: string; skillName: string }, SkillsCliRemoveResult>(),
+  skills_cli_retry_update_recovery: command<{ jobId: string; operationId: string }, SkillsCliApplyRecoveryResult>(),
   skills_cli_reveal_skill_folder: command<{ skillName: string }, null>(),
   skills_cli_unlink_platform: command<{ jobId: string; skillName: string; skillportAgentId: string }, SkillsCliPlacement>(),
+  skills_cli_update_inventory: command<undefined, SkillsCliUpdateInventory>(),
+  skills_cli_verify_update_baseline: command<{ jobId: string; skillNames: string[] }, SkillsCliUpdateInventory>(),
   test_ai_connection: command<undefined, AiConnectionTestResult_Serialize>(),
   test_github_pat: command<undefined, GitHubPatTestResult>(),
   unassign_skill_tags: command<{ skillId: string; tagIds: string[] }, null>(),
@@ -119,6 +124,8 @@ export const GENERATED_IPC_COMMAND_NAMES = [
   "set_ai_api_key",
   "set_github_pat",
   "skills_cli_add_global",
+  "skills_cli_apply_updates",
+  "skills_cli_check_updates",
   "skills_cli_doctor",
   "skills_cli_export_inventory",
   "skills_cli_install_targets",
@@ -128,8 +135,11 @@ export const GENERATED_IPC_COMMAND_NAMES = [
   "skills_cli_preview_source",
   "skills_cli_read_skill_md",
   "skills_cli_remove_global",
+  "skills_cli_retry_update_recovery",
   "skills_cli_reveal_skill_folder",
   "skills_cli_unlink_platform",
+  "skills_cli_update_inventory",
+  "skills_cli_verify_update_baseline",
   "test_ai_connection",
   "test_github_pat",
   "unassign_skill_tags",
@@ -201,6 +211,9 @@ export type BatchInstallResult = {
 	skipped: SkippedInstall[],
 	failed: FailedInstall[],
 };
+
+/**  Probe ledger status. Unsupported and unverified both fail closed. */
+export type CapabilitySupport = "verified_supported" | "verified_unsupported" | "unverified";
 
 /**  Failed item from a Central batch install request. */
 export type CentralBatchInstallFailure = {
@@ -817,6 +830,31 @@ export type SkillsCliAddResult = {
 	targetedPlatforms: number,
 };
 
+export type SkillsCliApplyRecoveryResult = {
+	operationId: string,
+	phase: string,
+};
+
+export type SkillsCliApplyResult = {
+	appliedSkillNames: string[],
+	installedRevisionSha: string,
+};
+
+export type SkillsCliApplySelection = {
+	skillName: string,
+	skillPath: string,
+	expectedInstalledRevision: string | null,
+	expectedInstalledLocalDigest: string | null,
+	expectedPendingRevision: string,
+	expectedPendingDigest: string,
+};
+
+export type SkillsCliApplyUpdateRequest = {
+	jobId: string,
+	repositoryKey: string,
+	selections: SkillsCliApplySelection[],
+};
+
 /**  Result of `skills_cli_doctor`. */
 export type SkillsCliDoctorReport = {
 	nodeVersion: string,
@@ -863,6 +901,12 @@ export type SkillsCliInstallTarget = {
 };
 
 export type SkillsCliManagedLinkKind = "windows_junction" | "symlink";
+
+export type SkillsCliPendingRecovery = {
+	operationId: string,
+	phase: string,
+	lastErrorCode: string | null,
+};
 
 export type SkillsCliPlacement = {
 	agentId: string,
@@ -914,6 +958,61 @@ export type SkillsCliSourcePreview = {
 };
 
 export type SkillsCliSourceTypeBucket = "github" | "gitlab" | "git" | "mintlify" | "huggingface" | "local" | "well-known" | "unknown";
+
+export type SkillsCliUpdateBlocker = {
+	code: string,
+	skillName: string,
+};
+
+export type SkillsCliUpdateCapabilityPlan = {
+	npmSpec: string,
+	forceFlag: CapabilitySupport,
+	keepLinksFlag: CapabilitySupport,
+	pinnedFullShaSource: CapabilitySupport,
+	directCopyRefresh: CapabilitySupport,
+	applyMethod: string,
+};
+
+export type SkillsCliUpdateInventory = {
+	skills: SkillsCliUpdateSkillRow[],
+	repositories: SkillsCliUpdateRepositoryRow[],
+	lastSuccessAt: string | null,
+	pendingRecovery: SkillsCliPendingRecovery | null,
+	capability: SkillsCliUpdateCapabilityPlan,
+};
+
+export type SkillsCliUpdateRepositoryRow = {
+	repositoryKey: string,
+	normalizedSource: string,
+	branch: string,
+	observedRevisionSha: string | null,
+	status: string,
+	lastCheckedAt: string | null,
+	lastErrorCode: string | null,
+	rateLimitResetAt: string | null,
+	pendingCount: number,
+};
+
+export type SkillsCliUpdateSkillRow = {
+	skillName: string,
+	repositoryKey: string | null,
+	normalizedSource: string | null,
+	skillPath: string | null,
+	status: SkillsCliUpdateStatus,
+	installedRevisionSha: string | null,
+	observedRevisionSha: string | null,
+	pendingRevisionSha: string | null,
+	installedLocalDigest: string | null,
+	observedUpstreamDigest: string | null,
+	pendingUpstreamDigest: string | null,
+	isStale: boolean,
+	lastErrorCode: string | null,
+	changeSummary: string[],
+	blockers: SkillsCliUpdateBlocker[],
+	argvPreview: string[],
+};
+
+export type SkillsCliUpdateStatus = "not_checked" | "checking" | "current" | "update_available" | "local_modified" | "baseline_required" | "unsupported" | "rate_limited" | "failed";
 
 /**  Describes a target that was already installed and safely left in place. */
 export type SkippedInstall = {

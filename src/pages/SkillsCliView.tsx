@@ -19,6 +19,7 @@ import {
 } from "@/components/skillsCli/SkillsCliInstallMount";
 import { SkillsCliToolbar } from "@/components/skillsCli/SkillsCliToolbar";
 import { SkillsCliUninstallDialog } from "@/components/skillsCli/SkillsCliUninstallDialog";
+import { SkillsCliUpdateDrawer } from "@/components/skillsCli/SkillsCliUpdateDrawer";
 import { showSkillsCliActionToast } from "@/components/skillsCli/skillsCliActionToast";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,12 @@ import {
   openSkillsCliDetail,
   openSkillsCliInstall,
   openSkillsCliUninstall,
+  openSkillsCliUpdate,
+  actionableUpdateSkillNames,
+  pendingUpdateCountForSkills,
+  repositoryKeyForSkills,
+  skillHasPendingUpdate,
+  updateRowForSkill,
   type SkillsCliActiveSurface,
   type SkillsCliBucket,
   type SkillsCliGroupBy,
@@ -87,6 +94,10 @@ export function SkillsCliView() {
   const previewRemoveGlobal = useSkillsCliStore((state) => state.previewRemoveGlobal);
   const removeGlobalBatch = useSkillsCliStore((state) => state.removeGlobalBatch);
   const docState = useSkillsCliStore((state) => state.docState);
+  const updateInventory = useSkillsCliStore((state) => state.updateInventory);
+  const updateJob = useSkillsCliStore((state) => state.updateJob);
+  const updateError = useSkillsCliStore((state) => state.updateError);
+  const updateProgress = useSkillsCliStore((state) => state.updateProgress);
 
   const [query, setQuery] = useState("");
   const [groupBy, setGroupBy] = useState<SkillsCliGroupBy>("repo");
@@ -369,6 +380,27 @@ export function SkillsCliView() {
     );
   }
 
+  function openUpdateSurface(input: {
+    repositoryKey: string | null;
+    skillNames: readonly string[];
+    from: EventTarget | null;
+  }) {
+    if (!input.repositoryKey) {
+      showSkillsCliActionToast({
+        semantic: "error",
+        message: t("skillsCli.updates.checkFirst"),
+      });
+      return;
+    }
+    captureReturnFocus(input.from);
+    setActiveSurface(
+      openSkillsCliUpdate({
+        repositoryKey: input.repositoryKey,
+        skillNames: input.skillNames,
+      }),
+    );
+  }
+
   async function handleDetailToggle(agentId: string, next: boolean) {
     if (!detailSkill) {
       return;
@@ -456,6 +488,9 @@ export function SkillsCliView() {
         hidden
         data-testid="skills-cli-active-surface"
         data-kind={activeSurface?.kind ?? "none"}
+        data-update-repo={
+          activeSurface?.kind === "update" ? activeSurface.repositoryKey : ""
+        }
         data-focus={
           activeSurface?.kind === "detail" ? String(activeSurface.focus) : ""
         }
@@ -474,8 +509,23 @@ export function SkillsCliView() {
         runtimeError={runtimeError}
         isLoading={isLoading}
         isRefreshing={isRefreshing}
+        isCheckingUpdates={updateJob.phase === "checking"}
         installAvailable={SKILLS_CLI_INSTALL_SURFACE_AVAILABLE}
         onRefresh={() => void loadAll()}
+        onCheckUpdates={() => {
+          void useSkillsCliStore
+            .getState()
+            .checkUpdates()
+            .catch((error) => {
+              showSkillsCliActionToast({
+                semantic: "error",
+                message: formatBackendError(error, t),
+              });
+            });
+        }}
+        onCancelUpdate={() => {
+          void useSkillsCliStore.getState().cancelUpdateJob();
+        }}
         onOpenInstall={() => setActiveSurface(openSkillsCliInstall())}
         installButtonRef={installButtonRef}
       />
@@ -503,6 +553,86 @@ export function SkillsCliView() {
             }
             isExporting={isExporting}
           />
+
+          {updateInventory.lastSuccessAt ? (
+            <p
+              data-testid="skills-cli-update-last-checked"
+              className="text-xs text-muted-foreground"
+            >
+              {t("skillsCli.updates.lastChecked", {
+                time: updateInventory.lastSuccessAt,
+              })}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {t("skillsCli.updates.notChecked")}
+            </p>
+          )}
+
+          {updateProgress ? (
+            <p
+              data-testid="skills-cli-update-check-progress"
+              className="text-xs text-muted-foreground"
+            >
+              {t("skillsCli.updates.progress", {
+                phase: updateProgress.phase,
+                completed: updateProgress.repositoryCompleted,
+                total: updateProgress.repositoryTotal,
+              })}
+            </p>
+          ) : null}
+
+          {updateInventory.pendingRecovery ? (
+            <div
+              role="alert"
+              data-testid="skills-cli-update-recovery-banner"
+              className="flex flex-wrap items-center gap-2 text-sm text-destructive-text"
+            >
+              <span>{t("skillsCli.updates.recoveryRequired")}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const operationId =
+                    useSkillsCliStore.getState().updateInventory.pendingRecovery
+                      ?.operationId;
+                  if (!operationId) {
+                    return;
+                  }
+                  void useSkillsCliStore
+                    .getState()
+                    .retryUpdateRecovery(operationId)
+                    .catch((error) => {
+                      showSkillsCliActionToast({
+                        semantic: "error",
+                        message: formatBackendError(error, t),
+                      });
+                    });
+                }}
+              >
+                {t("skillsCli.updates.retryRecovery")}
+              </Button>
+            </div>
+          ) : null}
+
+          {updateError && (
+            <div
+              role="alert"
+              data-testid="skills-cli-update-cache-error"
+              className="flex flex-wrap items-center gap-2 text-sm text-destructive-text"
+            >
+              <span>{formatBackendError(updateError, t)}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void useSkillsCliStore.getState().checkUpdates()}
+              >
+                {t("skillsCli.updates.retry")}
+              </Button>
+            </div>
+          )}
 
           {inventoryError && (
             <div
@@ -548,6 +678,19 @@ export function SkillsCliView() {
                 {buckets.map((bucket) => {
                   const panelId = `skills-cli-group-panel-${bucket.id}`;
                   const expanded = !collapsedGroupIds.has(bucket.id);
+                  const updateCount = pendingUpdateCountForSkills(
+                    bucket.skills,
+                    updateInventory,
+                  );
+                  const groupRepositoryKey = repositoryKeyForSkills(
+                    bucket.skills,
+                    updateInventory,
+                  );
+                  const actionableNames = actionableUpdateSkillNames(
+                    bucket.skills,
+                    updateInventory,
+                    Boolean(updateInventory.pendingRecovery),
+                  );
                   return (
                     <section key={bucket.id}>
                       <SkillsCliGroupHeader
@@ -557,6 +700,17 @@ export function SkillsCliView() {
                         panelId={panelId}
                         onToggle={() => toggleCollapsed(bucket.id)}
                         onSelectAll={() => handleSelectAll(bucket)}
+                        updateCount={updateCount}
+                        onUpdateAll={
+                          updateCount > 0 && groupRepositoryKey
+                            ? () =>
+                                openUpdateSurface({
+                                  repositoryKey: groupRepositoryKey,
+                                  skillNames: actionableNames,
+                                  from: document.activeElement,
+                                })
+                            : undefined
+                        }
                       />
                       {expanded ? (
                         <div id={panelId} className={SKILLS_CLI_GRID_CLASS}>
@@ -568,6 +722,9 @@ export function SkillsCliView() {
                               name={skill.name}
                               path={skill.canonicalPath ?? skill.path}
                               placements={skill.placements}
+                              updateAvailable={skillHasPendingUpdate(
+                                updateRowForSkill(updateInventory, skill.name),
+                              )}
                               checkbox={
                                 selectMode
                                   ? {
@@ -678,7 +835,11 @@ export function SkillsCliView() {
         targets={targets}
         contentWidth={contentWidthPx}
         docState={docState}
-        updateAvailable={false}
+        updateAvailable={skillHasPendingUpdate(
+          detailSkill
+            ? updateRowForSkill(updateInventory, detailSkill.name)
+            : null,
+        )}
         focusSection={detailFocus}
         runtimeBlocked={runtimeBlocked}
         isMutating={isMutating}
@@ -701,12 +862,50 @@ export function SkillsCliView() {
             .getState()
             .revealSkillFolder(detailSkill.name);
         }}
+        onUpdate={
+          detailSkill
+            ? () =>
+                openUpdateSurface({
+                  repositoryKey: updateRowForSkill(
+                    updateInventory,
+                    detailSkill.name,
+                  )?.repositoryKey ?? null,
+                  skillNames: [detailSkill.name],
+                  from: document.activeElement,
+                })
+            : undefined
+        }
         onUninstall={() => {
           if (!detailSkill) {
             return;
           }
           setActiveSurface(openSkillsCliUninstall([detailSkill.name]));
         }}
+      />
+
+      <SkillsCliUpdateDrawer
+        open={activeSurface?.kind === "update"}
+        repositoryKey={
+          activeSurface?.kind === "update" ? activeSurface.repositoryKey : ""
+        }
+        skillNames={
+          activeSurface?.kind === "update" ? activeSurface.skillNames : []
+        }
+        skills={skills}
+        inventory={updateInventory}
+        contentWidth={contentWidthPx}
+        updateError={updateError}
+        updateJobPhase={updateJob.phase}
+        updateProgress={updateProgress}
+        returnFocusRef={returnFocusRef}
+        onClose={() => setActiveSurface(closeSkillsCliSurface())}
+        onApply={(input) => useSkillsCliStore.getState().applyUpdates(input)}
+        onVerifyBaseline={(names) =>
+          useSkillsCliStore.getState().verifyUpdateBaseline(names)
+        }
+        onRetryRecovery={(operationId) =>
+          useSkillsCliStore.getState().retryUpdateRecovery(operationId)
+        }
       />
     </div>
   );

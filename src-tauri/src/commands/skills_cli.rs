@@ -10,14 +10,21 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use serde_json::json;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 use crate::ipc_error::{public_message_for_code, IpcError};
 use crate::operation_log::{
     record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
 };
 use crate::services::exclusive_job::ExclusiveJobError;
+use crate::services::github_import;
 use crate::services::skills_cli as domain;
+use crate::services::skills_cli::updates::{
+    apply_updates, load_update_inventory_for_pool, retry_update_recovery, verify_update_baseline_at,
+    ProductionSkillsCliGithub, SkillsCliApplyRecoveryResult, SkillsCliApplyResult,
+    SkillsCliApplyUpdateRequest, SkillsCliUpdateInventory, SkillsCliUpdateProgress,
+    UpdateProgressEmitter, UPDATE_PROGRESS_EVENT,
+};
 use crate::services::skills_cli::{
     NodeProcessRunner, SkillsCliAddResult, SkillsCliDoctorReport, SkillsCliError,
     SkillsCliGlobalSnapshot, SkillsCliInstallTarget, SkillsCliPlacement, SkillsCliRemovePlan,
@@ -391,9 +398,200 @@ pub async fn cancel_skills_cli_job(
         .map_err(job_lease_error)
 }
 
+struct AppUpdateProgress {
+    app: AppHandle,
+}
+
+impl UpdateProgressEmitter for AppUpdateProgress {
+    fn emit_update_progress(&self, payload: &SkillsCliUpdateProgress) {
+        let _ = self.app.emit(UPDATE_PROGRESS_EVENT, payload);
+    }
+}
+
+async fn github_from_state(
+    state: &AppState,
+) -> Result<ProductionSkillsCliGithub, IpcError> {
+    let auth = github_import::github_direct_auth_from_secret_store(
+        &state.db,
+        state.secrets.as_ref(),
+    )
+    .await
+    .map_err(|_| to_ipc_error(&SkillsCliError::UpdateCheckFailed))?;
+    let client = github_import::github_client()
+        .map_err(|_| to_ipc_error(&SkillsCliError::UpdateCheckFailed))?;
+    Ok(ProductionSkillsCliGithub { client, auth })
+}
+
+#[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn skills_cli_check_updates(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    job_id: String,
+) -> crate::ipc_error::IpcResult<SkillsCliUpdateInventory> {
+    let lease = state
+        .skills_cli_jobs
+        .acquire(&job_id)
+        .map_err(job_lease_error)?;
+    let context = state.resolve_target_context().await?;
+    let active_target = context.target().clone();
+    let pool = context.db().clone();
+    domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
+    let github = github_from_state(&state).await?;
+    let home = crate::paths::resolve_home_dir();
+    let started_at = Instant::now();
+    let result = domain::updates::check_updates_at(
+        &pool,
+        &crate::paths::universal_skills_dir(),
+        &domain::skills_cli_lock_path(&home),
+        &github,
+        &AppUpdateProgress { app },
+        &job_id,
+        Some(lease.cancel_flag()),
+    )
+    .await;
+    let status = if result.is_ok() {
+        "succeeded"
+    } else {
+        "failed"
+    };
+    record_operation_log_best_effort(
+        &pool,
+        target_context_from_active_target(&active_target),
+        OperationLogEvent::new(
+            "skills_cli",
+            "skills_cli.check_updates",
+            status,
+            if result.is_ok() {
+                "Checked Skills CLI updates"
+            } else {
+                "Failed to check Skills CLI updates"
+            },
+        )
+        .details(json!({
+            "skillCount": result.as_ref().map(|inventory| inventory.skills.len()).unwrap_or(0),
+            "jobId": job_id,
+        }))
+        .duration_ms(started_at.elapsed().as_millis() as i64),
+    )
+    .await;
+    result.map_err(|error| to_ipc_error(&error))
+}
+
+#[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn skills_cli_update_inventory(
+    state: State<'_, AppState>,
+) -> crate::ipc_error::IpcResult<SkillsCliUpdateInventory> {
+    let context = state.resolve_target_context().await?;
+    domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+    load_update_inventory_for_pool(context.db())
+        .await
+        .map_err(|error| to_ipc_error(&error))
+}
+
+#[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn skills_cli_verify_update_baseline(
+    state: State<'_, AppState>,
+    job_id: String,
+    skill_names: Vec<String>,
+) -> crate::ipc_error::IpcResult<SkillsCliUpdateInventory> {
+    let lease = state
+        .skills_cli_jobs
+        .acquire(&job_id)
+        .map_err(job_lease_error)?;
+    let context = state.resolve_target_context().await?;
+    domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+    let home = crate::paths::resolve_home_dir();
+    verify_update_baseline_at(
+        context.db(),
+        &crate::paths::universal_skills_dir(),
+        &domain::skills_cli_lock_path(&home),
+        &skill_names,
+        Some(lease.cancel_flag()),
+    )
+    .await
+    .map_err(|error| to_ipc_error(&error))
+}
+
+#[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn skills_cli_apply_updates(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: SkillsCliApplyUpdateRequest,
+) -> crate::ipc_error::IpcResult<SkillsCliApplyResult> {
+    let lease = state
+        .skills_cli_jobs
+        .acquire(&request.job_id)
+        .map_err(job_lease_error)?;
+    let context = state.resolve_target_context().await?;
+    let active_target = context.target().clone();
+    let pool = context.db().clone();
+    domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
+    let github = github_from_state(&state).await?;
+    let started_at = Instant::now();
+    let skill_count = request.selections.len();
+    let result = apply_updates(
+        &pool,
+        &github,
+        &AppUpdateProgress { app },
+        &request,
+        Some(lease.cancel_flag()),
+    )
+    .await;
+    record_operation_log_best_effort(
+        &pool,
+        target_context_from_active_target(&active_target),
+        OperationLogEvent::new(
+            "skills_cli",
+            "skills_cli.apply_updates",
+            if result.is_ok() { "succeeded" } else { "failed" },
+            if result.is_ok() {
+                "Applied Skills CLI updates"
+            } else {
+                "Failed to apply Skills CLI updates"
+            },
+        )
+        .details(json!({ "skillCount": skill_count, "jobId": request.job_id }))
+        .duration_ms(started_at.elapsed().as_millis() as i64),
+    )
+    .await;
+    result.map_err(|error| to_ipc_error(&error))
+}
+
+#[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn skills_cli_retry_update_recovery(
+    state: State<'_, AppState>,
+    job_id: String,
+    operation_id: String,
+) -> crate::ipc_error::IpcResult<SkillsCliApplyRecoveryResult> {
+    let lease = state
+        .skills_cli_jobs
+        .acquire(&job_id)
+        .map_err(job_lease_error)?;
+    let context = state.resolve_target_context().await?;
+    domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+    let home = crate::paths::resolve_home_dir();
+    let _ = lease.cancel_flag();
+    retry_update_recovery(
+        context.db(),
+        &operation_id,
+        &crate::paths::universal_skills_dir(),
+        &domain::skills_cli_lock_path(&home),
+        &crate::paths::skills_cli_update_recovery_dir(),
+        Some(lease.cancel_flag()),
+    )
+    .await
+    .map_err(|error| to_ipc_error(&error))
+}
+
 #[cfg(test)]
 mod tests {
     use super::mutation_log_details;
+    use crate::services::skills_cli::SkillsCliError;
 
     #[test]
     fn mutation_log_details_omit_paths_and_argv() {
@@ -407,5 +605,13 @@ mod tests {
         assert!(!serialized.contains("C:"));
         assert!(!details.as_object().unwrap().contains_key("targetPath"));
         assert!(!details.as_object().unwrap().contains_key("path"));
+    }
+
+    #[test]
+    fn update_check_failed_is_retryable_at_the_ipc_boundary() {
+        let error = SkillsCliError::UpdateCheckFailed;
+        assert_eq!(error.ipc_code(), "skills_cli.update_check_failed");
+        assert!(error.retryable());
+        assert!(!SkillsCliError::UpdateBaselineRequired.retryable());
     }
 }

@@ -44,6 +44,7 @@ pub use repos::settings_repo::*;
 pub use repos::skill_relations_repo::{
     repair_orphan_skill_relations, OrphanRelationReport, OrphanRepairReport,
 };
+pub use repos::skills_cli_updates_repo::*;
 pub use repos::skills_repo::*;
 pub use repos::tag_groups_repo::*;
 pub use repos::tags_repo::*;

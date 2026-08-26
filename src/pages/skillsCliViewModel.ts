@@ -2,6 +2,9 @@ import type {
   SkillsCliGlobalSkill,
   SkillsCliInstallTarget,
   SkillsCliPlacement,
+  SkillsCliUpdateInventory,
+  SkillsCliUpdateSkillRow,
+  SkillsCliUpdateStatus,
 } from "@/types";
 
 export type SkillsCliGroupBy = "repo" | "platform" | "status" | "none";
@@ -12,7 +15,7 @@ export type SkillsCliActiveSurface =
   | null
   | { kind: "install" }
   | { kind: "detail"; skillName: string; focus: null | "links" }
-  | { kind: "update" }
+  | { kind: "update"; repositoryKey: string; skillNames: readonly string[] }
   | { kind: "uninstall"; skillNames: readonly string[] };
 
 export interface SkillsCliCounts {
@@ -330,8 +333,15 @@ export function openSkillsCliDetail(
   return { kind: "detail", skillName, focus };
 }
 
-export function openSkillsCliUpdate(): SkillsCliActiveSurface {
-  return { kind: "update" };
+export function openSkillsCliUpdate(input: {
+  repositoryKey: string;
+  skillNames: readonly string[];
+}): SkillsCliActiveSurface {
+  return {
+    kind: "update",
+    repositoryKey: input.repositoryKey,
+    skillNames: input.skillNames,
+  };
 }
 
 export function openSkillsCliUninstall(
@@ -342,4 +352,236 @@ export function openSkillsCliUninstall(
 
 export function closeSkillsCliSurface(): SkillsCliActiveSurface {
   return null;
+}
+
+const NINE_STATES: readonly SkillsCliUpdateStatus[] = [
+  "not_checked",
+  "checking",
+  "current",
+  "update_available",
+  "local_modified",
+  "baseline_required",
+  "unsupported",
+  "rate_limited",
+  "failed",
+];
+
+export function skillsCliUpdateStatuses(): readonly SkillsCliUpdateStatus[] {
+  return NINE_STATES;
+}
+
+export function updateRowForSkill(
+  inventory: SkillsCliUpdateInventory | null,
+  skillName: string,
+): SkillsCliUpdateSkillRow | null {
+  return inventory?.skills.find((row) => row.skillName === skillName) ?? null;
+}
+
+export function visibleUpdateStatus(
+  row: SkillsCliUpdateSkillRow | null,
+  checking: boolean,
+  currentRepositoryKey: string | null,
+): SkillsCliUpdateStatus {
+  if (
+    checking &&
+    row?.repositoryKey &&
+    (currentRepositoryKey == null || row.repositoryKey === currentRepositoryKey)
+  ) {
+    return "checking";
+  }
+  return row?.status ?? "not_checked";
+}
+
+export function skillHasPendingUpdate(row: SkillsCliUpdateSkillRow | null): boolean {
+  return Boolean(row?.pendingRevisionSha);
+}
+
+export function pendingUpdateCountForSkills(
+  skills: readonly SkillsCliGlobalSkill[],
+  inventory: SkillsCliUpdateInventory | null,
+): number {
+  return skills.filter((skill) =>
+    skillHasPendingUpdate(updateRowForSkill(inventory, skill.name)),
+  ).length;
+}
+
+export function skillHasTopologyBlocker(skill: SkillsCliGlobalSkill): boolean {
+  return skill.placements.some(
+    (placement) =>
+      placement.state === "direct_copy" || placement.state === "conflict",
+  );
+}
+
+function updateRowIsSelectable(
+  row: SkillsCliUpdateSkillRow | null,
+  skill: SkillsCliGlobalSkill | undefined,
+  hasRecovery: boolean,
+): boolean {
+  if (!row || !skill || hasRecovery || row.isStale) {
+    return false;
+  }
+  if (skillHasTopologyBlocker(skill)) {
+    return false;
+  }
+  return Boolean(row.pendingRevisionSha);
+}
+
+export function isUpdateApplyEnabled(
+  row: SkillsCliUpdateSkillRow | null,
+  skill: SkillsCliGlobalSkill | undefined,
+  hasRecovery: boolean,
+): boolean {
+  return (
+    updateRowIsSelectable(row, skill, hasRecovery) &&
+    row?.status === "update_available"
+  );
+}
+
+export function isUpdateReinstallEnabled(
+  row: SkillsCliUpdateSkillRow | null,
+  skill: SkillsCliGlobalSkill | undefined,
+  hasRecovery: boolean,
+): boolean {
+  return (
+    updateRowIsSelectable(row, skill, hasRecovery) &&
+    row?.status === "baseline_required"
+  );
+}
+
+export function actionableUpdateSkillNames(
+  skills: readonly SkillsCliGlobalSkill[],
+  inventory: SkillsCliUpdateInventory | null,
+  hasRecovery: boolean,
+): string[] {
+  return skills
+    .filter((skill) =>
+      isUpdateApplyEnabled(
+        updateRowForSkill(inventory, skill.name),
+        skill,
+        hasRecovery,
+      ),
+    )
+    .map((skill) => skill.name);
+}
+
+export function argvPreviewForSelection(
+  inventory: SkillsCliUpdateInventory | null,
+  skillNames: readonly string[],
+): string[] {
+  const forbidden = new Set(["--force", "--keep-links"]);
+  const tokens: string[] = [];
+  for (const name of skillNames) {
+    const row = updateRowForSkill(inventory, name);
+    for (const token of row?.argvPreview ?? []) {
+      if (forbidden.has(token) || tokens.includes(token)) {
+        continue;
+      }
+      tokens.push(token);
+    }
+  }
+  return tokens;
+}
+
+export function repositoryKeyForSkills(
+  skills: readonly SkillsCliGlobalSkill[],
+  inventory: SkillsCliUpdateInventory | null,
+): string | null {
+  const keys = new Set<string>();
+  for (const skill of skills) {
+    const key = updateRowForSkill(inventory, skill.name)?.repositoryKey;
+    if (key) {
+      keys.add(key);
+    }
+  }
+  if (keys.size !== 1) {
+    return null;
+  }
+  const [key] = keys;
+  return key ?? null;
+}
+
+export function applySelectionsForNames(
+  inventory: SkillsCliUpdateInventory | null,
+  skillNames: readonly string[],
+): Array<{
+  skillName: string;
+  skillPath: string;
+  expectedInstalledRevision: string | null;
+  expectedInstalledLocalDigest: string | null;
+  expectedPendingRevision: string;
+  expectedPendingDigest: string;
+}> {
+  const selections = [];
+  for (const name of skillNames) {
+    const row = updateRowForSkill(inventory, name);
+    if (
+      !row?.skillPath ||
+      !row.pendingRevisionSha ||
+      !row.pendingUpstreamDigest
+    ) {
+      continue;
+    }
+    selections.push({
+      skillName: name,
+      skillPath: row.skillPath,
+      expectedInstalledRevision: row.installedRevisionSha,
+      expectedInstalledLocalDigest: row.installedLocalDigest,
+      expectedPendingRevision: row.pendingRevisionSha,
+      expectedPendingDigest: row.pendingUpstreamDigest,
+    });
+  }
+  return selections;
+}
+
+export function shortRevisionIdentity(sha: string | null | undefined): string {
+  const trimmed = sha?.trim() ?? "";
+  if (!trimmed) {
+    return "";
+  }
+  return trimmed.length > 7 ? trimmed.slice(0, 7) : trimmed;
+}
+
+export interface SkillsCliUpdateDrawerRow {
+  skillName: string;
+  selected: boolean;
+  status: SkillsCliUpdateStatus;
+  installedRevision: string | null;
+  observedRevision: string | null;
+  changeSummary: string[];
+  applyEnabled: boolean;
+  reinstallEnabled: boolean;
+  blockerCodes: string[];
+}
+
+export function buildUpdateDrawerRows(
+  skills: readonly SkillsCliGlobalSkill[],
+  inventory: SkillsCliUpdateInventory | null,
+  repositoryKey: string,
+  selectedNames: ReadonlySet<string>,
+  hasRecovery: boolean,
+): SkillsCliUpdateDrawerRow[] {
+  const byName = new Map(skills.map((skill) => [skill.name, skill]));
+  return (inventory?.skills ?? [])
+    .filter(
+      (row) => row.repositoryKey === repositoryKey && byName.has(row.skillName),
+    )
+    .map((row) => {
+      const skill = byName.get(row.skillName);
+      return {
+        skillName: row.skillName,
+        selected: selectedNames.has(row.skillName),
+        status: row.status,
+        installedRevision: row.installedRevisionSha,
+        observedRevision: row.observedRevisionSha,
+        changeSummary: row.changeSummary,
+        applyEnabled: isUpdateApplyEnabled(row, skill, hasRecovery),
+        reinstallEnabled: isUpdateReinstallEnabled(row, skill, hasRecovery),
+        blockerCodes: [
+          ...row.blockers.map((item) => item.code),
+          ...(skill && skillHasTopologyBlocker(skill)
+            ? ["skills_cli.update_topology_conflict"]
+            : []),
+        ],
+      };
+    });
 }

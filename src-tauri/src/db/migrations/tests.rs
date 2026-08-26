@@ -183,6 +183,7 @@ fn migration_sources_are_checksum_locked() {
         descriptor_checksum(4).unwrap(),
         descriptor_checksum(5).unwrap(),
         descriptor_checksum(6).unwrap(),
+        descriptor_checksum(7).unwrap(),
     ];
     assert_eq!(
         checksums,
@@ -193,6 +194,7 @@ fn migration_sources_are_checksum_locked() {
             "f1225528d87dccc2b06e0553a241fd3f0e56463cf69faafb18976401da111188",
             "1d7efcd9c5d218f4ccf4f3c4d59a286129e8e4090e6786a4fa7075313bec2ba3",
             "1144ab4443ad86e574690ad1c7ebe2e15b9b546031a63ddf596a5e9aba6c502d",
+            "739c87f61d50e40dc06a4e2fdc3a7f7bcd3643067ec15e951f0a3fda04e977d2",
         ]
     );
     assert_eq!(checksums.len(), versions::MIGRATIONS.len());
@@ -267,6 +269,50 @@ async fn migration_six_preserves_legacy_pending_additions_and_accepts_new_identi
 }
 
 #[tokio::test]
+async fn migration_seven_creates_skills_cli_update_tables_and_reopens() {
+    let directory = TempDir::new().unwrap();
+    let database_path = directory.path().join("migration-seven.sqlite");
+    let pool = crate::db::pool::create_pool(&database_path).await.unwrap();
+    for version in 1..=6 {
+        apply_migration(&pool, version).await.unwrap();
+    }
+    apply_migration(&pool, 7).await.unwrap();
+
+    for table in [
+        "skills_cli_update_repositories",
+        "skills_cli_update_states",
+        "skills_cli_update_operations",
+    ] {
+        let present = sqlx::query(
+            "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = ?",
+        )
+        .bind(table)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .try_get::<i64, _>("count")
+        .unwrap();
+        assert_eq!(present, 1, "{table} missing after v7");
+    }
+
+    let versions = sqlx::query("SELECT version FROM schema_migrations ORDER BY version")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(versions.len(), 7);
+    pool.close().await;
+
+    let reopened = crate::db::open_database(&database_path).await.unwrap();
+    let reopened_versions =
+        sqlx::query("SELECT version FROM schema_migrations ORDER BY version")
+            .fetch_all(&reopened)
+            .await
+            .unwrap();
+    assert_eq!(reopened_versions.len(), 7);
+    reopened.close().await;
+}
+
+#[tokio::test]
 async fn selected_release_fixtures_upgrade_with_backup_and_cascades() {
     let _guard = DATABASE_OPEN_TEST_LOCK.lock().await;
     for fixture in fixture_manifest().fixtures {
@@ -289,7 +335,7 @@ async fn selected_release_fixtures_upgrade_with_backup_and_cascades() {
                 .fetch_all(&pool)
                 .await
                 .unwrap();
-        assert_eq!(versions.len(), 6);
+        assert_eq!(versions.len(), 7);
         for (index, row) in versions.iter().enumerate() {
             let version = i64::try_from(index + 1).unwrap();
             assert_eq!(row.try_get::<i64, _>("version").unwrap(), version);
@@ -320,6 +366,9 @@ async fn selected_release_fixtures_upgrade_with_backup_and_cascades() {
             .collect::<Vec<_>>();
         assert!(pending_columns.contains(&"resolved_commit_sha".to_string()));
         assert!(pending_columns.contains(&"snapshot_digest".to_string()));
+        assert!(file_has_table(&database_path, "skills_cli_update_repositories").await);
+        assert!(file_has_table(&database_path, "skills_cli_update_states").await);
+        assert!(file_has_table(&database_path, "skills_cli_update_operations").await);
         // Migration 4 adds nullable per-skill provenance; pre-existing rows stay
         // NULL and are read as "provenance unknown".
         let provenance = db::get_skill_repository_provenance(&pool, "fixture-skill")
@@ -491,7 +540,7 @@ async fn preflight_rejects_checksum_gap_and_future_versions_without_backup() {
     )
     .await;
     assert_preflight_rejection(
-        "INSERT INTO schema_migrations (version, checksum, applied_at) VALUES (7, 'future', 'now')",
+        "INSERT INTO schema_migrations (version, checksum, applied_at) VALUES (8, 'future', 'now')",
         "newer than supported",
     )
     .await;

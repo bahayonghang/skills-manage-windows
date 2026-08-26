@@ -96,6 +96,7 @@ pub(crate) use snapshot::{
     pinned_repo_ref, repository_snapshot_digest_from_local, resolve_commit_sha,
     validate_commit_sha,
 };
+pub(crate) use digest::skill_content_digest_from_file_bytes;
 #[cfg(test)]
 use snapshot_import::import_github_repo_skills_from_preview;
 pub(crate) use snapshot_import::import_github_repo_skills_from_preview_with_branch;

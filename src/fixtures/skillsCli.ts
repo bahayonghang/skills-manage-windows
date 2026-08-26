@@ -1,10 +1,12 @@
 import { registerIpcFixtures } from "@/lib/ipc";
-import type {
-  SkillsCliDoctorReport,
-  SkillsCliGlobalSkill,
-  SkillsCliGlobalSnapshot,
-  SkillsCliInstallTarget,
-  SkillsCliSourcePreview,
+import {
+  EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+  type SkillsCliDoctorReport,
+  type SkillsCliGlobalSkill,
+  type SkillsCliGlobalSnapshot,
+  type SkillsCliInstallTarget,
+  type SkillsCliSourcePreview,
+  type SkillsCliUpdateInventory,
 } from "@/types";
 
 const FIXTURE_SKILLS: SkillsCliGlobalSkill[] = [
@@ -70,6 +72,49 @@ const FIXTURE_DOCTOR: SkillsCliDoctorReport = {
   npmSpec: "skills@1.5.23",
 };
 
+const FIXTURE_UPDATE_INVENTORY: SkillsCliUpdateInventory = {
+  ...EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+  lastSuccessAt: "2026-08-26T00:00:00.000Z",
+  repositories: [
+    {
+      repositoryKey: "owner/repo@main",
+      normalizedSource: "https://github.com/owner/repo",
+      branch: "main",
+      observedRevisionSha: "bbbbbbb222222222222222222222222222222222",
+      status: "ok",
+      lastCheckedAt: "2026-08-26T00:00:00.000Z",
+      lastErrorCode: null,
+      rateLimitResetAt: null,
+      pendingCount: 1,
+    },
+  ],
+  skills: [
+    {
+      skillName: "demo-skill",
+      repositoryKey: "owner/repo@main",
+      normalizedSource: "https://github.com/owner/repo",
+      skillPath: "demo-skill",
+      status: "update_available",
+      installedRevisionSha: "aaaaaaa111111111111111111111111111111111",
+      observedRevisionSha: "bbbbbbb222222222222222222222222222222222",
+      pendingRevisionSha: "bbbbbbb222222222222222222222222222222222",
+      installedLocalDigest: "sha256-v1:installed",
+      observedUpstreamDigest: "sha256-v1:upstream",
+      pendingUpstreamDigest: "sha256-v1:upstream",
+      isStale: false,
+      lastErrorCode: null,
+      changeSummary: ["SKILL.md"],
+      blockers: [],
+      argvPreview: [
+        "refresh",
+        "owned-canonical",
+        "from-pinned-github-snapshot",
+        "demo-skill",
+      ],
+    },
+  ],
+};
+
 export function registerSkillsCliFixtures(): void {
   registerIpcFixtures({
     skills_cli_doctor: () => FIXTURE_DOCTOR,
@@ -120,5 +165,24 @@ export function registerSkillsCliFixtures(): void {
       confirmable: true,
     }),
     cancel_skills_cli_job: () => true,
+    skills_cli_update_inventory: () => FIXTURE_UPDATE_INVENTORY,
+    skills_cli_check_updates: () => FIXTURE_UPDATE_INVENTORY,
+    skills_cli_verify_update_baseline: () => ({
+      ...FIXTURE_UPDATE_INVENTORY,
+      skills: FIXTURE_UPDATE_INVENTORY.skills.map((row) => ({
+        ...row,
+        status: "current" as const,
+        pendingRevisionSha: null,
+        pendingUpstreamDigest: null,
+      })),
+    }),
+    skills_cli_apply_updates: () => ({
+      appliedSkillNames: ["demo-skill"],
+      installedRevisionSha: "bbbbbbb222222222222222222222222222222222",
+    }),
+    skills_cli_retry_update_recovery: () => ({
+      operationId: "fixture-recovery",
+      phase: "db_committed",
+    }),
   });
 }

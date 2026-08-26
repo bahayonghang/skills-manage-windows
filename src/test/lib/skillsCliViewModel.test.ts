@@ -27,13 +27,23 @@ import {
   openSkillsCliInstall,
   openSkillsCliUninstall,
   openSkillsCliUpdate,
+  argvPreviewForSelection,
+  isUpdateApplyEnabled,
+  isUpdateReinstallEnabled,
+  actionableUpdateSkillNames,
+  pendingUpdateCountForSkills,
+  skillsCliUpdateStatuses,
+  visibleUpdateStatus,
 } from "@/pages/skillsCliViewModel";
 import type {
   SkillsCliGlobalSkill,
   SkillsCliInstallTarget,
   SkillsCliPlacement,
   SkillsCliPlacementState,
+  SkillsCliUpdateInventory,
+  SkillsCliUpdateSkillRow,
 } from "@/types";
+import { EMPTY_SKILLS_CLI_UPDATE_INVENTORY } from "@/types";
 
 const targets: SkillsCliInstallTarget[] = [
   {
@@ -362,7 +372,16 @@ describe("surface helpers", () => {
 
   it("opens install and update as distinct surface kinds", () => {
     expect(openSkillsCliInstall()).toEqual({ kind: "install" });
-    expect(openSkillsCliUpdate()).toEqual({ kind: "update" });
+    expect(
+      openSkillsCliUpdate({
+        repositoryKey: "owner/repo@main",
+        skillNames: ["demo"],
+      }),
+    ).toEqual({
+      kind: "update",
+      repositoryKey: "owner/repo@main",
+      skillNames: ["demo"],
+    });
   });
 });
 
@@ -383,6 +402,7 @@ describe("i18n parity for batch-actions strings", () => {
     expect(keysOf(en.skillsCli.uninstallImpact)).toEqual(
       keysOf(zh.skillsCli.uninstallImpact),
     );
+    expect(keysOf(en.skillsCli.updates)).toEqual(keysOf(zh.skillsCli.updates));
     expect(keysOf(en.backendErrors.skills_cli)).toEqual(
       keysOf(zh.backendErrors.skills_cli),
     );
@@ -399,6 +419,7 @@ describe("batch-actions source contracts", () => {
       "src/components/skillsCli/SkillsCliBatchBar.tsx",
       "src/components/skillsCli/SkillsCliUninstallDialog.tsx",
       "src/pages/skillsCliExport.ts",
+      "src/components/skillsCli/SkillsCliUpdateDrawer.tsx",
     ];
     const joined = files.map((file) => readFileSync(resolve(root, file), "utf8")).join("\n");
     expect(joined).not.toMatch(/window\.addEventListener\(\s*['"]keydown['"]/);
@@ -690,3 +711,165 @@ describe("link target summaries", () => {
     expect(summaries.find((item) => item.agentId === "amp")?.linkableCount).toBe(2);
   });
 });
+
+function updateRow(
+  overrides: Partial<SkillsCliUpdateSkillRow> = {},
+): SkillsCliUpdateSkillRow {
+  return {
+    skillName: "demo",
+    repositoryKey: "owner/repo@main",
+    normalizedSource: "https://github.com/owner/repo",
+    skillPath: "demo",
+    status: "update_available",
+    installedRevisionSha: "aaa",
+    observedRevisionSha: "bbb",
+    pendingRevisionSha: "bbb",
+    installedLocalDigest: "sha256-v1:a",
+    observedUpstreamDigest: "sha256-v1:b",
+    pendingUpstreamDigest: "sha256-v1:b",
+    isStale: false,
+    lastErrorCode: null,
+    changeSummary: ["SKILL.md"],
+    blockers: [],
+    argvPreview: [
+      "refresh",
+      "owned-canonical",
+      "from-pinned-github-snapshot",
+      "demo",
+    ],
+    ...overrides,
+  };
+}
+
+describe("Skills CLI update view-model", () => {
+  it("exposes the nine update statuses", () => {
+    expect(skillsCliUpdateStatuses()).toEqual([
+      "not_checked",
+      "checking",
+      "current",
+      "update_available",
+      "local_modified",
+      "baseline_required",
+      "unsupported",
+      "rate_limited",
+      "failed",
+    ]);
+  });
+
+  it("keeps pending counts after failed or rate-limited repository rows", () => {
+    const inventory: SkillsCliUpdateInventory = {
+      ...EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+      skills: [
+        updateRow({ status: "failed", pendingRevisionSha: "bbb" }),
+        updateRow({
+          skillName: "other",
+          status: "rate_limited",
+          pendingRevisionSha: "ccc",
+        }),
+      ],
+    };
+    expect(
+      pendingUpdateCountForSkills(
+        [skill({ name: "demo" }), skill({ name: "other" })],
+        inventory,
+      ),
+    ).toBe(2);
+    expect(visibleUpdateStatus(updateRow({ status: "failed" }), false, null)).toBe(
+      "failed",
+    );
+    expect(
+      visibleUpdateStatus(updateRow({ status: "current" }), true, "owner/repo@main"),
+    ).toBe("checking");
+  });
+
+  it("disables apply for stale, recovery, and topology blockers", () => {
+    const demo = skill({ name: "demo" });
+    expect(isUpdateApplyEnabled(updateRow({ isStale: true }), demo, false)).toBe(
+      false,
+    );
+    expect(isUpdateApplyEnabled(updateRow(), demo, true)).toBe(false);
+    expect(
+      isUpdateApplyEnabled(
+        updateRow(),
+        skill({
+          name: "demo",
+          placements: [placement("cursor", "direct_copy")],
+        }),
+        false,
+      ),
+    ).toBe(false);
+    expect(isUpdateApplyEnabled(updateRow(), demo, false)).toBe(true);
+    expect(
+      isUpdateApplyEnabled(
+        updateRow({
+          status: "baseline_required",
+          pendingRevisionSha: "bbb",
+        }),
+        demo,
+        false,
+      ),
+    ).toBe(false);
+    expect(
+      isUpdateReinstallEnabled(
+        updateRow({
+          status: "baseline_required",
+          pendingRevisionSha: "bbb",
+        }),
+        demo,
+        false,
+      ),
+    ).toBe(true);
+    expect(
+      actionableUpdateSkillNames(
+        [demo, skill({ name: "other" })],
+        {
+          ...EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+          skills: [
+            updateRow(),
+            updateRow({
+              skillName: "other",
+              status: "baseline_required",
+              pendingRevisionSha: "ccc",
+            }),
+            updateRow({
+              skillName: "failed-skill",
+              status: "failed",
+              pendingRevisionSha: "ddd",
+              isStale: true,
+            }),
+          ],
+        },
+        false,
+      ),
+    ).toEqual(["demo"]);
+  });
+
+  it("uses backend argv preview and never adds force or keep-links", () => {
+    const preview = argvPreviewForSelection(
+      {
+        ...EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+        skills: [
+          updateRow({
+            argvPreview: [
+              "refresh",
+              "owned-canonical",
+              "from-pinned-github-snapshot",
+              "--force",
+              "demo",
+            ],
+          }),
+        ],
+      },
+      ["demo"],
+    );
+    expect(preview).toEqual([
+      "refresh",
+      "owned-canonical",
+      "from-pinned-github-snapshot",
+      "demo",
+    ]);
+    expect(preview).not.toContain("--force");
+    expect(preview).not.toContain("--keep-links");
+  });
+});
+

@@ -15,6 +15,7 @@ mod lock;
 mod placement;
 mod remove;
 mod runner;
+pub mod updates;
 
 pub use agent_map::{
     cli_agent_for_skillport_id, is_explicitly_unsupported, map_skillport_ids_to_cli_agents,
@@ -35,6 +36,11 @@ pub use lock::{
     classify_local_path_origin, is_mapped_agent_lock_copy, is_path_inside_owned_canonical,
     load_cli_lock_ownership, resolved_link_target, skills_cli_lock_path,
     skills_cli_lock_path_from_env, CliLockEntry, CliLockOwnership, LinkOrigin,
+};
+pub use updates::{
+    SkillsCliApplyRecoveryResult, SkillsCliApplyResult, SkillsCliApplySelection,
+    SkillsCliApplyUpdateRequest, SkillsCliUpdateInventory, SkillsCliUpdateProgress,
+    SkillsCliUpdateStatus,
 };
 pub(crate) use remove::{preview_remove_global, remove_global};
 pub(crate) use runner::{

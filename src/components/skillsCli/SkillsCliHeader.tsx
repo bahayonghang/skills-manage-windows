@@ -14,8 +14,11 @@ export interface SkillsCliHeaderProps {
   runtimeError: string | null;
   isLoading: boolean;
   isRefreshing: boolean;
+  isCheckingUpdates?: boolean;
   installAvailable: boolean;
   onRefresh: () => void;
+  onCheckUpdates: () => void;
+  onCancelUpdate?: () => void;
   onOpenInstall: () => void;
   installButtonRef?: Ref<HTMLButtonElement>;
 }
@@ -26,8 +29,11 @@ export function SkillsCliHeader({
   runtimeError,
   isLoading,
   isRefreshing,
+  isCheckingUpdates = false,
   installAvailable,
   onRefresh,
+  onCheckUpdates,
+  onCancelUpdate,
   onOpenInstall,
   installButtonRef,
 }: SkillsCliHeaderProps) {
@@ -62,6 +68,28 @@ export function SkillsCliHeader({
             <RefreshCw className={cn("size-4", isRefreshing && "animate-spin")} />
             {isRefreshing ? t("skillsCli.refreshing") : t("skillsCli.refresh")}
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCheckUpdates}
+            aria-label={t("skillsCli.updates.checkUpdates")}
+            data-testid="skills-cli-check-updates"
+          >
+            {isCheckingUpdates
+              ? t("skillsCli.updates.checking")
+              : t("skillsCli.updates.checkUpdates")}
+          </Button>
+          {isCheckingUpdates && onCancelUpdate ? (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onCancelUpdate}
+              aria-label={t("skillsCli.updates.cancelCheck")}
+              data-testid="skills-cli-cancel-update"
+            >
+              {t("skillsCli.updates.cancelCheck")}
+            </Button>
+          ) : null}
           <Button
             ref={installButtonRef}
             type="button"

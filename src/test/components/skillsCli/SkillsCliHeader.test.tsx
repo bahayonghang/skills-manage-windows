@@ -21,6 +21,7 @@ describe("SkillsCliHeader", () => {
         isRefreshing={false}
         installAvailable
         onRefresh={vi.fn()}
+        onCheckUpdates={vi.fn()}
         onOpenInstall={vi.fn()}
       />,
     );
@@ -45,6 +46,7 @@ describe("SkillsCliHeader", () => {
         isRefreshing={false}
         installAvailable
         onRefresh={vi.fn()}
+        onCheckUpdates={vi.fn()}
         onOpenInstall={vi.fn()}
       />,
     );
@@ -67,6 +69,7 @@ describe("SkillsCliHeader", () => {
         isRefreshing
         installAvailable={false}
         onRefresh={onRefresh}
+        onCheckUpdates={vi.fn()}
         onOpenInstall={onOpenInstall}
       />,
     );
@@ -75,5 +78,26 @@ describe("SkillsCliHeader", () => {
     expect(install).toBeDisabled();
     fireEvent.click(install);
     expect(onOpenInstall).not.toHaveBeenCalled();
+  });
+
+  it("keeps Check updates enabled when the runtime is blocked", () => {
+    const onCheckUpdates = vi.fn();
+    render(
+      <SkillsCliHeader
+        counts={counts}
+        doctor={null}
+        runtimeError="skills_cli.cli_unavailable:The Skills CLI package could not be executed."
+        isLoading={false}
+        isRefreshing={false}
+        installAvailable
+        onRefresh={vi.fn()}
+        onCheckUpdates={onCheckUpdates}
+        onOpenInstall={vi.fn()}
+      />,
+    );
+    const check = screen.getByRole("button", { name: "检查更新" });
+    expect(check).toBeEnabled();
+    fireEvent.click(check);
+    expect(onCheckUpdates).toHaveBeenCalledTimes(1);
   });
 });

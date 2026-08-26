@@ -46,6 +46,19 @@ pub async fn skills_cli_unlink_platform(
 ) -> IpcResult<SkillsCliPlacement>;
 pub async fn skills_cli_export_inventory(path: String, json: String) -> IpcResult<()>;
 pub async fn cancel_skills_cli_job(job_id: String) -> IpcResult<bool>;
+pub async fn skills_cli_check_updates(job_id: String) -> IpcResult<SkillsCliUpdateInventory>;
+pub async fn skills_cli_update_inventory() -> IpcResult<SkillsCliUpdateInventory>;
+pub async fn skills_cli_verify_update_baseline(
+    job_id: String,
+    skill_names: Vec<String>,
+) -> IpcResult<SkillsCliUpdateInventory>;
+pub async fn skills_cli_apply_updates(
+    request: SkillsCliApplyUpdateRequest,
+) -> IpcResult<SkillsCliApplyResult>;
+pub async fn skills_cli_retry_update_recovery(
+    job_id: String,
+    operation_id: String,
+) -> IpcResult<SkillsCliApplyRecoveryResult>;
 ```
 
 Frontend: only `src/stores/skillsCliStore.ts` may `invoke` these commands.
@@ -101,6 +114,17 @@ Export writer owns atomic persist; the renderer never receives filesystem write 
   `acquire_target_mutation_guard` (`central-mutation-lock.md`). Order: lease →
   guard → under-guard ownership/placement recheck → FS/lock mutation → drop
   guard → drop lease. Link/unlink/remove follow this order.
+- **Upstream updates**: GitHub SHA/snapshot pinning for *detection* reuses
+  SecretStore / `github_client` at the command boundary. Product argv never
+  includes `--force`, `--keep-links`, or an unverified full-SHA `skills add`
+  source. Pinned full-SHA `skills add`/`update` and direct-copy refresh are
+  fail-closed (`verified_unsupported` / `unverified`). Apply refreshes owned
+  canonical files from a pinned GitHub snapshot over HTTP, then journals
+  `prepared → cli_started → db_committed` (or `recovery_required`). Order:
+  `skills_cli` lease → network prepare → Local mutation guard → recheck →
+  journal. Never delete ordinary directories; never auto-convert `direct_copy`;
+  conflict is zero-write. `skills_cli_update_inventory` is a cache read and
+  must not fail global inventory. Progress event: `skills-cli://update-progress`.
 - **Leftover**: Local scan sets `cli_lock_protect=true` and excludes lock-owned
   canonicals, resolved links, **and** `{mapped_detected_agent.global_skills_dir}/<name>`
   when the lock contains `name`. Unlocked copies under the Universal root stay
@@ -138,6 +162,16 @@ Export writer owns atomic persist; the renderer never receives filesystem write 
 | Export schema / persist | `skills_cli.export_invalid` / `skills_cli.export_failed` | false |
 | Reveal spawn failure | `skills_cli.reveal_failed` | false |
 | Remove recovery required | `skills_cli.recovery_required` | true |
+| Update cache/request stale | `skills_cli.update_stale` | true |
+| No exact installed baseline | `skills_cli.update_baseline_required` | false |
+| Source/path not a supported GitHub update | `skills_cli.update_unsupported` | false |
+| GitHub primary/secondary/429 limit | `skills_cli.update_rate_limited` | true |
+| Repository check failed after settle | `skills_cli.update_check_failed` | true |
+| Canonical files differ from installed baseline | `skills_cli.update_local_modified` | false |
+| direct_copy or conflict placement | `skills_cli.update_topology_conflict` | false |
+| Interrupted journaled apply | `skills_cli.update_recovery_required` | true |
+| Post-apply digest/lock mismatch | `skills_cli.update_integrity` | false |
+| v7 update tables unavailable | `skills_cli.update_migration` | false |
 
 Same-family exclusive-job busy at the registry is `job.skills_cli_busy`; the
 command layer remaps it to `skills_cli.busy` so the UI sees one envelope.

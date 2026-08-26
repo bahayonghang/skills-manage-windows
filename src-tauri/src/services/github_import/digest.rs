@@ -71,3 +71,17 @@ pub(super) fn aggregate_digest(domain: &str, entries: &[DigestFileEntry]) -> Str
         hex_encode(hasher.finalize().as_slice())
     )
 }
+
+/// Domain-separated skill content digest from already-loaded file bytes.
+/// Paths must be skill-relative POSIX paths. Ordering is enforced here.
+pub(crate) fn skill_content_digest_from_file_bytes(files: &[(String, Vec<u8>)]) -> String {
+    let entries = files
+        .iter()
+        .map(|(path, bytes)| DigestFileEntry {
+            path: path.clone(),
+            byte_len: bytes.len() as u64,
+            sha256: file_sha256(bytes),
+        })
+        .collect::<Vec<_>>();
+    aggregate_digest(SKILL_CONTENT_DIGEST_DOMAIN, &entries)
+}

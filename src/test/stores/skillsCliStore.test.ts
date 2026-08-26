@@ -1,10 +1,20 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mockListen = vi.hoisted(() => vi.fn());
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: mockListen,
+}));
 
 import { ipcFixtureError } from "@/lib/ipc/errors";
 import { useSkillsCliStore } from "@/stores/skillsCliStore";
 import { ipcInvokeCalls, ipcInvokedCommands, mockIpcCommand, mockIpcCommands } from "@/test/support/ipcMock";
+import {
+  EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+  type SkillsCliUpdateInventory,
+} from "@/types";
 
 const doctor = { nodeVersion: "v22.20.0", npmSpec: "skills@1.5.23" };
 const skills = [
@@ -57,11 +67,20 @@ function resetState() {
     inventoryError: null,
     actionError: null,
     docState: { status: "idle" },
+    updateInventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+    isLoadingUpdateCache: false,
+    updateJob: { jobId: null, phase: null },
+    updateError: null,
+    updateProgress: null,
   });
 }
 
 describe("skillsCliStore", () => {
-  beforeEach(resetState);
+  beforeEach(() => {
+    resetState();
+    mockListen.mockReset();
+    mockListen.mockResolvedValue(vi.fn());
+  });
 
   it("loads doctor, list, and install targets with snapshot paths", async () => {
     mockIpcCommands({
@@ -720,6 +739,212 @@ describe("skillsCliStore doc and reveal", () => {
     expect(text).toContain("async exportInventory(");
     expect(text).toContain("async readSkillDoc(");
     expect(text).toContain("async revealSkillFolder(");
+    expect(text).toContain("async checkUpdates(");
+    expect(text).toContain("skills-cli://update-progress");
+  });
+
+  it("loads update cache independently and keeps global inventory when the cache rejects", async () => {
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: listGlobal,
+      skills_cli_install_targets: targets,
+      skills_cli_update_inventory: () => {
+        throw ipcFixtureError(
+          "skills_cli.update_migration",
+          "The Skills CLI update database is not available.",
+        );
+      },
+    });
+    await useSkillsCliStore.getState().loadAll();
+    expect(useSkillsCliStore.getState().skills).toEqual(skills);
+    expect(useSkillsCliStore.getState().inventoryError).toBeNull();
+    expect(useSkillsCliStore.getState().updateError).toContain(
+      "skills_cli.update_migration",
+    );
+  });
+
+  it("listens for update progress before invoking check updates", async () => {
+    const inventory: SkillsCliUpdateInventory = {
+      ...EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+      lastSuccessAt: "2026-08-26T00:00:00.000Z",
+    };
+    const order: string[] = [];
+    mockListen.mockImplementation(async () => {
+      order.push("listen");
+      return vi.fn();
+    });
+    mockIpcCommand("skills_cli_check_updates", () => {
+      order.push("invoke");
+      return inventory;
+    });
+
+    await useSkillsCliStore.getState().checkUpdates();
+
+    expect(order).toEqual(["listen", "invoke"]);
+    expect(mockListen.mock.calls[0]?.[0]).toBe("skills-cli://update-progress");
+    expect(typeof mockListen.mock.calls[0]?.[1]).toBe("function");
+    expect(ipcInvokeCalls("skills_cli_check_updates")[0]?.args).toEqual({
+      jobId: expect.any(String),
+    });
+    expect(useSkillsCliStore.getState().updateInventory).toEqual(inventory);
+    expect(useSkillsCliStore.getState().updateJob.phase).toBeNull();
+  });
+
+  it("ignores a stale check result after a newer job starts", async () => {
+    let resolveFirst: ((value: SkillsCliUpdateInventory) => void) | undefined;
+    mockIpcCommand(
+      "skills_cli_check_updates",
+      () =>
+        new Promise<SkillsCliUpdateInventory>((resolve) => {
+          resolveFirst = resolve;
+        }),
+    );
+    const first = useSkillsCliStore.getState().checkUpdates();
+    await vi.waitFor(() => {
+      expect(resolveFirst).toBeTypeOf("function");
+    });
+    useSkillsCliStore.setState({
+      updateJob: { jobId: "newer-job", phase: "checking" },
+    });
+    resolveFirst?.({
+      ...EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+      lastSuccessAt: "old",
+    });
+    await first;
+    expect(useSkillsCliStore.getState().updateInventory.lastSuccessAt).not.toBe(
+      "old",
+    );
+    expect(useSkillsCliStore.getState().updateJob.jobId).toBe("newer-job");
+  });
+
+  it("rejects a second check while an update job is running", async () => {
+    useSkillsCliStore.setState({
+      updateJob: { jobId: "job-running", phase: "checking" },
+    });
+    await expect(useSkillsCliStore.getState().checkUpdates()).rejects.toThrow(
+      /skills_cli.busy/,
+    );
+    expect(ipcInvokeCalls("skills_cli_check_updates")).toHaveLength(0);
+  });
+
+  it("applies using backend pending tokens and never sends force flags", async () => {
+    useSkillsCliStore.setState({
+      updateInventory: {
+        ...EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+        skills: [
+          {
+            skillName: "demo-skill",
+            repositoryKey: "owner/repo@main",
+            normalizedSource: "https://github.com/owner/repo",
+            skillPath: "demo-skill",
+            status: "update_available",
+            installedRevisionSha: "aaa",
+            observedRevisionSha: "bbb",
+            pendingRevisionSha: "bbb",
+            installedLocalDigest: "sha256-v1:a",
+            observedUpstreamDigest: "sha256-v1:b",
+            pendingUpstreamDigest: "sha256-v1:b",
+            isStale: false,
+            lastErrorCode: null,
+            changeSummary: [],
+            blockers: [],
+            argvPreview: [
+              "refresh",
+              "owned-canonical",
+              "from-pinned-github-snapshot",
+              "demo-skill",
+            ],
+          },
+        ],
+      },
+    });
+    mockIpcCommands({
+      skills_cli_apply_updates: {
+        appliedSkillNames: ["demo-skill"],
+        installedRevisionSha: "bbb",
+      },
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: listGlobal,
+      skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+    });
+    await useSkillsCliStore.getState().applyUpdates({
+      repositoryKey: "owner/repo@main",
+      skillNames: ["demo-skill"],
+    });
+    const payload = ipcInvokeCalls("skills_cli_apply_updates")[0]?.args as {
+      request: {
+        jobId: string;
+        repositoryKey: string;
+        selections: Array<{ skillName: string }>;
+      };
+    };
+    expect(payload.request.repositoryKey).toBe("owner/repo@main");
+    expect(payload.request.selections[0]?.skillName).toBe("demo-skill");
+    expect(JSON.stringify(payload)).not.toContain("--force");
+    expect(JSON.stringify(payload)).not.toContain("--keep-links");
+  });
+
+  it("does not treat a follow-up inventory refresh failure as an apply failure", async () => {
+    useSkillsCliStore.setState({
+      updateInventory: {
+        ...EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+        skills: [
+          {
+            skillName: "demo-skill",
+            repositoryKey: "owner/repo@main",
+            normalizedSource: "https://github.com/owner/repo",
+            skillPath: "demo-skill",
+            status: "update_available",
+            installedRevisionSha: "aaa",
+            observedRevisionSha: "bbb",
+            pendingRevisionSha: "bbb",
+            installedLocalDigest: "sha256-v1:a",
+            observedUpstreamDigest: "sha256-v1:b",
+            pendingUpstreamDigest: "sha256-v1:b",
+            isStale: false,
+            lastErrorCode: null,
+            changeSummary: [],
+            blockers: [],
+            argvPreview: [
+              "refresh",
+              "owned-canonical",
+              "from-pinned-github-snapshot",
+              "demo-skill",
+            ],
+          },
+        ],
+      },
+    });
+    mockIpcCommands({
+      skills_cli_apply_updates: {
+        appliedSkillNames: ["demo-skill"],
+        installedRevisionSha: "bbb",
+      },
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: listGlobal,
+      skills_cli_install_targets: targets,
+      skills_cli_update_inventory: () => {
+        throw ipcFixtureError(
+          "skills_cli.update_migration",
+          "The Skills CLI update database is not available.",
+        );
+      },
+    });
+    await expect(
+      useSkillsCliStore.getState().applyUpdates({
+        repositoryKey: "owner/repo@main",
+        skillNames: ["demo-skill"],
+      }),
+    ).resolves.toEqual({
+      appliedSkillNames: ["demo-skill"],
+      installedRevisionSha: "bbb",
+    });
+    expect(useSkillsCliStore.getState().updateJob.phase).toBeNull();
+    expect(useSkillsCliStore.getState().updateError).toContain(
+      "skills_cli.update_migration",
+    );
   });
 });
+
 

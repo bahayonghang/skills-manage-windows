@@ -119,6 +119,36 @@ pub enum SkillsCliError {
 
     #[error("A Skills CLI remove operation needs recovery")]
     RecoveryRequired,
+
+    #[error("The Skills CLI update request no longer matches the current state")]
+    UpdateStale,
+
+    #[error("This skill has no installed update baseline")]
+    UpdateBaselineRequired,
+
+    #[error("This skill source cannot be updated")]
+    UpdateUnsupported,
+
+    #[error("GitHub rate limited the Skills CLI update check")]
+    UpdateRateLimited { reset_at: Option<String> },
+
+    #[error("The Skills CLI update check failed")]
+    UpdateCheckFailed,
+
+    #[error("The local skill files differ from the installed baseline")]
+    UpdateLocalModified,
+
+    #[error("The platform placement cannot be updated")]
+    UpdateTopologyConflict,
+
+    #[error("A Skills CLI update operation needs recovery")]
+    UpdateRecoveryRequired,
+
+    #[error("The Skills CLI update files failed an integrity check")]
+    UpdateIntegrity,
+
+    #[error("The Skills CLI update database is not available")]
+    UpdateMigration,
 }
 
 impl SkillsCliError {
@@ -152,11 +182,29 @@ impl SkillsCliError {
             Self::ExportFailed => "skills_cli.export_failed",
             Self::RevealFailed => "skills_cli.reveal_failed",
             Self::RecoveryRequired => "skills_cli.recovery_required",
+            Self::UpdateStale => "skills_cli.update_stale",
+            Self::UpdateBaselineRequired => "skills_cli.update_baseline_required",
+            Self::UpdateUnsupported => "skills_cli.update_unsupported",
+            Self::UpdateRateLimited { .. } => "skills_cli.update_rate_limited",
+            Self::UpdateCheckFailed => "skills_cli.update_check_failed",
+            Self::UpdateLocalModified => "skills_cli.update_local_modified",
+            Self::UpdateTopologyConflict => "skills_cli.update_topology_conflict",
+            Self::UpdateRecoveryRequired => "skills_cli.update_recovery_required",
+            Self::UpdateIntegrity => "skills_cli.update_integrity",
+            Self::UpdateMigration => "skills_cli.update_migration",
         }
     }
 
     pub fn retryable(&self) -> bool {
-        matches!(self, Self::Busy | Self::RecoveryRequired)
+        matches!(
+            self,
+            Self::Busy
+                | Self::RecoveryRequired
+                | Self::UpdateStale
+                | Self::UpdateRateLimited { .. }
+                | Self::UpdateCheckFailed
+                | Self::UpdateRecoveryRequired
+        )
     }
 
     pub(crate) fn task_join(label: &'static str, message: String) -> Self {
