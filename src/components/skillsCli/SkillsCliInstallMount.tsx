@@ -1,5 +1,7 @@
 import type { ReactNode, RefObject } from "react";
 
+import { SkillsCliInstallSurface } from "@/components/skillsCli/SkillsCliInstallSurface";
+
 export interface SkillsCliInstallMountProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -13,7 +15,7 @@ export interface SkillsCliInstallMountProps {
  * SkillsCliView, SkillsCliHeader, or the page surface controller.
  * Constants stay co-located with the mount component by design.
  */
-export const SKILLS_CLI_INSTALL_SURFACE_AVAILABLE = false;
+export const SKILLS_CLI_INSTALL_SURFACE_AVAILABLE = true;
 
 export function SkillsCliInstallMount(
   props: SkillsCliInstallMountProps,
@@ -32,14 +34,5 @@ export function renderSkillsCliInstallMount(
   if (!available) {
     return null;
   }
-  return (
-    <div
-      data-testid="skills-cli-install-mount"
-      data-open={String(props.open)}
-      data-content-width={
-        props.contentWidthPx == null ? "" : String(props.contentWidthPx)
-      }
-      data-has-return-focus={String(props.returnFocusRef != null)}
-    />
-  );
+  return <SkillsCliInstallSurface {...props} />;
 }

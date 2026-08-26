@@ -20,7 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { formatBackendError } from "@/lib/backendError";
 import { isLocalTarget } from "@/lib/targetKind";
 import { cn } from "@/lib/utils";
@@ -43,16 +42,6 @@ import {
 import { useSkillsCliStore } from "@/stores/skillsCliStore";
 import { useTargetStore } from "@/stores/targetStore";
 
-function preselectedSkillFromSource(source: string, skills: string[]): string[] {
-  const atIndex = source.lastIndexOf("@");
-  if (atIndex <= 0) return [...skills];
-  const hinted = source.slice(atIndex + 1).trim();
-  if (hinted && skills.includes(hinted)) {
-    return [hinted];
-  }
-  return [...skills];
-}
-
 function bucketLabel(
   t: (key: string, options?: Record<string, unknown>) => string,
   labelKey: string,
@@ -68,27 +57,17 @@ export function SkillsCliView() {
 
   const skills = useSkillsCliStore((state) => state.skills);
   const targets = useSkillsCliStore((state) => state.targets);
-  const preview = useSkillsCliStore((state) => state.preview);
   const doctor = useSkillsCliStore((state) => state.doctor);
   const canonicalRoot = useSkillsCliStore((state) => state.canonicalRoot);
   const lockPath = useSkillsCliStore((state) => state.lockPath);
   const isLoading = useSkillsCliStore((state) => state.isLoading);
   const isRefreshing = useSkillsCliStore((state) => state.isRefreshing);
-  const isPreviewing = useSkillsCliStore((state) => state.isPreviewing);
   const isMutating = useSkillsCliStore((state) => state.isMutating);
-  const jobId = useSkillsCliStore((state) => state.jobId);
   const runtimeError = useSkillsCliStore((state) => state.runtimeError);
   const inventoryError = useSkillsCliStore((state) => state.inventoryError);
-  const actionError = useSkillsCliStore((state) => state.actionError);
   const loadAll = useSkillsCliStore((state) => state.loadAll);
-  const previewSource = useSkillsCliStore((state) => state.previewSource);
-  const addGlobal = useSkillsCliStore((state) => state.addGlobal);
   const removeGlobal = useSkillsCliStore((state) => state.removeGlobal);
-  const cancelJob = useSkillsCliStore((state) => state.cancelJob);
 
-  const [source, setSource] = useState("");
-  const [selectedSkillNames, setSelectedSkillNames] = useState<string[]>([]);
-  const [selectedPlatformIds, setSelectedPlatformIds] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [groupBy, setGroupBy] = useState<SkillsCliGroupBy>("repo");
   const [platformFilter, setPlatformFilter] = useState<string | null>(null);
@@ -113,20 +92,6 @@ export function SkillsCliView() {
   }, [isLocal, loadAll]);
 
   useEffect(() => {
-    setSelectedPlatformIds(
-      targets.filter((target) => target.defaultSelected).map((target) => target.id),
-    );
-  }, [targets]);
-
-  useEffect(() => {
-    if (!preview) {
-      setSelectedSkillNames([]);
-      return;
-    }
-    setSelectedSkillNames(preselectedSkillFromSource(preview.source, preview.skills));
-  }, [preview]);
-
-  useEffect(() => {
     const node = contentRef.current;
     if (!node || typeof ResizeObserver === "undefined") {
       return;
@@ -142,7 +107,6 @@ export function SkillsCliView() {
   }, [isLocal]);
 
   const runtimeBlocked = runtimeError !== null;
-  const installOpen = !inventoryError && skills.length === 0 && !isLoading;
   const showInventoryEmpty = skills.length === 0 && !isLoading && !inventoryError;
   const showLoading = isLoading && skills.length === 0 && !inventoryError;
   const enabledIds = useMemo(() => enabledTargetIdSet(targets), [targets]);
@@ -193,57 +157,6 @@ export function SkillsCliView() {
     setSelectedCardNames(new Set());
   }
 
-  async function handlePreview() {
-    const result = await previewSource(source.trim());
-    if (!result) {
-      const latest = useSkillsCliStore.getState().actionError;
-      if (latest) {
-        showSkillsCliActionToast({
-          semantic: "error",
-          message: t("skillsCli.previewError", {
-            error: formatBackendError(latest, t),
-          }),
-        });
-      }
-    }
-  }
-
-  async function handleAdd() {
-    if (selectedSkillNames.length === 0 || selectedPlatformIds.length === 0) {
-      return;
-    }
-    try {
-      const result = await addGlobal({
-        source: preview?.source ?? source.trim(),
-        skillNames: selectedSkillNames,
-        skillportAgentIds: selectedPlatformIds,
-      });
-      showSkillsCliActionToast({
-        semantic: "success",
-        message: t("skillsCli.addSuccess", {
-          count: result.installedSkills,
-          platforms: result.targetedPlatforms,
-        }),
-      });
-      setSource("");
-      await loadAll();
-      const refreshError = useSkillsCliStore.getState().inventoryError;
-      if (refreshError) {
-        showSkillsCliActionToast({
-          semantic: "error",
-          message: t("skillsCli.inventoryRefreshWarning", {
-            error: formatBackendError(refreshError, t),
-          }),
-        });
-      }
-    } catch (err) {
-      showSkillsCliActionToast({
-        semantic: "error",
-        message: t("skillsCli.addError", { error: formatBackendError(err, t) }),
-      });
-    }
-  }
-
   async function handleUninstall() {
     const name = uninstallNames[0];
     if (!name) return;
@@ -265,22 +178,6 @@ export function SkillsCliView() {
         }),
       });
     }
-  }
-
-  function toggleSkill(name: string) {
-    setSelectedSkillNames((current) =>
-      current.includes(name)
-        ? current.filter((item) => item !== name)
-        : [...current, name],
-    );
-  }
-
-  function togglePlatform(id: string) {
-    setSelectedPlatformIds((current) =>
-      current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id],
-    );
   }
 
   function toggleCollapsed(id: string) {
@@ -306,13 +203,6 @@ export function SkillsCliView() {
       return next;
     });
   }
-
-  const canAdd =
-    selectedSkillNames.length > 0 &&
-    selectedPlatformIds.length > 0 &&
-    !runtimeBlocked &&
-    !isMutating &&
-    !isPreviewing;
 
   return (
     <div
@@ -461,106 +351,6 @@ export function SkillsCliView() {
               </div>
             )}
           </section>
-
-          <details
-            data-testid="skills-cli-install"
-            className="rounded-lg border border-border p-4"
-            open={installOpen}
-          >
-            <summary className="cursor-pointer text-sm font-medium">
-              {t("skillsCli.installHeading")}
-            </summary>
-            <div className="mt-3 space-y-3">
-              {actionError && (
-                <p role="alert" className="text-sm text-destructive-text">
-                  {formatBackendError(actionError, t)}
-                </p>
-              )}
-              {runtimeBlocked && (
-                <p className="text-sm text-muted-foreground">
-                  {t("skillsCli.runtimeBlocked")}
-                </p>
-              )}
-              <label className="text-sm font-medium" htmlFor="skills-cli-source">
-                {t("skillsCli.sourceLabel")}
-              </label>
-              <div className="flex flex-wrap gap-2">
-                <Input
-                  id="skills-cli-source"
-                  value={source}
-                  onChange={(event) => setSource(event.target.value)}
-                  placeholder={t("skillsCli.sourcePlaceholder")}
-                  disabled={isPreviewing || isMutating}
-                />
-                <Button
-                  onClick={() => void handlePreview()}
-                  disabled={!source.trim() || isPreviewing || isMutating}
-                >
-                  {isPreviewing ? t("skillsCli.previewing") : t("skillsCli.preview")}
-                </Button>
-              </div>
-
-              {preview && (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <fieldset>
-                    <legend className="mb-2 text-sm font-medium">
-                      {t("skillsCli.skillsHeading")}
-                    </legend>
-                    <div className="space-y-1.5">
-                      {preview.skills.map((name) => (
-                        <label
-                          key={name}
-                          className="flex items-center gap-2 text-sm"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedSkillNames.includes(name)}
-                            onChange={() => toggleSkill(name)}
-                            aria-label={t("skillsCli.selectSkill", { name })}
-                          />
-                          {name}
-                        </label>
-                      ))}
-                    </div>
-                  </fieldset>
-                  <fieldset>
-                    <legend className="mb-2 text-sm font-medium">
-                      {t("skillsCli.platformsHeading")}
-                    </legend>
-                    <div className="space-y-1.5">
-                      {targets.map((target) => (
-                        <label
-                          key={target.id}
-                          className="flex items-center gap-2 text-sm"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedPlatformIds.includes(target.id)}
-                            onChange={() => togglePlatform(target.id)}
-                            aria-label={t("skillsCli.selectPlatform", {
-                              name: target.displayName,
-                            })}
-                          />
-                          {target.displayName}
-                        </label>
-                      ))}
-                    </div>
-                  </fieldset>
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <Button onClick={() => void handleAdd()} disabled={!canAdd}>
-                  {isMutating ? t("skillsCli.adding") : t("skillsCli.add")}
-                </Button>
-                {jobId && (
-                  <Button variant="outline" onClick={() => void cancelJob()}>
-                    {t("skillsCli.cancel")}
-                  </Button>
-                )}
-              </div>
-            </div>
-          </details>
 
           {canonicalRoot && lockPath && (
             <div

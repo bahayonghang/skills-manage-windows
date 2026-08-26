@@ -8,10 +8,27 @@ import {
   renderSkillsCliInstallMount,
 } from "@/components/skillsCli/SkillsCliInstallMount";
 
+vi.mock("@/components/skillsCli/SkillsCliInstallSurface", () => ({
+  SkillsCliInstallSurface: (props: {
+    open: boolean;
+    contentWidthPx: number | null;
+    returnFocusRef: { current: unknown };
+  }) => (
+    <div
+      data-testid="skills-cli-install-mount"
+      data-open={String(props.open)}
+      data-content-width={
+        props.contentWidthPx == null ? "" : String(props.contentWidthPx)
+      }
+      data-has-return-focus={String(props.returnFocusRef != null)}
+    />
+  ),
+}));
+
 describe("SkillsCliInstallMount", () => {
-  it("starts unavailable and renders null", () => {
-    expect(SKILLS_CLI_INSTALL_SURFACE_AVAILABLE).toBe(false);
-    const { container } = render(
+  it("is available and wires the install surface", () => {
+    expect(SKILLS_CLI_INSTALL_SURFACE_AVAILABLE).toBe(true);
+    render(
       <SkillsCliInstallMount
         open
         onOpenChange={vi.fn()}
@@ -19,8 +36,27 @@ describe("SkillsCliInstallMount", () => {
         contentWidthPx={1180}
       />,
     );
+    expect(screen.getByTestId("skills-cli-install-mount")).toHaveAttribute(
+      "data-open",
+      "true",
+    );
+  });
+
+  it("renders null when the seam is explicitly unavailable", () => {
+    const { container } = render(
+      <>
+        {renderSkillsCliInstallMount(
+          {
+            open: true,
+            onOpenChange: vi.fn(),
+            returnFocusRef: createRef<HTMLElement | null>(),
+            contentWidthPx: 1180,
+          },
+          false,
+        )}
+      </>,
+    );
     expect(container).toBeEmptyDOMElement();
-    expect(screen.queryByTestId("skills-cli-install-mount")).not.toBeInTheDocument();
   });
 
   it("passes open, close, return-focus, and content width through when available", () => {

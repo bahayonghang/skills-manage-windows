@@ -88,6 +88,7 @@ function mockHappyPath() {
     skills_cli_doctor: doctor,
     skills_cli_list_global: listGlobal,
     skills_cli_install_targets: targets,
+    get_setting: null,
     skills_cli_preview_source: {
       source: "owner/repo",
       skills: ["demo-skill", "helper-skill"],
@@ -146,7 +147,7 @@ describe("SkillsCliView", () => {
       "/tmp/agents/skills.lock",
     );
     expect(screen.queryByLabelText("库存统计 KPI")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "安装技能" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "安装技能" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "导出全部" })).toBeDisabled();
     expect(screen.getByTestId("skills-cli-layout-bands")).toHaveAttribute(
       "data-grid",
@@ -158,39 +159,46 @@ describe("SkillsCliView", () => {
     );
   });
 
-  it("orders inventory before the collapsed install section", async () => {
+  it("keeps a single header dialog entry and does not render a footer install details block", async () => {
     mockHappyPath();
     render(<SkillsCliView />);
     await screen.findByText("demo-skill");
 
-    const inventory = screen.getByTestId("skills-cli-inventory");
-    const install = screen.getByTestId("skills-cli-install");
-    expect(
-      inventory.compareDocumentPosition(install) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(install).not.toHaveAttribute("open");
+    expect(screen.getByTestId("skills-cli-inventory")).toBeInTheDocument();
+    expect(screen.queryByTestId("skills-cli-install")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "安装所选" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("库存统计 KPI")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "安装技能" }));
+    expect(screen.getByTestId("skills-cli-active-surface")).toHaveAttribute(
+      "data-kind",
+      "install",
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "安装技能" }),
+    ).toBeInTheDocument();
   });
 
-  it("shows the empty state with an open install section on an empty lock", async () => {
+  it("shows the empty state without a leftover install details block on an empty lock", async () => {
     mockIpcCommands({
       skills_cli_doctor: doctor,
       skills_cli_list_global: emptyList,
       skills_cli_install_targets: targets,
+      get_setting: null,
     });
     render(<SkillsCliView />);
 
-    // The empty text exists before the first load settles; wait for the
-    // post-load commit via the install section's open attribute.
     await waitFor(() => {
-      expect(screen.getByTestId("skills-cli-install")).toHaveAttribute("open");
+      expect(screen.getByTestId("skills-cli-doctor")).toHaveTextContent(
+        "skills@1.5.23",
+      );
     });
     expect(screen.queryByTestId("skills-cli-census-empty")).not.toBeInTheDocument();
     expect(screen.queryByText("demo-skill")).not.toBeInTheDocument();
     expect(
       screen.getByText("尚未安装 Skills CLI 全局技能。"),
     ).toBeInTheDocument();
+    expect(screen.queryByTestId("skills-cli-install")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "安装技能" })).toBeEnabled();
     expect(
       screen.queryByTestId("skills-cli-inventory-error"),
     ).not.toBeInTheDocument();
@@ -216,8 +224,12 @@ describe("SkillsCliView", () => {
     expect(screen.getByTestId("skills-cli-doctor")).toHaveTextContent(
       "无法执行 Skills CLI 软件包。",
     );
-    expect(screen.getByRole("button", { name: "安装所选" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "安装技能" })).toBeDisabled();
+    expect(screen.queryByRole("dialog", { name: "安装技能" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("skills-cli-active-surface")).toHaveAttribute(
+      "data-kind",
+      "none",
+    );
     expect(
       screen.getByRole("button", { name: "卸载 demo-skill" }),
     ).toBeDisabled();
@@ -262,53 +274,8 @@ describe("SkillsCliView", () => {
     expect(
       screen.queryByText("尚未安装 Skills CLI 全局技能。"),
     ).not.toBeInTheDocument();
-    expect(screen.getByTestId("skills-cli-install")).not.toHaveAttribute("open");
-  });
-
-  it("defaults preview skill and enabled platform checkboxes", async () => {
-    mockHappyPath();
-    render(<SkillsCliView />);
-    await screen.findByText("demo-skill");
-
-    fireEvent.change(screen.getByLabelText("技能来源"), {
-      target: { value: "owner/repo" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "预览技能" }));
-
-    const demo = await screen.findByLabelText("安装 demo-skill");
-    const helper = screen.getByLabelText("安装 helper-skill");
-    const cursor = screen.getByLabelText("安装到 Cursor");
-    const amp = screen.getByLabelText("安装到 Amp");
-
-    expect(demo).toBeChecked();
-    expect(helper).toBeChecked();
-    expect(cursor).toBeChecked();
-    expect(amp).not.toBeChecked();
-  });
-
-  it("sends the changed selection payload on add", async () => {
-    mockHappyPath();
-    render(<SkillsCliView />);
-    await screen.findByText("demo-skill");
-
-    fireEvent.change(screen.getByLabelText("技能来源"), {
-      target: { value: "owner/repo" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "预览技能" }));
-    await screen.findByLabelText("安装 demo-skill");
-
-    fireEvent.click(screen.getByLabelText("安装 demo-skill"));
-    fireEvent.click(screen.getByLabelText("安装到 Amp"));
-    fireEvent.click(screen.getByRole("button", { name: "安装所选" }));
-
-    await waitFor(() => {
-      expect(ipcInvokeCalls("skills_cli_add_global")).toHaveLength(1);
-    });
-    expect(ipcInvokeCalls("skills_cli_add_global")[0].args).toMatchObject({
-      source: "owner/repo",
-      skillNames: ["helper-skill"],
-      skillportAgentIds: ["cursor", "amp"],
-    });
+    expect(screen.queryByTestId("skills-cli-install")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "安装技能" })).toBeEnabled();
   });
 
   it("confirms uninstall of canonical copy, platform links, and lock row", async () => {
@@ -476,132 +443,6 @@ describe("SkillsCliView", () => {
     expect(screen.getByLabelText("选择技能")).toBeChecked();
     fireEvent.keyDown(page, { key: "Escape" });
     expect(screen.queryByLabelText("选择技能")).not.toBeInTheDocument();
-  });
-
-  it("keeps mutation success when a follow-up inventory refresh fails", async () => {
-    const failingList = vi
-      .fn()
-      .mockReturnValueOnce(listGlobal)
-      .mockImplementation(() => {
-        throw ipcFixtureError("internal.unexpected", "list failed");
-      });
-    mockIpcCommands({
-      skills_cli_doctor: doctor,
-      skills_cli_list_global: failingList,
-      skills_cli_install_targets: targets,
-      skills_cli_preview_source: {
-        source: "owner/repo",
-        skills: ["demo-skill", "helper-skill"],
-      },
-      skills_cli_add_global: { installedSkills: 1, targetedPlatforms: 1 },
-    });
-    render(<SkillsCliView />);
-    await screen.findByText("demo-skill");
-    fireEvent.change(screen.getByLabelText("技能来源"), {
-      target: { value: "owner/repo" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "预览技能" }));
-    await screen.findByLabelText("安装 demo-skill");
-    fireEvent.click(screen.getByRole("button", { name: "安装所选" }));
-    await waitFor(() => {
-      expect(showSkillsCliActionToast).toHaveBeenCalledWith(
-        expect.objectContaining({
-          semantic: "success",
-        }),
-      );
-    });
-    await waitFor(() => {
-      expect(showSkillsCliActionToast).toHaveBeenCalledWith(
-        expect.objectContaining({
-          semantic: "error",
-          message: expect.stringContaining("安装成功，但库存刷新失败"),
-        }),
-      );
-    });
-    expect(showSkillsCliActionToast).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: expect.stringMatching(/安装失败|addError/),
-      }),
-    );
-    expect(ipcInvokeCalls("skills_cli_add_global")).toHaveLength(1);
-  });
-
-  it("does not treat a runtime-only refresh failure as an add failure", async () => {
-    const doctorOnce = vi
-      .fn()
-      .mockReturnValueOnce(doctor)
-      .mockImplementation(() => {
-        throw ipcFixtureError(
-          "skills_cli.cli_unavailable",
-          "The Skills CLI package could not be executed.",
-        );
-      });
-    mockIpcCommands({
-      skills_cli_doctor: doctorOnce,
-      skills_cli_list_global: listGlobal,
-      skills_cli_install_targets: targets,
-      skills_cli_preview_source: {
-        source: "owner/repo",
-        skills: ["demo-skill", "helper-skill"],
-      },
-      skills_cli_add_global: { installedSkills: 1, targetedPlatforms: 1 },
-    });
-    render(<SkillsCliView />);
-    await screen.findByText("demo-skill");
-    fireEvent.change(screen.getByLabelText("技能来源"), {
-      target: { value: "owner/repo" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "预览技能" }));
-    await screen.findByLabelText("安装 demo-skill");
-    fireEvent.click(screen.getByRole("button", { name: "安装所选" }));
-    await waitFor(() => {
-      expect(showSkillsCliActionToast).toHaveBeenCalledWith(
-        expect.objectContaining({ semantic: "success" }),
-      );
-    });
-    expect(showSkillsCliActionToast).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: expect.stringContaining("安装成功，但库存刷新失败"),
-      }),
-    );
-    expect(
-      await screen.findByText("无法执行 Skills CLI 软件包。"),
-    ).toBeInTheDocument();
-  });
-
-  it("reports mutation failure without retrying add", async () => {
-    mockIpcCommands({
-      skills_cli_doctor: doctor,
-      skills_cli_list_global: listGlobal,
-      skills_cli_install_targets: targets,
-      skills_cli_preview_source: {
-        source: "owner/repo",
-        skills: ["demo-skill", "helper-skill"],
-      },
-      skills_cli_add_global: () => {
-        throw ipcFixtureError(
-          "skills_cli.cli_unavailable",
-          "The Skills CLI package could not be executed.",
-        );
-      },
-    });
-    render(<SkillsCliView />);
-    await screen.findByText("demo-skill");
-    fireEvent.change(screen.getByLabelText("技能来源"), {
-      target: { value: "owner/repo" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "预览技能" }));
-    await screen.findByLabelText("安装 demo-skill");
-    fireEvent.click(screen.getByRole("button", { name: "安装所选" }));
-    await waitFor(() => {
-      expect(showSkillsCliActionToast).toHaveBeenCalledWith(
-        expect.objectContaining({
-          semantic: "error",
-          message: "无法执行 Skills CLI 软件包。",
-        }),
-      );
-    });
-    expect(ipcInvokeCalls("skills_cli_add_global")).toHaveLength(1);
   });
 
   it("disables duplicate refresh while a refresh is in flight", async () => {
