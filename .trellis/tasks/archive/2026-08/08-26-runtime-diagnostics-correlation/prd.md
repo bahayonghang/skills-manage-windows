@@ -26,12 +26,12 @@ recorder保留同一 correlation并清除 raw message/stack/path风险，同时�
 
 ## Acceptance Criteria
 
-- [ ] 每个 backend fallible IPC fixture产生一条安全 backend failure event并返回同一correlation。
-- [ ] frontend recorder存在/缺失/失败时，backend evidence均不受影响；self-logging无递归。
-- [ ] 同一 rejection 的 backend/frontend Runtime lines有同一ID、不同source、相同code且可筛选。
-- [ ] filename/stack/path/URL/token/args/raw reason对抗种子不进入Runtime磁盘新事件、read/export或DOM fixture。
-- [ ] legacy rejection/no-correlation、unknown error、infallible command、browser fixture路径安全退化。
-- [ ] runtime logging、IPC wrapper、store/parser targeted tests与retention/export regressions通过。
+- [x] 每个 backend fallible IPC fixture产生一条安全 backend failure event并返回同一correlation。
+- [x] frontend recorder存在/缺失/失败时，backend evidence均不受影响；self-logging无递归。
+- [x] 同一 rejection 的 backend/frontend Runtime lines有同一ID、不同source、相同code且可筛选。
+- [x] filename/stack/path/URL/token/args/raw reason对抗种子不进入Runtime磁盘新事件、read/export或DOM fixture。
+- [x] legacy rejection/no-correlation、unknown error、infallible command、browser fixture路径安全退化。
+- [x] runtime logging、IPC wrapper、store/parser targeted tests与retention/export regressions通过。
 
 ## Out of Scope
 
