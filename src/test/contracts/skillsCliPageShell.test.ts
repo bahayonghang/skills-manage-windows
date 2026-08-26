@@ -26,6 +26,20 @@ const PAGE_SHELL_SOURCES = [
   "src/components/skillsCli/skillsCliActionToast.tsx",
 ];
 
+const PAGE_SHELL_OWNED_PATHS = [
+  "src/pages/SkillsCliView.tsx",
+  "src/components/skillsCli/SkillsCliHeader.tsx",
+  "src/pages/skillsCliViewModel.ts",
+] as const;
+
+const INSTALL_WIZARD_SOURCES = [
+  "src/pages/skillsCliInstallViewModel.ts",
+  "src/components/skillsCli/SkillsCliInstallSurface.tsx",
+  "src/components/skillsCli/SkillsCliInstallDialog.tsx",
+  "src/components/skillsCli/SkillsCliInstallDialog.steps.tsx",
+  "src/stores/skillsCliRecentSourcesStore.ts",
+];
+
 describe("Skills CLI page-shell contracts", () => {
   it("locks named container query classes and forbids viewport grid breakpoints", () => {
     expect(SKILLS_CLI_CONTENT_CONTAINER_CLASS).toContain("@container/skills-cli");
@@ -49,12 +63,14 @@ describe("Skills CLI page-shell contracts", () => {
   });
 
   it("keeps install-wizard from owning the page shell files", () => {
-    const task = JSON.parse(
-      read(".trellis/tasks/08-26-install-wizard/task.json"),
-    ) as { relatedFiles?: string[] };
-    const related = task.relatedFiles ?? [];
-    expect(related).not.toContain("src/pages/SkillsCliView.tsx");
-    expect(related).not.toContain("src/components/skillsCli/SkillsCliHeader.tsx");
-    expect(related).not.toContain("src/pages/skillsCliViewModel.ts");
+    const joined = INSTALL_WIZARD_SOURCES.map((file) => read(file)).join("\n");
+    for (const owned of PAGE_SHELL_OWNED_PATHS) {
+      expect(joined).not.toContain(owned);
+    }
+    expect(joined).not.toMatch(/from ["']@\/pages\/SkillsCliView["']/);
+    expect(joined).not.toMatch(
+      /from ["']@\/components\/skillsCli\/SkillsCliHeader["']/,
+    );
+    expect(joined).not.toMatch(/from ["']@\/pages\/skillsCliViewModel["']/);
   });
 });
