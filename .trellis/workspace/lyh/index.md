@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 109
+- **Total Sessions**: 110
 - **Last Active**: 2026-08-26
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1585 | Active |
+| `journal-2.md` | ~1607 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 110 | 2026-08-26 | 完成可观测性核心契约与日志系统任务规划 | `1f4d7b80`, `779a5611` | `dev` |
 | 109 | 2026-08-26 | Skills CLI 库存优先页面前端落地与 doctor 非阻塞 | `83f5a391`, `d1f0380b`, `e01ac92f`, `943b8ef2` | `dev` |
 | 108 | 2026-08-25 | Skills CLI 库存读路径与无窗口 spawn | `d73958a066945813cc708d4e860586f93af83c13`, `2de1a2808bc4fa2b53f9b0116150bbc7321b44c8`, `2a28ce5b86d067fbfd847f04d16e127e12d5e52e`, `bffffc0957546537e9c58ff3448eda90656c97a2`, `c1be555cbd2d8403ca5106d75e4f07d46477a217` | `dev` |
 | 107 | 2026-08-24 | Skills CLI global Local 管理 | `436e6c9b` | `feat/npx-skills-global-manage` |

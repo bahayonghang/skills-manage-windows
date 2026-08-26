@@ -1583,3 +1583,25 @@ SSH/WSL Platform leftover apply now validates paths, deletes unique POSIX paths 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 110: 完成可观测性核心契约与日志系统任务规划
+
+**Date**: 2026-08-26
+**Task**: 完成可观测性核心契约与日志系统任务规划
+**Branch**: `dev`
+
+### Summary
+
+建立命令日志策略单一来源、Operation 关联生命周期、启动中断收口、错误脱敏与前后端 correlationId 契约；创建父任务和七个后续子任务，并完成核心子任务独立检查与归档。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1f4d7b80` | (see git log) |
+| `779a5611` | (see git log) |
+
+### Status
+
+[OK] **Completed**
