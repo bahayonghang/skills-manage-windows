@@ -80,12 +80,15 @@ pub(crate) fn is_component_contained(root: &Path, candidate: &Path) -> bool {
     candidate_components.starts_with(&root_components)
 }
 
-pub(crate) async fn read_skill_md(skill_name: &str) -> Result<SkillsCliSkillDoc, SkillsCliError> {
-    let home = crate::paths::resolve_home_dir();
+pub(crate) async fn read_skill_md(
+    tx: &super::SkillsCliTransport,
+    skill_name: &str,
+) -> Result<SkillsCliSkillDoc, SkillsCliError> {
+    let paths = tx.paths();
     read_skill_md_at(
         skill_name,
-        &crate::paths::universal_skills_dir(),
-        &super::lock::skills_cli_lock_path(&home),
+        &paths.canonical_root_path(),
+        &paths.lock_path_buf(),
     )
     .await
 }
@@ -144,12 +147,15 @@ fn read_skill_md_file(skill_name: &str, path: &Path) -> Result<SkillsCliSkillDoc
     })
 }
 
-pub(crate) fn reveal_skill_folder(skill_name: &str) -> Result<(), SkillsCliError> {
-    let home = crate::paths::resolve_home_dir();
+pub(crate) fn reveal_skill_folder(
+    tx: &super::SkillsCliTransport,
+    skill_name: &str,
+) -> Result<(), SkillsCliError> {
+    let paths = tx.paths();
     reveal_skill_folder_at(
         skill_name,
-        &crate::paths::universal_skills_dir(),
-        &super::lock::skills_cli_lock_path(&home),
+        &paths.canonical_root_path(),
+        &paths.lock_path_buf(),
         open_path_in_file_manager,
     )
 }

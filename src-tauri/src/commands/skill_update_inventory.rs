@@ -193,7 +193,10 @@ pub async fn refresh_skill_update_inventory(
             let (_, target) = audit_target(&active_target);
             // Only the Local target consults this machine's Skills CLI lock
             // when excluding CLI-owned skills from leftover buckets.
-            let cli_lock_protect = crate::services::skills_cli::is_local_target(&active_target);
+            let cli_lock_protect =
+                crate::services::skills_cli::SkillsCliTransport::uses_local_cli_lock(
+                    &active_target,
+                );
             let definition = operation_definition("refresh_skill_update_inventory");
             let batch_id = OperationBatchId::parse(&operation_id).unwrap_or_default();
             let progress = inventory_progress_reporter(app, operation_id);
@@ -257,7 +260,10 @@ pub async fn retry_failed_update_repositories(
             let active_target = request_context.target().clone();
             let pool = request_context.db().clone();
             let (_, target) = audit_target(&active_target);
-            let cli_lock_protect = crate::services::skills_cli::is_local_target(&active_target);
+            let cli_lock_protect =
+                crate::services::skills_cli::SkillsCliTransport::uses_local_cli_lock(
+                    &active_target,
+                );
             let definition = operation_definition("retry_failed_update_repositories");
             let batch_id = OperationBatchId::parse(&operation_id).unwrap_or_default();
             let progress = inventory_progress_reporter(app, operation_id);
@@ -314,7 +320,10 @@ pub async fn get_skill_update_inventory(
             let request_context = state.resolve_target_context().await?;
             let active_target = request_context.target().clone();
             let pool = request_context.db().clone();
-            let cli_lock_protect = crate::services::skills_cli::is_local_target(&active_target);
+            let cli_lock_protect =
+                crate::services::skills_cli::SkillsCliTransport::uses_local_cli_lock(
+                    &active_target,
+                );
             get_skill_update_inventory_impl_scoped(&pool, scope, cli_lock_protect)
                 .await
                 .map_err(|e| e.to_string())
@@ -761,7 +770,10 @@ pub async fn scan_deleted_platform_copies(
             let (_, target) = audit_target(&active_target);
             // CLI lock protection applies only to the Local target; remote
             // scans never consult this machine's lock file.
-            let cli_lock_protect = crate::services::skills_cli::is_local_target(&active_target);
+            let cli_lock_protect =
+                crate::services::skills_cli::SkillsCliTransport::uses_local_cli_lock(
+                    &active_target,
+                );
             let definition = operation_definition("scan_deleted_platform_copies");
             crate::observability::run_operation(
                 &state,

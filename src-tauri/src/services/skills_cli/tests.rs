@@ -24,9 +24,9 @@ use super::runner::{
     SkillsCliRunner,
 };
 use super::{
-    add_global, add_global_with_lock_at, doctor_with_program, ensure_local_target,
-    install_targets, list_global_at, preview_source_with_launcher, AddGlobalLockRequest,
-    SkillsCliInstallKind, SkillsCliSourceTypeBucket, SKILLS_CLI_AGENT_MAP, SKILLS_CLI_UNSUPPORTED,
+    add_global, add_global_with_lock_at, doctor_with_program, install_targets, list_global_at,
+    preview_source_with_launcher, AddGlobalLockRequest, SkillsCliCapability, SkillsCliInstallKind,
+    SkillsCliSourceTypeBucket, SkillsCliTransport, SKILLS_CLI_AGENT_MAP, SKILLS_CLI_UNSUPPORTED,
 };
 use crate::db::{self, SkillForAgent};
 use crate::ipc_error::{public_message_for_code, IpcError};
@@ -408,12 +408,18 @@ async fn ac7_add_nonzero_exit_warns_without_stderr() {
         logged.contains("Skills CLI add command failed"),
         "missing add warn: {logged}"
     );
-    assert!(logged.contains("operation"), "missing operation field: {logged}");
+    assert!(
+        logged.contains("operation"),
+        "missing operation field: {logged}"
+    );
     assert!(
         logged.contains("skills_cli.add_global"),
         "missing operation value: {logged}"
     );
-    assert!(logged.contains("exit_code"), "missing exit_code field: {logged}");
+    assert!(
+        logged.contains("exit_code"),
+        "missing exit_code field: {logged}"
+    );
     assert!(!logged.contains("SECRET_STDERR_TOKEN"));
     assert!(!logged.contains("npm ERR!"));
 }
@@ -430,10 +436,7 @@ fn ac7b_start_phase_io_maps_to_cli_unavailable_without_source_display() {
     assert_eq!(mapped.ipc_code(), "skills_cli.cli_unavailable");
     let message = public_message_for_code(mapped.ipc_code()).unwrap();
     let ipc = IpcError::new(mapped.ipc_code(), message, mapped.retryable());
-    assert_eq!(
-        ipc.message,
-        "The Skills CLI package could not be executed."
-    );
+    assert_eq!(ipc.message, "The Skills CLI package could not be executed.");
     assert!(!ipc.message.contains(PLANTED));
 
     let logged = String::from_utf8(logs.lock().unwrap().clone()).unwrap();
@@ -442,7 +445,10 @@ fn ac7b_start_phase_io_maps_to_cli_unavailable_without_source_display() {
         "missing spawn warn: {logged}"
     );
     assert!(logged.contains("phase"), "missing phase field: {logged}");
-    assert!(logged.contains("io_kind"), "missing io_kind field: {logged}");
+    assert!(
+        logged.contains("io_kind"),
+        "missing io_kind field: {logged}"
+    );
     assert!(
         !logged.contains("PLANTED_SPAWN_PATH"),
         "source Display leaked: {logged}"
@@ -463,9 +469,10 @@ async fn ac1_doctor_spawns_only_node_version() {
     assert_eq!(recorded.len(), 1);
     assert_eq!(recorded[0].args, vec!["--version".to_string()]);
     assert!(
-        !recorded[0].args.iter().any(|arg| arg.contains("skills")
-            || arg.contains("--help")
-            || arg.contains("npx")),
+        !recorded[0]
+            .args
+            .iter()
+            .any(|arg| arg.contains("skills") || arg.contains("--help") || arg.contains("npx")),
         "doctor must not probe the Skills CLI package: {:?}",
         recorded[0].args
     );
@@ -534,27 +541,16 @@ async fn ac8_doctor_rejects_old_node() {
 
 #[tokio::test]
 async fn ac3_ac5_empty_selection_refuses_before_spawn() {
-    let runner = FakeCliRunner::new();
-    let empty_skills = add_global(
-        &runner,
-        "owner/repo",
-        vec![],
-        vec!["cursor".to_string()],
-        None,
-    )
-    .await
-    .unwrap_err();
+    let runner = std::sync::Arc::new(FakeCliRunner::new());
+    let tx = SkillsCliTransport::for_local_with_runner(runner.clone());
+    let empty_skills = add_global(&tx, "owner/repo", vec![], vec!["cursor".to_string()], None)
+        .await
+        .unwrap_err();
     assert!(matches!(empty_skills, SkillsCliError::SelectionEmpty));
 
-    let empty_platforms = add_global(
-        &runner,
-        "owner/repo",
-        vec!["demo".to_string()],
-        vec![],
-        None,
-    )
-    .await
-    .unwrap_err();
+    let empty_platforms = add_global(&tx, "owner/repo", vec!["demo".to_string()], vec![], None)
+        .await
+        .unwrap_err();
     assert!(matches!(empty_platforms, SkillsCliError::SelectionEmpty));
     assert!(runner.recorded().is_empty());
 }
@@ -590,7 +586,9 @@ async fn ac3_install_targets_default_detected_enabled_mapped() {
         .await
         .unwrap();
 
-    let targets = install_targets(&pool).await.unwrap();
+    let targets = install_targets(&SkillsCliTransport::for_local(), &pool)
+        .await
+        .unwrap();
     let ids: Vec<&str> = targets.iter().map(|target| target.id.as_str()).collect();
     assert!(ids.contains(&"cursor"));
     assert!(ids.contains(&"amp"));
@@ -606,16 +604,79 @@ async fn ac3_install_targets_default_detected_enabled_mapped() {
 }
 
 #[test]
-fn ac2_non_local_ipc_rejects_without_spawn() {
-    assert!(matches!(
-        ensure_local_target(&ssh_target()),
-        Err(SkillsCliError::LocalTargetOnly)
+fn ac2_capability_matrix_gates_remote_except_doctor() {
+    let local = SkillsCliTransport::for_local();
+    for cap in SkillsCliCapability::ALL {
+        assert!(
+            local.ensure_capability(*cap).is_ok(),
+            "local must allow {cap:?}"
+        );
+    }
+
+    let runner = std::sync::Arc::new(crate::test_support::FakeRunner::new());
+    let tx = SkillsCliTransport::for_tests_remote(crate::targets::ConnectedRemoteTarget::Ssh(
+        crate::targets::ConnectedSshTarget::for_tests_with_runner(ssh_config(), runner),
     ));
-    assert!(matches!(
-        ensure_local_target(&wsl_target()),
-        Err(SkillsCliError::LocalTargetOnly)
+    assert!(tx.ensure_capability(SkillsCliCapability::Doctor).is_ok());
+    assert!(SkillsCliTransport::ensure_capability_for_target(
+        &ssh_target(),
+        SkillsCliCapability::Doctor
+    )
+    .is_ok());
+    assert!(SkillsCliTransport::ensure_capability_for_target(
+        &wsl_target(),
+        SkillsCliCapability::Doctor
+    )
+    .is_ok());
+    assert!(SkillsCliTransport::ensure_capability_for_target(
+        &ActiveTarget::Local,
+        SkillsCliCapability::AddGlobal
+    )
+    .is_ok());
+    assert!(!SkillsCliTransport::uses_local_cli_lock(&ssh_target()));
+    assert!(!SkillsCliTransport::uses_local_cli_lock(&wsl_target()));
+    assert!(SkillsCliTransport::uses_local_cli_lock(
+        &ActiveTarget::Local
     ));
-    assert!(ensure_local_target(&ActiveTarget::Local).is_ok());
+    for cap in SkillsCliCapability::ALL
+        .iter()
+        .copied()
+        .filter(|cap| *cap != SkillsCliCapability::Doctor)
+    {
+        assert!(
+            matches!(
+                tx.ensure_capability(cap),
+                Err(SkillsCliError::LocalTargetOnly)
+            ),
+            "remote must reject {cap:?}"
+        );
+        assert!(
+            matches!(
+                SkillsCliTransport::ensure_capability_for_target(&ssh_target(), cap),
+                Err(SkillsCliError::LocalTargetOnly)
+            ),
+            "remote target gate must reject {cap:?} without connecting"
+        );
+        assert_eq!(tx.write_count(), 0, "zero-write after {cap:?}");
+    }
+}
+
+fn ssh_config() -> RemoteTargetConfig {
+    RemoteTargetConfig {
+        id: "ssh-cli-test".to_string(),
+        label: "SSH".to_string(),
+        host: "example.invalid".to_string(),
+        username: "alice".to_string(),
+        port: 22,
+        auth_method: SshAuthMethod::Key,
+        key_path: "~/.ssh/id_ed25519".to_string(),
+        credential_key: None,
+        protected_password: None,
+        password: None,
+        remote_home: "/mnt/remote-seam-home".to_string(),
+        remote_os: "linux".to_string(),
+        symlink_enabled: true,
+    }
 }
 
 #[test]
@@ -943,4 +1004,178 @@ fn ac15_missing_npx_js_public_message_omits_candidate_paths() {
         .unwrap_or("The operation failed. See runtime logs for details.");
     assert!(!message.contains(&planted), "{message}");
     assert!(!err.to_string().contains(&planted), "{err}");
+}
+
+fn remote_tx(runner: std::sync::Arc<crate::test_support::FakeRunner>) -> SkillsCliTransport {
+    SkillsCliTransport::for_tests_remote(crate::targets::ConnectedRemoteTarget::Ssh(
+        crate::targets::ConnectedSshTarget::for_tests_with_runner(ssh_config(), runner),
+    ))
+}
+
+#[test]
+fn skills_cli_business_logic_does_not_match_active_target() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/services/skills_cli");
+    let mut files = Vec::new();
+    collect_rs_files(&root, &mut files);
+    for path in files {
+        let file_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("");
+        if file_name == "transport.rs" || file_name == "tests.rs" {
+            continue;
+        }
+        let source = std::fs::read_to_string(&path).unwrap();
+        let mut skip_test_mod = false;
+        let mut brace_depth = 0usize;
+        for (index, line) in source.lines().enumerate() {
+            let trimmed = line.trim();
+            if skip_test_mod {
+                let opens = trimmed.bytes().filter(|byte| *byte == b'{').count();
+                let closes = trimmed.bytes().filter(|byte| *byte == b'}').count();
+                if opens == 0 && closes == 0 {
+                    continue;
+                }
+                brace_depth += opens;
+                brace_depth = brace_depth.saturating_sub(closes);
+                if brace_depth == 0 {
+                    skip_test_mod = false;
+                }
+                continue;
+            }
+            if trimmed.starts_with("#[cfg(test)]") {
+                skip_test_mod = true;
+                brace_depth = 0;
+                continue;
+            }
+            if trimmed.starts_with("//") {
+                continue;
+            }
+            assert!(
+                !trimmed.contains("ActiveTarget::Ssh") && !trimmed.contains("ActiveTarget::Wsl"),
+                "{}:{} matches ActiveTarget outside transport.rs",
+                path.display(),
+                index + 1
+            );
+            assert!(
+                !trimmed.contains("\".agents\""),
+                "{}:{} hard-codes the Universal agents directory",
+                path.display(),
+                index + 1
+            );
+        }
+    }
+}
+
+fn collect_rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            collect_rs_files(&path, out);
+        } else if path.extension().and_then(|ext| ext.to_str()) == Some("rs") {
+            out.push(path);
+        }
+    }
+}
+
+#[test]
+fn remote_paths_follow_injected_home_not_local_home() {
+    let local_home = crate::paths::skills_cli_local_home()
+        .to_string_lossy()
+        .replace('\\', "/");
+    let runner = std::sync::Arc::new(crate::test_support::FakeRunner::new());
+    let tx = remote_tx(runner);
+    let paths = tx.paths();
+    assert!(
+        paths.canonical_root().starts_with("/mnt/remote-seam-home"),
+        "{}",
+        paths.canonical_root()
+    );
+    assert!(
+        paths.lock_path().starts_with("/mnt/remote-seam-home"),
+        "{}",
+        paths.lock_path()
+    );
+    assert!(
+        !local_home.is_empty() && !paths.canonical_root().contains(&local_home),
+        "canonical {} leaked local home {local_home}",
+        paths.canonical_root()
+    );
+    assert!(
+        !paths.lock_path().contains(&local_home),
+        "lock {} leaked local home {local_home}",
+        paths.lock_path()
+    );
+}
+
+#[tokio::test]
+async fn remote_doctor_round_trips_are_constant_and_map_node_errors() {
+    for platforms in [&["cursor"][..], &["a", "b", "c", "d", "e", "f"][..]] {
+        let runner = std::sync::Arc::new(crate::test_support::FakeRunner::new());
+        runner.push_success("XDG=\nHOME=/mnt/remote-seam-home\nNODEV=v22.20.0\n");
+        let tx = remote_tx(runner.clone());
+        let report = tx.doctor_ignoring_platforms(platforms).await.unwrap();
+        assert_eq!(report.node_version, "v22.20.0");
+        assert_eq!(report.npm_spec, SKILLS_CLI_NPM_SPEC);
+        let calls = runner.calls();
+        assert_eq!(calls.len(), 1, "platform count {}", platforms.len());
+        let stdin = String::from_utf8_lossy(calls[0].stdin.as_deref().unwrap_or(&[]));
+        assert!(!stdin.contains("skills --help"), "{stdin}");
+        assert!(stdin.contains("NODEV"), "{stdin}");
+    }
+
+    let missing = std::sync::Arc::new(crate::test_support::FakeRunner::new());
+    missing.push_success("XDG=\nHOME=/mnt/remote-seam-home\nNODEV=\n");
+    let missing_err = remote_tx(missing).doctor().await.unwrap_err();
+    assert!(matches!(missing_err, SkillsCliError::NodeMissing));
+    assert_eq!(missing_err.ipc_code(), "skills_cli.node_missing");
+
+    let old = std::sync::Arc::new(crate::test_support::FakeRunner::new());
+    old.push_success("XDG=\nHOME=/mnt/remote-seam-home\nNODEV=v18.20.0\n");
+    let old_err = remote_tx(old).doctor().await.unwrap_err();
+    assert!(matches!(old_err, SkillsCliError::NodeTooOld { .. }));
+    assert_eq!(old_err.ipc_code(), "skills_cli.node_missing");
+
+    let xdg = std::sync::Arc::new(crate::test_support::FakeRunner::new());
+    xdg.push_success("XDG=/var/xdg-state\nHOME=/mnt/remote-seam-home\nNODEV=v22.20.0\n");
+    let tx = remote_tx(xdg);
+    tx.doctor().await.unwrap();
+    assert_eq!(
+        tx.paths().lock_path(),
+        "/var/xdg-state/skills/.skill-lock.json"
+    );
+}
+
+#[tokio::test]
+async fn remote_doctor_stderr_sentinel_stays_out_of_ipc_and_logs() {
+    const SENTINEL: &str = "SKILLPORT_STDERR_SENTINEL_9f3a2c";
+    let (logs, _guard) = capture_logs();
+    let runner = std::sync::Arc::new(crate::test_support::FakeRunner::new());
+    runner.push_output(1, "", SENTINEL);
+    let err = remote_tx(runner).doctor().await.unwrap_err();
+    assert_eq!(err.ipc_code(), "skills_cli.node_missing");
+    let message = public_message_for_code(err.ipc_code()).unwrap();
+    let ipc = IpcError::new(err.ipc_code(), message, err.retryable());
+    assert!(!ipc.message.contains(SENTINEL));
+    assert!(!format!("{err}").contains(SENTINEL));
+    assert!(!format!("{err:?}").contains(SENTINEL));
+    let serialized = serde_json::to_string(&ipc).unwrap();
+    assert!(!serialized.contains(SENTINEL));
+    let logged = String::from_utf8(logs.lock().unwrap().clone()).unwrap();
+    assert!(!logged.contains(SENTINEL), "{logged}");
+}
+
+#[tokio::test]
+async fn remote_home_mismatch_warns_without_path_values() {
+    let (logs, _guard) = capture_logs();
+    let runner = std::sync::Arc::new(crate::test_support::FakeRunner::new());
+    runner.push_success("XDG=\nHOME=/other-probed-home\nNODEV=v22.20.0\n");
+    remote_tx(runner).doctor().await.unwrap();
+    let logged = String::from_utf8(logs.lock().unwrap().clone()).unwrap();
+    assert!(
+        logged.contains("Skills CLI remote HOME does not match configured remote_home"),
+        "{logged}"
+    );
+    assert!(!logged.contains("/other-probed-home"), "{logged}");
+    assert!(!logged.contains("/mnt/remote-seam-home"), "{logged}");
 }

@@ -35,7 +35,7 @@ use super::{
     check_cancel, is_valid_skill_token, map_guard_error, mapped_inventory_platforms,
     SkillsCliManagedLinkKind, SkillsCliPlacement, SkillsCliPlacementConflict,
     SkillsCliPlacementState, SkillsCliRemovePlacementSummary, SkillsCliRemovePlan,
-    SkillsCliRemoveResult,
+    SkillsCliRemoveResult, SkillsCliTransport,
 };
 
 const REMOVE_LOCK_OPERATION: &str = "Skills CLI global remove";
@@ -97,15 +97,16 @@ struct RemoveManifestV1 {
 }
 
 pub(crate) async fn preview_remove_global(
+    tx: &SkillsCliTransport,
     pool: &DbPool,
     skill_name: &str,
 ) -> Result<SkillsCliRemovePlan, SkillsCliError> {
-    let home = crate::paths::resolve_home_dir();
+    let paths = tx.paths();
     preview_remove_global_at(
         pool,
         skill_name,
-        &crate::paths::universal_skills_dir(),
-        &super::lock::skills_cli_lock_path(&home),
+        &paths.canonical_root_path(),
+        &paths.lock_path_buf(),
     )
     .await
 }
@@ -130,17 +131,18 @@ pub(crate) async fn preview_remove_global_at(
 }
 
 pub(crate) async fn remove_global(
+    tx: &SkillsCliTransport,
     pool: &DbPool,
     skill_name: &str,
     cancel: Option<&AtomicBool>,
 ) -> Result<SkillsCliRemoveResult, SkillsCliError> {
-    let home = crate::paths::resolve_home_dir();
+    let paths = tx.paths();
     remove_global_at(
         pool,
         skill_name,
         cancel,
-        &crate::paths::universal_skills_dir(),
-        &super::lock::skills_cli_lock_path(&home),
+        &paths.canonical_root_path(),
+        &paths.lock_path_buf(),
         None,
         crate::paths::skills_cli_remove_recovery_dir(),
         DEFAULT_CENTRAL_MUTATION_TIMEOUT,

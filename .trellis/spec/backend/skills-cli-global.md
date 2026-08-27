@@ -9,7 +9,11 @@ CLI-lock exclusion, leftover apply mutation locking, or platform
 
 This is **not** SkillPort Central (`~/.skillsmanage/skills/`) and **not** the
 `skillport-cli` binary (`shared-local-cli.md`). The npm package is pinned
-(`SKILLS_CLI_NPM_SPEC = "skills@1.5.23"`). MVP is Local target only.
+(`SKILLS_CLI_NPM_SPEC = "skills@1.5.23"`). Commands freeze a TargetContext,
+query `ensure_capability_for_target`, then build `SkillsCliTransport` only when
+the capability is open. This seam task opens **Doctor** on Remote; other
+capabilities stay `skills_cli.local_target_only` until a later child opens them.
+`RevealFolder` is permanently unsupported on Remote (no host file manager).
 
 ## 2. Signatures
 
@@ -69,9 +73,20 @@ Cleanup candidates are skills whose placements are all `unavailable`. Group `sta
 
 ## 3. Contracts
 
-- **Local gate**: SSH/WSL returns `skills_cli.local_target_only` before spawn,
-  lock reads, leftover CLI protection, or origin annotation. Do not use this
-  machine's lock to protect remote leftover.
+- **Capability matrix**: query `SkillsCliTransport::ensure_capability_for_target`
+  after `resolve_target_context()` and **before** `for_target()`. Unsupported
+  Remote capabilities return `skills_cli.local_target_only` before handshake,
+  spawn, lock reads, leftover CLI protection, or origin annotation, and are
+  zero-write. Do not use this machine's lock to protect remote leftover.
+
+| Capability | Local | Remote (this seam) | Opens in |
+| --- | --- | --- | --- |
+| doctor | supported | supported | seam |
+| list / install_targets / read / export | supported | `local_target_only` | inventory |
+| reveal | supported | permanently unsupported | — |
+| link / unlink / preview_remove / remove / leftover | supported | `local_target_only` | mutate |
+| preview_source / add / update family | supported | `local_target_only` | install-update |
+| cancel_job | supported | `local_target_only` | stays gated until a child opens the matching mutation |
 - **Ownership**: a path is CLI-owned only when `.skill-lock.json` (version 3)
   contains the sanitized name. Do not treat `~/.agents/skills/` as wholly
   owned. Lock path: `$XDG_STATE_HOME/skills/.skill-lock.json`, else
@@ -153,7 +168,7 @@ Cleanup candidates are skills whose placements are all `unavailable`. Group `sta
 
 | Condition | Code | retryable |
 | --- | --- | --- |
-| ActiveTarget is SSH/WSL | `skills_cli.local_target_only` | false |
+| ActiveTarget is SSH/WSL and the capability is not yet opened (or is permanently unsupported, e.g. reveal) | `skills_cli.local_target_only` | false |
 | Node missing or `< 22.20.0` | `skills_cli.node_missing` | false |
 | npx JS cannot be resolved, or the CLI process cannot spawn | `skills_cli.cli_unavailable` | false |
 | CLI non-zero on add | `skills_cli.cli_failed` | false |
@@ -192,20 +207,28 @@ command layer remaps it to `skills_cli.busy` so the UI sees one envelope.
 - Good: add acquires the `skills_cli` lease, then the Local mutation guard,
   spawns `node` + `npx-cli.js --yes --package=skills@1.5.23 -- skills add … -g -y -a … -s …`,
   and leftover local apply / Central install wait Busy until the guard drops.
-- Base: preview is a Local read that may spawn; doctor only probes node; list
-  is a Local lock+FS read: no exclusive job, no mutation lock, no CLI spawn.
+- Base: preview is a lock+FS read that may spawn; doctor only probes node
+  (Local PATH or one Remote `run_script`); list is a lock+FS read: no exclusive
+  job, no mutation lock, no CLI spawn. Remote doctor round-trips are constant
+  in platform count and never run `skills --help`.
 - Bad: `Command::new("npx.cmd")`; leftover scan skipping every path under
   `~/.agents/skills/`; using the local lock while scanning SSH leftover;
-  mixing `active_db()` + `active_target()` when annotating origin.
+  mixing `active_db()` + `active_target()` when annotating origin;
+  `match ActiveTarget` in Skills CLI business logic outside `transport.rs`.
 
 ## 6. Tests Required
 
 - Argv table: `--yes`, PIN spec, `-g -y -a -s`; assert no `--all`, `*`, `npx.cmd`.
 - Mapping closure: every seed builtin id is mapped or unsupported.
 - Doctor: missing node / too old; missing npx JS only affects spawn paths.
-- Non-Local IPC reject; `cli_lock_protect=false` does not exclude remote leftover.
+  Remote doctor: constant remote command count for 1 vs 6 platforms; Node
+  missing and too-old both `skills_cli.node_missing`; no `skills --help`.
+- Capability matrix: Remote + unopened capability → `skills_cli.local_target_only`
+  and zero writes; Remote + Doctor → Ok; Local + any capability → Ok.
+  `cli_lock_protect=false` does not exclude remote leftover.
 - Leftover: lock canonical/link excluded; lock-named mapped agent copy
-  excluded; unlocked sibling copy still listed; remote scan ignores local lock.
+  excluded; unlocked sibling copy still listed; remote scan ignores local lock
+  (lands in `remote-mutate`; this seam only keeps the lock-isolation rule).
 - Inventory: copy-only (no canonical) still listed with `installKind=copy`;
   lock name with no directories listed as `missing`; unknown `sourceType` →
   `sourceTypeBucket=unknown`; `placements` five-state table; compatible `agents`
@@ -272,4 +295,15 @@ const runtimeBlocked = runtimeError !== null;
 
 // Correct: Install is fail-closed; other surfaces stay usable.
 // cli_unavailable is spawn-path only (add/preview). Add non-zero is skills_cli.cli_failed.
+```
+
+```rust
+// Wrong: one Local-only gate, then match ActiveTarget in list/link/remove.
+domain::ensure_local_target(target)?;
+match target { ActiveTarget::Local => local_home(), ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => remote_home() }
+
+// Correct: gate with the capability matrix before connect; paths/fs come from the transport.
+SkillsCliTransport::ensure_capability_for_target(target, SkillsCliCapability::Doctor)?;
+let tx = SkillsCliTransport::for_target(target).await?;
+// Business logic reads tx.paths() / tx.fs(). Only transport.rs matches ActiveTarget.
 ```

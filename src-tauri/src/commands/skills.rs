@@ -209,7 +209,9 @@ pub async fn get_skills_by_agent(
             let mut skills = central_skills::get_skills_by_agent_impl(&pool, &agent_id)
                 .await
                 .map_err(|e| e.to_string())?;
-            if crate::services::skills_cli::is_local_target(context.target()) {
+            if crate::services::skills_cli::SkillsCliTransport::uses_local_cli_lock(
+                context.target(),
+            ) {
                 crate::services::skills_cli::annotate_platform_install_origins(&mut skills);
             }
             Ok::<_, String>(skills)

@@ -2,9 +2,9 @@
 //!
 //! The official CLI records every global install in
 //! `$XDG_STATE_HOME/skills/.skill-lock.json` (falling back to
-//! `~/.agents/.skill-lock.json`), keyed by sanitized skill name. A path is
-//! CLI-owned only when the lock proves it — never merely because it lives
-//! under `~/.agents/skills/`.
+//! `home / UNIVERSAL_AGENTS_DIR_NAME / .skill-lock.json`), keyed by sanitized
+//! skill name. A path is CLI-owned only when the lock proves it — never merely
+//! because it lives under the Universal skills root.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -40,7 +40,7 @@ impl CliLockOwnership {
     }
 
     /// Canonical directory the CLI owns for this entry:
-    /// `~/.agents/skills/<sanitized-name>`.
+    /// `{universal_skills_dir}/<sanitized-name>`.
     pub fn canonical_dir(&self, universal_skills_dir: &Path, name: &str) -> PathBuf {
         universal_skills_dir.join(name)
     }
@@ -65,7 +65,7 @@ impl CliLockOwnership {
 }
 
 /// The lock file location: `$XDG_STATE_HOME/skills/.skill-lock.json`, else
-/// `~/.agents/.skill-lock.json`.
+/// `home / UNIVERSAL_AGENTS_DIR_NAME / .skill-lock.json`.
 pub fn skills_cli_lock_path_from_env(xdg_state_home: Option<&str>, home_dir: &Path) -> PathBuf {
     match xdg_state_home.filter(|value| !value.trim().is_empty()) {
         Some(state_home) => Path::new(state_home)
@@ -79,6 +79,24 @@ pub fn skills_cli_lock_path_from_env(xdg_state_home: Option<&str>, home_dir: &Pa
 
 pub fn skills_cli_lock_path(home_dir: &Path) -> PathBuf {
     skills_cli_lock_path_from_env(std::env::var("XDG_STATE_HOME").ok().as_deref(), home_dir)
+}
+
+/// Remote lock path using POSIX joins. Branching matches
+/// [`skills_cli_lock_path_from_env`] character-for-character, including the
+/// empty/`XDG_STATE_HOME` trim filter. Never uses `Path::join` (Windows hosts
+/// would inject `\`) and never names the Universal agents directory as a
+/// string literal.
+pub(crate) fn remote_lock_path(xdg_state_home: Option<&str>, remote_home: &str) -> String {
+    match xdg_state_home.filter(|value| !value.trim().is_empty()) {
+        Some(state_home) => crate::targets::remote_join(
+            &crate::targets::remote_join(state_home, "skills"),
+            ".skill-lock.json",
+        ),
+        None => crate::targets::remote_join(
+            &crate::targets::remote_join(remote_home, crate::paths::UNIVERSAL_AGENTS_DIR_NAME),
+            ".skill-lock.json",
+        ),
+    }
 }
 
 /// Read and parse the lock file. A missing file yields empty ownership; an
@@ -239,8 +257,9 @@ pub fn classify_local_path_origin(
 /// Local-only: callers must not invoke this for SSH/WSL listings. A missing
 /// or unreadable lock yields the link_type fallback (symlink → central).
 pub fn annotate_platform_install_origins(skills: &mut [crate::db::SkillForAgent]) {
-    let home = crate::paths::resolve_home_dir();
-    let ownership = load_cli_lock_ownership(&skills_cli_lock_path(&home)).unwrap_or_default();
+    let ownership =
+        load_cli_lock_ownership(&skills_cli_lock_path(&crate::paths::skills_cli_local_home()))
+            .unwrap_or_default();
     annotate_platform_install_origins_with(
         &ownership,
         &crate::paths::universal_skills_dir(),
@@ -330,5 +349,40 @@ mod tests {
         assert!(entry.skill_folder_hash.is_none());
         assert!(entry.source.is_none());
         assert!(entry.installed_at.is_none());
+    }
+
+    #[test]
+    fn remote_lock_path_matches_local_env_branches_without_agents_literal() {
+        let cases: [(Option<&str>, &str); 3] = [
+            (Some("/var/xdg-state"), "/mnt/remote-seam-home"),
+            (None, "/mnt/remote-seam-home"),
+            (Some("   "), "/mnt/remote-seam-home"),
+        ];
+        for (xdg, home) in cases {
+            let remote = remote_lock_path(xdg, home);
+            let local = skills_cli_lock_path_from_env(xdg, Path::new(home));
+            let local_posix = local.to_string_lossy().replace('\\', "/");
+            assert_eq!(remote, local_posix, "xdg={xdg:?} home={home}");
+            if xdg.filter(|value| !value.trim().is_empty()).is_some() {
+                assert!(remote.ends_with("/skills/.skill-lock.json"), "{remote}");
+                assert!(
+                    !remote.contains(crate::paths::UNIVERSAL_AGENTS_DIR_NAME),
+                    "{remote}"
+                );
+            } else {
+                let expected_dir = crate::paths::UNIVERSAL_AGENTS_DIR_NAME;
+                assert!(remote.contains(&format!("/{expected_dir}/")), "{remote}");
+            }
+        }
+        let source = include_str!("lock.rs");
+        let remote_fn = source
+            .split("pub(crate) fn remote_lock_path")
+            .nth(1)
+            .and_then(|rest| rest.split("pub fn load_cli_lock_ownership").next())
+            .unwrap_or(source);
+        assert!(
+            !remote_fn.contains("\".agents\""),
+            "remote_lock_path must not hard-code the .agents literal"
+        );
     }
 }

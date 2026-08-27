@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/transport-seam.md", "reason": "R1 要求新接缝与 InstallTransport 同构：单编排 + 每传输 hook，本 spec 是该范式的权威定义"}
+{"file": ".trellis/spec/backend/skill-usage-analytics.md", "reason": "R1 的第二个参照范式 Scope/FsBackend（trait + 两实现），需对比后择一并说明理由"}
+{"file": ".trellis/spec/backend/target-context.md", "reason": "R5 要求命令入口先 resolve_target_context 冻结 target + DbPool 再建传输"}
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "R6 直接修订本文件：§1 Local-only、§3 Local gate、§4 错误矩阵 local_target_only 行、§5 Base/Bad case、§6 测试要求"}
+{"file": ".trellis/spec/backend/path-policy.md", "reason": "R2 远端路径解析：canonical root / lock path / 平台 global skills dir，且 lock 路径不得出现 .agents 字面量"}
+{"file": ".trellis/spec/backend/process-supervision.md", "reason": "R3 远端 doctor 的 Node 探测需遵守进程策略与超时；每次 run_command 一次 SSH 握手"}
+{"file": ".trellis/spec/backend/spawn-blocking-io.md", "reason": "远端探测涉及阻塞 IO 与命令执行，需放在正确的执行器上"}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "R4 能力矩阵对未远端化能力返回稳定错误码，需按域错误枚举扩展而非临时字符串"}
+{"file": ".trellis/spec/backend/index.md", "reason": "后端层 Pre-Development Checklist 入口"}
+{"file": ".trellis/tasks/08-27-skills-cli-availability-remote/research/current-state-evidence.md", "reason": "ensure_local_target、RemoteTargetConfig.remote_home、ConnectedRemoteTarget::run_command 的 file:line 证据"}

@@ -3,9 +3,10 @@ use std::path::{Path, PathBuf};
 
 mod skills_cli;
 pub use skills_cli::{
-    skills_cli_remove_recovery_dir, skills_cli_remove_recovery_dir_from_app_data,
-    skills_cli_update_recovery_dir, skills_cli_update_recovery_dir_from_app_data,
-    SKILLS_CLI_DIR_NAME, SKILLS_CLI_REMOVE_RECOVERY_DIR_NAME, SKILLS_CLI_UPDATE_RECOVERY_DIR_NAME,
+    skills_cli_local_home, skills_cli_remove_recovery_dir,
+    skills_cli_remove_recovery_dir_from_app_data, skills_cli_update_recovery_dir,
+    skills_cli_update_recovery_dir_from_app_data, SKILLS_CLI_DIR_NAME,
+    SKILLS_CLI_REMOVE_RECOVERY_DIR_NAME, SKILLS_CLI_UPDATE_RECOVERY_DIR_NAME,
 };
 
 pub const APP_DATA_DIR_NAME: &str = ".skillsmanage";

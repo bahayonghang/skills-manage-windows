@@ -11,7 +11,7 @@ use tempfile::Builder;
 
 use crate::fs_util::run_blocking_fs_with;
 
-use super::SkillsCliError;
+use super::{SkillsCliError, SkillsCliTransport};
 
 const EXPORT_LIMIT: usize = 1_048_576;
 const TEMP_PREFIX: &str = ".skillport-skills-cli-export-";
@@ -38,7 +38,11 @@ const PLACEMENT_STATES: [&str; 5] = [
     "unavailable",
 ];
 
-pub(crate) async fn export_inventory(path: PathBuf, json: String) -> Result<(), SkillsCliError> {
+pub(crate) async fn export_inventory(
+    _tx: &SkillsCliTransport,
+    path: PathBuf,
+    json: String,
+) -> Result<(), SkillsCliError> {
     run_blocking_fs_with(
         "Skills CLI inventory export",
         move || export_inventory_sync(&path, &json),

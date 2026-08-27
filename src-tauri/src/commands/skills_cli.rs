@@ -1,12 +1,9 @@
 //! Tauri IPC shells for Skills CLI global (`-g`) management.
 //!
-//! Every command resolves a request-scoped [`TargetContext`] first and
-//! rejects non-Local targets before spawning anything or reading local
-//! state. Business logic lives in `crate::services::skills_cli`; this module
-//! owns the Local gate, exclusive job lease, operation log, and the typed
-//! error envelope.
-
-use std::sync::Arc;
+//! Every command resolves a request-scoped [`TargetContext`] first, queries
+//! the capability matrix (before any remote handshake), then builds
+//! [`SkillsCliTransport`] only when the capability is open. Business logic
+//! lives in `crate::services::skills_cli`.
 
 use tauri::{AppHandle, Emitter, State};
 
@@ -25,10 +22,11 @@ use crate::services::skills_cli::updates::{
     SkillsCliUpdateProgress, UpdateProgressEmitter, UPDATE_PROGRESS_EVENT,
 };
 use crate::services::skills_cli::{
-    NodeProcessRunner, SkillsCliAddResult, SkillsCliDoctorReport, SkillsCliError,
+    SkillsCliAddResult, SkillsCliCapability, SkillsCliDoctorReport, SkillsCliError,
     SkillsCliGlobalSnapshot, SkillsCliInstallTarget, SkillsCliPlacement, SkillsCliRemovePlan,
-    SkillsCliRemoveResult, SkillsCliRunner, SkillsCliSkillDoc, SkillsCliSourcePreview,
+    SkillsCliRemoveResult, SkillsCliSkillDoc, SkillsCliSourcePreview, SkillsCliTransport,
 };
+use crate::targets::ActiveTarget;
 use crate::AppState;
 
 fn to_ipc_error(error: &SkillsCliError) -> IpcError {
@@ -38,6 +36,17 @@ fn to_ipc_error(error: &SkillsCliError) -> IpcError {
         "The operation failed. See runtime logs for details.",
     );
     IpcError::new(code, message, error.retryable())
+}
+
+fn require_capability(target: &ActiveTarget, cap: SkillsCliCapability) -> Result<(), IpcError> {
+    SkillsCliTransport::ensure_capability_for_target(target, cap)
+        .map_err(|error| to_ipc_error(&error))
+}
+
+async fn open_transport(target: &ActiveTarget) -> Result<SkillsCliTransport, IpcError> {
+    SkillsCliTransport::for_target(target)
+        .await
+        .map_err(|error| to_ipc_error(&error))
 }
 
 fn job_lease_error(error: ExclusiveJobError) -> IpcError {
@@ -61,10 +70,6 @@ fn job_lease_error(error: ExclusiveJobError) -> IpcError {
             false,
         ),
     }
-}
-
-fn domain_runner() -> Arc<dyn SkillsCliRunner> {
-    Arc::new(NodeProcessRunner)
 }
 
 fn operation_definition(command: &'static str) -> OperationDefinition {
@@ -105,8 +110,9 @@ pub async fn skills_cli_doctor(
 ) -> crate::ipc_error::IpcResult<SkillsCliDoctorReport> {
     crate::ipc_boundary_async!("skills_cli_doctor", {
         let context = state.resolve_target_context().await?;
-        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
-        domain::doctor(domain_runner().as_ref())
+        require_capability(context.target(), SkillsCliCapability::Doctor)?;
+        let tx = open_transport(context.target()).await?;
+        domain::doctor(&tx)
             .await
             .map_err(|error| to_ipc_error(&error))
     })
@@ -119,9 +125,10 @@ pub async fn skills_cli_list_global(
 ) -> crate::ipc_error::IpcResult<SkillsCliGlobalSnapshot> {
     crate::ipc_boundary_async!("skills_cli_list_global", {
         let context = state.resolve_target_context().await?;
-        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        require_capability(context.target(), SkillsCliCapability::ListGlobal)?;
+        let tx = open_transport(context.target()).await?;
         let pool = context.db().clone();
-        domain::list_global(&pool)
+        domain::list_global(&tx, &pool)
             .await
             .map_err(|error| to_ipc_error(&error))
     })
@@ -135,7 +142,8 @@ pub async fn skills_cli_install_targets(
     crate::ipc_boundary_async!("skills_cli_install_targets", {
         let context = state.resolve_target_context().await?;
         let pool = context.db().clone();
-        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        require_capability(context.target(), SkillsCliCapability::InstallTargets)?;
+        let tx = open_transport(context.target()).await?;
         let definition = operation_definition("skills_cli_install_targets");
         crate::observability::run_operation(
             &state,
@@ -146,7 +154,7 @@ pub async fn skills_cli_install_targets(
                     .count(SafeDetailKey::AffectedCount, targets.len() as u64)
             },
             || async move {
-                domain::install_targets(&pool)
+                domain::install_targets(&tx, &pool)
                     .await
                     .map_err(|error| skills_cli_failure(definition, &error))
             },
@@ -163,8 +171,9 @@ pub async fn skills_cli_preview_source(
 ) -> crate::ipc_error::IpcResult<SkillsCliSourcePreview> {
     crate::ipc_boundary_async!("skills_cli_preview_source", {
         let context = state.resolve_target_context().await?;
-        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
-        domain::preview_source(domain_runner().as_ref(), &source)
+        require_capability(context.target(), SkillsCliCapability::PreviewSource)?;
+        let tx = open_transport(context.target()).await?;
+        domain::preview_source(&tx, &source)
             .await
             .map_err(|error| to_ipc_error(&error))
     })
@@ -186,7 +195,8 @@ pub async fn skills_cli_add_global(
             .map_err(job_lease_error)?;
         let context = state.resolve_target_context().await?;
         let active_target = context.target().clone();
-        domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
+        require_capability(&active_target, SkillsCliCapability::AddGlobal)?;
+        let tx = open_transport(&active_target).await?;
         let definition = operation_definition("skills_cli_add_global");
         let requested_skills = skill_names.len() as u64;
         let requested_platforms = skillport_agent_ids.len() as u64;
@@ -205,7 +215,7 @@ pub async fn skills_cli_add_global(
             },
             || async move {
                 domain::add_global(
-                    domain_runner().as_ref(),
+                    &tx,
                     &source,
                     skill_names,
                     skillport_agent_ids,
@@ -234,7 +244,8 @@ pub async fn skills_cli_remove_global(
         let context = state.resolve_target_context().await?;
         let active_target = context.target().clone();
         let pool = context.db().clone();
-        domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
+        require_capability(&active_target, SkillsCliCapability::RemoveGlobal)?;
+        let tx = open_transport(&active_target).await?;
         let definition = operation_definition("skills_cli_remove_global");
         let operation_context = OperationContext::new(OperationTarget::local()).subject(
             OperationSubjectKind::Skill,
@@ -257,7 +268,7 @@ pub async fn skills_cli_remove_global(
                     )
             },
             || async move {
-                domain::remove_global(&pool, &skill_name, Some(lease.cancel_flag()))
+                domain::remove_global(&tx, &pool, &skill_name, Some(lease.cancel_flag()))
                     .await
                     .map_err(|error| skills_cli_failure(definition, &error))
             },
@@ -274,8 +285,9 @@ pub async fn skills_cli_read_skill_md(
 ) -> crate::ipc_error::IpcResult<SkillsCliSkillDoc> {
     crate::ipc_boundary_async!("skills_cli_read_skill_md", {
         let context = state.resolve_target_context().await?;
-        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
-        domain::read_skill_md(&skill_name)
+        require_capability(context.target(), SkillsCliCapability::ReadSkillMd)?;
+        let tx = open_transport(context.target()).await?;
+        domain::read_skill_md(&tx, &skill_name)
             .await
             .map_err(|error| to_ipc_error(&error))
     })
@@ -289,7 +301,8 @@ pub async fn skills_cli_reveal_skill_folder(
 ) -> crate::ipc_error::IpcResult<()> {
     crate::ipc_boundary_async!("skills_cli_reveal_skill_folder", {
         let context = state.resolve_target_context().await?;
-        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        require_capability(context.target(), SkillsCliCapability::RevealFolder)?;
+        let tx = open_transport(context.target()).await?;
         let definition = operation_definition("skills_cli_reveal_skill_folder");
         let operation_context = OperationContext::new(OperationTarget::local()).subject(
             OperationSubjectKind::Skill,
@@ -301,7 +314,7 @@ pub async fn skills_cli_reveal_skill_folder(
             operation_context,
             |_| SafeOperationResult::succeeded("Revealed a Skills CLI skill folder."),
             || async move {
-                domain::reveal_skill_folder(&skill_name)
+                domain::reveal_skill_folder(&tx, &skill_name)
                     .map_err(|error| skills_cli_failure(definition, &error))
             },
         )
@@ -325,7 +338,8 @@ pub async fn skills_cli_link_platform(
         let context = state.resolve_target_context().await?;
         let active_target = context.target().clone();
         let pool = context.db().clone();
-        domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
+        require_capability(&active_target, SkillsCliCapability::LinkPlatform)?;
+        let tx = open_transport(&active_target).await?;
 
         let definition = operation_definition("skills_cli_link_platform");
         let operation_context = OperationContext::new(OperationTarget::local()).subject(
@@ -344,6 +358,7 @@ pub async fn skills_cli_link_platform(
             },
             || async move {
                 domain::link_platform(
+                    &tx,
                     &pool,
                     &skill_name,
                     &skillport_agent_id,
@@ -373,7 +388,8 @@ pub async fn skills_cli_unlink_platform(
         let context = state.resolve_target_context().await?;
         let active_target = context.target().clone();
         let pool = context.db().clone();
-        domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
+        require_capability(&active_target, SkillsCliCapability::UnlinkPlatform)?;
+        let tx = open_transport(&active_target).await?;
 
         let definition = operation_definition("skills_cli_unlink_platform");
         let operation_context = OperationContext::new(OperationTarget::local()).subject(
@@ -392,6 +408,7 @@ pub async fn skills_cli_unlink_platform(
             },
             || async move {
                 domain::unlink_platform(
+                    &tx,
                     &pool,
                     &skill_name,
                     &skillport_agent_id,
@@ -413,9 +430,10 @@ pub async fn skills_cli_preview_remove_global(
 ) -> crate::ipc_error::IpcResult<SkillsCliRemovePlan> {
     crate::ipc_boundary_async!("skills_cli_preview_remove_global", {
         let context = state.resolve_target_context().await?;
-        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        require_capability(context.target(), SkillsCliCapability::PreviewRemove)?;
+        let tx = open_transport(context.target()).await?;
         let pool = context.db().clone();
-        domain::preview_remove_global(&pool, &skill_name)
+        domain::preview_remove_global(&tx, &pool, &skill_name)
             .await
             .map_err(|error| to_ipc_error(&error))
     })
@@ -430,7 +448,8 @@ pub async fn skills_cli_export_inventory(
 ) -> crate::ipc_error::IpcResult<()> {
     crate::ipc_boundary_async!("skills_cli_export_inventory", {
         let context = state.resolve_target_context().await?;
-        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        require_capability(context.target(), SkillsCliCapability::ExportInventory)?;
+        let tx = open_transport(context.target()).await?;
         let definition = operation_definition("skills_cli_export_inventory");
         crate::observability::run_operation(
             &state,
@@ -438,7 +457,7 @@ pub async fn skills_cli_export_inventory(
             OperationContext::new(OperationTarget::local()),
             |_| SafeOperationResult::succeeded("Exported the Skills CLI inventory."),
             || async move {
-                domain::export_inventory(std::path::PathBuf::from(path), json)
+                domain::export_inventory(&tx, std::path::PathBuf::from(path), json)
                     .await
                     .map_err(|error| skills_cli_failure(definition, &error))
             },
@@ -455,7 +474,7 @@ pub async fn cancel_skills_cli_job(
 ) -> crate::ipc_error::IpcResult<bool> {
     crate::ipc_boundary_async!("cancel_skills_cli_job", {
         let context = state.resolve_target_context().await?;
-        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        require_capability(context.target(), SkillsCliCapability::CancelJob)?;
         let definition = operation_definition("cancel_skills_cli_job");
         crate::observability::run_operation(
             &state,
@@ -511,9 +530,11 @@ pub async fn skills_cli_check_updates(
         let context = state.resolve_target_context().await?;
         let active_target = context.target().clone();
         let pool = context.db().clone();
-        domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
+        require_capability(&active_target, SkillsCliCapability::CheckUpdates)?;
+        let tx = open_transport(&active_target).await?;
         let github = github_from_state(&state).await?;
-        let home = crate::paths::resolve_home_dir();
+        let canonical_root = tx.paths().canonical_root_path();
+        let lock_path = tx.paths().lock_path_buf();
         let definition = operation_definition("skills_cli_check_updates");
         crate::observability::run_operation(
             &state,
@@ -526,8 +547,8 @@ pub async fn skills_cli_check_updates(
             || async move {
                 domain::updates::check_updates_at(
                     &pool,
-                    &crate::paths::universal_skills_dir(),
-                    &domain::skills_cli_lock_path(&home),
+                    &canonical_root,
+                    &lock_path,
                     &github,
                     &AppUpdateProgress { app },
                     &job_id,
@@ -548,7 +569,7 @@ pub async fn skills_cli_update_inventory(
 ) -> crate::ipc_error::IpcResult<SkillsCliUpdateInventory> {
     crate::ipc_boundary_async!("skills_cli_update_inventory", {
         let context = state.resolve_target_context().await?;
-        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        require_capability(context.target(), SkillsCliCapability::UpdateInventory)?;
         load_update_inventory_for_pool(context.db())
             .await
             .map_err(|error| to_ipc_error(&error))
@@ -568,8 +589,10 @@ pub async fn skills_cli_verify_update_baseline(
             .acquire(&job_id)
             .map_err(job_lease_error)?;
         let context = state.resolve_target_context().await?;
-        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
-        let home = crate::paths::resolve_home_dir();
+        require_capability(context.target(), SkillsCliCapability::VerifyUpdateBaseline)?;
+        let tx = open_transport(context.target()).await?;
+        let canonical_root = tx.paths().canonical_root_path();
+        let lock_path = tx.paths().lock_path_buf();
         let pool = context.db().clone();
         let definition = operation_definition("skills_cli_verify_update_baseline");
         let requested = skill_names.len() as u64;
@@ -585,8 +608,8 @@ pub async fn skills_cli_verify_update_baseline(
             || async move {
                 verify_update_baseline_at(
                     &pool,
-                    &crate::paths::universal_skills_dir(),
-                    &domain::skills_cli_lock_path(&home),
+                    &canonical_root,
+                    &lock_path,
                     &skill_names,
                     Some(lease.cancel_flag()),
                 )
@@ -613,7 +636,8 @@ pub async fn skills_cli_apply_updates(
         let context = state.resolve_target_context().await?;
         let active_target = context.target().clone();
         let pool = context.db().clone();
-        domain::ensure_local_target(&active_target).map_err(|error| to_ipc_error(&error))?;
+        require_capability(&active_target, SkillsCliCapability::ApplyUpdates)?;
+        let tx = open_transport(&active_target).await?;
         let github = github_from_state(&state).await?;
         let definition = operation_definition("skills_cli_apply_updates");
         let requested = request.selections.len() as u64;
@@ -631,6 +655,7 @@ pub async fn skills_cli_apply_updates(
             },
             || async move {
                 apply_updates(
+                    &tx,
                     &pool,
                     &github,
                     &AppUpdateProgress { app },
@@ -658,9 +683,9 @@ pub async fn skills_cli_retry_update_recovery(
             .acquire(&job_id)
             .map_err(job_lease_error)?;
         let context = state.resolve_target_context().await?;
-        domain::ensure_local_target(context.target()).map_err(|error| to_ipc_error(&error))?;
+        require_capability(context.target(), SkillsCliCapability::RetryUpdateRecovery)?;
+        let tx = open_transport(context.target()).await?;
         let pool = context.db().clone();
-        let home = crate::paths::resolve_home_dir();
         let definition = operation_definition("skills_cli_retry_update_recovery");
         let operation_context = OperationContext::new(OperationTarget::local()).subject(
             OperationSubjectKind::Operation,
@@ -672,16 +697,9 @@ pub async fn skills_cli_retry_update_recovery(
             operation_context,
             |_| SafeOperationResult::succeeded("Retried Skills CLI update recovery."),
             || async move {
-                retry_update_recovery(
-                    &pool,
-                    &operation_id,
-                    &crate::paths::universal_skills_dir(),
-                    &domain::skills_cli_lock_path(&home),
-                    &crate::paths::skills_cli_update_recovery_dir(),
-                    Some(lease.cancel_flag()),
-                )
-                .await
-                .map_err(|error| skills_cli_failure(definition, &error))
+                retry_update_recovery(&tx, &pool, &operation_id, Some(lease.cancel_flag()))
+                    .await
+                    .map_err(|error| skills_cli_failure(definition, &error))
             },
         )
         .await

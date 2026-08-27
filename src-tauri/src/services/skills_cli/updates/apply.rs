@@ -30,6 +30,7 @@ use crate::targets::ActiveTarget;
 
 use super::super::{
     check_cancel, list_global_at, map_guard_error, SkillsCliError, SkillsCliPlacementState,
+    SkillsCliTransport,
 };
 use super::capability::argv_contains_forbidden_flags;
 use super::detect::topology_blockers;
@@ -115,18 +116,21 @@ pub struct ApplyContext<'a> {
 }
 
 pub(crate) async fn apply_updates(
+    tx: &SkillsCliTransport,
     pool: &DbPool,
     github: &dyn SkillsCliUpdateGithub,
     progress: &dyn UpdateProgressEmitter,
     request: &SkillsCliApplyUpdateRequest,
     cancel: Option<&AtomicBool>,
 ) -> Result<SkillsCliApplyResult, SkillsCliError> {
-    let home = crate::paths::resolve_home_dir();
+    let canonical_root = tx.paths().canonical_root_path();
+    let lock_path = tx.paths().lock_path_buf();
+    let recovery_root = crate::paths::skills_cli_update_recovery_dir();
     apply_updates_at(ApplyContext {
         pool,
-        canonical_root: &crate::paths::universal_skills_dir(),
-        lock_path: &crate::services::skills_cli::skills_cli_lock_path(&home),
-        recovery_root: &crate::paths::skills_cli_update_recovery_dir(),
+        canonical_root: &canonical_root,
+        lock_path: &lock_path,
+        recovery_root: &recovery_root,
         github,
         progress,
         request,
@@ -498,13 +502,14 @@ pub(crate) async fn apply_updates_at(
 }
 
 pub(crate) async fn retry_update_recovery(
+    tx: &SkillsCliTransport,
     pool: &DbPool,
     operation_id: &str,
-    canonical_root: &Path,
-    lock_path: &Path,
-    recovery_root: &Path,
     cancel: Option<&AtomicBool>,
 ) -> Result<SkillsCliApplyRecoveryResult, SkillsCliError> {
+    let canonical_root = tx.paths().canonical_root_path();
+    let lock_path = tx.paths().lock_path_buf();
+    let recovery_root = crate::paths::skills_cli_update_recovery_dir();
     let _guard = acquire_target_mutation_guard(
         &ActiveTarget::Local,
         UPDATE_LOCK_OPERATION,
@@ -515,9 +520,9 @@ pub(crate) async fn retry_update_recovery(
     recover_one(
         pool,
         operation_id,
-        canonical_root,
-        lock_path,
-        recovery_root,
+        &canonical_root,
+        &lock_path,
+        &recovery_root,
         cancel,
     )
     .await

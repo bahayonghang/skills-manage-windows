@@ -27,7 +27,6 @@ use serde::{Deserialize, Serialize};
 
 use super::SkillsCliError;
 use crate::db::DbPool;
-use crate::targets::ActiveTarget;
 
 pub const UPDATE_PROGRESS_EVENT: &str = "skills-cli://update-progress";
 pub const UPDATE_LOCK_OPERATION: &str = "Skills CLI update apply";
@@ -176,10 +175,6 @@ impl UpdateProgressEmitter for NoopProgress {
 pub fn map_db_error(_error: sqlx::Error) -> SkillsCliError {
     tracing::warn!("Skills CLI update database error");
     SkillsCliError::UpdateMigration
-}
-
-pub fn ensure_local(target: &ActiveTarget) -> Result<(), SkillsCliError> {
-    super::ensure_local_target(target)
 }
 
 pub(crate) async fn load_update_inventory_for_pool(

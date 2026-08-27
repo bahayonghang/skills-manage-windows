@@ -1,8 +1,8 @@
 //! Skills CLI global management service.
 //!
 //! Wraps the official `skills` npm package (PIN: [`SKILLS_CLI_NPM_SPEC`]) for
-//! the `-g` lifecycle on the Local target only. Add still supervises the CLI;
-//! list/read/link/unlink/reveal/export/remove use lock + filesystem ownership.
+//! the `-g` lifecycle. Local and Remote share one transport seam; this task
+//! opens doctor on Remote and keeps other capabilities gated.
 
 mod agent_map;
 mod argv;
@@ -15,6 +15,7 @@ mod lock;
 mod placement;
 mod remove;
 mod runner;
+mod transport;
 pub mod updates;
 
 pub use agent_map::{
@@ -38,9 +39,8 @@ pub use lock::{
     skills_cli_lock_path_from_env, CliLockEntry, CliLockOwnership, LinkOrigin,
 };
 pub(crate) use remove::{preview_remove_global, remove_global};
-pub(crate) use runner::{
-    bulk_transfer_policy, standard_policy, NodeProcessRunner, SkillsCliRunner,
-};
+pub(crate) use runner::{bulk_transfer_policy, standard_policy, SkillsCliRunner};
+pub use transport::{SkillsCliCapability, SkillsCliTransport};
 pub use updates::{
     SkillsCliApplyRecoveryResult, SkillsCliApplyResult, SkillsCliApplySelection,
     SkillsCliApplyUpdateRequest, SkillsCliUpdateInventory, SkillsCliUpdateProgress,
@@ -239,22 +239,6 @@ pub struct SkillsCliRemoveResult {
     pub retained_direct_copy_agent_ids: Vec<String>,
 }
 
-// ─── Target gate ─────────────────────────────────────────────────────────────
-
-/// Every `skills_cli_*` command rejects non-Local targets before any spawn or
-/// local lock read.
-pub fn ensure_local_target(target: &ActiveTarget) -> Result<(), SkillsCliError> {
-    match target {
-        ActiveTarget::Local => Ok(()),
-        ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => Err(SkillsCliError::LocalTargetOnly),
-    }
-}
-
-/// True when the given explicit target is Local.
-pub fn is_local_target(target: &ActiveTarget) -> bool {
-    matches!(target, ActiveTarget::Local)
-}
-
 // ─── Launcher helpers ────────────────────────────────────────────────────────
 
 fn resolve_launcher() -> Result<NodeLauncher, SkillsCliError> {
@@ -262,7 +246,7 @@ fn resolve_launcher() -> Result<NodeLauncher, SkillsCliError> {
     resolve_node_launcher(&path)
 }
 
-fn resolve_node_program_from_env() -> Result<PathBuf, SkillsCliError> {
+pub(crate) fn resolve_node_program_from_env() -> Result<PathBuf, SkillsCliError> {
     let path = std::env::var("PATH").unwrap_or_default();
     resolve_node_program(&path)
 }
@@ -308,12 +292,12 @@ pub(crate) fn map_guard_error(error: CentralMutationError) -> SkillsCliError {
 
 // ─── Doctor ──────────────────────────────────────────────────────────────────
 
-/// Probe the local runtime: node present and version >= PIN requirement.
-/// Does not spawn the pinned Skills CLI package.
+/// Probe node on the frozen transport. Local resolves PATH; Remote uses one
+/// `run_script` round-trip and never probes `skills --help`.
 pub(crate) async fn doctor(
-    runner: &dyn SkillsCliRunner,
+    tx: &SkillsCliTransport,
 ) -> Result<SkillsCliDoctorReport, SkillsCliError> {
-    doctor_with_program(runner, &resolve_node_program_from_env()?).await
+    tx.doctor().await
 }
 
 pub(crate) async fn doctor_with_program(
@@ -358,14 +342,12 @@ pub(crate) async fn doctor_with_program(
 // ─── List ────────────────────────────────────────────────────────────────────
 
 /// List global Skills CLI skills from lock v3 + filesystem. Does not spawn.
-pub(crate) async fn list_global(pool: &DbPool) -> Result<SkillsCliGlobalSnapshot, SkillsCliError> {
-    let home = crate::paths::resolve_home_dir();
-    list_global_at(
-        pool,
-        &crate::paths::universal_skills_dir(),
-        &skills_cli_lock_path(&home),
-    )
-    .await
+pub(crate) async fn list_global(
+    tx: &SkillsCliTransport,
+    pool: &DbPool,
+) -> Result<SkillsCliGlobalSnapshot, SkillsCliError> {
+    let paths = tx.paths();
+    list_global_at(pool, &paths.canonical_root_path(), &paths.lock_path_buf()).await
 }
 
 pub(crate) async fn list_global_at(
@@ -422,7 +404,10 @@ fn is_platform_detected(global_skills_dir: &str) -> bool {
 ///
 /// Unsupported builtins are hidden from the selector entirely; custom agents
 /// never appear because they have no reviewed mapping.
-pub async fn install_targets(pool: &DbPool) -> Result<Vec<SkillsCliInstallTarget>, SkillsCliError> {
+pub async fn install_targets(
+    _tx: &SkillsCliTransport,
+    pool: &DbPool,
+) -> Result<Vec<SkillsCliInstallTarget>, SkillsCliError> {
     let agents = crate::db::get_all_agents(pool)
         .await
         .map_err(|error| SkillsCliError::Io {
@@ -487,10 +472,10 @@ pub fn parse_preview_skill_names(stdout: &str) -> Vec<String> {
 
 /// Preview installable skills for a whitelisted source without installing.
 pub(crate) async fn preview_source(
-    runner: &dyn SkillsCliRunner,
+    tx: &SkillsCliTransport,
     raw_source: &str,
 ) -> Result<SkillsCliSourcePreview, SkillsCliError> {
-    preview_source_with_launcher(runner, &resolve_launcher()?, raw_source).await
+    preview_source_with_launcher(tx.runner(), &resolve_launcher()?, raw_source).await
 }
 
 pub(crate) async fn preview_source_with_launcher(
@@ -595,7 +580,7 @@ async fn add_global_locked(
 /// (cancellation/progress only); this function owns the Local target mutation
 /// guard across the whole child process lifetime.
 pub(crate) async fn add_global(
-    runner: &dyn SkillsCliRunner,
+    tx: &SkillsCliTransport,
     raw_source: &str,
     skill_names: Vec<String>,
     skillport_agent_ids: Vec<String>,
@@ -614,7 +599,15 @@ pub(crate) async fn add_global(
     .await
     .map_err(map_guard_error)?;
 
-    add_global_locked(runner, &launcher, &source, skill_names, cli_agents, cancel).await
+    add_global_locked(
+        tx.runner(),
+        &launcher,
+        &source,
+        skill_names,
+        cli_agents,
+        cancel,
+    )
+    .await
 }
 
 /// Isolated-lock inputs for [`add_global_with_lock_at`].

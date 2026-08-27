@@ -26,23 +26,24 @@ use super::placement::{classify_one, PlacementPlatform};
 use super::remove::recover_pending_for_skill_at;
 use super::{
     check_cancel, is_valid_skill_token, map_guard_error, mapped_inventory_platforms,
-    SkillsCliPlacement, SkillsCliPlacementState,
+    SkillsCliPlacement, SkillsCliPlacementState, SkillsCliTransport,
 };
 
 const LINK_LOCK_OPERATION: &str = "Skills CLI platform link";
 const UNLINK_LOCK_OPERATION: &str = "Skills CLI platform unlink";
 
 pub(crate) async fn link_platform(
+    tx: &SkillsCliTransport,
     pool: &DbPool,
     skill_name: &str,
     skillport_agent_id: &str,
     cancel: Option<&AtomicBool>,
 ) -> Result<SkillsCliPlacement, SkillsCliError> {
-    let home = crate::paths::resolve_home_dir();
+    let paths = tx.paths();
     link_platform_at(
         pool,
-        &crate::paths::universal_skills_dir(),
-        &super::lock::skills_cli_lock_path(&home),
+        &paths.canonical_root_path(),
+        &paths.lock_path_buf(),
         None,
         crate::paths::skills_cli_remove_recovery_dir(),
         skill_name,
@@ -54,16 +55,17 @@ pub(crate) async fn link_platform(
 }
 
 pub(crate) async fn unlink_platform(
+    tx: &SkillsCliTransport,
     pool: &DbPool,
     skill_name: &str,
     skillport_agent_id: &str,
     cancel: Option<&AtomicBool>,
 ) -> Result<SkillsCliPlacement, SkillsCliError> {
-    let home = crate::paths::resolve_home_dir();
+    let paths = tx.paths();
     unlink_platform_at(
         pool,
-        &crate::paths::universal_skills_dir(),
-        &super::lock::skills_cli_lock_path(&home),
+        &paths.canonical_root_path(),
+        &paths.lock_path_buf(),
         None,
         crate::paths::skills_cli_remove_recovery_dir(),
         skill_name,
