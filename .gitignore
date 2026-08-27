@@ -35,6 +35,10 @@ Thumbs.db
 .omc/
 .factory/
 .kiro/
+.omp/
+.grok/
+.kimi-code/
+
 
 # planning with files
 task_plan.md
@@ -51,3 +55,4 @@ ref/
 
 # spark visual-companion brainstorm sessions
 .superpowers/
+.worktrees/
