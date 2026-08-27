@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { invoke, listen } from "@/lib/ipc";
+import { invoke } from "@/lib/ipc";
 import { backendErrorStateValue, parseBackendError } from "@/lib/backendError";
 import {
   emptyPlacementOutcome,
@@ -13,145 +13,32 @@ import {
   applySkillDocResponse,
   type SkillsCliDocState,
 } from "@/pages/skillsCliDetailModel";
-import { applySelectionsForNames } from "@/pages/skillsCliViewModel";
 import {
   EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
-  type SkillsCliAddResult,
-  type SkillsCliApplyRecoveryResult,
-  type SkillsCliApplyResult,
-  type SkillsCliDoctorReport,
   type SkillsCliGlobalSkill,
   type SkillsCliInstallTarget,
   type SkillsCliPlacement,
-  type SkillsCliRemovePlan,
-  type SkillsCliSkillDoc,
   type SkillsCliSourcePreview,
-  type SkillsCliUpdateInventory,
-  type SkillsCliUpdateJobPhase,
+  type SkillsCliDoctorReport,
   type SkillsCliUpdateProgress,
 } from "@/types";
+import {
+  createSkillsCliUpdateSlice,
+  EMPTY_UPDATE_JOB,
+  newJobId,
+  skillsCliOperationBusy,
+  BUSY_ENVELOPE,
+  SELECTION_EMPTY_ENVELOPE,
+} from "./skillsCliStore.updateSlice";
+import type { SkillsCliState } from "./skillsCliStore.types";
 
 export type { SkillsCliDocState };
-
 export type { PlacementMutationOutcome };
-
-export interface SkillsCliExportInventoryInput {
-  path: string;
-  json: string;
-}
-
-export interface SkillsCliAddInput {
-  source: string;
-  skillNames: string[];
-  skillportAgentIds: string[];
-}
-
-const BUSY_ENVELOPE =
-  "skills_cli.busy:Another skill operation is using this target.";
-const SELECTION_EMPTY_ENVELOPE =
-  "skills_cli.selection_empty:Select at least one skill and one platform.";
-const UPDATE_PROGRESS_EVENT = "skills-cli://update-progress";
-
-export type SkillsCliUpdateJob = {
-  jobId: string | null;
-  phase: SkillsCliUpdateJobPhase;
-};
-
-const EMPTY_UPDATE_JOB: SkillsCliUpdateJob = { jobId: null, phase: null };
-
-function newJobId(): string {
-  return (
-    globalThis.crypto?.randomUUID?.() ??
-    `job-${Date.now()}-${Math.random().toString(16).slice(2)}`
-  );
-}
-
-interface SkillsCliState {
-  skills: SkillsCliGlobalSkill[];
-  targets: SkillsCliInstallTarget[];
-  preview: SkillsCliSourcePreview | null;
-  doctor: SkillsCliDoctorReport | null;
-  canonicalRoot: string | null;
-  lockPath: string | null;
-  isLoading: boolean;
-  isRefreshing: boolean;
-  isPreviewing: boolean;
-  isMutating: boolean;
-  isCancelling: boolean;
-  jobId: string | null;
-  /** Doctor rejection: write paths (install/uninstall) are degraded. */
-  runtimeError: string | null;
-  /** list_global / install_targets read failure: stale inventory is kept. */
-  inventoryError: string | null;
-  /** preview/add/remove failure: toast + inline in the install section. */
-  actionError: string | null;
-  docState: SkillsCliDocState;
-  updateInventory: SkillsCliUpdateInventory;
-  isLoadingUpdateCache: boolean;
-  updateJob: SkillsCliUpdateJob;
-  updateError: string | null;
-  updateProgress: SkillsCliUpdateProgress | null;
-
-  loadAll: () => Promise<void>;
-  loadUpdateInventory: () => Promise<void>;
-  checkUpdates: () => Promise<SkillsCliUpdateInventory>;
-  verifyUpdateBaseline: (skillNames: string[]) => Promise<SkillsCliUpdateInventory>;
-  applyUpdates: (input: {
-    repositoryKey: string;
-    skillNames: string[];
-  }) => Promise<SkillsCliApplyResult>;
-  retryUpdateRecovery: (
-    operationId: string,
-  ) => Promise<SkillsCliApplyRecoveryResult>;
-  cancelUpdateJob: () => Promise<void>;
-  previewSource: (source: string) => Promise<SkillsCliSourcePreview | null>;
-  addGlobal: (input: SkillsCliAddInput) => Promise<SkillsCliAddResult>;
-  removeGlobal: (skillName: string) => Promise<boolean>;
-  previewRemoveGlobal: (skillName: string) => Promise<SkillsCliRemovePlan | null>;
-  readSkillMd: (skillName: string) => Promise<SkillsCliSkillDoc | null>;
-  readSkillDoc: (skillName: string) => Promise<void>;
-  clearSkillDoc: (skillName?: string) => void;
-  revealSkillFolder: (skillName: string) => Promise<void>;
-  linkPlatform: (skillName: string, agentId: string) => Promise<void>;
-  unlinkPlatform: (skillName: string, agentId: string) => Promise<void>;
-  linkPlatformBatch: (
-    skillNames: string[],
-    agentId: string,
-  ) => Promise<PlacementMutationOutcome>;
-  unlinkManagedBatch: (skillNames: string[]) => Promise<PlacementMutationOutcome>;
-  removeGlobalBatch: (skillNames: string[]) => Promise<PlacementMutationOutcome>;
-  exportInventory: (input: SkillsCliExportInventoryInput) => Promise<void>;
-  cancelJob: () => Promise<void>;
-  resetForTargetChange: () => void;
-}
-
-function skillsCliOperationBusy(state: SkillsCliState): boolean {
-  return (
-    state.isMutating ||
-    state.isCancelling ||
-    state.updateJob.phase != null
-  );
-}
-
-async function listenForUpdateProgress(
-  get: () => SkillsCliState,
-  set: (patch: Partial<SkillsCliState>) => void,
-  jobId: string,
-): Promise<() => void> {
-  try {
-    return await listen<SkillsCliUpdateProgress>(
-      UPDATE_PROGRESS_EVENT,
-      (event) => {
-        if (event.payload.jobId !== jobId || get().updateJob.jobId !== jobId) {
-          return;
-        }
-        set({ updateProgress: event.payload });
-      },
-    );
-  } catch {
-    return () => undefined;
-  }
-}
+export type {
+  SkillsCliAddInput,
+  SkillsCliExportInventoryInput,
+  SkillsCliUpdateJob,
+} from "./skillsCliStore.types";
 
 function errorCodeFrom(error: unknown): string {
   return parseBackendError(error).code ?? "internal.unexpected";
@@ -347,6 +234,7 @@ const emptyState = {
 
 export const useSkillsCliStore = create<SkillsCliState>((set, get) => ({
   ...emptyState,
+  ...createSkillsCliUpdateSlice(set, get),
 
   async loadAll() {
     // Inventory and runtime health settle on independent tracks: a doctor
@@ -395,239 +283,6 @@ export const useSkillsCliStore = create<SkillsCliState>((set, get) => ({
       patch.updateError = backendErrorStateValue(updateCache.reason);
     }
     set(patch);
-  },
-
-  async loadUpdateInventory() {
-    set({ isLoadingUpdateCache: true });
-    try {
-      const inventory = await invoke("skills_cli_update_inventory");
-      set({
-        updateInventory: inventory ?? EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
-        isLoadingUpdateCache: false,
-        updateError: null,
-      });
-    } catch (error) {
-      set({
-        isLoadingUpdateCache: false,
-        updateError: backendErrorStateValue(error),
-      });
-    }
-  },
-
-  async checkUpdates() {
-    if (skillsCliOperationBusy(get())) {
-      throw new Error(BUSY_ENVELOPE);
-    }
-    const jobId = newJobId();
-    set({
-      updateJob: { jobId, phase: "checking" },
-      updateError: null,
-      updateProgress: null,
-    });
-    let unlisten: (() => void) | undefined;
-    try {
-      unlisten = await listenForUpdateProgress(get, set, jobId);
-      const inventory = await invoke("skills_cli_check_updates", { jobId });
-      if (get().updateJob.jobId !== jobId) {
-        return inventory;
-      }
-      set({
-        updateInventory: inventory,
-        updateJob: EMPTY_UPDATE_JOB,
-        updateProgress: null,
-        updateError: null,
-      });
-      return inventory;
-    } catch (error) {
-      if (get().updateJob.jobId === jobId) {
-        set({
-          updateError: backendErrorStateValue(error),
-          updateJob: EMPTY_UPDATE_JOB,
-        });
-      }
-      throw error;
-    } finally {
-      try {
-        unlisten?.();
-      } catch {
-        // Browser and test runtimes expose a no-op unlisten.
-      }
-    }
-  },
-
-  async verifyUpdateBaseline(skillNames) {
-    if (skillsCliOperationBusy(get())) {
-      throw new Error(BUSY_ENVELOPE);
-    }
-    const jobId = newJobId();
-    set({
-      updateJob: { jobId, phase: "verifying" },
-      updateError: null,
-      updateProgress: null,
-    });
-    let unlisten: (() => void) | undefined;
-    try {
-      unlisten = await listenForUpdateProgress(get, set, jobId);
-      const inventory = await invoke("skills_cli_verify_update_baseline", {
-        jobId,
-        skillNames,
-      });
-      if (get().updateJob.jobId !== jobId) {
-        return inventory;
-      }
-      set({
-        updateInventory: inventory,
-        updateJob: EMPTY_UPDATE_JOB,
-        updateProgress: null,
-        updateError: null,
-      });
-      return inventory;
-    } catch (error) {
-      if (get().updateJob.jobId === jobId) {
-        set({
-          updateError: backendErrorStateValue(error),
-          updateJob: EMPTY_UPDATE_JOB,
-        });
-      }
-      throw error;
-    } finally {
-      try {
-        unlisten?.();
-      } catch {
-        // Browser and test runtimes expose a no-op unlisten.
-      }
-    }
-  },
-
-  async applyUpdates(input) {
-    if (skillsCliOperationBusy(get())) {
-      throw new Error(BUSY_ENVELOPE);
-    }
-    const selections = applySelectionsForNames(
-      get().updateInventory,
-      input.skillNames,
-    );
-    if (selections.length === 0) {
-      set({ updateError: SELECTION_EMPTY_ENVELOPE });
-      throw new Error(SELECTION_EMPTY_ENVELOPE);
-    }
-    const jobId = newJobId();
-    set({
-      updateJob: { jobId, phase: "applying" },
-      updateError: null,
-      updateProgress: null,
-    });
-    let unlisten: (() => void) | undefined;
-    try {
-      unlisten = await listenForUpdateProgress(get, set, jobId);
-      const result = await invoke("skills_cli_apply_updates", {
-        request: {
-          jobId,
-          repositoryKey: input.repositoryKey,
-          selections,
-        },
-      });
-      if (get().updateJob.jobId !== jobId) {
-        return result;
-      }
-      try {
-        await get().loadAll();
-      } catch (refreshError) {
-        if (get().updateJob.jobId === jobId) {
-          set({
-            updateError: backendErrorStateValue(refreshError),
-            updateJob: EMPTY_UPDATE_JOB,
-            updateProgress: null,
-          });
-        }
-        return result;
-      }
-      if (get().updateJob.jobId === jobId) {
-        set({ updateJob: EMPTY_UPDATE_JOB, updateProgress: null });
-      }
-      return result;
-    } catch (error) {
-      if (get().updateJob.jobId === jobId) {
-        set({
-          updateError: backendErrorStateValue(error),
-          updateJob: EMPTY_UPDATE_JOB,
-        });
-      }
-      throw error;
-    } finally {
-      try {
-        unlisten?.();
-      } catch {
-        // Browser and test runtimes expose a no-op unlisten.
-      }
-    }
-  },
-
-  async retryUpdateRecovery(operationId) {
-    if (skillsCliOperationBusy(get())) {
-      throw new Error(BUSY_ENVELOPE);
-    }
-    const jobId = newJobId();
-    set({
-      updateJob: { jobId, phase: "recovering" },
-      updateError: null,
-      updateProgress: null,
-    });
-    let unlisten: (() => void) | undefined;
-    try {
-      unlisten = await listenForUpdateProgress(get, set, jobId);
-      const result = await invoke("skills_cli_retry_update_recovery", {
-        jobId,
-        operationId,
-      });
-      if (get().updateJob.jobId !== jobId) {
-        return result;
-      }
-      try {
-        await get().loadAll();
-      } catch (refreshError) {
-        if (get().updateJob.jobId === jobId) {
-          set({
-            updateError: backendErrorStateValue(refreshError),
-            updateJob: EMPTY_UPDATE_JOB,
-            updateProgress: null,
-          });
-        }
-        return result;
-      }
-      if (get().updateJob.jobId === jobId) {
-        set({ updateJob: EMPTY_UPDATE_JOB, updateProgress: null });
-      }
-      return result;
-    } catch (error) {
-      if (get().updateJob.jobId === jobId) {
-        set({
-          updateError: backendErrorStateValue(error),
-          updateJob: EMPTY_UPDATE_JOB,
-        });
-      }
-      throw error;
-    } finally {
-      try {
-        unlisten?.();
-      } catch {
-        // Browser and test runtimes expose a no-op unlisten.
-      }
-    }
-  },
-
-  async cancelUpdateJob() {
-    const jobId = get().updateJob.jobId;
-    if (!jobId) {
-      return;
-    }
-    try {
-      await invoke("cancel_skills_cli_job", { jobId });
-    } finally {
-      if (get().updateJob.jobId === jobId) {
-        set({ isCancelling: false });
-      }
-    }
   },
 
   async previewSource(source) {

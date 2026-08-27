@@ -727,20 +727,24 @@ describe("skillsCliStore doc and reveal", () => {
   });
 
   it("does not rewrite batch-owned link actions from the doc/reveal increment", () => {
-    const text = readFileSync(
+    const store = readFileSync(
       resolve(process.cwd(), "src/stores/skillsCliStore.ts"),
       "utf8",
     );
-    expect(text).toContain("async linkPlatform(");
-    expect(text).toContain("async unlinkPlatform(");
-    expect(text).toContain("async linkPlatformBatch(");
-    expect(text).toContain("async unlinkManagedBatch(");
-    expect(text).toContain("async removeGlobalBatch(");
-    expect(text).toContain("async exportInventory(");
-    expect(text).toContain("async readSkillDoc(");
-    expect(text).toContain("async revealSkillFolder(");
-    expect(text).toContain("async checkUpdates(");
-    expect(text).toContain("skills-cli://update-progress");
+    const updateSlice = readFileSync(
+      resolve(process.cwd(), "src/stores/skillsCliStore.updateSlice.ts"),
+      "utf8",
+    );
+    expect(store).toContain("async linkPlatform(");
+    expect(store).toContain("async unlinkPlatform(");
+    expect(store).toContain("async linkPlatformBatch(");
+    expect(store).toContain("async unlinkManagedBatch(");
+    expect(store).toContain("async removeGlobalBatch(");
+    expect(store).toContain("async exportInventory(");
+    expect(store).toContain("async readSkillDoc(");
+    expect(store).toContain("async revealSkillFolder(");
+    expect(updateSlice).toContain("async checkUpdates(");
+    expect(updateSlice).toContain("skills-cli://update-progress");
   });
 
   it("loads update cache independently and keeps global inventory when the cache rejects", async () => {

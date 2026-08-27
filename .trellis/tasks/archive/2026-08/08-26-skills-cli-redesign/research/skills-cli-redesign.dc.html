@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" />
+<style>
+  body { margin: 0; background: #11111b; }
+  a { color: #b4befe; text-decoration: none; }
+  a:hover { color: #cdd6f4; }
+  input { font-family: inherit; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: rgba(69,71,90,0.22); }
+  ::-webkit-scrollbar-thumb { background: rgba(166,173,200,0.28); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(166,173,200,0.58); }
+</style>
+</helmet>
+<div style="position:relative;width:1280px;height:760px;display:flex;flex-direction:column;overflow:hidden;background:#1e1e2e;color:#cdd6f4;font-family:'Instrument Serif',ui-serif,serif;font-size:16px;border:1px solid #313244">
+
+  <div style="display:flex;align-items:center;height:24px;padding:0 8px 0 10px;background:#11111b;border-bottom:1px solid #313244;flex-shrink:0">
+    <span style="width:12px;height:12px;background:#b4befe;-webkit-mask:{{ icons.blocks }} center/contain no-repeat;mask:{{ icons.blocks }} center/contain no-repeat"></span>
+    <span style="margin-left:8px;font-size:11px;color:#a6adc8">SkillPort</span>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:center;gap:14px;color:#a6adc8">
+      <span style="width:11px;height:11px;background:currentColor;-webkit-mask:{{ icons.minus }} center/contain no-repeat;mask:{{ icons.minus }} center/contain no-repeat"></span>
+      <span style="width:10px;height:10px;background:currentColor;-webkit-mask:{{ icons.square }} center/contain no-repeat;mask:{{ icons.square }} center/contain no-repeat"></span>
+      <span style="width:11px;height:11px;background:currentColor;-webkit-mask:{{ icons.x }} center/contain no-repeat;mask:{{ icons.x }} center/contain no-repeat"></span>
+    </div>
+  </div>
+
+  <header style="position:relative;display:flex;align-items:center;height:48px;padding:0 16px;border-bottom:1px solid #313244;background:#181825;flex-shrink:0">
+    <span style="z-index:10;padding:6px;border-radius:6px;color:#b4befe;display:inline-flex">
+      <span style="width:16px;height:16px;background:currentColor;-webkit-mask:{{ icons.blocks }} center/contain no-repeat;mask:{{ icons.blocks }} center/contain no-repeat"></span>
+    </span>
+    <div style="flex:1"></div>
+    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:0 64px">
+      <div style="display:flex;align-items:center;gap:8px;height:32px;width:416px;padding:0 12px;border-radius:6px;font-size:14px;background:rgba(69,71,90,0.4);color:#a6adc8;border:1px solid rgba(49,50,68,0.5)">
+        <span style="width:14px;height:14px;flex-shrink:0;background:currentColor;-webkit-mask:{{ icons.search }} center/contain no-repeat;mask:{{ icons.search }} center/contain no-repeat"></span>
+        <span style="flex:1;text-align:left">Search skills…</span>
+        <span style="border:1px solid rgba(49,50,68,0.5);border-radius:4px;padding:2px 4px;font-size:11px;font-family:'JetBrains Mono',monospace">Ctrl K</span>
+      </div>
+    </div>
+    <div style="margin-left:8px;display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:6px;background:#b4befe;color:#181825;font-size:14px">
+      <span style="width:14px;height:14px;background:currentColor;-webkit-mask:{{ icons.plus }} center/contain no-repeat;mask:{{ icons.plus }} center/contain no-repeat"></span>
+      <span>Import skill</span>
+    </div>
+    <div style="margin-left:8px;display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border:1px solid #313244;border-radius:6px;color:#cdd6f4;font-size:13px">
+      <span style="width:14px;height:14px;background:currentColor;-webkit-mask:{{ icons.database }} center/contain no-repeat;mask:{{ icons.database }} center/contain no-repeat"></span>
+      <span>Local</span>
+      <span style="width:12px;height:12px;color:#a6adc8;background:currentColor;-webkit-mask:{{ icons.chevronDown }} center/contain no-repeat;mask:{{ icons.chevronDown }} center/contain no-repeat"></span>
+    </div>
+    <span style="margin-left:6px;padding:6px;color:#a6adc8;display:inline-flex">
+      <span style="width:16px;height:16px;background:currentColor;-webkit-mask:{{ icons.keyboard }} center/contain no-repeat;mask:{{ icons.keyboard }} center/contain no-repeat"></span>
+    </span>
+    <span style="margin-left:2px;padding:6px;color:#a6adc8;display:inline-flex">
+      <span style="width:16px;height:16px;background:currentColor;-webkit-mask:{{ icons.sun }} center/contain no-repeat;mask:{{ icons.sun }} center/contain no-repeat"></span>
+    </span>
+  </header>
+
+  <div style="flex:1;display:flex;min-height:0">
+
+    <nav style="display:flex;flex-direction:column;flex-shrink:0;width:208px;height:100%;border-right:1px solid #313244;background:#181825">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #313244">
+        <span style="font-size:14px;font-weight:700;letter-spacing:-0.01em;color:#b4befe">SkillPort</span>
+        <span style="width:16px;height:16px;color:#a6adc8;background:currentColor;-webkit-mask:{{ icons.chevronLeft }} center/contain no-repeat;mask:{{ icons.chevronLeft }} center/contain no-repeat"></span>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:8px 6px;display:flex;flex-direction:column;gap:2px">
+        <sc-for list="{{ navBefore }}" as="item" hint-placeholder-count="2">
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;font-size:14px">
+            <span style="width:16px;height:16px;flex-shrink:0;background:currentColor;-webkit-mask:{{ item.icon }} center/contain no-repeat;mask:{{ item.icon }} center/contain no-repeat"></span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ item.label }}</span>
+            <sc-if value="{{ item.count }}" hint-placeholder-val="{{ false }}">
+              <span style="font-size:10px;font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums;padding:2px 6px;border-radius:999px;background:rgba(69,71,90,0.6);color:#a6adc8">{{ item.count }}</span>
+            </sc-if>
+          </div>
+        </sc-for>
+        <div style="position:relative">
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;font-size:14px;font-weight:600;color:#181825;background:linear-gradient(145deg,color-mix(in oklch,#b4befe 94%,white 12%),color-mix(in oklch,#b4befe 82%,black 14%));box-shadow:inset 0 1px 0 color-mix(in oklch,white 22%,transparent),0 10px 28px color-mix(in oklch,#b4befe 22%,transparent),0 0 0 1px rgba(180,190,254,0.4)">
+            <span style="width:16px;height:16px;flex-shrink:0;background:currentColor;-webkit-mask:{{ icons.terminal }} center/contain no-repeat;mask:{{ icons.terminal }} center/contain no-repeat"></span>
+            <span style="flex:1">Skills CLI global</span>
+            <span style="font-size:10px;font-family:'JetBrains Mono',monospace;padding:2px 6px;border-radius:999px;background:rgba(24,24,37,0.25)">51</span>
+          </div>
+          <span style="position:absolute;left:0;top:4px;bottom:4px;width:3px;border-radius:0 999px 999px 0;background:#181825"></span>
+        </div>
+        <sc-for list="{{ navAfter }}" as="item" hint-placeholder-count="6">
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;font-size:14px">
+            <span style="width:16px;height:16px;flex-shrink:0;background:currentColor;-webkit-mask:{{ item.icon }} center/contain no-repeat;mask:{{ item.icon }} center/contain no-repeat"></span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ item.label }}</span>
+          </div>
+        </sc-for>
+        <div style="border-top:1px solid rgba(49,50,68,0.7);margin:8px 0"></div>
+        <div style="font-size:12px;font-weight:500;color:#a6adc8;text-transform:uppercase;letter-spacing:0.06em;padding:8px 10px 4px">Coding</div>
+        <div style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;font-size:14px">
+          <span style="width:16px;height:16px;flex-shrink:0;background:currentColor;-webkit-mask:{{ icons.globe }} center/contain no-repeat;mask:{{ icons.globe }} center/contain no-repeat"></span>
+          <span style="flex:1">Universal</span>
+          <span style="font-size:10px;font-family:'JetBrains Mono',monospace;padding:2px 6px;border-radius:999px;background:rgba(69,71,90,0.6);color:#a6adc8">56</span>
+        </div>
+        <sc-for list="{{ navPlatforms }}" as="item" hint-placeholder-count="4">
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;font-size:14px">
+            <span style="width:16px;height:16px;flex-shrink:0;border-radius:2px;background:{{ item.iconBg }};-webkit-mask:{{ item.iconMask }} center/contain no-repeat;mask:{{ item.iconMask }} center/contain no-repeat"></span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ item.label }}</span>
+            <span style="font-size:10px;font-family:'JetBrains Mono',monospace;padding:2px 6px;border-radius:999px;background:rgba(69,71,90,0.6);color:#a6adc8">{{ item.count }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="border-top:1px solid rgba(49,50,68,0.7);padding:8px 6px">
+        <div style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;font-size:14px">
+          <span style="width:16px;height:16px;background:currentColor;-webkit-mask:{{ icons.settings }} center/contain no-repeat;mask:{{ icons.settings }} center/contain no-repeat"></span>
+          <span>Settings</span>
+        </div>
+      </div>
+    </nav>
+
+    <div style="position:relative;flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;background:#1e1e2e">
+
+      <div style="border-bottom:1px solid #313244;padding:12px 24px 10px;display:flex;flex-direction:column;gap:10px;flex-shrink:0">
+        <div style="display:flex;align-items:center;gap:12px">
+          <h1 style="margin:0;font-size:20px;font-weight:600;letter-spacing:-0.01em;white-space:nowrap">Skills CLI global</h1>
+          <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#a6adc8;font-variant-numeric:tabular-nums">
+            <span style="padding:2px 8px;border-radius:999px;background:rgba(69,71,90,0.45);color:#cdd6f4">{{ statInstalled }}</span>
+            <span style="padding:2px 8px;border-radius:999px;background:rgba(69,71,90,0.45)">{{ statLinked }}</span>
+            <span style="padding:2px 8px;border-radius:999px;background:rgba(243,139,168,0.12);color:#f38ba8">{{ statUnlinked }}</span>
+            <span style="padding:2px 8px;border-radius:999px;background:rgba(166,227,161,0.1);color:#a6e3a1">{{ statRepos }}</span>
+          </div>
+          <div style="flex:1"></div>
+          <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:999px;border:1px solid rgba(166,227,161,0.3);background:rgba(166,227,161,0.08);font-family:'JetBrains Mono',monospace;font-size:11px;color:#a6e3a1">
+            <span style="width:6px;height:6px;border-radius:999px;background:#a6e3a1"></span>
+            Node v22.20.0 · skills@1.5.23
+          </span>
+          <button onClick="{{ noop }}" style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #313244;border-radius:6px;background:transparent;color:#a6adc8;cursor:pointer" style-hover="border-color:#585b70;color:#cdd6f4" title="Refresh">
+            <span style="width:15px;height:15px;background:currentColor;-webkit-mask:{{ icons.refresh }} center/contain no-repeat;mask:{{ icons.refresh }} center/contain no-repeat"></span>
+          </button>
+          <button onClick="{{ openInstall }}" style="display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 14px;border:0;border-radius:6px;background:#b4befe;color:#181825;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer" style-hover="background:#c7cffe">
+            <span style="width:14px;height:14px;background:currentColor;-webkit-mask:{{ icons.packagePlus }} center/contain no-repeat;mask:{{ icons.packagePlus }} center/contain no-repeat"></span>
+            <span>Install skills</span>
+          </button>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px;height:30px;width:280px;padding:0 10px;border-radius:6px;background:rgba(69,71,90,0.32);border:1px solid rgba(49,50,68,0.8)">
+            <span style="width:14px;height:14px;flex-shrink:0;color:#a6adc8;background:currentColor;-webkit-mask:{{ icons.search }} center/contain no-repeat;mask:{{ icons.search }} center/contain no-repeat"></span>
+            <input value="{{ query }}" onInput="{{ onQuery }}" placeholder="Filter by name, path or repo…" style="flex:1;min-width:0;border:0;outline:none;background:transparent;color:#cdd6f4;font-size:13px" />
+            <sc-if value="{{ hasQuery }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ clearQuery }}" style="display:inline-flex;border:0;background:transparent;color:#a6adc8;cursor:pointer;padding:0">
+                <span style="width:12px;height:12px;background:currentColor;-webkit-mask:{{ icons.x }} center/contain no-repeat;mask:{{ icons.x }} center/contain no-repeat"></span>
+              </button>
+            </sc-if>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:2px;padding:2px;border-radius:7px;background:rgba(69,71,90,0.28);border:1px solid rgba(49,50,68,0.8)">
+            <span style="padding:0 8px;font-size:11px;color:#a6adc8">Group</span>
+            <sc-for list="{{ groupOptions }}" as="opt" hint-placeholder-count="4">
+              <button onClick="{{ opt.onClick }}" style="height:24px;padding:0 10px;border:0;border-radius:5px;font-family:inherit;font-size:12px;cursor:pointer;background:{{ opt.bg }};color:{{ opt.fg }}">{{ opt.label }}</button>
+            </sc-for>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:4px">
+            <sc-for list="{{ platformChips }}" as="chip" hint-placeholder-count="8">
+              <button onClick="{{ chip.onClick }}" title="{{ chip.title }}" style="display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 8px;border-radius:999px;border:1px solid {{ chip.border }};background:{{ chip.bg }};color:{{ chip.fg }};font-family:inherit;font-size:11px;cursor:pointer">
+                <span style="width:12px;height:12px;flex-shrink:0;border-radius:2px;opacity:{{ chip.iconOpacity }};background:{{ chip.iconBg }};-webkit-mask:{{ chip.iconMask }} center/contain no-repeat;mask:{{ chip.iconMask }} center/contain no-repeat"></span>
+                <span style="font-variant-numeric:tabular-nums">{{ chip.count }}</span>
+              </button>
+            </sc-for>
+          </div>
+
+          <div style="flex:1"></div>
+
+          <button onClick="{{ toggleUnlinked }}" style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid {{ unlinkedBorder }};background:{{ unlinkedBg }};color:{{ unlinkedFg }};font-family:inherit;font-size:12px;cursor:pointer">
+            <span style="width:13px;height:13px;background:currentColor;-webkit-mask:{{ icons.unlink }} center/contain no-repeat;mask:{{ icons.unlink }} center/contain no-repeat"></span>
+            <span>Unlinked only</span>
+          </button>
+          <button onClick="{{ toggleSelectMode }}" style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid {{ selectBorder }};background:{{ selectBg }};color:{{ selectFg }};font-family:inherit;font-size:12px;cursor:pointer">
+            <span style="width:13px;height:13px;background:currentColor;-webkit-mask:{{ icons.checkSquare }} center/contain no-repeat;mask:{{ icons.checkSquare }} center/contain no-repeat"></span>
+            <span>Select</span>
+          </button>
+          <button onClick="{{ noop }}" title="Export list" style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;border:1px solid #313244;background:transparent;color:#a6adc8;cursor:pointer" style-hover="color:#cdd6f4;border-color:#585b70">
+            <span style="width:14px;height:14px;background:currentColor;-webkit-mask:{{ icons.fileDown }} center/contain no-repeat;mask:{{ icons.fileDown }} center/contain no-repeat"></span>
+          </button>
+        </div>
+      </div>
+
+      <div style="flex:1;overflow-y:auto;padding:14px 24px 96px;display:flex;flex-direction:column;gap:18px">
+        <sc-for list="{{ groups }}" as="group" hint-placeholder-count="3">
+          <section>
+            <div style="position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;padding:6px 2px 8px;background:#1e1e2e;border-bottom:1px solid rgba(49,50,68,0.7)">
+              <button onClick="{{ group.onToggle }}" style="display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;padding:0;color:#cdd6f4;font-family:inherit;cursor:pointer">
+                <span style="width:12px;height:12px;color:#a6adc8;background:currentColor;-webkit-mask:{{ group.chevron }} center/contain no-repeat;mask:{{ group.chevron }} center/contain no-repeat"></span>
+                <span style="display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:13px;color:#cdd6f4">
+                  <span style="width:13px;height:13px;color:#a6adc8;background:currentColor;-webkit-mask:{{ icons.gitRepo }} center/contain no-repeat;mask:{{ icons.gitRepo }} center/contain no-repeat"></span>
+                  {{ group.label }}
+                </span>
+              </button>
+              <span style="font-size:11px;color:#a6adc8;font-variant-numeric:tabular-nums">{{ group.meta }}</span>
+              <sc-if value="{{ group.hasUpdates }}" hint-placeholder-val="{{ false }}">
+                <span style="padding:1px 7px;border-radius:999px;background:rgba(180,190,254,0.12);border:1px solid rgba(180,190,254,0.25);font-size:11px;color:#b4befe">{{ group.updateLabel }}</span>
+              </sc-if>
+              <div style="flex:1"></div>
+              <button onClick="{{ group.onSelectAll }}" style="height:24px;padding:0 8px;border:1px solid #313244;border-radius:6px;background:transparent;color:#a6adc8;font-family:inherit;font-size:11px;cursor:pointer" style-hover="color:#cdd6f4;border-color:#585b70">Select all</button>
+              <button onClick="{{ group.onUpdateAll }}" style="display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px;border:1px solid #313244;border-radius:6px;background:transparent;color:#a6adc8;font-family:inherit;font-size:11px;cursor:pointer" style-hover="color:#b4befe;border-color:rgba(180,190,254,0.4)">
+                <span style="width:11px;height:11px;background:currentColor;-webkit-mask:{{ icons.download }} center/contain no-repeat;mask:{{ icons.download }} center/contain no-repeat"></span>
+                Update all
+              </button>
+            </div>
+
+            <sc-if value="{{ group.open }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding-top:10px">
+                <sc-for list="{{ group.skills }}" as="skill" hint-placeholder-count="8">
+                  <div style="position:relative;display:flex;flex-direction:column;gap:6px;padding:10px 11px;border-radius:10px;background:{{ skill.bg }};box-shadow:0 0 0 1px {{ skill.ring }};cursor:pointer" style-hover="box-shadow:0 0 0 1px rgba(180,190,254,0.45)" onClick="{{ skill.onClick }}">
+                    <div style="display:flex;align-items:center;gap:7px">
+                      <sc-if value="{{ selectMode }}" hint-placeholder-val="{{ false }}">
+                        <button onClick="{{ skill.onSelect }}" style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;padding:0;flex-shrink:0;border-radius:4px;border:1px solid {{ skill.boxBorder }};background:{{ skill.boxBg }};cursor:pointer">
+                          <span style="width:10px;height:10px;background:#181825;opacity:{{ skill.checkOpacity }};-webkit-mask:{{ icons.check }} center/contain no-repeat;mask:{{ icons.check }} center/contain no-repeat"></span>
+                        </button>
+                      </sc-if>
+                      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:600;color:#cdd6f4">{{ skill.name }}</span>
+                      <sc-if value="{{ skill.updatable }}" hint-placeholder-val="{{ false }}">
+                        <span title="Update available" style="width:6px;height:6px;flex-shrink:0;border-radius:999px;background:#b4befe"></span>
+                      </sc-if>
+                      <button onClick="{{ skill.onUninstall }}" title="Uninstall" style="display:inline-flex;padding:0;border:0;background:transparent;color:#6c7086;cursor:pointer" style-hover="color:#f38ba8">
+                        <span style="width:13px;height:13px;background:currentColor;-webkit-mask:{{ icons.trash }} center/contain no-repeat;mask:{{ icons.trash }} center/contain no-repeat"></span>
+                      </button>
+                    </div>
+                    <sc-if value="{{ showPathRow }}" hint-placeholder-val="{{ true }}">
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#7f849c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ skill.shortPath }}</div>
+                    </sc-if>
+                    <div style="display:flex;align-items:center;gap:5px;min-height:18px">
+                      <sc-if value="{{ skill.linked }}" hint-placeholder-val="{{ true }}">
+                        <sc-for list="{{ skill.agentIcons }}" as="ag" hint-placeholder-count="4">
+                          <span title="{{ ag.name }}" style="width:14px;height:14px;flex-shrink:0;border-radius:3px;background:{{ ag.iconBg }};-webkit-mask:{{ ag.iconMask }} center/contain no-repeat;mask:{{ ag.iconMask }} center/contain no-repeat"></span>
+                        </sc-for>
+                      </sc-if>
+                      <sc-if value="{{ skill.more }}" hint-placeholder-val="{{ false }}">
+                        <span style="font-size:10px;color:#a6adc8;font-variant-numeric:tabular-nums">{{ skill.moreLabel }}</span>
+                      </sc-if>
+                      <sc-if value="{{ skill.notLinked }}" hint-placeholder-val="{{ false }}">
+                        <span style="display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:999px;background:rgba(249,226,175,0.1);border:1px solid rgba(249,226,175,0.25);font-size:10px;color:#f9e2af">
+                          <span style="width:9px;height:9px;background:currentColor;-webkit-mask:{{ icons.unlink }} center/contain no-repeat;mask:{{ icons.unlink }} center/contain no-repeat"></span>
+                          Not linked
+                        </span>
+                      </sc-if>
+                      <div style="flex:1"></div>
+                      <button onClick="{{ skill.onOpen }}" title="Manage links" style="display:inline-flex;padding:0;border:0;background:transparent;color:#6c7086;cursor:pointer" style-hover="color:#b4befe">
+                        <span style="width:13px;height:13px;background:currentColor;-webkit-mask:{{ icons.link }} center/contain no-repeat;mask:{{ icons.link }} center/contain no-repeat"></span>
+                      </button>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </section>
+        </sc-for>
+
+        <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:40px;text-align:center;color:#a6adc8;font-size:14px">No skill matches “{{ query }}”.</div>
+        </sc-if>
+
+        <div style="display:flex;flex-direction:column;gap:2px;font-size:11px;color:#6c7086;font-family:'JetBrains Mono',monospace;padding-top:4px">
+          <span>Canonical root: C:\Users\lyh\.agents\skills</span>
+          <span>Lock file: C:\Users\lyh\.agents\.skill-lock.json</span>
+          <span>SkillPort does not own all of ~/.agents/skills/.</span>
+        </div>
+      </div>
+
+      <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;left:50%;transform:translateX(-50%);bottom:18px;display:flex;align-items:center;gap:8px;height:46px;padding:0 10px 0 16px;border-radius:12px;background:#181825;border:1px solid #45475a;box-shadow:0 18px 44px -18px rgba(0,0,0,0.8)">
+          <span style="font-size:13px;color:#cdd6f4;font-variant-numeric:tabular-nums">{{ selectionLabel }}</span>
+          <span style="width:1px;height:22px;background:#313244"></span>
+          <div style="position:relative">
+            <button onClick="{{ toggleLinkMenu }}" style="display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:0;border-radius:7px;background:#b4befe;color:#181825;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">
+              <span style="width:13px;height:13px;background:currentColor;-webkit-mask:{{ icons.link }} center/contain no-repeat;mask:{{ icons.link }} center/contain no-repeat"></span>
+              Link to platform
+              <span style="width:11px;height:11px;background:currentColor;-webkit-mask:{{ icons.chevronDown }} center/contain no-repeat;mask:{{ icons.chevronDown }} center/contain no-repeat"></span>
+            </button>
+            <sc-if value="{{ linkMenuOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;bottom:38px;left:0;width:210px;padding:6px;border-radius:10px;background:#181825;border:1px solid #45475a;box-shadow:0 18px 44px -18px rgba(0,0,0,0.85);display:flex;flex-direction:column;gap:2px">
+                <sc-for list="{{ linkMenuItems }}" as="lm" hint-placeholder-count="8">
+                  <button onClick="{{ lm.onClick }}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:0;border-radius:6px;background:transparent;color:#cdd6f4;font-family:inherit;font-size:12px;cursor:pointer;text-align:left" style-hover="background:rgba(69,71,90,0.45)">
+                    <span style="width:14px;height:14px;flex-shrink:0;border-radius:3px;background:{{ lm.iconBg }};-webkit-mask:{{ lm.iconMask }} center/contain no-repeat;mask:{{ lm.iconMask }} center/contain no-repeat"></span>
+                    <span style="flex:1">{{ lm.name }}</span>
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6c7086">{{ lm.count }}</span>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+          <button onClick="{{ unlinkSelected }}" style="display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid #313244;border-radius:7px;background:transparent;color:#cdd6f4;font-family:inherit;font-size:12px;cursor:pointer" style-hover="border-color:#585b70">
+            <span style="width:13px;height:13px;background:currentColor;-webkit-mask:{{ icons.unlink }} center/contain no-repeat;mask:{{ icons.unlink }} center/contain no-repeat"></span>
+            Unlink
+          </button>
+          <button onClick="{{ noop }}" style="display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid #313244;border-radius:7px;background:transparent;color:#cdd6f4;font-family:inherit;font-size:12px;cursor:pointer" style-hover="border-color:#585b70">
+            <span style="width:13px;height:13px;background:currentColor;-webkit-mask:{{ icons.fileDown }} center/contain no-repeat;mask:{{ icons.fileDown }} center/contain no-repeat"></span>
+            Export
+          </button>
+          <button onClick="{{ confirmUninstallSelected }}" style="display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid rgba(243,139,168,0.35);border-radius:7px;background:rgba(243,139,168,0.1);color:#f38ba8;font-family:inherit;font-size:12px;cursor:pointer" style-hover="background:rgba(243,139,168,0.18)">
+            <span style="width:13px;height:13px;background:currentColor;-webkit-mask:{{ icons.trash }} center/contain no-repeat;mask:{{ icons.trash }} center/contain no-repeat"></span>
+            Uninstall
+          </button>
+          <span style="width:1px;height:22px;background:#313244"></span>
+          <button onClick="{{ clearSelection }}" title="Clear selection" style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:0;border-radius:7px;background:transparent;color:#a6adc8;cursor:pointer" style-hover="color:#cdd6f4">
+            <span style="width:14px;height:14px;background:currentColor;-webkit-mask:{{ icons.x }} center/contain no-repeat;mask:{{ icons.x }} center/contain no-repeat"></span>
+          </button>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <sc-if value="{{ installOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(17,17,27,0.62);backdrop-filter:blur(2px)">
+      <div style="width:620px;max-height:640px;display:flex;flex-direction:column;border-radius:14px;background:#181825;border:1px solid #45475a;box-shadow:0 30px 80px -20px rgba(0,0,0,0.85);overflow:hidden">
+        <div style="display:flex;align-items:center;gap:10px;padding:16px 18px 12px;border-bottom:1px solid #313244">
+          <span style="width:16px;height:16px;color:#b4befe;background:currentColor;-webkit-mask:{{ icons.packagePlus }} center/contain no-repeat;mask:{{ icons.packagePlus }} center/contain no-repeat"></span>
+          <div style="flex:1">
+            <div style="font-size:16px;font-weight:600">Install Skills CLI skills</div>
+            <div style="font-size:12px;color:#a6adc8">npx skills add — runs against ~/.agents/skills</div>
+          </div>
+          <button onClick="{{ closeInstall }}" style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:#a6adc8;cursor:pointer" style-hover="color:#cdd6f4;background:rgba(69,71,90,0.4)">
+            <span style="width:14px;height:14px;background:currentColor;-webkit-mask:{{ icons.x }} center/contain no-repeat;mask:{{ icons.x }} center/contain no-repeat"></span>
+          </button>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;padding:12px 18px;border-bottom:1px solid #313244">
+          <sc-for list="{{ steps }}" as="step" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:999px;font-size:11px;font-family:'JetBrains Mono',monospace;background:{{ step.bg }};color:{{ step.fg }};border:1px solid {{ step.border }}">{{ step.n }}</span>
+              <span style="font-size:12px;color:{{ step.labelColor }}">{{ step.label }}</span>
+              <sc-if value="{{ step.divider }}" hint-placeholder-val="{{ true }}">
+                <span style="width:26px;height:1px;background:#313244;margin:0 4px"></span>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+
+          <sc-if value="{{ onStep1 }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <label style="font-size:12px;color:#a6adc8">Skill source</label>
+              <div style="display:flex;gap:8px">
+                <input value="{{ source }}" onInput="{{ onSource }}" placeholder="owner/repo or https://github.com/owner/repo" style="flex:1;height:34px;padding:0 10px;border-radius:7px;border:1px solid #313244;background:rgba(69,71,90,0.28);color:#cdd6f4;font-family:'JetBrains Mono',monospace;font-size:12px;outline:none" />
+                <button onClick="{{ gotoStep2 }}" style="height:34px;padding:0 14px;border:0;border-radius:7px;background:#b4befe;color:#181825;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Preview skills</button>
+              </div>
+              <div style="font-size:11px;color:#6c7086">Supports GitHub, GitLab, git URLs, Mintlify, Hugging Face and local folders.</div>
+              <div style="margin-top:4px;font-size:12px;color:#a6adc8">Recent sources</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                <sc-for list="{{ recentSources }}" as="rs" hint-placeholder-count="4">
+                  <button onClick="{{ rs.onClick }}" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;border:1px solid #313244;background:rgba(69,71,90,0.25);color:#cdd6f4;font-family:'JetBrains Mono',monospace;font-size:11px;white-space:nowrap;cursor:pointer" style-hover="border-color:rgba(180,190,254,0.5);color:#b4befe">{{ rs.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ onStep2 }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#b4befe">{{ source }}</span>
+                <span style="font-size:11px;color:#a6adc8">{{ previewMeta }}</span>
+                <div style="flex:1"></div>
+                <button onClick="{{ toggleAllPreview }}" style="height:24px;padding:0 10px;border:1px solid #313244;border-radius:6px;background:transparent;color:#a6adc8;font-family:inherit;font-size:11px;cursor:pointer">{{ toggleAllLabel }}</button>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                <sc-for list="{{ previewSkills }}" as="ps" hint-placeholder-count="8">
+                  <button onClick="{{ ps.onClick }}" style="display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:8px;border:1px solid {{ ps.border }};background:{{ ps.bg }};color:#cdd6f4;font-family:inherit;font-size:12px;cursor:pointer;text-align:left">
+                    <span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;flex-shrink:0;border-radius:4px;border:1px solid {{ ps.boxBorder }};background:{{ ps.boxBg }}">
+                      <span style="width:10px;height:10px;background:#181825;opacity:{{ ps.checkOpacity }};-webkit-mask:{{ icons.check }} center/contain no-repeat;mask:{{ icons.check }} center/contain no-repeat"></span>
+                    </span>
+                    <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ps.name }}</span>
+                    <sc-if value="{{ ps.installed }}" hint-placeholder-val="{{ false }}">
+                      <span style="font-size:10px;color:#f9e2af">installed</span>
+                    </sc-if>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ onStep3 }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:12px;color:#a6adc8">{{ step3Summary }}</span>
+                <div style="flex:1"></div>
+                <button onClick="{{ toggleAllPlatforms }}" style="height:24px;padding:0 10px;border:1px solid #313244;border-radius:6px;background:transparent;color:#a6adc8;font-family:inherit;font-size:11px;cursor:pointer">{{ platformToggleLabel }}</button>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                <sc-for list="{{ platformChoices }}" as="pc" hint-placeholder-count="8">
+                  <button onClick="{{ pc.onClick }}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;border:1px solid {{ pc.border }};background:{{ pc.bg }};color:#cdd6f4;font-family:inherit;font-size:12px;cursor:pointer;text-align:left">
+                    <span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;flex-shrink:0;border-radius:4px;border:1px solid {{ pc.boxBorder }};background:{{ pc.boxBg }}">
+                      <span style="width:10px;height:10px;background:#181825;opacity:{{ pc.checkOpacity }};-webkit-mask:{{ icons.check }} center/contain no-repeat;mask:{{ icons.check }} center/contain no-repeat"></span>
+                    </span>
+                    <span style="width:14px;height:14px;flex-shrink:0;border-radius:3px;background:{{ pc.iconBg }};-webkit-mask:{{ pc.iconMask }} center/contain no-repeat;mask:{{ pc.iconMask }} center/contain no-repeat"></span>
+                    <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ pc.name }}</span>
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6c7086">{{ pc.count }}</span>
+                  </button>
+                </sc-for>
+              </div>
+              <div style="margin-top:2px;padding:10px 12px;border-radius:8px;background:rgba(69,71,90,0.25);border:1px solid #313244;font-family:'JetBrains Mono',monospace;font-size:11px;color:#a6adc8">{{ commandPreview }}</div>
+            </div>
+          </sc-if>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;padding:12px 18px;border-top:1px solid #313244">
+          <span style="font-size:11px;color:#6c7086">{{ footerHint }}</span>
+          <div style="flex:1"></div>
+          <sc-if value="{{ canBack }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ back }}" style="height:32px;padding:0 12px;border:1px solid #313244;border-radius:7px;background:transparent;color:#cdd6f4;font-family:inherit;font-size:13px;cursor:pointer">Back</button>
+          </sc-if>
+          <button onClick="{{ primaryAction }}" style="display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 16px;border:0;border-radius:7px;background:#b4befe;color:#181825;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;opacity:{{ primaryOpacity }}">
+            <span>{{ primaryLabel }}</span>
+            <span style="width:13px;height:13px;background:currentColor;-webkit-mask:{{ icons.arrowRight }} center/contain no-repeat;mask:{{ icons.arrowRight }} center/contain no-repeat"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+
+
+  <sc-if value="{{ toastOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;left:232px;bottom:18px;z-index:5;display:flex;align-items:center;gap:9px;height:38px;padding:0 14px;border-radius:10px;background:#181825;border:1px solid #45475a;box-shadow:0 14px 36px -16px rgba(0,0,0,0.8)">
+      <span style="width:14px;height:14px;color:{{ toast.color }};background:currentColor;-webkit-mask:{{ toast.icon }} center/contain no-repeat;mask:{{ toast.icon }} center/contain no-repeat"></span>
+      <span style="font-size:12px;color:#cdd6f4">{{ toast.text }}</span>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ detailOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;display:flex;justify-content:flex-end;background:rgba(17,17,27,0.5)">
+      <div style="width:460px;height:100%;display:flex;flex-direction:column;background:#181825;border-left:1px solid #45475a;box-shadow:-24px 0 60px -24px rgba(0,0,0,0.85)">
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:16px 18px 12px;border-bottom:1px solid #313244">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:17px;font-weight:600;color:#cdd6f4">{{ detail.name }}</span>
+              <sc-if value="{{ detail.updatable }}" hint-placeholder-val="{{ false }}">
+                <span style="padding:1px 7px;border-radius:999px;background:rgba(180,190,254,0.12);border:1px solid rgba(180,190,254,0.25);font-size:11px;color:#b4befe">Update available</span>
+              </sc-if>
+            </div>
+            <div style="margin-top:4px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#7f849c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ detail.path }}</div>
+          </div>
+          <button onClick="{{ closeDetail }}" style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:#a6adc8;cursor:pointer" style-hover="color:#cdd6f4;background:rgba(69,71,90,0.4)">
+            <span style="width:14px;height:14px;background:currentColor;-webkit-mask:{{ icons.x }} center/contain no-repeat;mask:{{ icons.x }} center/contain no-repeat"></span>
+          </button>
+        </div>
+
+        <div style="display:flex;gap:8px;padding:10px 18px;border-bottom:1px solid #313244;font-size:11px;color:#a6adc8">
+          <span style="display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:rgba(69,71,90,0.35);font-family:'JetBrains Mono',monospace">
+            <span style="width:11px;height:11px;background:currentColor;-webkit-mask:{{ icons.gitRepo }} center/contain no-repeat;mask:{{ icons.gitRepo }} center/contain no-repeat"></span>
+            {{ detail.repoLabel }}
+          </span>
+          <span style="padding:2px 8px;border-radius:999px;background:rgba(69,71,90,0.35);font-family:'JetBrains Mono',monospace">{{ detail.version }}</span>
+          <span style="padding:2px 8px;border-radius:999px;background:rgba(69,71,90,0.35)">{{ detail.installedAt }}</span>
+        </div>
+
+        <div style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:16px 18px;display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:12px;font-weight:600;color:#cdd6f4;text-transform:uppercase;letter-spacing:0.06em">Platform links</span>
+              <span style="font-size:11px;color:#a6adc8">{{ detail.linkSummary }}</span>
+              <div style="flex:1"></div>
+              <button onClick="{{ detail.onLinkAll }}" style="height:24px;padding:0 9px;border:1px solid #313244;border-radius:6px;background:transparent;color:#a6adc8;font-family:inherit;font-size:11px;cursor:pointer" style-hover="color:#cdd6f4;border-color:#585b70">{{ detail.linkAllLabel }}</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <sc-for list="{{ detail.platforms }}" as="p" hint-placeholder-count="8">
+                <div style="display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:8px;background:{{ p.bg }};border:1px solid {{ p.border }}">
+                  <span style="width:16px;height:16px;flex-shrink:0;border-radius:3px;background:{{ p.iconBg }};-webkit-mask:{{ p.iconMask }} center/contain no-repeat;mask:{{ p.iconMask }} center/contain no-repeat"></span>
+                  <span style="flex:1;font-size:12px;color:#cdd6f4">{{ p.name }}</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6c7086">{{ p.target }}</span>
+                  <button onClick="{{ p.onToggle }}" style="position:relative;width:34px;height:18px;padding:0;flex-shrink:0;border:0;border-radius:999px;background:{{ p.trackBg }};cursor:pointer">
+                    <span style="position:absolute;top:2px;left:{{ p.knobLeft }};width:14px;height:14px;border-radius:999px;background:{{ p.knobBg }};transition:left 140ms ease"></span>
+                  </button>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:12px;font-weight:600;color:#cdd6f4;text-transform:uppercase;letter-spacing:0.06em">SKILL.md</span>
+              <div style="flex:1"></div>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6c7086">{{ detail.fileMeta }}</span>
+            </div>
+            <pre style="margin:0;padding:12px 14px;border-radius:10px;background:#11111b;border:1px solid #313244;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.7;color:#a6adc8;white-space:pre-wrap">{{ detail.markdown }}</pre>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;padding:12px 18px;border-top:1px solid #313244">
+          <sc-if value="{{ detail.updatable }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ openUpdatesFromDetail }}" style="display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:0;border-radius:7px;background:#b4befe;color:#181825;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">
+              <span style="width:13px;height:13px;background:currentColor;-webkit-mask:{{ icons.download }} center/contain no-repeat;mask:{{ icons.download }} center/contain no-repeat"></span>
+              Update
+            </button>
+          </sc-if>
+          <button onClick="{{ noop }}" style="display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid #313244;border-radius:7px;background:transparent;color:#cdd6f4;font-family:inherit;font-size:12px;white-space:nowrap;cursor:pointer" style-hover="border-color:#585b70">
+            <span style="width:13px;height:13px;flex-shrink:0;background:currentColor;-webkit-mask:{{ icons.folderOpen }} center/contain no-repeat;mask:{{ icons.folderOpen }} center/contain no-repeat"></span>
+            Reveal folder
+          </button>
+          <div style="flex:1"></div>
+          <button onClick="{{ confirmUninstallDetail }}" style="display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid rgba(243,139,168,0.35);border-radius:7px;background:rgba(243,139,168,0.1);color:#f38ba8;font-family:inherit;font-size:12px;cursor:pointer" style-hover="background:rgba(243,139,168,0.18)">
+            <span style="width:13px;height:13px;background:currentColor;-webkit-mask:{{ icons.trash }} center/contain no-repeat;mask:{{ icons.trash }} center/contain no-repeat"></span>
+            Uninstall
+          </button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ updatesOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;display:flex;justify-content:flex-end;background:rgba(17,17,27,0.5)">
+      <div style="width:500px;height:100%;display:flex;flex-direction:column;background:#181825;border-left:1px solid #45475a;box-shadow:-24px 0 60px -24px rgba(0,0,0,0.85)">
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:16px 18px 12px;border-bottom:1px solid #313244">
+          <span style="width:16px;height:16px;margin-top:3px;color:#b4befe;background:currentColor;-webkit-mask:{{ icons.download }} center/contain no-repeat;mask:{{ icons.download }} center/contain no-repeat"></span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:16px;font-weight:600">Update from {{ updates.repoLabel }}</div>
+            <div style="margin-top:2px;font-size:12px;color:#a6adc8">{{ updates.summary }}</div>
+          </div>
+          <button onClick="{{ closeUpdates }}" style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:#a6adc8;cursor:pointer" style-hover="color:#cdd6f4;background:rgba(69,71,90,0.4)">
+            <span style="width:14px;height:14px;background:currentColor;-webkit-mask:{{ icons.x }} center/contain no-repeat;mask:{{ icons.x }} center/contain no-repeat"></span>
+          </button>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 18px;border-bottom:1px solid #313244">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#a6adc8">{{ updates.revLine }}</span>
+          <div style="flex:1"></div>
+          <button onClick="{{ toggleAllUpdates }}" style="height:24px;padding:0 10px;border:1px solid #313244;border-radius:6px;background:transparent;color:#a6adc8;font-family:inherit;font-size:11px;cursor:pointer">{{ updates.toggleLabel }}</button>
+        </div>
+
+        <div style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:14px 18px;display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ updates.rows }}" as="row" hint-placeholder-count="4">
+            <div style="display:flex;flex-direction:column;gap:7px;padding:11px 12px;border-radius:10px;background:{{ row.bg }};border:1px solid {{ row.border }}">
+              <div style="display:flex;align-items:center;gap:9px">
+                <button onClick="{{ row.onToggle }}" style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;padding:0;flex-shrink:0;border-radius:4px;border:1px solid {{ row.boxBorder }};background:{{ row.boxBg }};cursor:pointer">
+                  <span style="width:10px;height:10px;background:#181825;opacity:{{ row.checkOpacity }};-webkit-mask:{{ icons.check }} center/contain no-repeat;mask:{{ icons.check }} center/contain no-repeat"></span>
+                </button>
+                <span style="flex:1;font-size:13px;font-weight:600;color:#cdd6f4">{{ row.name }}</span>
+                <span style="display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10px;color:#6c7086">
+                  <span>{{ row.from }}</span>
+                  <span style="width:10px;height:10px;background:currentColor;-webkit-mask:{{ icons.arrowRight }} center/contain no-repeat;mask:{{ icons.arrowRight }} center/contain no-repeat"></span>
+                  <span style="color:#a6e3a1">{{ row.to }}</span>
+                </span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:3px;padding-left:24px">
+                <sc-for list="{{ row.changes }}" as="ch" hint-placeholder-count="2">
+                  <div style="display:flex;gap:7px;font-family:'JetBrains Mono',monospace;font-size:10px;line-height:1.6">
+                    <span style="color:{{ ch.color }};width:8px;flex-shrink:0">{{ ch.sign }}</span>
+                    <span style="color:#a6adc8">{{ ch.text }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <sc-if value="{{ row.localEdits }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-left:24px;display:inline-flex;align-items:center;gap:5px;padding:2px 7px;border-radius:999px;align-self:flex-start;background:rgba(249,226,175,0.1);border:1px solid rgba(249,226,175,0.25);font-size:10px;color:#f9e2af">Local edits will be overwritten</div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;padding:12px 18px;border-top:1px solid #313244">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6c7086;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ updates.command }}</span>
+          <button onClick="{{ closeUpdates }}" style="height:32px;padding:0 12px;border:1px solid #313244;border-radius:7px;background:transparent;color:#cdd6f4;font-family:inherit;font-size:13px;cursor:pointer">Cancel</button>
+          <button onClick="{{ runUpdates }}" style="height:32px;padding:0 14px;border:0;border-radius:7px;background:#b4befe;color:#181825;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;opacity:{{ updates.primaryOpacity }}">{{ updates.primaryLabel }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ uninstallOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(17,17,27,0.68);backdrop-filter:blur(2px)">
+      <div style="width:440px;display:flex;flex-direction:column;border-radius:14px;background:#181825;border:1px solid #45475a;box-shadow:0 30px 80px -20px rgba(0,0,0,0.85);overflow:hidden">
+        <div style="display:flex;gap:12px;padding:18px 18px 14px">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;flex-shrink:0;border-radius:9px;background:rgba(243,139,168,0.12);color:#f38ba8">
+            <span style="width:17px;height:17px;background:currentColor;-webkit-mask:{{ icons.trash }} center/contain no-repeat;mask:{{ icons.trash }} center/contain no-repeat"></span>
+          </span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:16px;font-weight:600">{{ uninstall.title }}</div>
+            <div style="margin-top:4px;font-size:12px;line-height:1.6;color:#a6adc8">{{ uninstall.body }}</div>
+          </div>
+        </div>
+
+        <div style="margin:0 18px;padding:10px 12px;border-radius:9px;background:rgba(69,71,90,0.22);border:1px solid #313244;max-height:130px;overflow:auto;display:flex;flex-wrap:wrap;gap:5px">
+          <sc-for list="{{ uninstall.names }}" as="n" hint-placeholder-count="4">
+            <span style="padding:2px 7px;border-radius:5px;background:rgba(69,71,90,0.5);font-family:'JetBrains Mono',monospace;font-size:11px;color:#cdd6f4">{{ n.label }}</span>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px;padding:12px 18px 0;font-size:11px;color:#a6adc8">
+          <div style="display:flex;gap:7px">
+            <span style="color:#f38ba8">•</span>
+            <span>{{ uninstall.lineFolder }}</span>
+          </div>
+          <div style="display:flex;gap:7px">
+            <span style="color:#f38ba8">•</span>
+            <span>{{ uninstall.lineLinks }}</span>
+          </div>
+        </div>
+
+        <label style="display:flex;align-items:center;gap:8px;margin:14px 18px 0;padding:9px 11px;border-radius:8px;background:rgba(69,71,90,0.22);border:1px solid #313244;cursor:pointer" onClick="{{ toggleKeepLinks }}">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;flex-shrink:0;border-radius:4px;border:1px solid {{ uninstall.keepBorder }};background:{{ uninstall.keepBg }}">
+            <span style="width:10px;height:10px;background:#181825;opacity:{{ uninstall.keepOpacity }};-webkit-mask:{{ icons.check }} center/contain no-repeat;mask:{{ icons.check }} center/contain no-repeat"></span>
+          </span>
+          <span style="font-size:12px;color:#cdd6f4">Keep platform link entries (re-install restores them)</span>
+        </label>
+
+        <div style="display:flex;align-items:center;gap:8px;padding:16px 18px">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#6c7086;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ uninstall.command }}</span>
+          <button onClick="{{ closeUninstall }}" style="height:32px;padding:0 12px;border:1px solid #313244;border-radius:7px;background:transparent;color:#cdd6f4;font-family:inherit;font-size:13px;cursor:pointer">Cancel</button>
+          <button onClick="{{ doUninstall }}" style="height:32px;padding:0 14px;border:0;border-radius:7px;background:#f38ba8;color:#181825;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">{{ uninstall.confirmLabel }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:760},&quot;showPaths&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Density&quot;},&quot;defaultGroupBy&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Repository&quot;,&quot;Platform&quot;,&quot;Status&quot;,&quot;None&quot;],&quot;default&quot;:&quot;Repository&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Density&quot;}}">
+const LUCIDE = {
+  blocks: "blocks", minus: "minus", square: "square", x: "x", search: "search",
+  plus: "plus", database: "database", chevronDown: "chevron-down",
+  chevronLeft: "chevron-left", chevronRight: "chevron-right", keyboard: "keyboard",
+  sun: "sun", terminal: "terminal", settings: "settings", globe: "globe",
+  trash: "trash-2", layoutDashboard: "layout-dashboard", folderOpen: "folder-open",
+  store: "store", layers: "layers", scrollText: "scroll-text", chartColumn: "chart-column",
+  refresh: "refresh-cw", packagePlus: "package-plus", link: "link-2", unlink: "unlink",
+  check: "check", checkSquare: "square-check-big", fileDown: "file-down",
+  download: "download", gitRepo: "folder-git-2", arrowRight: "arrow-right",
+};
+const BLANK = "url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27/%3E')";
+const BRAND = (n) => `https://unpkg.com/@lobehub/icons-static-svg@latest/icons/${n}.svg`;
+
+const AGENTS = {
+  amp: { name: "Amp", src: BRAND("amp-color") },
+  claude: { name: "Claude Code", src: BRAND("claude-color") },
+  copilot: { name: "GitHub Copilot", src: BRAND("copilot-color") },
+  opencode: { name: "OpenCode", src: BRAND("opencode"), mask: true },
+  grok: { name: "Grok", src: BRAND("grok"), mask: true },
+  cursor: { name: "Cursor", src: "assets/cursor.png" },
+  codex: { name: "Codex CLI", src: "assets/codex.png" },
+  kiro: { name: "Kiro", src: "assets/kiro.png" },
+};
+
+// Monochrome CDN SVGs must be painted as masks (their currentColor resolves to
+// black inside an external reference); the local PNGs are real artwork.
+const ICON = (src, isMask, color) =>
+  isMask
+    ? { iconMask: `url(${src})`, iconBg: color }
+    : { iconMask: "none", iconBg: `url(${src}) center/contain no-repeat` };
+const AGENT_ICON = (id, color) => ICON(AGENTS[id].src, AGENTS[id].mask, color);
+const AGENT_ORDER = ["amp", "claude", "codex", "cursor", "copilot", "opencode", "kiro", "grok"];
+
+const FULL = ["amp", "claude", "codex", "cursor", "copilot", "opencode"];
+const CORE = ["amp", "claude", "codex"];
+
+const REPOS = [
+  {
+    id: "mattpocock",
+    label: "mattpocock/skills",
+    updates: 3,
+    names: [
+      ["ask-matt", FULL], ["claude-handoff", []], ["code-review", FULL],
+      ["codebase-design", FULL], ["commit", CORE], ["context-gathering", []],
+      ["debug-loop", FULL], ["deep-research", FULL], ["docs-writer", CORE],
+      ["error-messages", FULL], ["explain-code", CORE], ["git-worktree", FULL],
+      ["honest-feedback", []], ["naming", CORE], ["next-steps", FULL],
+      ["prompt-writing", []], ["react-review", FULL], ["refactor", FULL],
+      ["release-notes", CORE], ["skill-writing", FULL], ["test-writer", FULL],
+      ["tidy-first", CORE], ["ts-types", FULL], ["typescript-review", FULL],
+      ["unit-tests", FULL], ["wait-what", FULL], ["wayfinder", FULL],
+      ["wizard", FULL], ["writing-beats", []], ["writing-for-agents", FULL],
+      ["writing-fragments", []], ["writing-shape", []], ["jsdoc", CORE],
+      ["perf-audit", FULL], ["package-audit", CORE], ["repro", FULL],
+      ["sql-review", CORE], ["tailwind-review", FULL], ["todo-triage", []],
+      ["learn-repo", FULL],
+    ],
+  },
+  {
+    id: "anthropics",
+    label: "anthropics/agent-skills",
+    updates: 0,
+    names: [
+      ["pdf-forms", ["claude", "amp"]], ["xlsx", ["claude"]],
+      ["pptx", ["claude", "codex"]], ["docx", ["claude"]],
+      ["web-research", ["claude", "amp", "codex", "cursor"]],
+      ["artifacts-builder", []], ["mcp-builder", ["claude"]],
+    ],
+  },
+  {
+    id: "obra",
+    label: "obra/superpowers",
+    updates: 1,
+    names: [
+      ["brainstorm", ["amp", "claude", "codex", "cursor"]],
+      ["plan-mode", ["amp", "claude"]], ["subagent-driven", []],
+      ["verification-loop", ["amp", "claude", "codex"]],
+    ],
+  },
+];
+
+const PREVIEW_SKILLS = [
+  ["brainstorm", true], ["plan-mode", true], ["subagent-driven", true],
+  ["verification-loop", true], ["condition-based-waiting", false],
+  ["defense-in-depth", false], ["root-cause-tracing", false],
+  ["test-driven-development", false], ["writing-plans", false],
+  ["yagni", false],
+];
+
+const UPDATES = {
+  mattpocock: [
+    { name: "code-review", from: "a41f0c2", to: "7e9b134", localEdits: true, changes: [["+", "adds a severity rubric for review comments"], ["~", "SKILL.md rewritten (128 → 164 lines)"]] },
+    { name: "deep-research", from: "a41f0c2", to: "7e9b134", localEdits: false, changes: [["+", "new references/search-operators.md"], ["-", "drops the deprecated summarise step"]] },
+    { name: "ts-types", from: "a41f0c2", to: "7e9b134", localEdits: false, changes: [["~", "narrower guidance on satisfies vs as const"]] },
+  ],
+  obra: [
+    { name: "plan-mode", from: "c0d51ab", to: "f3a7710", localEdits: false, changes: [["+", "adds a checkpoint step before execution"], ["~", "frontmatter description tightened"]] },
+  ],
+  anthropics: [],
+};
+const UPDATABLE = new Set(Object.values(UPDATES).flat().map((u) => u.name));
+
+const MARKDOWN = (name, repoLabel) => `---
+name: ${name}
+description: Use when the user asks for ${name.replace(/-/g, " ")};
+  keeps the agent on a single, verifiable path.
+---
+
+# ${name}
+
+## When to use this
+Trigger on an explicit request, or when the conversation
+shows the symptom this skill fixes.
+
+## Process
+1. Restate the goal in one sentence.
+2. Gather only the context the next step needs.
+3. Do the smallest reversible step, then verify.
+4. Report what changed and what is still open.
+
+## Anti-patterns
+- Skipping verification because the change "looks right".
+- Expanding scope beyond what was asked.
+
+<!-- source: ${repoLabel} -->`;
+
+const ALL_SKILLS = REPOS.flatMap((r) =>
+  r.names.map(([name, agents]) => ({
+    name,
+    repo: r.id,
+    repoLabel: r.label,
+    agents,
+    path: `C:\\Users\\lyh\\.agents\\skills\\${name}`,
+  })),
+);
+
+class Component extends DCLogic {
+  state = {
+    icons: {},
+    query: "",
+    groupBy: null,
+    platformFilter: null,
+    unlinkedOnly: false,
+    selectMode: false,
+    selected: [],
+    closed: [],
+    installOpen: false,
+    step: 1,
+    source: "obra/superpowers",
+    previewPicked: PREVIEW_SKILLS.filter(([, isNew]) => isNew).map(([n]) => n),
+    platformPicked: ["amp", "claude", "codex"],
+    links: {},
+    removed: [],
+    detailName: null,
+    linkMenuOpen: false,
+    updatesRepo: null,
+    updatePicked: [],
+    uninstallNames: null,
+    keepLinks: false,
+    toast: null,
+  };
+
+  componentDidMount() {
+    Promise.all(
+      Object.entries(LUCIDE).map(([key, file]) =>
+        fetch(`https://unpkg.com/lucide-static@0.544.0/icons/${file}.svg`)
+          .then((r) => r.text())
+          .then((svg) => [
+            key,
+            `url('data:image/svg+xml,${encodeURIComponent(svg).replace(/'/g, "%27").replace(/;/g, "%3B")}')`,
+          ])
+          .catch(() => [key, BLANK]),
+      ),
+    ).then((pairs) => this.setState({ icons: Object.fromEntries(pairs) }));
+    window.addEventListener("keydown", this.onKey);
+  }
+
+  notify(text, tone) {
+    clearTimeout(this._toastTimer);
+    this.setState({ toast: { text, tone: tone || "ok" } });
+    this._toastTimer = setTimeout(() => this.setState({ toast: null }), 2800);
+  }
+
+  onKey = (e) => {
+    if (e.key !== "Escape") return;
+    const s = this.state;
+    if (s.uninstallNames) this.setState({ uninstallNames: null });
+    else if (s.installOpen) this.setState({ installOpen: false });
+    else if (s.updatesRepo) this.setState({ updatesRepo: null });
+    else if (s.detailName) this.setState({ detailName: null });
+    else if (s.linkMenuOpen) this.setState({ linkMenuOpen: false });
+    else if (s.selected.length) this.setState({ selected: [], selectMode: false });
+  };
+
+  componentWillUnmount() {
+    clearTimeout(this._toastTimer);
+    window.removeEventListener("keydown", this.onKey);
+  }
+
+  toggle(key, value) {
+    this.setState((s) => {
+      const list = s[key];
+      return {
+        [key]: list.includes(value) ? list.filter((v) => v !== value) : [...list, value],
+      };
+    });
+  }
+
+  renderVals() {
+    const icons = new Proxy(this.state.icons, { get: (o, k) => o[k] ?? BLANK });
+    const s = this.state;
+    const groupBy = s.groupBy ?? this.props.defaultGroupBy ?? "Repository";
+    const showPathRow = this.props.showPaths ?? true;
+    const q = s.query.trim().toLowerCase();
+
+    const world = ALL_SKILLS.filter((sk) => !s.removed.includes(sk.name)).map((sk) => ({
+      ...sk,
+      agents: s.links[sk.name] ?? sk.agents,
+    }));
+
+    const matches = (sk) =>
+      (!q || sk.name.includes(q) || sk.repoLabel.toLowerCase().includes(q) || sk.path.toLowerCase().includes(q)) &&
+      (!s.platformFilter || sk.agents.includes(s.platformFilter)) &&
+      (!s.unlinkedOnly || sk.agents.length === 0);
+
+    const visible = world.filter(matches);
+
+    const buckets = [];
+    if (groupBy === "Repository") {
+      for (const r of REPOS) {
+        const skills = visible.filter((sk) => sk.repo === r.id);
+        if (skills.length)
+          buckets.push({ id: r.id, label: r.label, updates: (UPDATES[r.id] || []).length, skills });
+      }
+    } else if (groupBy === "Platform") {
+      for (const id of AGENT_ORDER) {
+        const skills = visible.filter((sk) => sk.agents.includes(id));
+        if (skills.length) buckets.push({ id, label: AGENTS[id].name, updates: 0, skills });
+      }
+      const none = visible.filter((sk) => sk.agents.length === 0);
+      if (none.length) buckets.push({ id: "none", label: "Not linked", updates: 0, skills: none });
+    } else if (groupBy === "Status") {
+      const linked = visible.filter((sk) => sk.agents.length > 0);
+      const un = visible.filter((sk) => sk.agents.length === 0);
+      if (linked.length) buckets.push({ id: "linked", label: "Linked to platforms", updates: 0, skills: linked });
+      if (un.length) buckets.push({ id: "unlinked", label: "Not linked", updates: 0, skills: un });
+    } else {
+      buckets.push({ id: "all", label: "All skills", updates: 0, skills: visible });
+    }
+
+    const mkSkill = (sk) => {
+      const on = s.selected.includes(sk.name);
+      const shown = sk.agents
+        .slice(0, 4)
+        .map((a) => ({ key: a, ...AGENTS[a], ...AGENT_ICON(a, "#b4befe") }));
+      const more = sk.agents.length - shown.length;
+      return {
+        key: sk.name,
+        name: sk.name,
+        shortPath: `~\\.agents\\skills\\${sk.name}`,
+        bg: on ? "color-mix(in srgb,#b4befe 8%,#181825)" : "#181825",
+        ring: on ? "rgba(180,190,254,0.55)" : "color-mix(in srgb,#313244 75%,transparent)",
+        boxBorder: on ? "#b4befe" : "#585b70",
+        boxBg: on ? "#b4befe" : "transparent",
+        checkOpacity: on ? 1 : 0,
+        agentIcons: shown,
+        linked: shown.length > 0,
+        notLinked: sk.agents.length === 0,
+        more: more > 0,
+        moreLabel: `+${more}`,
+        updatable: UPDATABLE.has(sk.name),
+        onSelect: (e) => {
+          if (e && e.stopPropagation) e.stopPropagation();
+          this.toggle("selected", sk.name);
+        },
+        onOpen: (e) => {
+          if (e && e.stopPropagation) e.stopPropagation();
+          this.setState({ detailName: sk.name });
+        },
+        onUninstall: (e) => {
+          if (e && e.stopPropagation) e.stopPropagation();
+          this.setState({ uninstallNames: [sk.name], keepLinks: false });
+        },
+        onClick: () => {
+          if (s.selectMode) this.toggle("selected", sk.name);
+          else this.setState({ detailName: sk.name });
+        },
+      };
+    };
+
+    const groups = buckets.map((b) => ({
+      key: b.id,
+      label: b.label,
+      open: !s.closed.includes(b.id),
+      chevron: s.closed.includes(b.id) ? icons.chevronRight : icons.chevronDown,
+      meta: `${b.skills.length} skills · ${b.skills.filter((sk) => sk.agents.length > 0).length} linked`,
+      hasUpdates: b.updates > 0,
+      updateLabel: `${b.updates} updates`,
+      onToggle: () => this.toggle("closed", b.id),
+      onSelectAll: () =>
+        this.setState((st) => ({
+          selectMode: true,
+          selected: Array.from(new Set([...st.selected, ...b.skills.map((sk) => sk.name)])),
+        })),
+      onUpdateAll: () => {
+        const repoId = REPOS.some((r) => r.id === b.id) ? b.id : "mattpocock";
+        this.setState({
+          updatesRepo: repoId,
+          updatePicked: (UPDATES[repoId] || []).map((u) => u.name),
+        });
+      },
+      skills: b.skills.map(mkSkill),
+    }));
+
+    const chip = (id) => {
+      const count = ALL_SKILLS.filter((sk) => sk.agents.includes(id)).length;
+      const active = s.platformFilter === id;
+      return {
+        key: id,
+        title: `${AGENTS[id].name} · ${count} skills`,
+        ...AGENT_ICON(id, active ? "#b4befe" : "#a6adc8"),
+        count,
+        iconOpacity: active ? 1 : 0.75,
+        border: active ? "rgba(180,190,254,0.55)" : "#313244",
+        bg: active ? "color-mix(in srgb,#b4befe 12%,transparent)" : "rgba(69,71,90,0.22)",
+        fg: active ? "#b4befe" : "#a6adc8",
+        onClick: () => this.setState({ platformFilter: active ? null : id }),
+      };
+    };
+
+    const step = s.step;
+    const previewSkills = PREVIEW_SKILLS.map(([name, isNew]) => {
+      const on = s.previewPicked.includes(name);
+      return {
+        key: name,
+        name,
+        installed: !isNew,
+        border: on ? "rgba(180,190,254,0.5)" : "#313244",
+        bg: on ? "color-mix(in srgb,#b4befe 8%,transparent)" : "rgba(69,71,90,0.18)",
+        boxBorder: on ? "#b4befe" : "#585b70",
+        boxBg: on ? "#b4befe" : "transparent",
+        checkOpacity: on ? 1 : 0,
+        onClick: () => this.toggle("previewPicked", name),
+      };
+    });
+
+    const platformChoices = AGENT_ORDER.map((id) => {
+      const on = s.platformPicked.includes(id);
+      return {
+        key: id,
+        name: AGENTS[id].name,
+        ...AGENT_ICON(id, on ? "#cdd6f4" : "#7f849c"),
+        count: ALL_SKILLS.filter((sk) => sk.agents.includes(id)).length,
+        border: on ? "rgba(180,190,254,0.5)" : "#313244",
+        bg: on ? "color-mix(in srgb,#b4befe 8%,transparent)" : "rgba(69,71,90,0.18)",
+        boxBorder: on ? "#b4befe" : "#585b70",
+        boxBg: on ? "#b4befe" : "transparent",
+        checkOpacity: on ? 1 : 0,
+        onClick: () => this.toggle("platformPicked", id),
+      };
+    });
+
+    const stepLabels = ["Source", "Skills", "Platforms"];
+
+    const totalCount = world.length;
+    const linkedCount = world.filter((sk) => sk.agents.length > 0).length;
+
+    const setLinks = (names, fn) =>
+      this.setState((st) => {
+        const links = { ...st.links };
+        for (const n of names) {
+          const base = ALL_SKILLS.find((sk) => sk.name === n);
+          links[n] = fn(st.links[n] ?? base.agents);
+        }
+        return { links };
+      });
+
+    const detailSkill = world.find((sk) => sk.name === s.detailName) || null;
+    const detail = detailSkill
+      ? {
+          name: detailSkill.name,
+          path: detailSkill.path,
+          repoLabel: detailSkill.repoLabel,
+          version: UPDATABLE.has(detailSkill.name) ? "a41f0c2" : "7e9b134",
+          installedAt: "installed 12 days ago",
+          updatable: UPDATABLE.has(detailSkill.name),
+          linkSummary: `${detailSkill.agents.length} of ${AGENT_ORDER.length} platforms`,
+          linkAllLabel: detailSkill.agents.length === AGENT_ORDER.length ? "Unlink all" : "Link all",
+          onLinkAll: () =>
+            setLinks([detailSkill.name], (cur) =>
+              cur.length === AGENT_ORDER.length ? [] : [...AGENT_ORDER],
+            ),
+          fileMeta: "SKILL.md · 1.4 KB",
+          markdown: MARKDOWN(detailSkill.name, detailSkill.repoLabel),
+          platforms: AGENT_ORDER.map((id) => {
+            const on = detailSkill.agents.includes(id);
+            return {
+              key: id,
+              name: AGENTS[id].name,
+              ...AGENT_ICON(id, on ? "#b4befe" : "#7f849c"),
+              target: on ? `~/.${id}/skills` : "—",
+              bg: on ? "color-mix(in srgb,#b4befe 7%,transparent)" : "rgba(69,71,90,0.18)",
+              border: on ? "rgba(180,190,254,0.35)" : "#313244",
+              trackBg: on ? "#b4befe" : "#45475a",
+              knobBg: on ? "#181825" : "#a6adc8",
+              knobLeft: on ? "18px" : "2px",
+              onToggle: () =>
+                setLinks([detailSkill.name], (cur) =>
+                  cur.includes(id) ? cur.filter((a) => a !== id) : [...cur, id],
+                ),
+            };
+          }),
+        }
+      : { platforms: [], markdown: "", name: "", path: "", repoLabel: "", version: "", installedAt: "", linkSummary: "", linkAllLabel: "", fileMeta: "", updatable: false, onLinkAll: () => {} };
+
+    const upRepo = REPOS.find((r) => r.id === s.updatesRepo) || null;
+    const upRows = upRepo ? UPDATES[upRepo.id] || [] : [];
+    const updates = {
+      repoLabel: upRepo ? upRepo.label : "",
+      summary: upRepo ? `${upRows.length} of ${upRepo.names.length} installed skills have newer revisions` : "",
+      revLine: "a41f0c2 → 7e9b134 · fetched 2 minutes ago",
+      toggleLabel: s.updatePicked.length === upRows.length ? "Clear all" : "Select all",
+      primaryLabel: `Update ${s.updatePicked.length} skills`,
+      primaryOpacity: s.updatePicked.length ? 1 : 0.5,
+      command: `npx skills@1.5.23 add ${upRepo ? upRepo.label : ""} -g --force`,
+      rows: upRows.map((u) => {
+        const on = s.updatePicked.includes(u.name);
+        return {
+          key: u.name,
+          name: u.name,
+          from: u.from,
+          to: u.to,
+          localEdits: u.localEdits,
+          bg: on ? "color-mix(in srgb,#b4befe 6%,transparent)" : "rgba(69,71,90,0.18)",
+          border: on ? "rgba(180,190,254,0.35)" : "#313244",
+          boxBorder: on ? "#b4befe" : "#585b70",
+          boxBg: on ? "#b4befe" : "transparent",
+          checkOpacity: on ? 1 : 0,
+          onToggle: () => this.toggle("updatePicked", u.name),
+          changes: u.changes.map(([sign, text], i) => ({
+            key: i,
+            sign,
+            text,
+            color: sign === "+" ? "#a6e3a1" : sign === "-" ? "#f38ba8" : "#f9e2af",
+          })),
+        };
+      }),
+    };
+
+    const unNames = s.uninstallNames || [];
+    const unSkills = unNames.map((n) => world.find((sk) => sk.name === n)).filter(Boolean);
+    const unLinks = unSkills.reduce((acc, sk) => acc + sk.agents.length, 0);
+    const uninstall = {
+      title: unNames.length === 1 ? `Uninstall ${unNames[0]}?` : `Uninstall ${unNames.length} skills?`,
+      body:
+        unNames.length === 1
+          ? "The skill folder is deleted from the canonical root and every platform link pointing at it is removed."
+          : "Each skill folder is deleted from the canonical root and every platform link pointing at it is removed.",
+      names: unNames.map((n) => ({ key: n, label: n })),
+      lineFolder: `${unNames.length} folder${unNames.length === 1 ? "" : "s"} removed under ~/.agents/skills/`,
+      lineLinks: `${unLinks} platform link${unLinks === 1 ? "" : "s"} affected · lock file rewritten`,
+      keepBorder: s.keepLinks ? "#b4befe" : "#585b70",
+      keepBg: s.keepLinks ? "#b4befe" : "transparent",
+      keepOpacity: s.keepLinks ? 1 : 0,
+      command: `npx skills@1.5.23 remove ${unNames.length === 1 ? unNames[0] : `${unNames.length} skills`} -g${s.keepLinks ? " --keep-links" : ""}`,
+      confirmLabel: unNames.length === 1 ? "Uninstall" : `Uninstall ${unNames.length}`,
+    };
+
+    const toast = s.toast || { text: "", tone: "ok" };
+
+    return {
+      toastOpen: !!s.toast,
+      toast: {
+        text: toast.text,
+        icon: toast.tone === "warn" ? icons.trash : icons.check,
+        color: toast.tone === "warn" ? "#f38ba8" : "#a6e3a1",
+      },
+      detailOpen: !!detailSkill,
+      detail,
+      closeDetail: () => this.setState({ detailName: null }),
+      openUpdatesFromDetail: () => {
+        const repoId = detailSkill ? detailSkill.repo : "mattpocock";
+        this.setState({
+          updatesRepo: repoId,
+          updatePicked: detailSkill ? [detailSkill.name] : [],
+          detailName: null,
+        });
+      },
+      confirmUninstallDetail: () =>
+        this.setState({ uninstallNames: [s.detailName], keepLinks: false, detailName: null }),
+      updatesOpen: !!upRepo,
+      updates,
+      closeUpdates: () => this.setState({ updatesRepo: null }),
+      runUpdates: () => {
+        const n = s.updatePicked.length;
+        this.setState({ updatesRepo: null });
+        if (n) this.notify(`${n} skills updated to 7e9b134`);
+      },
+      toggleAllUpdates: () =>
+        this.setState({
+          updatePicked: s.updatePicked.length === upRows.length ? [] : upRows.map((u) => u.name),
+        }),
+      uninstallOpen: unNames.length > 0,
+      uninstall,
+      closeUninstall: () => this.setState({ uninstallNames: null }),
+      toggleKeepLinks: () => this.setState({ keepLinks: !s.keepLinks }),
+      doUninstall: () => {
+        this.setState((st) => ({
+          removed: [...st.removed, ...unNames],
+          selected: st.selected.filter((n) => !unNames.includes(n)),
+          uninstallNames: null,
+        }));
+        this.notify(
+          unNames.length === 1
+            ? `${unNames[0]} uninstalled`
+            : `${unNames.length} skills uninstalled`,
+          "warn",
+        );
+      },
+      linkMenuOpen: s.linkMenuOpen,
+      toggleLinkMenu: () => this.setState({ linkMenuOpen: !s.linkMenuOpen }),
+      linkMenuItems: AGENT_ORDER.map((id) => ({
+        key: id,
+        name: AGENTS[id].name,
+        ...AGENT_ICON(id, "#cdd6f4"),
+        count: world.filter((sk) => sk.agents.includes(id)).length,
+        onClick: () => {
+          setLinks(s.selected, (cur) => (cur.includes(id) ? cur : [...cur, id]));
+          this.setState({ linkMenuOpen: false });
+          this.notify(`${s.selected.length} skills linked to ${AGENTS[id].name}`);
+        },
+      })),
+      unlinkSelected: () => {
+        setLinks(s.selected, () => []);
+        this.notify(`${s.selected.length} skills unlinked from all platforms`);
+      },
+      confirmUninstallSelected: () =>
+        this.setState({ uninstallNames: [...s.selected], keepLinks: false }),
+      icons,
+      ready: true,
+      statInstalled: `${totalCount} installed`,
+      statLinked: `${linkedCount} linked`,
+      statUnlinked: `${totalCount - linkedCount} unlinked`,
+      statRepos: `${REPOS.length} repositories`,
+      noop: () => {},
+      query: s.query,
+      hasQuery: s.query.length > 0,
+      onQuery: (e) => this.setState({ query: e.target.value }),
+      clearQuery: () => this.setState({ query: "" }),
+      showPathRow,
+      selectMode: s.selectMode,
+      isEmpty: visible.length === 0,
+      groups,
+      navBefore: [
+        { key: "dash", label: "Dashboard", icon: icons.layoutDashboard, count: null },
+        { key: "central", label: "Central Skills", icon: icons.blocks, count: 149 },
+      ],
+      navAfter: [
+        { key: "projects", label: "Projects", icon: icons.folderOpen },
+        { key: "obsidian", label: "Obsidian Vaults", icon: icons.blocks },
+        { key: "market", label: "Marketplace", icon: icons.store },
+        { key: "collections", label: "Collections", icon: icons.layers },
+        { key: "logs", label: "Operation Logs", icon: icons.scrollText },
+        { key: "usage", label: "Skill Usage", icon: icons.chartColumn },
+      ],
+      navPlatforms: [
+        { key: "ag", label: "Antigravity", ...ICON(BRAND("antigravity-color"), false, ""), count: 8 },
+        { key: "agcli", label: "Antigravity CLI", ...ICON(BRAND("antigravity-color"), false, ""), count: 18 },
+        { key: "cc", label: "Claude Code", ...ICON(BRAND("claude-color"), false, ""), count: 56 },
+        { key: "grok", label: "Grok", ...ICON(BRAND("grok"), true, "#cdd6f4"), count: 9 },
+      ],
+      groupOptions: ["Repository", "Platform", "Status", "None"].map((label) => ({
+        key: label,
+        label,
+        bg: groupBy === label ? "#b4befe" : "transparent",
+        fg: groupBy === label ? "#181825" : "#a6adc8",
+        onClick: () => this.setState({ groupBy: label }),
+      })),
+      platformChips: AGENT_ORDER.map(chip),
+      unlinkedOnly: s.unlinkedOnly,
+      unlinkedBorder: s.unlinkedOnly ? "rgba(249,226,175,0.45)" : "#313244",
+      unlinkedBg: s.unlinkedOnly ? "rgba(249,226,175,0.12)" : "transparent",
+      unlinkedFg: s.unlinkedOnly ? "#f9e2af" : "#a6adc8",
+      toggleUnlinked: () => this.setState({ unlinkedOnly: !s.unlinkedOnly }),
+      selectBorder: s.selectMode ? "rgba(180,190,254,0.5)" : "#313244",
+      selectBg: s.selectMode ? "color-mix(in srgb,#b4befe 12%,transparent)" : "transparent",
+      selectFg: s.selectMode ? "#b4befe" : "#a6adc8",
+      toggleSelectMode: () =>
+        this.setState({ selectMode: !s.selectMode, selected: s.selectMode ? [] : s.selected }),
+      hasSelection: s.selected.length > 0,
+      selectionLabel: `${s.selected.length} selected`,
+      clearSelection: () => this.setState({ selected: [], selectMode: false }),
+      installOpen: s.installOpen,
+      openInstall: () => this.setState({ installOpen: true, step: 1 }),
+      closeInstall: () => this.setState({ installOpen: false }),
+      steps: stepLabels.map((label, i) => ({
+        key: label,
+        n: i + 1,
+        label,
+        divider: i < 2,
+        bg: step === i + 1 ? "#b4befe" : step > i + 1 ? "rgba(166,227,161,0.18)" : "transparent",
+        fg: step === i + 1 ? "#181825" : step > i + 1 ? "#a6e3a1" : "#a6adc8",
+        border: step >= i + 1 ? "transparent" : "#313244",
+        labelColor: step === i + 1 ? "#cdd6f4" : "#a6adc8",
+      })),
+      onStep1: step === 1,
+      onStep2: step === 2,
+      onStep3: step === 3,
+      source: s.source,
+      onSource: (e) => this.setState({ source: e.target.value }),
+      gotoStep2: () => this.setState({ step: 2 }),
+      recentSources: ["mattpocock/skills", "anthropics/agent-skills", "obra/superpowers", "vercel-labs/agent-skills"].map((label) => ({
+        key: label,
+        label,
+        onClick: () => this.setState({ source: label, step: 2 }),
+      })),
+      previewSkills,
+      previewMeta: `${PREVIEW_SKILLS.length} skills found · ${PREVIEW_SKILLS.filter(([, n]) => !n).length} already installed`,
+      toggleAllPreview: () =>
+        this.setState({
+          previewPicked:
+            s.previewPicked.length === PREVIEW_SKILLS.length ? [] : PREVIEW_SKILLS.map(([n]) => n),
+        }),
+      toggleAllLabel: s.previewPicked.length === PREVIEW_SKILLS.length ? "Clear all" : "Select all",
+      platformChoices,
+      step3Summary: `${s.previewPicked.length} skills → ${s.platformPicked.length} platforms`,
+      toggleAllPlatforms: () =>
+        this.setState({
+          platformPicked: s.platformPicked.length === AGENT_ORDER.length ? [] : [...AGENT_ORDER],
+        }),
+      platformToggleLabel: s.platformPicked.length === AGENT_ORDER.length ? "Clear all" : "Select all",
+      commandPreview: `npx skills@1.5.23 add ${s.source} -g --agent ${s.platformPicked.join(",") || "…"}`,
+      canBack: step > 1,
+      back: () => this.setState({ step: Math.max(1, step - 1) }),
+      footerHint:
+        step === 1
+          ? "Runtime ready · Node v22.20.0"
+          : step === 2
+            ? `${s.previewPicked.length} of ${PREVIEW_SKILLS.length} selected`
+            : "Existing skills are skipped unless replaced",
+      primaryLabel: step === 3 ? `Install ${s.previewPicked.length} skills` : "Continue",
+      primaryOpacity:
+        (step === 2 && s.previewPicked.length === 0) || (step === 3 && s.platformPicked.length === 0)
+          ? 0.5
+          : 1,
+      primaryAction: () => {
+        if (step < 3) return this.setState({ step: step + 1 });
+        this.setState({ installOpen: false });
+        this.notify(
+          `${s.previewPicked.length} skills installed from ${s.source}`,
+        );
+      },
+    };
+  }
+}
+
+</script>
+</body>
+</html>

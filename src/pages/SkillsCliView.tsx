@@ -4,7 +4,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { Terminal } from "lucide-react";
@@ -23,22 +22,15 @@ import { SkillsCliUpdateDrawer } from "@/components/skillsCli/SkillsCliUpdateDra
 import { showSkillsCliActionToast } from "@/components/skillsCli/skillsCliActionToast";
 import { UnifiedSkillCard } from "@/components/skill/UnifiedSkillCard";
 import { Button } from "@/components/ui/button";
-import { formatBackendError, parseBackendError } from "@/lib/backendError";
-import { isEditableEventTarget } from "@/lib/keyboardShortcuts";
+import { formatBackendError } from "@/lib/backendError";
 import { isLocalTarget } from "@/lib/targetKind";
 import { cn } from "@/lib/utils";
 import {
-  emptyPlacementOutcome,
   reconcileSelectedNames,
   selectedHasManagedLink,
   summarizeLinkTargets,
-  type PlacementMutationOutcome,
 } from "@/pages/skillsCliBatchModel";
-import {
-  buildSkillsCliDetailRows,
-  summarizeDetailPlacements,
-} from "@/pages/skillsCliDetailModel";
-import { exportSkillsCliInventory } from "@/pages/skillsCliExport";
+import { createSkillsCliPageHandlers } from "@/pages/skillsCliPageHandlers";
 import {
   SKILLS_CLI_CONTENT_CONTAINER_CLASS,
   SKILLS_CLI_GRID_CLASS,
@@ -52,14 +44,12 @@ import {
   openSkillsCliDetail,
   openSkillsCliInstall,
   openSkillsCliUninstall,
-  openSkillsCliUpdate,
   actionableUpdateSkillNames,
   pendingUpdateCountForSkills,
   repositoryKeyForSkills,
   skillHasPendingUpdate,
   updateRowForSkill,
   type SkillsCliActiveSurface,
-  type SkillsCliBucket,
   type SkillsCliGroupBy,
 } from "@/pages/skillsCliViewModel";
 import { useSkillsCliStore } from "@/stores/skillsCliStore";
@@ -226,257 +216,37 @@ export function SkillsCliView() {
     );
   }
 
-  function handlePageKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key !== "Escape") {
-      return;
-    }
-    if (
-      activeSurface !== null ||
-      linkMenuOpen ||
-      event.defaultPrevented ||
-      isEditableEventTarget(event.target)
-    ) {
-      return;
-    }
-    setSelectMode(false);
-    setSelectedCardNames(new Set());
-  }
-
-  function handleSelectModeChange(next: boolean) {
-    setSelectMode(next);
-    if (!next) {
-      setSelectedCardNames(new Set());
-    }
-  }
-
-  function handleSelectAll(bucket: SkillsCliBucket) {
-    setSelectMode(true);
-    setSelectedCardNames((current) => {
-      const next = new Set(current);
-      for (const skill of bucket.skills) {
-        next.add(skill.name);
-      }
-      return next;
-    });
-  }
-
-  function toastPlacementOutcome(
-    outcome: PlacementMutationOutcome,
-    kind: "link" | "unlink",
-  ) {
-    const allOk = outcome.failed.length === 0 && outcome.skipped.length === 0;
-    const failedMessages = [
-      ...new Set(outcome.failed.map((item) => item.errorCode)),
-    ].map((code) => formatBackendError(`${code}:`, t));
-    showSkillsCliActionToast({
-      semantic: allOk ? "success" : "error",
-      message: allOk
-        ? t(
-            kind === "link"
-              ? "skillsCli.batch.linkSuccess"
-              : "skillsCli.batch.unlinkSuccess",
-            { succeeded: outcome.succeeded.length },
-          )
-        : [
-            t(
-              kind === "link"
-                ? "skillsCli.batch.linkPartial"
-                : "skillsCli.batch.unlinkPartial",
-              {
-                succeeded: outcome.succeeded.length,
-                failed: outcome.failed.length,
-                skipped: outcome.skipped.length,
-              },
-            ),
-            ...failedMessages,
-          ]
-            .join(" ")
-            .trim(),
-    });
-  }
-
-  async function handleExport(scope: "all" | "selected") {
-    setIsExporting(true);
-    try {
-      const result = await exportSkillsCliInventory({
-        scope,
-        skills: useSkillsCliStore.getState().skills,
-        selectedNames: selectedCardNames,
-        targets,
-        exportInventory: (input) =>
-          useSkillsCliStore.getState().exportInventory(input),
-      });
-      if (result === "cancelled") {
-        return;
-      }
-      showSkillsCliActionToast({
-        semantic: "success",
-        message: t(
-          scope === "all"
-            ? "skillsCli.export.successAll"
-            : "skillsCli.export.successSelected",
-        ),
-      });
-    } catch (error) {
-      showSkillsCliActionToast({
-        semantic: "error",
-        message: t("skillsCli.export.error", {
-          error: formatBackendError(error, t),
-        }),
-      });
-    } finally {
-      setIsExporting(false);
-    }
-  }
-
-  async function handleLink(agentId: string) {
-    setLinkMenuOpen(false);
-    try {
-      const outcome = await useSkillsCliStore
-        .getState()
-        .linkPlatformBatch([...selectedCardNames], agentId);
-      toastPlacementOutcome(outcome, "link");
-    } catch (error) {
-      showSkillsCliActionToast({
-        semantic: "error",
-        message: formatBackendError(error, t),
-      });
-    }
-  }
-
-  async function handleUnlink() {
-    try {
-      const outcome = await useSkillsCliStore
-        .getState()
-        .unlinkManagedBatch([...selectedCardNames]);
-      toastPlacementOutcome(outcome, "unlink");
-    } catch (error) {
-      showSkillsCliActionToast({
-        semantic: "error",
-        message: formatBackendError(error, t),
-      });
-    }
-  }
-
-  function handleUninstalled(names: string[]) {
-    setSelectedCardNames((current) => {
-      const next = new Set(current);
-      for (const name of names) {
-        next.delete(name);
-      }
-      return next;
-    });
-  }
-
-  function captureReturnFocus(target: EventTarget | null) {
-    if (target instanceof HTMLElement) {
-      returnFocusRef.current = target;
-    }
-  }
-
-  function handleDetailClose() {
-    setActiveSurface((current) =>
-      current?.kind === "detail" ? closeSkillsCliSurface() : current,
-    );
-  }
-
-  function openUpdateSurface(input: {
-    repositoryKey: string | null;
-    skillNames: readonly string[];
-    from: EventTarget | null;
-  }) {
-    if (!input.repositoryKey) {
-      showSkillsCliActionToast({
-        semantic: "error",
-        message: t("skillsCli.updates.checkFirst"),
-      });
-      return;
-    }
-    captureReturnFocus(input.from);
-    setActiveSurface(
-      openSkillsCliUpdate({
-        repositoryKey: input.repositoryKey,
-        skillNames: input.skillNames,
-      }),
-    );
-  }
-
-  async function handleDetailToggle(agentId: string, next: boolean) {
-    if (!detailSkill) {
-      return;
-    }
-    if (next) {
-      await useSkillsCliStore.getState().linkPlatform(detailSkill.name, agentId);
-      return;
-    }
-    await useSkillsCliStore.getState().unlinkPlatform(detailSkill.name, agentId);
-  }
-
-  async function handleDetailLinkAll() {
-    if (!detailSkill) {
-      return;
-    }
-    const rows = buildSkillsCliDetailRows(detailSkill, targets);
-    const { missingAgentIds } = summarizeDetailPlacements(rows, targets);
-    const outcome = emptyPlacementOutcome();
-    for (const agentId of missingAgentIds) {
-      try {
-        await useSkillsCliStore
-          .getState()
-          .linkPlatform(detailSkill.name, agentId);
-        outcome.succeeded.push({ skillName: detailSkill.name, agentId });
-      } catch (error) {
-        outcome.failed.push({
-          skillName: detailSkill.name,
-          agentId,
-          errorCode: parseBackendError(error).code ?? "internal.unexpected",
-        });
-      }
-    }
-    toastPlacementOutcome(outcome, "link");
-    const failed = outcome.failed[0];
-    if (failed) {
-      throw new Error(`${failed.errorCode}:`);
-    }
-  }
-
-  async function handleDetailUnlinkAll() {
-    if (!detailSkill) {
-      return;
-    }
-    const outcome = await useSkillsCliStore
-      .getState()
-      .unlinkManagedBatch([detailSkill.name]);
-    toastPlacementOutcome(outcome, "unlink");
-    const failed = outcome.failed[0];
-    if (failed) {
-      throw new Error(`${failed.errorCode}:`);
-    }
-  }
-
-  function toggleCollapsed(id: string) {
-    setCollapsedGroupIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }
-
-  function toggleCardSelected(name: string) {
-    setSelectedCardNames((current) => {
-      const next = new Set(current);
-      if (next.has(name)) {
-        next.delete(name);
-      } else {
-        next.add(name);
-      }
-      return next;
-    });
-  }
+  const {
+    captureReturnFocus,
+    handlePageKeyDown,
+    handleSelectModeChange,
+    handleSelectAll,
+    handleExport,
+    handleLink,
+    handleUnlink,
+    handleUninstalled,
+    handleDetailClose,
+    openUpdateSurface,
+    handleDetailToggle,
+    handleDetailLinkAll,
+    handleDetailUnlinkAll,
+    toggleCollapsed,
+    toggleCardSelected,
+  } = createSkillsCliPageHandlers({
+    t,
+    activeSurface,
+    linkMenuOpen,
+    selectedCardNames,
+    targets,
+    detailSkill,
+    returnFocusRef,
+    setSelectMode,
+    setSelectedCardNames,
+    setCollapsedGroupIds,
+    setActiveSurface,
+    setLinkMenuOpen,
+    setIsExporting,
+  });
 
   return (
     <div

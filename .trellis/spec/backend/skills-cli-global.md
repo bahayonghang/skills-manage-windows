@@ -216,6 +216,11 @@ command layer remaps it to `skills_cli.busy` so the UI sees one envelope.
 - Contention: held Local guard → leftover apply and `acquire_target_mutation_guard` Busy/Timeout.
 - Vitest: list, default platform checks, changed add payload, uninstall confirm
   stays open on failure, non-Local sidebar hidden, doctor error. No public network.
+- Update statuses: assert `local_modified` and `unsupported` from classify/check
+  (not only the nine-label UI list); empty cache yields `not_checked`; pending
+  update rows survive file-DB close/reopen. Parent AC9 stays fail until these exist.
+- Apply journal: inject `ApplyFault::{Backups, CliStarted, CliSucceeded, DbCommitted}`
+  and assert lock + placement after success. Parent AC10 stays fail until these exist.
 
 ## 7. Wrong vs Correct
 
