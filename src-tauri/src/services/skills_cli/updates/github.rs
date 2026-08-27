@@ -123,6 +123,7 @@ pub(crate) struct FakeSkillsCliGithub {
     results: Mutex<HashMap<String, FakeOutcome>>,
     sha_snapshots: Mutex<HashMap<String, GitHubRepoSnapshot>>,
     calls: Mutex<Vec<String>>,
+    planted_auth: Mutex<Option<String>>,
 }
 
 #[cfg(test)]
@@ -161,6 +162,14 @@ impl FakeSkillsCliGithub {
 
     pub fn call_keys(&self) -> Vec<String> {
         self.calls.lock().expect("fake github mutex").clone()
+    }
+
+    pub fn plant_auth(&self, token: &str) {
+        *self.planted_auth.lock().expect("fake github mutex") = Some(token.to_string());
+    }
+
+    pub fn planted_auth(&self) -> Option<String> {
+        self.planted_auth.lock().expect("fake github mutex").clone()
     }
 }
 

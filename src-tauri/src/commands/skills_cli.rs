@@ -16,8 +16,8 @@ use crate::services::exclusive_job::ExclusiveJobError;
 use crate::services::github_import;
 use crate::services::skills_cli as domain;
 use crate::services::skills_cli::updates::{
-    apply_updates, load_update_inventory_for_pool, retry_update_recovery,
-    verify_update_baseline_at, ProductionSkillsCliGithub, SkillsCliApplyRecoveryResult,
+    apply_updates, check_updates, load_update_inventory_for_pool, retry_update_recovery,
+    verify_update_baseline, ProductionSkillsCliGithub, SkillsCliApplyRecoveryResult,
     SkillsCliApplyResult, SkillsCliApplyUpdateRequest, SkillsCliUpdateInventory,
     SkillsCliUpdateProgress, UpdateProgressEmitter, UPDATE_PROGRESS_EVENT,
 };
@@ -642,8 +642,6 @@ pub async fn skills_cli_check_updates(
         require_capability(&active_target, SkillsCliCapability::CheckUpdates)?;
         let tx = open_transport(&active_target).await?;
         let github = github_from_state(&state).await?;
-        let canonical_root = tx.paths().canonical_root_path();
-        let lock_path = tx.paths().lock_path_buf();
         let definition = operation_definition("skills_cli_check_updates");
         crate::observability::run_operation(
             &state,
@@ -654,10 +652,9 @@ pub async fn skills_cli_check_updates(
                     .count(SafeDetailKey::AffectedCount, inventory.skills.len() as u64)
             },
             || async move {
-                domain::updates::check_updates_at(
+                check_updates(
+                    &tx,
                     &pool,
-                    &canonical_root,
-                    &lock_path,
                     &github,
                     &AppUpdateProgress { app },
                     &job_id,
@@ -700,8 +697,6 @@ pub async fn skills_cli_verify_update_baseline(
         let context = state.resolve_target_context().await?;
         require_capability(context.target(), SkillsCliCapability::VerifyUpdateBaseline)?;
         let tx = open_transport(context.target()).await?;
-        let canonical_root = tx.paths().canonical_root_path();
-        let lock_path = tx.paths().lock_path_buf();
         let pool = context.db().clone();
         let definition = operation_definition("skills_cli_verify_update_baseline");
         let requested = skill_names.len() as u64;
@@ -715,15 +710,9 @@ pub async fn skills_cli_verify_update_baseline(
                     .count(SafeDetailKey::AffectedCount, inventory.skills.len() as u64)
             },
             || async move {
-                verify_update_baseline_at(
-                    &pool,
-                    &canonical_root,
-                    &lock_path,
-                    &skill_names,
-                    Some(lease.cancel_flag()),
-                )
-                .await
-                .map_err(|error| skills_cli_failure(definition, &error))
+                verify_update_baseline(&tx, &pool, &skill_names, Some(lease.cancel_flag()))
+                    .await
+                    .map_err(|error| skills_cli_failure(definition, &error))
             },
         )
         .await

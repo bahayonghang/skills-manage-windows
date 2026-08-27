@@ -1,9 +1,9 @@
 //! Skills CLI global management service.
 //!
 //! Wraps the official `skills` npm package (PIN: [`SKILLS_CLI_NPM_SPEC`]) for
-//! the `-g` lifecycle. Local and Remote share one transport seam. This mutate
-//! task opens LinkPlatform, UnlinkPlatform, PreviewRemove, RemoveGlobal, and
-//! LeftoverScan on Remote. Install/update capabilities stay gated.
+//! the `-g` lifecycle. Local and Remote share one transport seam. Install and
+//! update capabilities are open on Remote except RevealFolder and
+//! `install_origin` guessing.
 
 mod agent_map;
 mod argv;
@@ -62,7 +62,7 @@ use crate::db::DbPool;
 use crate::services::central_mutation::{
     acquire_target_mutation_guard, CentralMutationError, DEFAULT_CENTRAL_MUTATION_TIMEOUT,
 };
-use crate::targets::{ActiveTarget, ProcessPolicy};
+use crate::targets::ProcessPolicy;
 
 #[cfg(test)]
 use crate::services::central_mutation::{acquire_central_mutation_guard_at, CentralMutationGuard};
@@ -196,6 +196,8 @@ pub struct SkillsCliPlacement {
     pub state: SkillsCliPlacementState,
     pub managed_link_kind: Option<SkillsCliManagedLinkKind>,
     pub reason_code: Option<String>,
+    /// Always `None` on Remote. Local platform origin lives on `SkillForAgent`.
+    pub install_origin: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -283,6 +285,7 @@ pub struct SkillsCliPlacementBatchItem {
 
 // ─── Launcher helpers ────────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 fn resolve_launcher() -> Result<NodeLauncher, SkillsCliError> {
     let path = std::env::var("PATH").unwrap_or_default();
     resolve_node_launcher(&path)
@@ -687,7 +690,9 @@ pub(crate) async fn preview_source(
     tx: &SkillsCliTransport,
     raw_source: &str,
 ) -> Result<SkillsCliSourcePreview, SkillsCliError> {
-    preview_source_with_launcher(tx.runner(), &resolve_launcher()?, raw_source).await
+    let _ = parse_skill_source(raw_source)?;
+    let launcher = tx.resolve_launcher().await?;
+    preview_source_with_launcher(tx.runner(), &launcher, raw_source).await
 }
 
 pub(crate) async fn preview_source_with_launcher(
@@ -758,6 +763,7 @@ async fn add_global_locked(
     skill_names: Vec<String>,
     cli_agents: Vec<String>,
     cancel: Option<&AtomicBool>,
+    target_kind: &'static str,
 ) -> Result<SkillsCliAddResult, SkillsCliError> {
     let output = run_cli(
         runner,
@@ -776,6 +782,7 @@ async fn add_global_locked(
             skill_count = skill_names.len(),
             agent_count = cli_agents.len(),
             source_kind = source.source_kind(),
+            target_kind,
             "Skills CLI add command failed"
         );
         return Err(SkillsCliError::CliFailed);
@@ -789,8 +796,9 @@ async fn add_global_locked(
 /// Install selected skills globally onto mapped platforms.
 ///
 /// Lock order per design §4: the caller holds the exclusive job lease
-/// (cancellation/progress only); this function owns the Local target mutation
-/// guard across the whole child process lifetime.
+/// (cancellation/progress only); this function owns the target mutation
+/// guard across the whole child process lifetime. Source whitelist runs
+/// before any remote command.
 pub(crate) async fn add_global(
     tx: &SkillsCliTransport,
     raw_source: &str,
@@ -801,10 +809,11 @@ pub(crate) async fn add_global(
     validate_selection(&skill_names, &skillport_agent_ids)?;
     let cli_agents = map_skillport_ids_to_cli_agents(&skillport_agent_ids)?;
     let source = parse_skill_source(raw_source)?;
-    let launcher = resolve_launcher()?;
+    let launcher = tx.resolve_launcher().await?;
+    let target_kind = tx.warn_target_kind();
 
     let _guard = acquire_target_mutation_guard(
-        &ActiveTarget::Local,
+        &tx.mutation_target(),
         INSTALL_LOCK_OPERATION,
         DEFAULT_CENTRAL_MUTATION_TIMEOUT,
     )
@@ -818,6 +827,7 @@ pub(crate) async fn add_global(
         skill_names,
         cli_agents,
         cancel,
+        target_kind,
     )
     .await
 }
@@ -860,10 +870,13 @@ pub(crate) async fn add_global_with_lock_at(
         request.skill_names,
         cli_agents,
         request.cancel,
+        "local",
     )
     .await
 }
 
+#[cfg(test)]
+mod install_update_tests;
 #[cfg(test)]
 mod mutate_tests;
 #[cfg(test)]

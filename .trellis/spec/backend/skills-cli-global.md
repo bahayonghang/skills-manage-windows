@@ -12,11 +12,14 @@ This is **not** SkillPort Central (`~/.skillsmanage/skills/`) and **not** the
 (`SKILLS_CLI_NPM_SPEC = "skills@1.5.23"`). Commands freeze a TargetContext,
 query `ensure_capability_for_target`, then build `SkillsCliTransport` only when
 the capability is open. Inventory opened **Doctor**, **ListGlobal**,
-**InstallTargets**, **ReadSkillMd**, and **ExportInventory** on Remote. This
-mutate task opens **LinkPlatform**, **UnlinkPlatform**, **PreviewRemove**,
-**RemoveGlobal**, and **LeftoverScan**. Remaining install/update capabilities
-stay `skills_cli.local_target_only`. `RevealFolder` is permanently unsupported
-on Remote (no host file manager).
+**InstallTargets**, **ReadSkillMd**, and **ExportInventory** on Remote. Mutate
+opened **LinkPlatform**, **UnlinkPlatform**, **PreviewRemove**,
+**RemoveGlobal**, and **LeftoverScan**. Install/update opened **PreviewSource**,
+**AddGlobal**, **CancelJob**, **CheckUpdates**, **UpdateInventory**,
+**VerifyUpdateBaseline**, **ApplyUpdates**, and **RetryUpdateRecovery**.
+`RevealFolder` is permanently unsupported on Remote (no host file manager).
+Remote `install_origin` is fail-closed (`None`); do not guess from path or
+`link_type`.
 
 ## 2. Signatures
 
@@ -97,8 +100,9 @@ Cleanup candidates are skills whose placements are all `unavailable`. Group `sta
 | list / install_targets / read / export | supported | supported | inventory |
 | reveal | supported | permanently unsupported | — |
 | link / unlink / preview_remove / remove / leftover | supported | supported | mutate |
-| preview_source / add / update family | supported | `local_target_only` | install-update |
-| cancel_job | supported | `local_target_only` | stays gated until a child opens the matching mutation |
+| preview_source / add / check_updates / update_inventory / verify_baseline / apply / retry_recovery | supported | supported | install-update |
+| cancel_job | supported | supported | install-update (lease cancel for add/apply) |
+| install_origin annotation | supported | unsupported (`None`, fail-closed) | — |
 - **Ownership**: a path is CLI-owned only when `.skill-lock.json` (version 3)
   contains the sanitized name. Do not treat `~/.agents/skills/` as wholly
   owned. Lock path: `$XDG_STATE_HOME/skills/.skill-lock.json`, else
@@ -162,26 +166,35 @@ Cleanup candidates are skills whose placements are all `unavailable`. Group `sta
   `SettingCategory::SkillsCli`. Array, 0–8 items, 16 KiB serialized, 2048-byte
   item, no control chars, exact-trim, BTreeSet dedupe, Skills CLI source
   validation without URL credentials/query/fragment.
-- **Process**: reuse `ProcessRequest` + Job Object. preview = Standard;
-  add = BulkTransfer; list/read/preview-remove do not spawn. stderr cap 1 MiB.
-  stdout/stderr/URLs stay out of `IpcError.message` and unredacted
-  operation-log details.
+- **Process**: reuse `ProcessRequest` + Job Object. preview = Standard 120s
+  (`run_command` on Remote); add = cancellable BulkTransfer 15min
+  (`run_script_cancellable` on Remote). list/read/preview-remove do not spawn.
+  stderr cap 1 MiB. stdout/stderr/URLs stay out of `IpcError.message` and
+  unredacted operation-log details. Structured warn fields stay on the
+  doctor-gate whitelist plus static `target_kind` (`local` / `ssh` / `wsl`).
 - **FS mutex vs job family**: exclusive job `skills_cli` is cancel/progress
   only (`exclusive-job-lifecycle.md`). Filesystem writes take
   `acquire_target_mutation_guard` (`central-mutation-lock.md`). Order: lease →
   guard → under-guard ownership/placement recheck → FS/lock mutation → drop
-  guard → drop lease. Link/unlink/remove follow this order.
+  guard → drop lease. Link/unlink/remove follow this order. Remote add uses
+  `tx.mutation_target()`. Source whitelist runs before any remote command.
 - **Upstream updates**: GitHub SHA/snapshot pinning for *detection* reuses
-  SecretStore / `github_client` at the command boundary. Product argv never
-  includes `--force`, `--keep-links`, or an unverified full-SHA `skills add`
-  source. Pinned full-SHA `skills add`/`update` and direct-copy refresh are
-  fail-closed (`verified_unsupported` / `unverified`). Apply refreshes owned
-  canonical files from a pinned GitHub snapshot over HTTP, then journals
-  `prepared → cli_started → db_committed` (or `recovery_required`). Order:
-  `skills_cli` lease → network prepare → Local mutation guard → recheck →
-  journal. Never delete ordinary directories; never auto-convert `direct_copy`;
-  conflict is zero-write. `skills_cli_update_inventory` is a cache read and
-  must not fail global inventory. Progress event: `skills-cli://update-progress`.
+  SecretStore / `github_client` at the command boundary on **this machine**.
+  Product argv never includes `--force`, `--keep-links`, or an unverified
+  full-SHA `skills add` source. Pinned full-SHA `skills add`/`update` and
+  direct-copy refresh are fail-closed (`verified_unsupported` / `unverified`).
+  Apply refreshes owned canonical files from a pinned GitHub snapshot pulled
+  locally over HTTP, then delivers a tar subset on SSH stdin to `tar -x`
+  staging (`run_command_with_stdin_bytes_cancellable` = `ProcessPolicy::bulk_transfer()`).
+  Tokens stay in local HTTP headers; never remote argv, env, or files (do not
+  copy `github_import` `curl.conf` `Authorization: Bearer`). Journal phases:
+  `prepared` / `backups_staged` / `cli_started` / `cli_succeeded` /
+  `db_committed` / `cleanup_pending` / `completed` / `rolled_back` /
+  `recovery_required`. Order: `skills_cli` lease → network prepare → target
+  mutation guard → recheck → journal. Never delete ordinary directories; never
+  auto-convert `direct_copy`; conflict is zero-write.
+  `skills_cli_update_inventory` is a cache read and must not fail global
+  inventory. Progress event: `skills-cli://update-progress`.
 - **Leftover**: Local scan sets `cli_lock_protect=true` and excludes lock-owned
   canonicals, resolved links, **and** `{mapped_detected_agent.global_skills_dir}/<name>`
   when the lock contains `name`. Unlocked copies under the Universal root stay
@@ -192,7 +205,8 @@ Cleanup candidates are skills whose placements are all `unavailable`. Group `sta
 - **Origin**: Local `get_skills_by_agent` annotates `install_origin` via
   `classify_local_path_origin`. Renderer never reads the lock.
   `link_type === "symlink"` is not automatically Central
-  (`platform-origin-classification.md`).
+  (`platform-origin-classification.md`). Remote placement `install_origin` is
+  always `None` (fail-closed); do not implement a remote guess.
 - **Selection**: candidate platforms = detected ∩ mapped. Default selected =
   those that are enabled. Empty skill or platform lists refuse add. Every seed
   builtin id is mapped or explicitly unsupported.
@@ -238,8 +252,9 @@ command layer remaps it to `skills_cli.busy` so the UI sees one envelope.
 
 ## 5. Good / Base / Bad Cases
 
-- Good: add acquires the `skills_cli` lease, then the Local mutation guard,
-  spawns `node` + `npx-cli.js --yes --package=skills@1.5.23 -- skills add … -g -y -a … -s …`,
+- Good: add acquires the `skills_cli` lease, then the target mutation guard,
+  spawns `node` + `npx-cli.js --yes --package=skills@1.5.23 -- skills add … -g -y -a … -s …`
+  (Remote quotes each argv via `shell_quote` after a one-RT launcher probe),
   and leftover local apply / Central install wait Busy until the guard drops.
 - Base: preview is a lock+FS read that may spawn; doctor only probes node
   (Local PATH or one Remote `run_script`); list is a lock+FS read: no exclusive
@@ -257,9 +272,11 @@ command layer remaps it to `skills_cli.busy` so the UI sees one envelope.
 - Doctor: missing node / too old; missing npx JS only affects spawn paths.
   Remote doctor: constant remote command count for 1 vs 6 platforms; Node
   missing and too-old both `skills_cli.node_missing`; no `skills --help`.
-- Capability matrix: Remote + unopened capability → `skills_cli.local_target_only`
+- Capability matrix: Remote + RevealFolder → `skills_cli.local_target_only`
   and zero writes; Remote + Doctor / inventory reads / link / unlink /
-  preview_remove / remove / leftover → Ok; Local + any capability → Ok.
+  preview_remove / remove / leftover / preview / add / cancel / check_updates /
+  update_inventory / verify / apply / retry_recovery → Ok; Local + any
+  capability → Ok. Remote `install_origin` is unsupported (`None`).
   `cli_lock_protect=false` does not exclude remote leftover using this
   machine's lock; remote leftover injects that target's lock ownership.
 - Leftover: lock canonical/link excluded; lock-named mapped agent copy

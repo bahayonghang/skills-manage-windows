@@ -3,7 +3,9 @@
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
-use crate::services::github_import::skill_content_digest_from_file_bytes;
+use crate::services::github_import::{
+    skill_content_digest_from_file_bytes, skill_content_digest_from_hashed_files,
+};
 use crate::services::resource_budget::{DEFAULT_COPY_BYTES, DEFAULT_COPY_ENTRIES};
 
 use super::super::SkillsCliError;
@@ -99,6 +101,69 @@ fn relative_posix(root: &Path, file: &Path) -> Result<String, SkillsCliError> {
         }
     }
     Ok(parts.join("/"))
+}
+
+pub fn digest_from_remote_hashed_files(files: &[(String, u64, [u8; 32])]) -> String {
+    skill_content_digest_from_hashed_files(files)
+}
+
+fn hex_decode_sha256(hex: &str) -> Option<[u8; 32]> {
+    if hex.len() != 64 || !hex.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return None;
+    }
+    let mut out = [0_u8; 32];
+    for (index, chunk) in hex.as_bytes().chunks_exact(2).enumerate() {
+        out[index] = u8::from_str_radix(std::str::from_utf8(chunk).ok()?, 16).ok()?;
+    }
+    Some(out)
+}
+
+/// Parse the multi-root hash script. Missing roots are omitted from the map.
+pub fn parse_remote_skill_hash_output(
+    output: &str,
+) -> Result<std::collections::HashMap<String, String>, SkillsCliError> {
+    let mut hashes = std::collections::HashMap::new();
+    let mut current_root: Option<String> = None;
+    let mut entries: Vec<(String, u64, [u8; 32])> = Vec::new();
+    for line in output.lines() {
+        if let Some(root) = line.strip_prefix("MISSING\t") {
+            hashes.remove(root);
+            continue;
+        }
+        if let Some(root) = line.strip_prefix("ROOT\t") {
+            if let Some(previous) = current_root.replace(root.to_string()) {
+                hashes.insert(previous, digest_from_remote_hashed_files(&entries));
+                entries.clear();
+            }
+            continue;
+        }
+        if let Some(root) = line.strip_prefix("END\t") {
+            let active = current_root.take().ok_or(SkillsCliError::UpdateIntegrity)?;
+            if active != root {
+                return Err(SkillsCliError::UpdateIntegrity);
+            }
+            hashes.insert(active, digest_from_remote_hashed_files(&entries));
+            entries.clear();
+            continue;
+        }
+        if current_root.is_none() {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let digest = parts.next().ok_or(SkillsCliError::UpdateIntegrity)?;
+        let size = parts.next().ok_or(SkillsCliError::UpdateIntegrity)?;
+        let rel = parts.next().ok_or(SkillsCliError::UpdateIntegrity)?;
+        let sha = hex_decode_sha256(digest).ok_or(SkillsCliError::UpdateIntegrity)?;
+        let byte_len: u64 = size.parse().map_err(|_| SkillsCliError::UpdateIntegrity)?;
+        if rel.contains("..") || rel.starts_with('/') {
+            return Err(SkillsCliError::UpdateIntegrity);
+        }
+        entries.push((rel.to_string(), byte_len, sha));
+    }
+    if current_root.is_some() {
+        return Err(SkillsCliError::UpdateIntegrity);
+    }
+    Ok(hashes)
 }
 
 pub fn write_skill_files(root: &Path, files: &[(String, Vec<u8>)]) -> Result<(), SkillsCliError> {

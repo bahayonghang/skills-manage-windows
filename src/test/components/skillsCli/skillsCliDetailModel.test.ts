@@ -65,6 +65,7 @@ function placement(
         : state === "unavailable"
           ? "skills_cli.placement_unavailable"
           : null,
+    installOrigin: null,
   };
 }
 

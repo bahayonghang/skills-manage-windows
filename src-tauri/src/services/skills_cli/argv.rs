@@ -186,17 +186,32 @@ impl NodeLauncher {
     }
 }
 
+/// POSIX npx-cli.js layouts relative to the node directory, then well-known
+/// global roots. Same order as the first entries of [`npx_js_candidates`].
+pub(crate) const NPX_JS_POSIX_RELATIVE: &[&str] = &[
+    "node_modules/npm/bin/npx-cli.js",
+    "lib/node_modules/npm/bin/npx-cli.js",
+    "../npm/node_modules/npm/bin/npx-cli.js",
+];
+
+pub(crate) const NPX_JS_POSIX_WELL_KNOWN: &[&str] = &[
+    "/usr/lib/node_modules/npm/bin/npx-cli.js",
+    "/usr/local/lib/node_modules/npm/bin/npx-cli.js",
+    "/opt/homebrew/lib/node_modules/npm/bin/npx-cli.js",
+];
+
 /// Candidate npm layouts relative to the resolved `node` directory, plus
 /// well-known global roots. Ordered by likelihood.
 pub(crate) fn npx_js_candidates(node_dir: &Path) -> Vec<PathBuf> {
-    let mut candidates = vec![
-        node_dir.join("node_modules/npm/bin/npx-cli.js"),
-        node_dir.join("lib/node_modules/npm/bin/npx-cli.js"),
-        node_dir.join("../npm/node_modules/npm/bin/npx-cli.js"),
-        PathBuf::from("/usr/lib/node_modules/npm/bin/npx-cli.js"),
-        PathBuf::from("/usr/local/lib/node_modules/npm/bin/npx-cli.js"),
-        PathBuf::from("/opt/homebrew/lib/node_modules/npm/bin/npx-cli.js"),
-    ];
+    let mut candidates: Vec<PathBuf> = NPX_JS_POSIX_RELATIVE
+        .iter()
+        .map(|relative| node_dir.join(relative))
+        .collect();
+    candidates.extend(
+        NPX_JS_POSIX_WELL_KNOWN
+            .iter()
+            .map(|path| PathBuf::from(*path)),
+    );
     if let Some(program_files) = std::env::var_os("ProgramFiles") {
         candidates.push(
             std::path::PathBuf::from(program_files).join("nodejs/node_modules/npm/bin/npx-cli.js"),
@@ -354,4 +369,27 @@ pub fn build_remove_global_argv(launcher: &NodeLauncher, skill_name: &str) -> Ve
     argv.push(skill_name.to_string());
     argv.push("-y".to_string());
     argv
+}
+
+/// Remote hosts speak POSIX paths. `PathBuf` on a Windows controller rewrites
+/// `/usr/bin/node` to `\usr\bin\node`, which remote `sh` cannot execute.
+fn posix_remote_path_literal(value: &str) -> String {
+    value.replace('\\', "/")
+}
+
+/// Quote `program` plus argv for a remote `sh` command. Every element is
+/// POSIX-single-quoted; callers must not interpolate unquoted user input.
+pub(crate) fn quote_remote_cli_command(program: &Path, args: &[String]) -> String {
+    let mut command =
+        crate::targets::shell_quote(&posix_remote_path_literal(&program.to_string_lossy()));
+    for (index, arg) in args.iter().enumerate() {
+        command.push(' ');
+        let quoted = if index == 0 {
+            crate::targets::shell_quote(&posix_remote_path_literal(arg))
+        } else {
+            crate::targets::shell_quote(arg)
+        };
+        command.push_str(&quoted);
+    }
+    command
 }

@@ -61,6 +61,7 @@ const listGlobal: {
           state: "managed_link",
           managedLinkKind: "windows_junction",
           reasonCode: null,
+          installOrigin: null,
         },
       ],
     },

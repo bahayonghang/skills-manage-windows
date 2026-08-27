@@ -145,6 +145,7 @@ pub struct RecordedCommand {
     pub program: String,
     pub args: Vec<String>,
     pub stdin: Option<Vec<u8>>,
+    pub env: Vec<(String, Option<String>)>,
     pub(crate) policy: crate::targets::ProcessPolicy,
 }
 
@@ -247,6 +248,15 @@ impl crate::targets::CommandRunner for FakeRunner {
                 .map(|arg| arg.to_string_lossy().into_owned())
                 .collect(),
             stdin,
+            env: command
+                .get_envs()
+                .map(|(key, value)| {
+                    (
+                        key.to_string_lossy().into_owned(),
+                        value.map(|item| item.to_string_lossy().into_owned()),
+                    )
+                })
+                .collect(),
             policy,
         });
         match self

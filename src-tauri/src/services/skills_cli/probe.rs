@@ -123,7 +123,10 @@ pub(crate) fn observed_slot_from_probe(
             reason_code: REASON_NOT_A_DIRECTORY.to_string(),
         },
         PathProbeKind::Link => {
-            let Some(target) = probe.link_target.as_deref().filter(|value| !value.is_empty())
+            let Some(target) = probe
+                .link_target
+                .as_deref()
+                .filter(|value| !value.is_empty())
             else {
                 return ObservedSlot::Conflict {
                     reason_code: REASON_BROKEN_LINK.to_string(),

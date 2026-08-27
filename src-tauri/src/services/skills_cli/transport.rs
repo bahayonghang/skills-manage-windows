@@ -18,21 +18,25 @@ use crate::services::installation::fs_util::{
     create_skills_cli_directory_link, is_reparse_or_symlink, ManagedDirectoryLinkKind,
 };
 use crate::targets::{
-    connect_remote_target, remote_file_type_is_dir, shell_quote, ActiveTarget,
-    ConnectedRemoteTarget, RemoteDirEntry, RemotePathInfo, TargetsError,
+    connect_remote_target, remote_file_type_is_dir, ActiveTarget, ConnectedRemoteTarget,
+    ProcessClass, RemoteDirEntry, RemotePathInfo, TargetsError,
 };
 
 use super::argv::{
-    is_node_version_supported, parse_node_version, SKILLS_CLI_MIN_NODE_DISPLAY, SKILLS_CLI_NPM_SPEC,
+    is_node_version_supported, parse_node_version, quote_remote_cli_command, NodeLauncher,
+    SKILLS_CLI_MIN_NODE_DISPLAY, SKILLS_CLI_NPM_SPEC,
 };
 use super::error::SkillsCliError;
 use super::lock::{remote_lock_path, skills_cli_lock_path_from_env};
 use super::probe::{build_path_probe_script, parse_path_probe_output, PathProbe, PathProbeKind};
 use super::remote_scripts::{
     build_atomic_replace_script, build_create_managed_link_script,
-    build_create_managed_links_script, build_remove_canonical_backup_script, build_rename_script,
-    build_verified_link_remove_script, is_skillport_canonical_backup_path, is_windows_remote_os,
-    parse_verified_link_remove_output, VerifiedLinkRemoveStatus,
+    build_create_managed_links_script, build_extract_tar_command,
+    build_remote_launcher_probe_script, build_remove_canonical_backup_script,
+    build_remove_update_scratch_script, build_rename_script, build_verified_link_remove_script,
+    is_skillport_canonical_backup_path, is_skillport_update_scratch_path, is_windows_remote_os,
+    parse_remote_launcher_probe, parse_verified_link_remove_output, VerifiedLinkRemoveStatus,
+    REMOTE_SKILL_HASH_SCRIPT,
 };
 use super::runner::{CliOutput, NodeProcessRunner, RunnerRequest, SkillsCliRunner};
 use super::SkillsCliManagedLinkKind;
@@ -47,10 +51,11 @@ else
 fi
 "#;
 
-/// One Skills CLI IPC capability. Inventory opens ListGlobal / InstallTargets /
-/// ReadSkillMd / ExportInventory on Remote. This mutate task also opens
-/// LinkPlatform, UnlinkPlatform, PreviewRemove, RemoveGlobal, and LeftoverScan.
-/// RevealFolder stays permanently unsupported. Install/update stay gated.
+/// Inventory opened ListGlobal / InstallTargets / ReadSkillMd / ExportInventory
+/// on Remote. Mutate opened Link/Unlink/PreviewRemove/RemoveGlobal/LeftoverScan.
+/// This install/update task opens PreviewSource, AddGlobal, CancelJob,
+/// CheckUpdates, UpdateInventory, VerifyUpdateBaseline, ApplyUpdates, and
+/// RetryUpdateRecovery. RevealFolder stays permanently unsupported.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SkillsCliCapability {
     Doctor,
@@ -102,6 +107,7 @@ impl SkillsCliCapability {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RemoteCapabilitySupport {
     Supported,
+    #[allow(dead_code)]
     UnsupportedOnRemote,
     /// Remote has no host file manager; never opened by later tasks.
     PermanentlyUnsupported,
@@ -118,16 +124,16 @@ fn remote_capability_support(cap: SkillsCliCapability) -> RemoteCapabilitySuppor
         | SkillsCliCapability::UnlinkPlatform
         | SkillsCliCapability::PreviewRemove
         | SkillsCliCapability::RemoveGlobal
-        | SkillsCliCapability::LeftoverScan => RemoteCapabilitySupport::Supported,
-        SkillsCliCapability::RevealFolder => RemoteCapabilitySupport::PermanentlyUnsupported,
-        SkillsCliCapability::PreviewSource
+        | SkillsCliCapability::LeftoverScan
+        | SkillsCliCapability::PreviewSource
         | SkillsCliCapability::AddGlobal
         | SkillsCliCapability::CancelJob
         | SkillsCliCapability::CheckUpdates
         | SkillsCliCapability::UpdateInventory
         | SkillsCliCapability::VerifyUpdateBaseline
         | SkillsCliCapability::ApplyUpdates
-        | SkillsCliCapability::RetryUpdateRecovery => RemoteCapabilitySupport::UnsupportedOnRemote,
+        | SkillsCliCapability::RetryUpdateRecovery => RemoteCapabilitySupport::Supported,
+        SkillsCliCapability::RevealFolder => RemoteCapabilitySupport::PermanentlyUnsupported,
     }
 }
 
@@ -387,6 +393,102 @@ impl SkillsCliTransport {
         }
     }
 
+    /// Static `local` / `ssh` / `wsl` label for structured warn fields.
+    pub(crate) fn warn_target_kind(&self) -> &'static str {
+        match &self.scope {
+            SkillsCliScope::Local => "local",
+            SkillsCliScope::Remote(connection) => match connection.active_target() {
+                ActiveTarget::Local => "local",
+                ActiveTarget::Ssh(_) => "ssh",
+                ActiveTarget::Wsl(_) => "wsl",
+            },
+        }
+    }
+
+    pub(crate) fn remote_connection(&self) -> Option<&ConnectedRemoteTarget> {
+        match &self.scope {
+            SkillsCliScope::Remote(connection) => Some(connection.as_ref()),
+            SkillsCliScope::Local => None,
+        }
+    }
+
+    pub(crate) async fn resolve_launcher(&self) -> Result<NodeLauncher, SkillsCliError> {
+        match &self.scope {
+            SkillsCliScope::Local => {
+                let path = std::env::var("PATH").unwrap_or_default();
+                crate::services::skills_cli::resolve_node_launcher(&path)
+            }
+            SkillsCliScope::Remote(connection) => {
+                let stdout = connection
+                    .run_script(&build_remote_launcher_probe_script(), &[])
+                    .await
+                    .map_err(|_| SkillsCliError::CliUnavailable)?;
+                parse_remote_launcher_probe(&stdout)
+            }
+        }
+    }
+
+    pub(crate) async fn digest_remote_skill_dirs(
+        &self,
+        roots: &[String],
+    ) -> Result<std::collections::HashMap<String, String>, SkillsCliError> {
+        let connection = self
+            .remote_connection()
+            .ok_or(SkillsCliError::LocalTargetOnly)?;
+        if roots.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let args: Vec<&str> = roots.iter().map(String::as_str).collect();
+        let stdout = connection
+            .run_script(REMOTE_SKILL_HASH_SCRIPT, &args)
+            .await
+            .map_err(|error| map_remote_error("hash skill directories", error))?;
+        super::updates::parse_remote_skill_hash_output(&stdout)
+    }
+
+    pub(crate) async fn extract_tar_stdin_cancellable(
+        &self,
+        staging: &str,
+        archive: &[u8],
+        cancel: Option<&std::sync::atomic::AtomicBool>,
+    ) -> Result<(), SkillsCliError> {
+        let connection = self
+            .remote_connection()
+            .ok_or(SkillsCliError::LocalTargetOnly)?;
+        self.writes.fetch_add(1, Ordering::SeqCst);
+        let command = build_extract_tar_command(staging);
+        connection
+            .run_command_with_stdin_bytes_cancellable(&command, archive, cancel)
+            .await
+            .map(|_| ())
+            .map_err(map_runner_error_from_targets)
+    }
+
+    pub(crate) async fn run_remote_script(
+        &self,
+        script: &str,
+        mutate: bool,
+    ) -> Result<String, SkillsCliError> {
+        let connection = self
+            .remote_connection()
+            .ok_or(SkillsCliError::LocalTargetOnly)?;
+        if mutate {
+            self.writes.fetch_add(1, Ordering::SeqCst);
+        }
+        connection
+            .run_script(script, &[])
+            .await
+            .map_err(|error| map_remote_error("run remote script", error))
+    }
+
+    pub(crate) async fn remove_update_scratch(&self, paths: &[&str]) -> Result<(), SkillsCliError> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let script = build_remove_update_scratch_script(paths)?;
+        self.run_remote_script(&script, true).await.map(|_| ())
+    }
+
     pub(crate) fn recovery_target_id(&self) -> Option<&str> {
         match &self.scope {
             SkillsCliScope::Local => None,
@@ -632,6 +734,9 @@ fn map_remote_error(context: &'static str, error: TargetsError) -> SkillsCliErro
             SkillsCliError::Timeout(Duration::from_millis(timeout_ms as u64))
         }
         TargetsError::ProcessCancelled(_) => SkillsCliError::Cancelled,
+        TargetsError::ProcessOutputLimitExceeded { stream, .. } => {
+            SkillsCliError::OutputLimitExceeded { stream }
+        }
         TargetsError::RemoteCommandFailed { .. } | TargetsError::WslCommandFailed { .. } => {
             tracing::warn!(context, "Skills CLI remote host is unavailable");
             SkillsCliError::RemoteUnavailable
@@ -987,14 +1092,18 @@ impl SkillsCliFs for RemoteSkillsCliFs {
     }
 
     async fn remove_tree(&self, path: &str) -> Result<(), SkillsCliError> {
-        if !is_skillport_canonical_backup_path(path) {
+        if !is_skillport_canonical_backup_path(path) && !is_skillport_update_scratch_path(path) {
             return Err(SkillsCliError::Io {
                 context: "remove tree",
                 source: std::io::Error::other("refused non-backup recursive delete"),
             });
         }
         self.writes.fetch_add(1, Ordering::SeqCst);
-        let script = build_remove_canonical_backup_script(path)?;
+        let script = if is_skillport_update_scratch_path(path) {
+            build_remove_update_scratch_script(&[path])?
+        } else {
+            build_remove_canonical_backup_script(path)?
+        };
         self.connection
             .run_script(&script, &[])
             .await
@@ -1134,12 +1243,15 @@ impl SkillsCliFs for RemoteSkillsCliFs {
 #[async_trait]
 impl SkillsCliRunner for RemoteNodeRunner {
     async fn run(&self, request: RunnerRequest<'_>) -> Result<CliOutput, SkillsCliError> {
-        let mut command = shell_quote(&request.program.to_string_lossy());
-        for arg in &request.args {
-            command.push(' ');
-            command.push_str(&shell_quote(arg));
-        }
-        match self.connection.run_command(&command).await {
+        let command = quote_remote_cli_command(&request.program, &request.args);
+        let result = if request.policy.class == ProcessClass::BulkTransfer {
+            self.connection
+                .run_script_cancellable(&command, &[], request.cancel)
+                .await
+        } else {
+            self.connection.run_command(&command).await
+        };
+        match result {
             Ok(stdout) => Ok(CliOutput {
                 status_success: true,
                 exit_code: Some(0),
@@ -1150,7 +1262,11 @@ impl SkillsCliRunner for RemoteNodeRunner {
                 Duration::from_millis(timeout_ms as u64),
             )),
             Err(TargetsError::ProcessCancelled(_)) => Err(SkillsCliError::Cancelled),
-            Err(TargetsError::RemoteCommandFailed { status, .. }) => Ok(CliOutput {
+            Err(TargetsError::ProcessOutputLimitExceeded { stream, .. }) => {
+                Err(SkillsCliError::OutputLimitExceeded { stream })
+            }
+            Err(TargetsError::RemoteCommandFailed { status, .. })
+            | Err(TargetsError::WslCommandFailed { status, .. }) => Ok(CliOutput {
                 status_success: false,
                 exit_code: status.code(),
                 stdout: Vec::new(),
@@ -1167,6 +1283,9 @@ fn map_runner_error_from_targets(error: TargetsError) -> SkillsCliError {
             SkillsCliError::Timeout(Duration::from_millis(timeout_ms as u64))
         }
         TargetsError::ProcessCancelled(_) => SkillsCliError::Cancelled,
+        TargetsError::ProcessOutputLimitExceeded { stream, .. } => {
+            SkillsCliError::OutputLimitExceeded { stream }
+        }
         _ => {
             tracing::warn!("Skills CLI remote process failed to start");
             SkillsCliError::CliUnavailable

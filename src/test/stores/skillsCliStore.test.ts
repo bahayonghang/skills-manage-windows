@@ -375,6 +375,7 @@ function placement(
     state,
     managedLinkKind: state === "managed_link" ? ("windows_junction" as const) : null,
     reasonCode: null,
+    installOrigin: null,
   };
 }
 
@@ -433,6 +434,7 @@ const linkedPlacement = {
   state: "managed_link" as const,
   managedLinkKind: "windows_junction" as const,
   reasonCode: null,
+  installOrigin: null,
 };
 
 const missingPlacement = {

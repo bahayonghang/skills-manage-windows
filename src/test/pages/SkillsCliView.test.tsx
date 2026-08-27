@@ -479,12 +479,12 @@ describe("SkillsCliView", () => {
       skills_cli_doctor: doctor,
       skills_cli_list_global: listGlobal,
       skills_cli_install_targets: targets,
-      skills_cli_update_inventory: () => {
-        throw ipcFixtureError(
-          "skills_cli.local_target_only",
-          "Skills CLI is available only on the Local target.",
-        );
-      },
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+      skills_cli_read_skill_md: ({ skillName }: { skillName: string }) => ({
+        skillName,
+        content: "---\nname: demo\n---\n# Demo",
+        byteSize: 25,
+      }),
     });
     const { unmount } = render(
       <MemoryRouter>
@@ -501,10 +501,10 @@ describe("SkillsCliView", () => {
       screen.queryByText("Skills CLI 全局管理仅可在本机 Local 目标上使用。"),
     ).not.toBeInTheDocument();
     const install = screen.getByRole("button", { name: "安装技能" });
-    expect(install).toBeDisabled();
-    expect(install).toHaveAttribute("title", localOnly);
-    expect(screen.getByTestId("skills-cli-check-updates")).toBeDisabled();
-    expect(screen.getByTestId("skills-cli-check-updates")).toHaveAttribute(
+    expect(install).toBeEnabled();
+    expect(install).not.toHaveAttribute("title", localOnly);
+    expect(screen.getByTestId("skills-cli-check-updates")).toBeEnabled();
+    expect(screen.getByTestId("skills-cli-check-updates")).not.toHaveAttribute(
       "title",
       localOnly,
     );
@@ -513,6 +513,16 @@ describe("SkillsCliView", () => {
     expect(uninstall).toBeEnabled();
     expect(uninstall).not.toHaveAttribute("title", localOnly);
     expect(screen.queryByTestId("skills-cli-update-cache-error")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "查看 demo-skill 的详情" }));
+    const drawer = await screen.findByRole(
+      "dialog",
+      { name: "demo-skill" },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    const reveal = within(drawer).getByTestId("skills-cli-detail-reveal");
+    expect(reveal).toBeDisabled();
+    expect(reveal).toHaveAttribute("title", localOnly);
+    expect(ipcInvokeCalls("skills_cli_reveal_skill_folder")).toHaveLength(0);
   });
 
   it("keeps a stale inventory when remote list rejects remote_unavailable", async () => {
@@ -802,6 +812,7 @@ describe("SkillsCliView", () => {
           state: "missing" as const,
           managedLinkKind: null,
           reasonCode: null,
+          installOrigin: null,
         },
       ],
     };
@@ -817,6 +828,7 @@ describe("SkillsCliView", () => {
         state: "managed_link",
         managedLinkKind: "windows_junction",
         reasonCode: null,
+        installOrigin: null,
       },
     });
     render(<SkillsCliView />);
@@ -857,6 +869,7 @@ describe("SkillsCliView", () => {
           state: "managed_link" as const,
           managedLinkKind: "windows_junction" as const,
           reasonCode: null,
+          installOrigin: null,
         },
       ],
     };
@@ -872,6 +885,7 @@ describe("SkillsCliView", () => {
         state: "missing",
         managedLinkKind: null,
         reasonCode: null,
+        installOrigin: null,
       },
     });
     render(<SkillsCliView />);
@@ -932,6 +946,7 @@ describe("SkillsCliView", () => {
           state: "missing" as const,
           managedLinkKind: null,
           reasonCode: null,
+          installOrigin: null,
         },
       ],
     };
@@ -942,6 +957,7 @@ describe("SkillsCliView", () => {
       state: "managed_link",
       managedLinkKind: "windows_junction",
       reasonCode: null,
+      installOrigin: null,
     };
     mockIpcCommands({
       skills_cli_doctor: doctor,
@@ -1004,6 +1020,7 @@ describe("SkillsCliView", () => {
           state: "missing" as const,
           managedLinkKind: null,
           reasonCode: null,
+          installOrigin: null,
         },
         {
           agentId: "amp",
@@ -1012,6 +1029,7 @@ describe("SkillsCliView", () => {
           state: "direct_copy" as const,
           managedLinkKind: null,
           reasonCode: "skills_cli.direct_copy_not_toggleable",
+          installOrigin: null,
         },
       ],
     };
@@ -1035,6 +1053,7 @@ describe("SkillsCliView", () => {
         state: "managed_link",
         managedLinkKind: "windows_junction",
         reasonCode: null,
+        installOrigin: null,
       },
     });
     render(<SkillsCliView />);
@@ -1133,6 +1152,7 @@ describe("SkillsCliView", () => {
           state: "managed_link" as const,
           managedLinkKind: "windows_junction" as const,
           reasonCode: null,
+          installOrigin: null,
         },
       ],
     };
@@ -1161,6 +1181,7 @@ describe("SkillsCliView", () => {
         state: "missing",
         managedLinkKind: null,
         reasonCode: null,
+        installOrigin: null,
       },
     });
     render(<SkillsCliView />);
@@ -1365,6 +1386,7 @@ describe("SkillsCliView", () => {
           state: "unavailable" as const,
           managedLinkKind: null,
           reasonCode: "canonical_missing",
+          installOrigin: null,
         },
       ],
     };
@@ -1437,6 +1459,7 @@ describe("SkillsCliView", () => {
           state: "unavailable" as const,
           managedLinkKind: null,
           reasonCode: "canonical_missing",
+          installOrigin: null,
         },
       ],
     };
@@ -1619,6 +1642,7 @@ describe("SkillsCliView", () => {
           state: "managed_link" as const,
           managedLinkKind: "windows_junction" as const,
           reasonCode: null,
+          installOrigin: null,
         },
       ],
     };
@@ -1633,6 +1657,7 @@ describe("SkillsCliView", () => {
           state: "direct_copy" as const,
           managedLinkKind: null,
           reasonCode: null,
+          installOrigin: null,
         },
       ],
     };
@@ -1648,6 +1673,7 @@ describe("SkillsCliView", () => {
         state: "missing",
         managedLinkKind: null,
         reasonCode: null,
+        installOrigin: null,
       },
     });
     render(<SkillsCliView />);
@@ -1690,6 +1716,7 @@ describe("SkillsCliView", () => {
           state: "managed_link" as const,
           managedLinkKind: "windows_junction" as const,
           reasonCode: null,
+          installOrigin: null,
         },
       ],
     };
@@ -1709,6 +1736,7 @@ describe("SkillsCliView", () => {
               state: "missing",
               managedLinkKind: null,
               reasonCode: null,
+              installOrigin: null,
             });
         }),
     });

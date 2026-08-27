@@ -85,3 +85,18 @@ pub(crate) fn skill_content_digest_from_file_bytes(files: &[(String, Vec<u8>)]) 
         .collect::<Vec<_>>();
     aggregate_digest(SKILL_CONTENT_DIGEST_DOMAIN, &entries)
 }
+
+/// Same framed digest as [`skill_content_digest_from_file_bytes`], from
+/// already-hashed `(path, byte_len, sha256)` records. Used when a remote host
+/// hashed the files and this process only aggregates.
+pub(crate) fn skill_content_digest_from_hashed_files(files: &[(String, u64, [u8; 32])]) -> String {
+    let entries = files
+        .iter()
+        .map(|(path, byte_len, sha256)| DigestFileEntry {
+            path: path.clone(),
+            byte_len: *byte_len,
+            sha256: *sha256,
+        })
+        .collect::<Vec<_>>();
+    aggregate_digest(SKILL_CONTENT_DIGEST_DOMAIN, &entries)
+}

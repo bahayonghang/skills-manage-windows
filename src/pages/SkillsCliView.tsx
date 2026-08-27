@@ -71,7 +71,8 @@ export function SkillsCliView() {
   const { t } = useTranslation();
   const activeTarget = useTargetStore((state) => state.activeTarget);
   const isLocal = isLocalTarget(activeTarget);
-  const installUpdateLockReason = skillsCliRemoteMutationLockReason(isLocal, t);
+  const revealLockReason = skillsCliRemoteMutationLockReason(isLocal, t);
+  const installUpdateLockReason = undefined;
 
   const skills = useSkillsCliStore((state) => state.skills);
   const targets = useSkillsCliStore((state) => state.targets);
@@ -697,6 +698,7 @@ export function SkillsCliView() {
           setActiveSurface(openSkillsCliUninstall([detailSkill.name]));
         }}
         mutationLockReason={installUpdateLockReason}
+        revealLockReason={revealLockReason}
       />
 
       <SkillsCliUpdateDrawer

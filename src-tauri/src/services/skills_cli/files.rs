@@ -104,9 +104,7 @@ pub(crate) async fn read_skill_md(
         .await
     {
         Ok(bytes) => parse_lock_content(&String::from_utf8_lossy(&bytes)),
-        Err(SkillsCliError::Io { source, .. })
-            if source.kind() == std::io::ErrorKind::NotFound =>
-        {
+        Err(SkillsCliError::Io { source, .. }) if source.kind() == std::io::ErrorKind::NotFound => {
             super::lock::CliLockOwnership::default()
         }
         Err(error) => return Err(error),
@@ -115,16 +113,17 @@ pub(crate) async fn read_skill_md(
         return Err(SkillsCliError::SkillNotOwned);
     }
     let canonical = paths.join_child(paths.canonical_root(), skill_name);
-    let probes = tx.fs().probe_paths(std::slice::from_ref(&canonical)).await?;
+    let probes = tx
+        .fs()
+        .probe_paths(std::slice::from_ref(&canonical))
+        .await?;
     if !probe::canonical_owned_from_probe(probes.first()) {
         return Err(SkillsCliError::CanonicalMissing);
     }
     let md_path = paths.join_child(&canonical, "SKILL.md");
     let bytes = match tx.fs().read_file_bounded(&md_path, SKILL_DOC_LIMIT).await {
         Ok(bytes) => bytes,
-        Err(SkillsCliError::Io { source, .. })
-            if source.kind() == std::io::ErrorKind::NotFound =>
-        {
+        Err(SkillsCliError::Io { source, .. }) if source.kind() == std::io::ErrorKind::NotFound => {
             return Err(SkillsCliError::SkillDocMissing);
         }
         Err(error) => return Err(error),
@@ -132,8 +131,7 @@ pub(crate) async fn read_skill_md(
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > SKILL_DOC_LIMIT {
         return Err(SkillsCliError::SkillDocTooLarge);
     }
-    let content =
-        String::from_utf8(bytes).map_err(|_| SkillsCliError::SkillDocInvalidUtf8)?;
+    let content = String::from_utf8(bytes).map_err(|_| SkillsCliError::SkillDocInvalidUtf8)?;
     let byte_size = u32::try_from(content.len()).unwrap_or(u32::MAX);
     Ok(SkillsCliSkillDoc {
         skill_name: skill_name.to_string(),
@@ -200,6 +198,7 @@ pub(crate) fn reveal_skill_folder(
     tx: &super::SkillsCliTransport,
     skill_name: &str,
 ) -> Result<(), SkillsCliError> {
+    tx.ensure_capability(super::SkillsCliCapability::RevealFolder)?;
     let paths = tx.paths();
     reveal_skill_folder_at(
         skill_name,

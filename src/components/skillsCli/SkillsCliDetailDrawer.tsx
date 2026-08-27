@@ -69,6 +69,7 @@ export interface SkillsCliDetailDrawerProps {
   onRevealFolder: () => void | Promise<void>;
   onUninstall: () => void;
   mutationLockReason?: string;
+  revealLockReason?: string;
 }
 
 function rowReason(
@@ -136,6 +137,7 @@ export function SkillsCliDetailDrawer({
   onRevealFolder,
   onUninstall,
   mutationLockReason,
+  revealLockReason,
 }: SkillsCliDetailDrawerProps) {
   const { t, i18n } = useTranslation();
   const titleId = useId();
@@ -621,8 +623,8 @@ export function SkillsCliDetailDrawer({
                   type="button"
                   variant="outline"
                   data-testid="skills-cli-detail-reveal"
-                  disabled={isMutating || Boolean(mutationLockReason)}
-                  title={mutationLockReason}
+                  disabled={isMutating || Boolean(revealLockReason)}
+                  title={revealLockReason}
                   onClick={() => void runReveal()}
                 >
                   <FolderOpen className="size-4" />

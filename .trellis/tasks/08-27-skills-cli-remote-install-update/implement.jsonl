@@ -1,0 +1,13 @@
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "R1/R2/R5 的权威契约：安装 argv 表与禁止项、来源白名单、更新 fail-closed 语义与 journal 阶段"}
+{"file": ".trellis/spec/backend/shared-local-cli.md", "reason": "R1 node + npx-cli.js 调用构造的共享约定，远端命令需保持等价而非另起一套拼接"}
+{"file": ".trellis/spec/backend/process-supervision.md", "reason": "R3 preview=Standard / add=BulkTransfer、stderr 1 MiB 上限，与远端 ProcessPolicy 120s / 15min 的对应"}
+{"file": ".trellis/spec/backend/update-inventory-retry.md", "reason": "R5 更新检测的重试与 stale 语义，远端不得偏离"}
+{"file": ".trellis/spec/backend/central-update-inventory-progress.md", "reason": "R9 进度事件的既有产出约定，远端需复用 skills-cli://update-progress"}
+{"file": ".trellis/spec/backend/central-update-batching.md", "reason": "apply 每请求单 repositoryKey，批量分组策略需与既有批处理约定一致"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "R6/R10 凭据边界与脱敏：GitHub token 不得进远端 argv/环境变量/落盘，URL 不进 IpcError.message"}
+{"file": ".trellis/spec/backend/fs-db-operation-journal.md", "reason": "R7 prepared → cli_started → db_committed（或 recovery_required）阶段模型"}
+{"file": ".trellis/spec/backend/central-mutation-lock.md", "reason": "R7 顺序中的远端 target guard 与 recheck"}
+{"file": ".trellis/spec/backend/exclusive-job-lifecycle.md", "reason": "R7 顺序的第一环 skills_cli lease，先于网络准备"}
+{"file": ".trellis/spec/backend/transport-seam.md", "reason": "R1/R6 远端安装与快照下发两条路线都必须经 seam 表达"}
+{"file": ".trellis/spec/frontend/job-correlation-cancellation.md", "reason": "R9 前端消费远端进度事件时的 jobId 关联与取消语义"}
+{"file": ".trellis/tasks/08-27-skills-cli-availability-remote/research/current-state-evidence.md", "reason": "skills_cli_apply_updates 单 repositoryKey 请求与 install_origin 仅 Local 生效的 file:line 证据"}

@@ -3,8 +3,9 @@
 //! Platform-slot deletes never use `rm -rf`. Recursive delete is generated
 //! only for SkillPort canonical backup paths (`.skillport-remove-<id>`).
 
-use crate::targets::{remote_parent, shell_quote};
+use crate::targets::{remote_join, remote_parent, shell_quote};
 
+use super::argv::{NPX_JS_POSIX_RELATIVE, NPX_JS_POSIX_WELL_KNOWN};
 use super::error::SkillsCliError;
 
 pub(crate) const SKILLS_CLI_REMOTE_MUTATION_CHUNK_SIZE: usize = 32;
@@ -13,6 +14,8 @@ pub(crate) const SKILLS_CLI_REMOTE_MUTATION_PROBE_OVERHEAD: usize = 1;
 
 const VERIFIED_REMOVE_HEREDOC: &str = "SKILLPORT_VERIFIED_LINK_REMOVE";
 const BACKUP_NAME_PREFIX: &str = ".skillport-remove-";
+const UPDATE_OP_DIR_PREFIX: &str = ".skillport-update-op-";
+const UPDATE_STAGING_DIR_PREFIX: &str = ".skillport-update-staging-";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum VerifiedLinkRemoveStatus {
@@ -34,6 +37,180 @@ pub(crate) fn is_skillport_canonical_backup_path(path: &str) -> bool {
     let trimmed = path.trim_end_matches(['/', '\\']);
     let name = trimmed.rsplit(['/', '\\']).next().unwrap_or(trimmed);
     name.starts_with(BACKUP_NAME_PREFIX) && name.len() > BACKUP_NAME_PREFIX.len()
+}
+
+pub(crate) fn is_skillport_update_scratch_path(path: &str) -> bool {
+    let trimmed = path.trim_end_matches(['/', '\\']);
+    let name = trimmed.rsplit(['/', '\\']).next().unwrap_or(trimmed);
+    (name.starts_with(UPDATE_OP_DIR_PREFIX) && name.len() > UPDATE_OP_DIR_PREFIX.len())
+        || (name.starts_with(UPDATE_STAGING_DIR_PREFIX)
+            && name.len() > UPDATE_STAGING_DIR_PREFIX.len())
+}
+
+pub(crate) fn remote_update_backup_dir(canonical_root: &str, operation_id: &str) -> String {
+    remote_join(
+        canonical_root,
+        &format!("{UPDATE_OP_DIR_PREFIX}{operation_id}"),
+    )
+}
+
+pub(crate) fn remote_update_staging_dir(canonical_root: &str, operation_id: &str) -> String {
+    remote_join(
+        canonical_root,
+        &format!("{UPDATE_STAGING_DIR_PREFIX}{operation_id}"),
+    )
+}
+
+/// One round-trip: resolve `node` then probe `npx-cli.js` in the same order as
+/// local [`super::argv::npx_js_candidates`] POSIX entries.
+pub(crate) fn build_remote_launcher_probe_script() -> String {
+    let mut script = String::from(
+        r#"set -eu
+NODE=$(command -v node 2>/dev/null || true)
+printf 'NODE=%s\n' "$NODE"
+if [ -z "$NODE" ]; then
+  printf 'NPX=\n'
+  exit 0
+fi
+NODE_DIR=$(dirname "$NODE")
+NPX=
+"#,
+    );
+    for relative in NPX_JS_POSIX_RELATIVE {
+        script.push_str("if [ -z \"$NPX\" ] && [ -f \"$NODE_DIR/");
+        script.push_str(relative);
+        script.push_str("\" ]; then NPX=\"$NODE_DIR/");
+        script.push_str(relative);
+        script.push_str("\"; fi\n");
+    }
+    for well_known in NPX_JS_POSIX_WELL_KNOWN {
+        script.push_str("if [ -z \"$NPX\" ] && [ -f ");
+        script.push_str(&shell_quote(well_known));
+        script.push_str(" ]; then NPX=");
+        script.push_str(&shell_quote(well_known));
+        script.push_str("; fi\n");
+    }
+    script.push_str("printf 'NPX=%s\\n' \"$NPX\"\n");
+    script
+}
+
+pub(crate) fn parse_remote_launcher_probe(
+    stdout: &str,
+) -> Result<super::NodeLauncher, SkillsCliError> {
+    let mut node = String::new();
+    let mut npx = String::new();
+    for line in stdout.lines() {
+        if let Some(value) = line.strip_prefix("NODE=") {
+            node = value.trim().to_string();
+        } else if let Some(value) = line.strip_prefix("NPX=") {
+            npx = value.trim().to_string();
+        }
+    }
+    if node.is_empty() || npx.is_empty() {
+        return Err(SkillsCliError::CliUnavailable);
+    }
+    Ok(super::NodeLauncher {
+        program: std::path::PathBuf::from(node),
+        npx_js: std::path::PathBuf::from(npx),
+    })
+}
+
+/// Multi-root content hash. Emits `ROOT` / `MISSING` / `END`. Skips update
+/// scratch dirs. Comparison uses the same framed digest as local hashing.
+pub(crate) const REMOTE_SKILL_HASH_SCRIPT: &str = r#"
+set -eu
+
+if command -v sha256sum >/dev/null 2>&1; then
+  hash_cmd='sha256sum'
+elif command -v shasum >/dev/null 2>&1; then
+  hash_cmd='shasum'
+elif command -v openssl >/dev/null 2>&1; then
+  hash_cmd='openssl'
+else
+  exit 86
+fi
+
+for root in "$@"; do
+  if [ ! -d "$root" ]; then
+    printf 'MISSING\t%s\n' "$root"
+    continue
+  fi
+  printf 'ROOT\t%s\n' "$root"
+  (cd "$root" && find . \( -name '.skillport-update-op-*' -o -name '.skillport-update-staging-*' \) -prune -o -type f -print | LC_ALL=C sort | while IFS= read -r path; do
+    case "$path" in
+      */.skillport-update-op-*|*/.skillport-update-staging-*) continue ;;
+    esac
+    case "$hash_cmd" in
+      sha256sum) digest=$(sha256sum "$path") ;;
+      shasum) digest=$(shasum -a 256 "$path") ;;
+      openssl) digest=$(openssl dgst -sha256 -r "$path") ;;
+    esac
+    set -- $digest
+    digest=$1
+    size=$(wc -c < "$path" | tr -d '[:space:]')
+    rel=${path#./}
+    printf '%s\t%s\t%s\n' "$digest" "$size" "$rel"
+  done)
+  printf 'END\t%s\n' "$root"
+done
+"#;
+
+pub(crate) fn build_copy_tree_if_exists_script(source: &str, dest: &str) -> String {
+    format!(
+        "set -eu\nif [ -d {source} ]; then\n  mkdir -p -- {dest}\n  cp -a -- {source}/. {dest}/\nfi\n",
+        source = shell_quote(source),
+        dest = shell_quote(dest)
+    )
+}
+
+pub(crate) fn build_copy_trees_if_exist_script(pairs: &[(String, String)]) -> String {
+    let mut script = String::from("set -eu\n");
+    for (source, dest) in pairs {
+        script.push_str(&build_copy_tree_if_exists_script(source, dest));
+    }
+    script
+}
+
+pub(crate) fn build_extract_tar_command(staging: &str) -> String {
+    format!(
+        "mkdir -p -- {staging} && tar -x -C {staging}",
+        staging = shell_quote(staging)
+    )
+}
+
+pub(crate) fn build_swap_canonicals_script(pairs: &[(String, String)]) -> String {
+    let mut script = String::from("set -eu\n");
+    for (staged, canonical) in pairs {
+        let parent = remote_parent(canonical).unwrap_or_else(|| ".".to_string());
+        script.push_str(&format!(
+            "mkdir -p -- {parent}\nif [ -e {canonical} ]; then rm -rf -- {canonical}; fi\nmv -- {staged} {canonical}\n",
+            parent = shell_quote(&parent),
+            canonical = shell_quote(canonical),
+            staged = shell_quote(staged)
+        ));
+    }
+    script
+}
+
+pub(crate) fn build_remove_update_scratch_script(paths: &[&str]) -> Result<String, SkillsCliError> {
+    if paths.is_empty() {
+        return Ok("set -eu\ntrue\n".to_string());
+    }
+    for path in paths {
+        if !is_skillport_update_scratch_path(path) {
+            return Err(SkillsCliError::Io {
+                context: "remove update scratch",
+                source: std::io::Error::other("refused non-update recursive delete"),
+            });
+        }
+    }
+    let mut script = String::from("set -eu\n");
+    for path in paths {
+        script.push_str("rm -rf -- ");
+        script.push_str(&shell_quote(path));
+        script.push('\n');
+    }
+    Ok(script)
 }
 
 pub(crate) fn build_create_managed_link_script(
@@ -226,6 +403,25 @@ mod tests {
             "/agents/skills/.skillport-remove-uuid"
         ));
         assert!(!is_skillport_canonical_backup_path("/cursor/skills/demo"));
+        assert!(is_skillport_update_scratch_path(
+            "/agents/skills/.skillport-update-op-abc"
+        ));
+        assert!(is_skillport_update_scratch_path(
+            "/agents/skills/.skillport-update-staging-abc"
+        ));
+        assert!(!is_skillport_update_scratch_path("/agents/skills/demo"));
+        assert!(build_remove_update_scratch_script(&["/agents/skills/demo"]).is_err());
+        let cleanup = build_remove_update_scratch_script(&[
+            "/agents/skills/.skillport-update-op-abc",
+            "/agents/skills/.skillport-update-staging-abc",
+        ])
+        .unwrap();
+        assert!(cleanup.contains("rm -rf --"));
+        let probe = build_remote_launcher_probe_script();
+        assert!(probe.contains("command -v node"));
+        assert!(probe.contains("node_modules/npm/bin/npx-cli.js"));
+        assert!(!probe.contains("npx.cmd"));
+        assert!(!probe.contains("cmd /c"));
     }
 
     #[test]

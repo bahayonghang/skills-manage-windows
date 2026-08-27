@@ -67,7 +67,9 @@ pub use error::GithubImportError;
 pub(crate) use archive::download_repo_snapshot;
 #[cfg(test)]
 pub(crate) use archive::download_repo_snapshot_with_test_endpoint;
-pub(crate) use digest::skill_content_digest_from_file_bytes;
+pub(crate) use digest::{
+    skill_content_digest_from_file_bytes, skill_content_digest_from_hashed_files,
+};
 #[cfg(test)]
 pub(crate) use import::import_github_repo_skills_impl;
 pub(crate) use import::{

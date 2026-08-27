@@ -8,10 +8,10 @@
 use std::path::{Path, PathBuf};
 
 use super::lock::{CliLockEntry, CliLockOwnership};
-use super::placement::{
-    classify_placements, compatible_agents, PlacementPlatform,
+use super::placement::{classify_placements, compatible_agents, PlacementPlatform};
+use super::{
+    SkillsCliGlobalSkill, SkillsCliInstallKind, SkillsCliPlacement, SkillsCliSourceTypeBucket,
 };
-use super::{SkillsCliGlobalSkill, SkillsCliInstallKind, SkillsCliPlacement, SkillsCliSourceTypeBucket};
 
 /// One mapped builtin platform used while classifying placements.
 #[derive(Debug, Clone)]

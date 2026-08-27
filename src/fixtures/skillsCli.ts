@@ -32,6 +32,7 @@ const FIXTURE_SKILLS: SkillsCliGlobalSkill[] = [
         state: "direct_copy",
         managedLinkKind: null,
         reasonCode: null,
+        installOrigin: null,
       },
     ],
   },
@@ -145,6 +146,7 @@ export function registerSkillsCliFixtures(): void {
       state: "managed_link",
       managedLinkKind: "windows_junction",
       reasonCode: null,
+      installOrigin: null,
     }),
     skills_cli_link_platform_batch: ({ items }) => ({
       succeeded: items.map((item) => ({
@@ -161,6 +163,7 @@ export function registerSkillsCliFixtures(): void {
       state: "missing",
       managedLinkKind: null,
       reasonCode: null,
+      installOrigin: null,
     }),
     skills_cli_unlink_platform_batch: ({ items }) => ({
       succeeded: items.map((item) => ({

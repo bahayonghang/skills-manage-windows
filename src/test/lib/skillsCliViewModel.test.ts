@@ -96,6 +96,7 @@ function placement(
     state,
     managedLinkKind: state === "managed_link" ? "windows_junction" : null,
     reasonCode,
+    installOrigin: null,
   };
 }
 

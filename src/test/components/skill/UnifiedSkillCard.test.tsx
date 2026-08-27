@@ -326,6 +326,7 @@ const skillsCliBaseProps = {
       state: "managed_link",
       managedLinkKind: "windows_junction",
       reasonCode: null,
+      installOrigin: null,
     },
     {
       agentId: "codex",
@@ -334,6 +335,7 @@ const skillsCliBaseProps = {
       state: "managed_link",
       managedLinkKind: "windows_junction",
       reasonCode: null,
+      installOrigin: null,
     },
     {
       agentId: "amp",
@@ -342,6 +344,7 @@ const skillsCliBaseProps = {
       state: "managed_link",
       managedLinkKind: "windows_junction",
       reasonCode: null,
+      installOrigin: null,
     },
     {
       agentId: "claude-code",
@@ -350,6 +353,7 @@ const skillsCliBaseProps = {
       state: "managed_link",
       managedLinkKind: "windows_junction",
       reasonCode: null,
+      installOrigin: null,
     },
     {
       agentId: "opencode",
@@ -358,6 +362,7 @@ const skillsCliBaseProps = {
       state: "managed_link",
       managedLinkKind: "windows_junction",
       reasonCode: null,
+      installOrigin: null,
     },
   ],
   onDetail: noop,
@@ -393,6 +398,7 @@ describe("UnifiedSkillCard skillsCli dense-row", () => {
             state: "direct_copy",
             managedLinkKind: null,
             reasonCode: null,
+            installOrigin: null,
           },
         ]}
       />,

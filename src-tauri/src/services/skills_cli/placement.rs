@@ -149,6 +149,7 @@ pub(crate) fn classify_one_observed(
         state,
         managed_link_kind,
         reason_code,
+        install_origin: None,
     }
 }
 
@@ -346,7 +347,12 @@ mod tests {
         );
     }
 
-    fn observed_platform(id: &str, detected: bool, enabled: bool, supported: bool) -> PlacementPlatform {
+    fn observed_platform(
+        id: &str,
+        detected: bool,
+        enabled: bool,
+        supported: bool,
+    ) -> PlacementPlatform {
         PlacementPlatform {
             agent_id: id.to_string(),
             display_name: id.to_string(),
@@ -397,7 +403,8 @@ mod tests {
             "/remote/cursor/skills/demo".to_string(),
         );
         assert_eq!(copy.state, SkillsCliPlacementState::DirectCopy);
-        let missing = classify_one_observed(true, ObservedSlot::Absent, &ready, "/slot".to_string());
+        let missing =
+            classify_one_observed(true, ObservedSlot::Absent, &ready, "/slot".to_string());
         assert_eq!(missing.state, SkillsCliPlacementState::Missing);
         let conflict = classify_one_observed(
             true,
@@ -409,12 +416,8 @@ mod tests {
         );
         assert_eq!(conflict.state, SkillsCliPlacementState::Conflict);
 
-        let missing_canonical = classify_one_observed(
-            false,
-            ObservedSlot::Absent,
-            &ready,
-            "/slot".to_string(),
-        );
+        let missing_canonical =
+            classify_one_observed(false, ObservedSlot::Absent, &ready, "/slot".to_string());
         assert_eq!(
             missing_canonical.reason_code.as_deref(),
             Some(REASON_CANONICAL_MISSING)

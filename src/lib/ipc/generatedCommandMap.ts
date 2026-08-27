@@ -1058,6 +1058,8 @@ export type SkillsCliPlacement = {
 	state: SkillsCliPlacementState,
 	managedLinkKind: SkillsCliManagedLinkKind | null,
 	reasonCode: string | null,
+	/**  Always `None` on Remote. Local platform origin lives on `SkillForAgent`. */
+	installOrigin: string | null,
 };
 
 export type SkillsCliPlacementBatchItem = {

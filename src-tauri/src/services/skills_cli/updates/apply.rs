@@ -12,7 +12,9 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 mod recover;
+mod remote;
 use recover::{recover_one, recover_pending_at};
+use remote::{apply_updates_remote, recover_one_remote};
 
 use crate::db::DbPool;
 use crate::db::{
@@ -42,7 +44,7 @@ use super::{
     SkillsCliUpdateProgress, UpdateProgressEmitter, UPDATE_LOCK_OPERATION,
 };
 
-const MANIFEST_VERSION: i64 = 1;
+pub(super) const MANIFEST_VERSION: i64 = 1;
 pub(super) const PHASE_PREPARED: &str = "prepared";
 pub(super) const PHASE_BACKUPS: &str = "backups_staged";
 pub(super) const PHASE_CLI_STARTED: &str = "cli_started";
@@ -126,6 +128,9 @@ pub(crate) async fn apply_updates(
     let canonical_root = tx.paths().canonical_root_path();
     let lock_path = tx.paths().lock_path_buf();
     let recovery_root = crate::paths::skills_cli_update_recovery_dir();
+    if tx.is_remote() {
+        return apply_updates_remote(tx, pool, github, progress, request, cancel).await;
+    }
     apply_updates_at(ApplyContext {
         pool,
         canonical_root: &canonical_root,
@@ -511,12 +516,15 @@ pub(crate) async fn retry_update_recovery(
     let lock_path = tx.paths().lock_path_buf();
     let recovery_root = crate::paths::skills_cli_update_recovery_dir();
     let _guard = acquire_target_mutation_guard(
-        &ActiveTarget::Local,
+        &tx.mutation_target(),
         UPDATE_LOCK_OPERATION,
         DEFAULT_CENTRAL_MUTATION_TIMEOUT,
     )
     .await
     .map_err(map_guard_error)?;
+    if tx.is_remote() {
+        return recover_one_remote(tx, pool, operation_id, cancel).await;
+    }
     recover_one(
         pool,
         operation_id,
@@ -568,7 +576,7 @@ fn refresh_canonicals(
     Ok(())
 }
 
-fn skill_files_from_snapshot(
+pub(super) fn skill_files_from_snapshot(
     snapshot: &GitHubRepoSnapshot,
     skill_path: &str,
 ) -> Result<Vec<(String, Vec<u8>)>, SkillsCliError> {
@@ -586,14 +594,18 @@ fn skill_files_from_snapshot(
     Ok(files)
 }
 
-fn lock_fingerprint(lock_path: &Path) -> Result<String, SkillsCliError> {
-    let bytes = std::fs::read(lock_path).unwrap_or_default();
+pub(super) fn fingerprint_lock_bytes(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(&bytes);
-    Ok(format!("{:x}", hasher.finalize()))
+    hasher.update(bytes);
+    format!("{:x}", hasher.finalize())
 }
 
-fn fail_if(fault: ApplyFault) -> Result<(), SkillsCliError> {
+fn lock_fingerprint(lock_path: &Path) -> Result<String, SkillsCliError> {
+    let bytes = std::fs::read(lock_path).unwrap_or_default();
+    Ok(fingerprint_lock_bytes(&bytes))
+}
+
+pub(super) fn fail_if(fault: ApplyFault) -> Result<(), SkillsCliError> {
     if injected_fault() == Some(fault) {
         Err(SkillsCliError::UpdateRecoveryRequired)
     } else {

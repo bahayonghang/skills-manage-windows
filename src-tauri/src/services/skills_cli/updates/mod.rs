@@ -17,11 +17,16 @@ mod status;
 mod tests;
 
 pub(crate) use apply::{apply_updates, retry_update_recovery};
+#[cfg(test)]
+pub(crate) use apply::{set_apply_fault, ApplyFault};
 pub use capability::{
     apply_argv_preview, update_capability_plan, CapabilitySupport, SkillsCliUpdateCapabilityPlan,
 };
-pub(crate) use detect::{check_updates_at, verify_update_baseline_at};
+pub(crate) use detect::{check_updates, verify_update_baseline};
+pub(crate) use digest::parse_remote_skill_hash_output;
 pub(crate) use github::ProductionSkillsCliGithub;
+#[cfg(test)]
+pub(crate) use github::{FakeSkillsCliGithub, GithubObserveResult};
 
 use serde::{Deserialize, Serialize};
 

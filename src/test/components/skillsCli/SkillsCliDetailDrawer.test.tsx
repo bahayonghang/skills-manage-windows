@@ -73,6 +73,7 @@ function placement(
           : state === "direct_copy"
             ? "skills_cli.direct_copy_not_toggleable"
             : null,
+    installOrigin: null,
   };
 }
 

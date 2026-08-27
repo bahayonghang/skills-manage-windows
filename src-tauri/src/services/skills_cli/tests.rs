@@ -629,6 +629,14 @@ fn ac2_capability_matrix_opens_inventory_reads_on_remote() {
         SkillsCliCapability::PreviewRemove,
         SkillsCliCapability::RemoveGlobal,
         SkillsCliCapability::LeftoverScan,
+        SkillsCliCapability::PreviewSource,
+        SkillsCliCapability::AddGlobal,
+        SkillsCliCapability::CancelJob,
+        SkillsCliCapability::CheckUpdates,
+        SkillsCliCapability::UpdateInventory,
+        SkillsCliCapability::VerifyUpdateBaseline,
+        SkillsCliCapability::ApplyUpdates,
+        SkillsCliCapability::RetryUpdateRecovery,
     ];
     for cap in open_on_remote {
         assert!(

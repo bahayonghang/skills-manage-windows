@@ -17,8 +17,8 @@ use crate::fs_util::run_blocking_fs_with;
 use crate::services::github_import::candidate_content_digest_from_snapshot;
 
 use super::super::{
-    check_cancel, list_global_at, SkillsCliError, SkillsCliGlobalSkill, SkillsCliPlacementState,
-    SkillsCliSourceTypeBucket,
+    check_cancel, list_global, list_global_at, SkillsCliError, SkillsCliGlobalSkill,
+    SkillsCliPlacementState, SkillsCliSourceTypeBucket, SkillsCliTransport,
 };
 use super::capability::{apply_argv_preview, update_capability_plan};
 use super::digest::digest_skill_directory;
@@ -54,6 +54,21 @@ pub(crate) async fn load_update_inventory(
     Ok(assemble_inventory(repositories, skills, pending))
 }
 
+pub(crate) async fn check_updates(
+    tx: &SkillsCliTransport,
+    pool: &DbPool,
+    github: &dyn SkillsCliUpdateGithub,
+    progress: &dyn UpdateProgressEmitter,
+    job_id: &str,
+    cancel: Option<&AtomicBool>,
+) -> Result<SkillsCliUpdateInventory, SkillsCliError> {
+    check_cancel(cancel)?;
+    let snapshot = list_global(tx, pool).await?;
+    let digests = collect_installed_digests(tx, &snapshot.skills).await?;
+    check_updates_from_snapshot(pool, github, progress, job_id, cancel, snapshot, digests).await
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) async fn check_updates_at(
     pool: &DbPool,
     canonical_root: &Path,
@@ -65,9 +80,86 @@ pub(crate) async fn check_updates_at(
 ) -> Result<SkillsCliUpdateInventory, SkillsCliError> {
     check_cancel(cancel)?;
     let snapshot = list_global_at(pool, canonical_root, lock_path).await?;
+    let mut digests = BTreeMap::new();
+    for skill in &snapshot.skills {
+        let canonical = skill
+            .canonical_path
+            .as_ref()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| canonical_root.join(&skill.name));
+        if canonical.is_dir() {
+            let path = canonical.clone();
+            let digest = run_blocking_fs_with(
+                "skills-cli-update-digest",
+                move || digest_skill_directory(&path),
+                SkillsCliError::task_join,
+            )
+            .await?;
+            digests.insert(skill.name.clone(), digest);
+        }
+    }
+    check_updates_from_snapshot(pool, github, progress, job_id, cancel, snapshot, digests).await
+}
+
+async fn collect_installed_digests(
+    tx: &SkillsCliTransport,
+    skills: &[SkillsCliGlobalSkill],
+) -> Result<BTreeMap<String, String>, SkillsCliError> {
+    if tx.is_remote() {
+        let roots: Vec<String> = skills
+            .iter()
+            .map(|skill| {
+                tx.paths()
+                    .join_child(tx.paths().canonical_root(), &skill.name)
+            })
+            .collect();
+        let by_path = tx.digest_remote_skill_dirs(&roots).await?;
+        let mut by_name = BTreeMap::new();
+        for skill in skills {
+            let path = tx
+                .paths()
+                .join_child(tx.paths().canonical_root(), &skill.name);
+            if let Some(digest) = by_path.get(&path) {
+                by_name.insert(skill.name.clone(), digest.clone());
+            }
+        }
+        return Ok(by_name);
+    }
+    let canonical_root = tx.paths().canonical_root_path();
+    let mut digests = BTreeMap::new();
+    for skill in skills {
+        let canonical = skill
+            .canonical_path
+            .as_ref()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| canonical_root.join(&skill.name));
+        if canonical.is_dir() {
+            let path = canonical.clone();
+            let digest = run_blocking_fs_with(
+                "skills-cli-update-digest",
+                move || digest_skill_directory(&path),
+                SkillsCliError::task_join,
+            )
+            .await?;
+            digests.insert(skill.name.clone(), digest);
+        }
+    }
+    Ok(digests)
+}
+
+async fn check_updates_from_snapshot(
+    pool: &DbPool,
+    github: &dyn SkillsCliUpdateGithub,
+    progress: &dyn UpdateProgressEmitter,
+    job_id: &str,
+    cancel: Option<&AtomicBool>,
+    snapshot: crate::services::skills_cli::SkillsCliGlobalSnapshot,
+    digests: BTreeMap<String, String>,
+) -> Result<SkillsCliUpdateInventory, SkillsCliError> {
     let mut scoped = Vec::new();
     for skill in snapshot.skills {
-        scoped.push(scope_skill(skill, canonical_root).await?);
+        let digest = digests.get(&skill.name).cloned();
+        scoped.push(scope_skill(skill, digest).await?);
     }
     let mut groups: BTreeMap<String, Vec<usize>> = BTreeMap::new();
     for (index, item) in scoped.iter().enumerate() {
@@ -288,6 +380,20 @@ pub(crate) async fn check_updates_at(
     load_update_inventory(pool).await
 }
 
+pub(crate) async fn verify_update_baseline(
+    tx: &SkillsCliTransport,
+    pool: &DbPool,
+    skill_names: &[String],
+    cancel: Option<&AtomicBool>,
+) -> Result<SkillsCliUpdateInventory, SkillsCliError> {
+    check_cancel(cancel)?;
+    let snapshot = list_global(tx, pool).await?;
+    let digests = collect_installed_digests(tx, &snapshot.skills).await?;
+    verify_update_baseline_from_snapshot(pool, &snapshot.skills, &digests, skill_names, cancel)
+        .await
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) async fn verify_update_baseline_at(
     pool: &DbPool,
     canonical_root: &Path,
@@ -297,31 +403,42 @@ pub(crate) async fn verify_update_baseline_at(
 ) -> Result<SkillsCliUpdateInventory, SkillsCliError> {
     check_cancel(cancel)?;
     let snapshot = list_global_at(pool, canonical_root, lock_path).await?;
+    let mut digests = BTreeMap::new();
+    for skill in &snapshot.skills {
+        let canonical = skill
+            .canonical_path
+            .as_ref()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| canonical_root.join(&skill.name));
+        if canonical.is_dir() {
+            let path = canonical.clone();
+            let digest = run_blocking_fs_with(
+                "skills-cli-verify-digest",
+                move || digest_skill_directory(&path),
+                SkillsCliError::task_join,
+            )
+            .await?;
+            digests.insert(skill.name.clone(), digest);
+        }
+    }
+    verify_update_baseline_from_snapshot(pool, &snapshot.skills, &digests, skill_names, cancel)
+        .await
+}
+
+async fn verify_update_baseline_from_snapshot(
+    pool: &DbPool,
+    skills: &[SkillsCliGlobalSkill],
+    digests: &BTreeMap<String, String>,
+    skill_names: &[String],
+    cancel: Option<&AtomicBool>,
+) -> Result<SkillsCliUpdateInventory, SkillsCliError> {
     let mut transaction = pool.begin().await.map_err(map_db_error)?;
     for name in skill_names {
         check_cancel(cancel)?;
-        let Some(skill) = snapshot.skills.iter().find(|skill| skill.name == *name) else {
+        let Some(_) = skills.iter().find(|skill| skill.name == *name) else {
             continue;
         };
-        let canonical = PathBuf::from(skill.canonical_path.clone().unwrap_or_default());
-        let path = if canonical.as_os_str().is_empty() {
-            canonical_root.join(name)
-        } else {
-            canonical
-        };
-        let local = if path.is_dir() {
-            let digest_path = path.clone();
-            Some(
-                run_blocking_fs_with(
-                    "skills-cli-verify-digest",
-                    move || digest_skill_directory(&digest_path),
-                    SkillsCliError::task_join,
-                )
-                .await?,
-            )
-        } else {
-            None
-        };
+        let local = digests.get(name).cloned();
         let existing = db::get_update_state(pool, name)
             .await
             .map_err(map_db_error)?;
@@ -354,7 +471,7 @@ pub(crate) async fn verify_update_baseline_at(
 
 async fn scope_skill(
     skill: SkillsCliGlobalSkill,
-    canonical_root: &Path,
+    local_digest: Option<String>,
 ) -> Result<ScopedSkill, SkillsCliError> {
     let source = skill
         .source_url
@@ -393,24 +510,6 @@ async fn scope_skill(
         skill.name.clone()
     } else {
         identity.skill_path.clone()
-    };
-    let canonical = skill
-        .canonical_path
-        .as_ref()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| canonical_root.join(&skill.name));
-    let local_digest = if canonical.is_dir() {
-        let path = canonical.clone();
-        Some(
-            run_blocking_fs_with(
-                "skills-cli-update-digest",
-                move || digest_skill_directory(&path),
-                SkillsCliError::task_join,
-            )
-            .await?,
-        )
-    } else {
-        None
     };
     Ok(ScopedSkill {
         skill,
