@@ -1025,17 +1025,22 @@ describe("skillsCliStore doc and reveal", () => {
       resolve(process.cwd(), "src/stores/skillsCliStore.ts"),
       "utf8",
     );
+    const placementSlice = readFileSync(
+      resolve(process.cwd(), "src/stores/skillsCliStore.placementSlice.ts"),
+      "utf8",
+    );
     const updateSlice = readFileSync(
       resolve(process.cwd(), "src/stores/skillsCliStore.updateSlice.ts"),
       "utf8",
     );
-    expect(store).toContain("async linkPlatform(");
-    expect(store).toContain("async unlinkPlatform(");
-    expect(store).toContain("async linkPlatformBatch(");
-    expect(store).toContain("async unlinkManagedBatch(");
-    expect(store).toContain("async unlinkPlatformBatch(");
-    expect(store).toContain("async removeGlobalBatch(");
-    expect(store).toContain("async applyUpdatesBatch(");
+    expect(store).toContain("createSkillsCliPlacementSlice");
+    expect(placementSlice).toContain("async linkPlatform(");
+    expect(placementSlice).toContain("async unlinkPlatform(");
+    expect(placementSlice).toContain("async linkPlatformBatch(");
+    expect(placementSlice).toContain("async unlinkManagedBatch(");
+    expect(placementSlice).toContain("async unlinkPlatformBatch(");
+    expect(placementSlice).toContain("async removeGlobalBatch(");
+    expect(placementSlice).toContain("async applyUpdatesBatch(");
     expect(store).toContain("batchProgress");
     expect(store).toContain("async exportInventory(");
     expect(store).toContain("async readSkillDoc(");

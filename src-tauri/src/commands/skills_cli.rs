@@ -5,14 +5,21 @@
 //! [`SkillsCliTransport`] only when the capability is open. Business logic
 //! lives in `crate::services::skills_cli`.
 
+mod helpers;
+#[cfg(test)]
+mod tests;
+
+use helpers::{
+    job_lease_error, open_transport, operation_definition, require_capability, reviewed_failure,
+    skills_cli_failure, to_ipc_error,
+};
 use tauri::{AppHandle, Emitter, State};
 
-use crate::ipc_error::{public_message_for_code, IpcError, REVIEWED_IPC_ERROR_CODES};
+use crate::ipc_error::IpcError;
 use crate::observability::{
-    CommandLogPolicy, OperationContext, OperationDefinition, OperationSubjectKind, OperationTarget,
-    ReviewedDiagnostic, ReviewedFailure, SafeDetailKey, SafeIdentifier, SafeOperationResult,
+    OperationContext, OperationSubjectKind, OperationTarget, SafeDetailKey, SafeIdentifier,
+    SafeOperationResult,
 };
-use crate::services::exclusive_job::ExclusiveJobError;
 use crate::services::github_import;
 use crate::services::skills_cli as domain;
 use crate::services::skills_cli::updates::{
@@ -25,84 +32,9 @@ use crate::services::skills_cli::{
     SkillsCliAddResult, SkillsCliCapability, SkillsCliDoctorReport, SkillsCliError,
     SkillsCliGlobalSnapshot, SkillsCliInstallTarget, SkillsCliPlacement,
     SkillsCliPlacementBatchItem, SkillsCliPlacementMutationOutcome, SkillsCliRemovePlan,
-    SkillsCliRemoveResult, SkillsCliSkillDoc, SkillsCliSourcePreview, SkillsCliTransport,
+    SkillsCliRemoveResult, SkillsCliSkillDoc, SkillsCliSourcePreview,
 };
-use crate::targets::ActiveTarget;
 use crate::AppState;
-
-fn to_ipc_error(error: &SkillsCliError) -> IpcError {
-    let code = error.ipc_code();
-    let message = public_message_for_code(code).unwrap_or(
-        // Only the internal family falls through; keep its fixed sentence.
-        "The operation failed. See runtime logs for details.",
-    );
-    IpcError::new(code, message, error.retryable())
-}
-
-fn require_capability(target: &ActiveTarget, cap: SkillsCliCapability) -> Result<(), IpcError> {
-    SkillsCliTransport::ensure_capability_for_target(target, cap)
-        .map_err(|error| to_ipc_error(&error))
-}
-
-async fn open_transport(target: &ActiveTarget) -> Result<SkillsCliTransport, IpcError> {
-    SkillsCliTransport::for_target(target)
-        .await
-        .map_err(|error| to_ipc_error(&error))
-}
-
-fn job_lease_error(error: ExclusiveJobError) -> IpcError {
-    match error {
-        ExclusiveJobError::InvalidId => {
-            IpcError::new("job.invalid_id", "The job identifier is invalid.", false)
-        }
-        ExclusiveJobError::Busy { .. } => IpcError::new(
-            "skills_cli.busy",
-            "Another skill operation is using this target.",
-            true,
-        ),
-        ExclusiveJobError::IdMismatch => IpcError::new(
-            "job.id_mismatch",
-            "The cancellation request does not match the active job.",
-            false,
-        ),
-        ExclusiveJobError::RegistryUnavailable => IpcError::new(
-            "job.registry_unavailable",
-            "The job registry is unavailable.",
-            false,
-        ),
-    }
-}
-
-fn operation_definition(command: &'static str) -> OperationDefinition {
-    match crate::ipc_registry::command_policy(command)
-        .expect("Skills CLI command must be registered")
-        .policy
-    {
-        CommandLogPolicy::Operation(definition) => definition,
-        _ => panic!("Skills CLI mutation must use Operation policy"),
-    }
-}
-
-fn reviewed_failure(definition: OperationDefinition, error: IpcError) -> ReviewedFailure {
-    let code = REVIEWED_IPC_ERROR_CODES
-        .iter()
-        .copied()
-        .find(|code| *code == error.safe_code())
-        .unwrap_or("internal.unexpected");
-    let message = public_message_for_code(code)
-        .unwrap_or("The operation failed. See runtime logs for details.");
-    ReviewedFailure::new(ReviewedDiagnostic::new(
-        code,
-        definition.category().as_str(),
-        definition.default_phase(),
-        message,
-        error.retryable,
-    ))
-}
-
-fn skills_cli_failure(definition: OperationDefinition, error: &SkillsCliError) -> ReviewedFailure {
-    reviewed_failure(definition, to_ipc_error(error))
-}
 
 #[tauri::command]
 #[cfg_attr(feature = "ipc-codegen", specta::specta)]
@@ -177,6 +109,107 @@ pub async fn skills_cli_preview_source(
         domain::preview_source(&tx, &source)
             .await
             .map_err(|error| to_ipc_error(&error))
+    })
+}
+
+#[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn skills_cli_read_skill_md(
+    state: State<'_, AppState>,
+    skill_name: String,
+) -> crate::ipc_error::IpcResult<SkillsCliSkillDoc> {
+    crate::ipc_boundary_async!("skills_cli_read_skill_md", {
+        let context = state.resolve_target_context().await?;
+        require_capability(context.target(), SkillsCliCapability::ReadSkillMd)?;
+        let tx = open_transport(context.target()).await?;
+        domain::read_skill_md(&tx, &skill_name)
+            .await
+            .map_err(|error| to_ipc_error(&error))
+    })
+}
+
+#[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn skills_cli_reveal_skill_folder(
+    state: State<'_, AppState>,
+    skill_name: String,
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary_async!("skills_cli_reveal_skill_folder", {
+        let context = state.resolve_target_context().await?;
+        require_capability(context.target(), SkillsCliCapability::RevealFolder)?;
+        let tx = open_transport(context.target()).await?;
+        let definition = operation_definition("skills_cli_reveal_skill_folder");
+        let operation_context = OperationContext::new(OperationTarget::local()).subject(
+            OperationSubjectKind::Skill,
+            SafeIdentifier::new(&skill_name),
+        );
+        crate::observability::run_operation(
+            &state,
+            definition,
+            operation_context,
+            |_| SafeOperationResult::succeeded("Revealed a Skills CLI skill folder."),
+            || async move {
+                domain::reveal_skill_folder(&tx, &skill_name)
+                    .map_err(|error| skills_cli_failure(definition, &error))
+            },
+        )
+        .await
+    })
+}
+
+#[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn skills_cli_export_inventory(
+    state: State<'_, AppState>,
+    path: String,
+    json: String,
+) -> crate::ipc_error::IpcResult<()> {
+    crate::ipc_boundary_async!("skills_cli_export_inventory", {
+        let context = state.resolve_target_context().await?;
+        require_capability(context.target(), SkillsCliCapability::ExportInventory)?;
+        let tx = open_transport(context.target()).await?;
+        let definition = operation_definition("skills_cli_export_inventory");
+        crate::observability::run_operation(
+            &state,
+            definition,
+            OperationContext::new(OperationTarget::local()),
+            |_| SafeOperationResult::succeeded("Exported the Skills CLI inventory."),
+            || async move {
+                domain::export_inventory(&tx, std::path::PathBuf::from(path), json)
+                    .await
+                    .map_err(|error| skills_cli_failure(definition, &error))
+            },
+        )
+        .await
+    })
+}
+
+#[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn cancel_skills_cli_job(
+    state: State<'_, AppState>,
+    job_id: String,
+) -> crate::ipc_error::IpcResult<bool> {
+    crate::ipc_boundary_async!("cancel_skills_cli_job", {
+        let context = state.resolve_target_context().await?;
+        require_capability(context.target(), SkillsCliCapability::CancelJob)?;
+        let definition = operation_definition("cancel_skills_cli_job");
+        crate::observability::run_operation(
+            &state,
+            definition,
+            OperationContext::new(OperationTarget::local()),
+            |changed: &bool| {
+                SafeOperationResult::succeeded("Requested Skills CLI cancellation.")
+                    .flag(SafeDetailKey::Changed, *changed)
+            },
+            || async {
+                state
+                    .skills_cli_jobs
+                    .cancel(&job_id)
+                    .map_err(|error| reviewed_failure(definition, job_lease_error(error)))
+            },
+        )
+        .await
     })
 }
 
@@ -271,51 +304,6 @@ pub async fn skills_cli_remove_global(
             || async move {
                 domain::remove_global(&tx, &pool, &skill_name, Some(lease.cancel_flag()))
                     .await
-                    .map_err(|error| skills_cli_failure(definition, &error))
-            },
-        )
-        .await
-    })
-}
-
-#[tauri::command]
-#[cfg_attr(feature = "ipc-codegen", specta::specta)]
-pub async fn skills_cli_read_skill_md(
-    state: State<'_, AppState>,
-    skill_name: String,
-) -> crate::ipc_error::IpcResult<SkillsCliSkillDoc> {
-    crate::ipc_boundary_async!("skills_cli_read_skill_md", {
-        let context = state.resolve_target_context().await?;
-        require_capability(context.target(), SkillsCliCapability::ReadSkillMd)?;
-        let tx = open_transport(context.target()).await?;
-        domain::read_skill_md(&tx, &skill_name)
-            .await
-            .map_err(|error| to_ipc_error(&error))
-    })
-}
-
-#[tauri::command]
-#[cfg_attr(feature = "ipc-codegen", specta::specta)]
-pub async fn skills_cli_reveal_skill_folder(
-    state: State<'_, AppState>,
-    skill_name: String,
-) -> crate::ipc_error::IpcResult<()> {
-    crate::ipc_boundary_async!("skills_cli_reveal_skill_folder", {
-        let context = state.resolve_target_context().await?;
-        require_capability(context.target(), SkillsCliCapability::RevealFolder)?;
-        let tx = open_transport(context.target()).await?;
-        let definition = operation_definition("skills_cli_reveal_skill_folder");
-        let operation_context = OperationContext::new(OperationTarget::local()).subject(
-            OperationSubjectKind::Skill,
-            SafeIdentifier::new(&skill_name),
-        );
-        crate::observability::run_operation(
-            &state,
-            definition,
-            operation_context,
-            |_| SafeOperationResult::succeeded("Revealed a Skills CLI skill folder."),
-            || async move {
-                domain::reveal_skill_folder(&tx, &skill_name)
                     .map_err(|error| skills_cli_failure(definition, &error))
             },
         )
@@ -548,62 +536,6 @@ pub async fn skills_cli_preview_remove_global(
     })
 }
 
-#[tauri::command]
-#[cfg_attr(feature = "ipc-codegen", specta::specta)]
-pub async fn skills_cli_export_inventory(
-    state: State<'_, AppState>,
-    path: String,
-    json: String,
-) -> crate::ipc_error::IpcResult<()> {
-    crate::ipc_boundary_async!("skills_cli_export_inventory", {
-        let context = state.resolve_target_context().await?;
-        require_capability(context.target(), SkillsCliCapability::ExportInventory)?;
-        let tx = open_transport(context.target()).await?;
-        let definition = operation_definition("skills_cli_export_inventory");
-        crate::observability::run_operation(
-            &state,
-            definition,
-            OperationContext::new(OperationTarget::local()),
-            |_| SafeOperationResult::succeeded("Exported the Skills CLI inventory."),
-            || async move {
-                domain::export_inventory(&tx, std::path::PathBuf::from(path), json)
-                    .await
-                    .map_err(|error| skills_cli_failure(definition, &error))
-            },
-        )
-        .await
-    })
-}
-
-#[tauri::command]
-#[cfg_attr(feature = "ipc-codegen", specta::specta)]
-pub async fn cancel_skills_cli_job(
-    state: State<'_, AppState>,
-    job_id: String,
-) -> crate::ipc_error::IpcResult<bool> {
-    crate::ipc_boundary_async!("cancel_skills_cli_job", {
-        let context = state.resolve_target_context().await?;
-        require_capability(context.target(), SkillsCliCapability::CancelJob)?;
-        let definition = operation_definition("cancel_skills_cli_job");
-        crate::observability::run_operation(
-            &state,
-            definition,
-            OperationContext::new(OperationTarget::local()),
-            |changed: &bool| {
-                SafeOperationResult::succeeded("Requested Skills CLI cancellation.")
-                    .flag(SafeDetailKey::Changed, *changed)
-            },
-            || async {
-                state
-                    .skills_cli_jobs
-                    .cancel(&job_id)
-                    .map_err(|error| reviewed_failure(definition, job_lease_error(error)))
-            },
-        )
-        .await
-    })
-}
-
 struct AppUpdateProgress {
     app: AppHandle,
 }
@@ -802,31 +734,4 @@ pub async fn skills_cli_retry_update_recovery(
         )
         .await
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::to_ipc_error;
-    use crate::services::skills_cli::SkillsCliError;
-
-    #[test]
-    fn dynamic_process_details_do_not_enter_the_ipc_envelope() {
-        let secret = r"C:\Users\alice\private --force token=ghp_secret";
-        let error = SkillsCliError::TaskJoin {
-            label: "skills-cli",
-            message: secret.to_string(),
-        };
-        let serialized = serde_json::to_string(&to_ipc_error(&error)).unwrap();
-        assert!(serialized.contains("internal.unexpected"));
-        assert!(!serialized.contains(secret));
-        assert!(!serialized.contains("ghp_secret"));
-    }
-
-    #[test]
-    fn update_check_failed_is_retryable_at_the_ipc_boundary() {
-        let error = SkillsCliError::UpdateCheckFailed;
-        assert_eq!(error.ipc_code(), "skills_cli.update_check_failed");
-        assert!(error.retryable());
-        assert!(!SkillsCliError::UpdateBaselineRequired.retryable());
-    }
 }
