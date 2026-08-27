@@ -25,7 +25,6 @@ export interface SkillsCliUninstallDialogProps {
   open: boolean;
   skillNames: readonly string[];
   isMutating: boolean;
-  runtimeBlocked?: boolean;
   returnFocusRef?: RefObject<HTMLElement | null>;
   onOpenChange: (open: boolean) => void;
   previewRemoveGlobal: (skillName: string) => Promise<SkillsCliRemovePlan | null>;
@@ -37,7 +36,6 @@ export function SkillsCliUninstallDialog({
   open,
   skillNames,
   isMutating,
-  runtimeBlocked = false,
   returnFocusRef,
   onOpenChange,
   previewRemoveGlobal,
@@ -136,7 +134,6 @@ export function SkillsCliUninstallDialog({
         });
   const confirmDisabled =
     isMutating ||
-    runtimeBlocked ||
     isPreviewing ||
     previewError !== null ||
     impact == null ||

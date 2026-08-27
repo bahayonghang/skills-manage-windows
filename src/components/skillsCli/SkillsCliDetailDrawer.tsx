@@ -55,7 +55,6 @@ export interface SkillsCliDetailDrawerProps {
   updateAvailable: boolean;
   focusSection: "links" | null;
   busyPlacements?: ReadonlySet<string>;
-  runtimeBlocked?: boolean;
   isMutating?: boolean;
   nowMs?: number;
   returnFocusRef?: RefObject<HTMLElement | null>;
@@ -122,7 +121,6 @@ export function SkillsCliDetailDrawer({
   updateAvailable,
   focusSection,
   busyPlacements,
-  runtimeBlocked = false,
   isMutating = false,
   nowMs,
   returnFocusRef,
@@ -221,7 +219,7 @@ export function SkillsCliDetailDrawer({
       ? formatRelativeTime(timeValue, i18n.language, nowMs ?? Date.now())
       : null;
   const showUpdateButton = updateAvailable && onUpdate != null;
-  const actionsLocked = runtimeBlocked || isMutating || aggregateBusy;
+  const actionsLocked = isMutating || aggregateBusy;
   const docBusy = visibleDoc.status === "loading";
 
   function markBusy(ids: readonly string[], next: boolean) {
@@ -461,11 +459,6 @@ export function SkillsCliDetailDrawer({
                       </Button>
                     )}
                   </div>
-                  {runtimeBlocked ? (
-                    <p className="text-xs text-muted-foreground">
-                      {t("skillsCli.detail.offlineHint")}
-                    </p>
-                  ) : null}
                   {mutationError ? (
                     <p
                       role="alert"
@@ -480,10 +473,7 @@ export function SkillsCliDetailDrawer({
                       const reason = rowReason(row, t);
                       const rowBusy = busy.has(row.agentId);
                       const switchDisabled =
-                        row.switchDisabled ||
-                        actionsLocked ||
-                        rowBusy ||
-                        runtimeBlocked;
+                        row.switchDisabled || actionsLocked || rowBusy;
                       const switchLabel = switchDisabled
                         ? t("skillsCli.detail.switchDisabled", {
                             platform: row.displayName,
@@ -615,7 +605,7 @@ export function SkillsCliDetailDrawer({
                   <Button
                     type="button"
                     data-testid="skills-cli-detail-update"
-                    disabled={runtimeBlocked}
+                    disabled={isMutating}
                     onClick={onUpdate}
                   >
                     {t("skillsCli.detail.update")}
@@ -625,7 +615,7 @@ export function SkillsCliDetailDrawer({
                   type="button"
                   variant="outline"
                   data-testid="skills-cli-detail-reveal"
-                  disabled={runtimeBlocked}
+                  disabled={isMutating}
                   onClick={() => void runReveal()}
                 >
                   <FolderOpen className="size-4" />
@@ -635,7 +625,7 @@ export function SkillsCliDetailDrawer({
                   type="button"
                   variant="destructive"
                   data-testid="skills-cli-detail-uninstall"
-                  disabled={runtimeBlocked || isMutating}
+                  disabled={isMutating}
                   onClick={onUninstall}
                 >
                   <Trash2 className="size-4" />

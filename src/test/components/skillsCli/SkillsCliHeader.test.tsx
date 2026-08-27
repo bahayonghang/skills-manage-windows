@@ -41,7 +41,7 @@ describe("SkillsCliHeader", () => {
       <SkillsCliHeader
         counts={counts}
         doctor={null}
-        runtimeError="skills_cli.cli_unavailable:The Skills CLI package could not be executed."
+        runtimeError="skills_cli.node_missing:Node.js 22.20 or later is required."
         isLoading={false}
         isRefreshing={false}
         installAvailable
@@ -51,7 +51,7 @@ describe("SkillsCliHeader", () => {
       />,
     );
     expect(screen.getByTestId("skills-cli-doctor")).toHaveTextContent(
-      "无法执行 Skills CLI 软件包。",
+      "需要 Node.js 22.20 或更高版本。",
     );
     expect(screen.getByRole("button", { name: "安装技能" })).toBeDisabled();
     expect(screen.getByTestId("skills-cli-counts")).toHaveTextContent("4");
@@ -86,7 +86,7 @@ describe("SkillsCliHeader", () => {
       <SkillsCliHeader
         counts={counts}
         doctor={null}
-        runtimeError="skills_cli.cli_unavailable:The Skills CLI package could not be executed."
+        runtimeError="skills_cli.node_missing:Node.js 22.20 or later is required."
         isLoading={false}
         isRefreshing={false}
         installAvailable
@@ -99,5 +99,52 @@ describe("SkillsCliHeader", () => {
     expect(check).toBeEnabled();
     fireEvent.click(check);
     expect(onCheckUpdates).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables Install for timeout while Refresh stays clickable", () => {
+    const onRefresh = vi.fn();
+    render(
+      <SkillsCliHeader
+        counts={counts}
+        doctor={null}
+        runtimeError="skills_cli.timeout:The Skills CLI command timed out."
+        isLoading={false}
+        isRefreshing={false}
+        installAvailable
+        onRefresh={onRefresh}
+        onCheckUpdates={vi.fn()}
+        onOpenInstall={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("skills-cli-doctor")).toHaveTextContent(
+      "Skills CLI 命令超时。",
+    );
+    expect(screen.getByRole("button", { name: "安装技能" })).toBeDisabled();
+    const refresh = screen.getByRole("button", { name: "刷新" });
+    expect(refresh).toBeEnabled();
+    fireEvent.click(refresh);
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables Install for an unexpected doctor failure while Refresh stays clickable", () => {
+    const onRefresh = vi.fn();
+    render(
+      <SkillsCliHeader
+        counts={counts}
+        doctor={null}
+        runtimeError="internal.unexpected:The operation failed. See runtime logs for details."
+        isLoading={false}
+        isRefreshing={false}
+        installAvailable
+        onRefresh={onRefresh}
+        onCheckUpdates={vi.fn()}
+        onOpenInstall={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("skills-cli-doctor")).toHaveTextContent(
+      "The operation failed. See runtime logs for details.",
+    );
+    expect(screen.getByRole("button", { name: "安装技能" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "刷新" })).toBeEnabled();
   });
 });

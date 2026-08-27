@@ -24,7 +24,7 @@ pub use agent_map::{
 pub use argv::{
     build_add_global_argv, build_list_global_argv, build_node_version_argv, build_preview_argv,
     build_probe_argv, build_remove_global_argv, is_node_version_supported, parse_node_version,
-    parse_skill_source, resolve_node_launcher, NodeLauncher, SkillSource,
+    parse_skill_source, resolve_node_launcher, resolve_node_program, NodeLauncher, SkillSource,
     SKILLS_CLI_MIN_NODE_DISPLAY, SKILLS_CLI_NPM_SPEC,
 };
 pub use error::SkillsCliError;
@@ -47,6 +47,7 @@ pub use updates::{
     SkillsCliUpdateStatus,
 };
 
+use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
 use serde::{Deserialize, Serialize};
@@ -59,8 +60,6 @@ use crate::targets::{ActiveTarget, ProcessPolicy};
 
 #[cfg(test)]
 use crate::services::central_mutation::{acquire_central_mutation_guard_at, CentralMutationGuard};
-#[cfg(test)]
-use std::path::PathBuf;
 
 use runner::{CliOutput, RunnerRequest};
 
@@ -263,6 +262,28 @@ fn resolve_launcher() -> Result<NodeLauncher, SkillsCliError> {
     resolve_node_launcher(&path)
 }
 
+fn resolve_node_program_from_env() -> Result<PathBuf, SkillsCliError> {
+    let path = std::env::var("PATH").unwrap_or_default();
+    resolve_node_program(&path)
+}
+
+async fn run_node_program(
+    runner: &dyn SkillsCliRunner,
+    program: &Path,
+    args: Vec<String>,
+    policy: ProcessPolicy,
+    cancel: Option<&AtomicBool>,
+) -> Result<CliOutput, SkillsCliError> {
+    runner
+        .run(RunnerRequest {
+            program: program.to_path_buf(),
+            args,
+            policy,
+            cancel,
+        })
+        .await
+}
+
 async fn run_cli(
     runner: &dyn SkillsCliRunner,
     launcher: &NodeLauncher,
@@ -270,15 +291,7 @@ async fn run_cli(
     policy: ProcessPolicy,
     cancel: Option<&AtomicBool>,
 ) -> Result<CliOutput, SkillsCliError> {
-    let program = launcher.program.clone();
-    runner
-        .run(RunnerRequest {
-            program,
-            args,
-            policy,
-            cancel,
-        })
-        .await
+    run_node_program(runner, &launcher.program, args, policy, cancel).await
 }
 
 pub(crate) fn map_guard_error(error: CentralMutationError) -> SkillsCliError {
@@ -295,26 +308,31 @@ pub(crate) fn map_guard_error(error: CentralMutationError) -> SkillsCliError {
 
 // ─── Doctor ──────────────────────────────────────────────────────────────────
 
-/// Probe the local runtime: node present, version >= PIN requirement, and the
-/// pinned package executable via npx.
+/// Probe the local runtime: node present and version >= PIN requirement.
+/// Does not spawn the pinned Skills CLI package.
 pub(crate) async fn doctor(
     runner: &dyn SkillsCliRunner,
 ) -> Result<SkillsCliDoctorReport, SkillsCliError> {
-    doctor_with_launcher(runner, &resolve_launcher()?).await
+    doctor_with_program(runner, &resolve_node_program_from_env()?).await
 }
 
-pub(crate) async fn doctor_with_launcher(
+pub(crate) async fn doctor_with_program(
     runner: &dyn SkillsCliRunner,
-    launcher: &NodeLauncher,
+    program: &Path,
 ) -> Result<SkillsCliDoctorReport, SkillsCliError> {
-    let version_output = run_cli(
+    let version_output = match run_node_program(
         runner,
-        launcher,
-        build_node_version_argv(launcher),
+        program,
+        vec!["--version".to_string()],
         standard_policy(),
         None,
     )
-    .await?;
+    .await
+    {
+        Ok(output) => output,
+        Err(SkillsCliError::CliUnavailable) => return Err(SkillsCliError::NodeMissing),
+        Err(error) => return Err(error),
+    };
     if !version_output.status_success {
         return Err(SkillsCliError::NodeMissing);
     }
@@ -329,23 +347,6 @@ pub(crate) async fn doctor_with_launcher(
             required: SKILLS_CLI_MIN_NODE_DISPLAY,
             found: found_version,
         });
-    }
-
-    // Prove the pinned package can execute without touching user state.
-    let probe = run_cli(
-        runner,
-        launcher,
-        build_probe_argv(launcher),
-        standard_policy(),
-        None,
-    )
-    .await?;
-    if !probe.status_success {
-        tracing::warn!(
-            status_success = probe.status_success,
-            "Skills CLI doctor probe failed"
-        );
-        return Err(SkillsCliError::CliUnavailable);
     }
 
     Ok(SkillsCliDoctorReport {
@@ -570,6 +571,16 @@ async fn add_global_locked(
     )
     .await?;
     if !output.status_success {
+        tracing::warn!(
+            operation = "skills_cli.add_global",
+            exit_code = ?output.exit_code,
+            stderr_bytes = output.stderr.len(),
+            stdout_bytes = output.stdout.len(),
+            skill_count = skill_names.len(),
+            agent_count = cli_agents.len(),
+            source_kind = source.source_kind(),
+            "Skills CLI add command failed"
+        );
         return Err(SkillsCliError::CliFailed);
     }
     Ok(SkillsCliAddResult {

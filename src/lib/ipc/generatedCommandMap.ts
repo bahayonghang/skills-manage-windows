@@ -251,6 +251,7 @@ export const GENERATED_REVIEWED_IPC_ERROR_CODES = [
   "skills_cli.busy",
   "skills_cli.cancelled",
   "skills_cli.canonical_missing",
+  "skills_cli.cli_failed",
   "skills_cli.cli_unavailable",
   "skills_cli.direct_copy_not_toggleable",
   "skills_cli.export_failed",

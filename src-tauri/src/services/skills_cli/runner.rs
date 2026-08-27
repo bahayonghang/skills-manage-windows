@@ -30,18 +30,18 @@ pub(crate) struct RunnerRequest<'a> {
 /// parse or drop them — they never reach IPC payloads or logs.
 pub(crate) struct CliOutput {
     pub status_success: bool,
+    pub exit_code: Option<i32>,
     pub stdout: Vec<u8>,
-    /// Captured for diagnostics; production paths drop it after parsing.
-    /// Parsed only by tests asserting cap behavior.
-    #[allow(dead_code)]
+    /// Captured so callers can log byte lengths; contents never enter IPC
+    /// payloads, tracing fields, or operation logs.
     pub stderr: Vec<u8>,
 }
 
-#[allow(dead_code)]
 impl CliOutput {
     fn from_std(output: StdOutput) -> Self {
         Self {
             status_success: output.status.success(),
+            exit_code: output.status.code(),
             stdout: output.stdout,
             stderr: output.stderr,
         }
@@ -53,16 +53,20 @@ pub(crate) trait SkillsCliRunner: Send + Sync {
     async fn run(&self, request: RunnerRequest<'_>) -> Result<CliOutput, SkillsCliError>;
 }
 
-fn map_runner_error(error: crate::targets::RunnerError) -> SkillsCliError {
-    use crate::targets::RunnerError;
+pub(crate) fn map_runner_error(error: crate::targets::RunnerError) -> SkillsCliError {
+    use crate::targets::{RunnerError, RunnerPhase};
     match error {
         RunnerError::Io {
-            phase: crate::targets::RunnerPhase::Start,
+            phase: RunnerPhase::Start,
             source,
-        } => SkillsCliError::Io {
-            context: "spawn Skills CLI process",
-            source,
-        },
+        } => {
+            tracing::warn!(
+                phase = "start",
+                io_kind = ?source.kind(),
+                "Skills CLI process failed to start"
+            );
+            SkillsCliError::CliUnavailable
+        }
         RunnerError::TimedOut { deadline, .. } => SkillsCliError::Timeout(deadline),
         RunnerError::Cancelled => SkillsCliError::Cancelled,
         RunnerError::OutputLimitExceeded { stream, .. } => SkillsCliError::OutputLimitExceeded {

@@ -75,9 +75,17 @@ Export writer owns atomic persist; the renderer never receives filesystem write 
   owned. Lock path: `$XDG_STATE_HOME/skills/.skill-lock.json`, else
   `home / UNIVERSAL_AGENTS_DIR_NAME / .skill-lock.json` (no `.agents` literal).
 - **Launcher**: program is `node.exe` / `node`. `argv[1]` is npm `npx-cli.js`.
-  Never `Command::new("npx.cmd")` or `cmd /c` string concat. Prefix:
+  Doctor only resolves the node program and runs `node --version`; `npx-cli.js`
+  resolution belongs to spawn paths (add/preview). Never `Command::new("npx.cmd")`
+  or `cmd /c` string concat. Prefix:
   `--yes --package=skills@1.5.23 -- skills`. Add/remove then add skills-layer
   `-g -y` plus at least one `-a` and `-s`. Never default `--all` or `--agent '*'`.
+- **Doctor gate (UI)**: a failed doctor (`node_missing`, `timeout`, `cancelled`,
+  or `internal.unexpected`) fail-closes Install only. list / remove / link /
+  unlink / export / detail stay available regardless of doctor result.
+  `cli_unavailable` is spawn-path only (add/preview) and must not lock the page.
+  This supersedes archived `08-25-skills-cli-inventory-frontend` R5, which
+  disabled uninstall when `cli_unavailable` appeared.
 - **Inventory read**: `skills_cli_list_global` reads lock v3 + filesystem + the
   same mapped∩detected platform set as `install_targets`. It must not spawn
   the CLI. Membership is lock names only. `path` / `installKind` prefer
@@ -145,7 +153,8 @@ Export writer owns atomic persist; the renderer never receives filesystem write 
 | --- | --- | --- |
 | ActiveTarget is SSH/WSL | `skills_cli.local_target_only` | false |
 | Node missing or `< 22.20.0` | `skills_cli.node_missing` | false |
-| npx JS or PIN package cannot run | `skills_cli.cli_unavailable` | false |
+| npx JS cannot be resolved, or the CLI process cannot spawn | `skills_cli.cli_unavailable` | false |
+| CLI non-zero on add | `skills_cli.cli_failed` | false |
 | Source fails whitelist (`&\|^%!<>"'`, spaces, `-c`) | `skills_cli.source_invalid` | false |
 | `--list` stdout has no parseable skill names | `skills_cli.preview_unparsed` | false |
 | Zero skills or zero platforms | `skills_cli.selection_empty` | false |
@@ -153,7 +162,7 @@ Export writer owns atomic persist; the renderer never receives filesystem write 
 | Target mutation lock or same-family job busy | `skills_cli.busy` | true |
 | Process deadline exceeded | `skills_cli.timeout` | false |
 | Exclusive-job cancel | `skills_cli.cancelled` | false |
-| CLI non-zero (preview/add), lock/FS IO, output cap | `internal.unexpected` | false |
+| lock/FS IO, output cap, listing parse failure | `internal.unexpected` | false |
 | Lock does not own the name | `skills_cli.skill_not_owned` | false |
 | Canonical missing / not a directory | `skills_cli.canonical_missing` | false |
 | SKILL.md missing / too large / invalid UTF-8 | `skills_cli.skill_doc_missing` / `skills_cli.skill_doc_too_large` / `skills_cli.skill_doc_invalid_utf8` | false |
@@ -181,8 +190,8 @@ command layer remaps it to `skills_cli.busy` so the UI sees one envelope.
 - Good: add acquires the `skills_cli` lease, then the Local mutation guard,
   spawns `node` + `npx-cli.js --yes --package=skills@1.5.23 -- skills add … -g -y -a … -s …`,
   and leftover local apply / Central install wait Busy until the guard drops.
-- Base: doctor/preview are Local reads that may spawn; list is a Local lock+FS
-  read: no exclusive job, no mutation lock, no CLI spawn.
+- Base: preview is a Local read that may spawn; doctor only probes node; list
+  is a Local lock+FS read: no exclusive job, no mutation lock, no CLI spawn.
 - Bad: `Command::new("npx.cmd")`; leftover scan skipping every path under
   `~/.agents/skills/`; using the local lock while scanning SSH leftover;
   mixing `active_db()` + `active_target()` when annotating origin.
@@ -191,7 +200,7 @@ command layer remaps it to `skills_cli.busy` so the UI sees one envelope.
 
 - Argv table: `--yes`, PIN spec, `-g -y -a -s`; assert no `--all`, `*`, `npx.cmd`.
 - Mapping closure: every seed builtin id is mapped or unsupported.
-- Doctor: missing node / too old / missing npx JS.
+- Doctor: missing node / too old; missing npx JS only affects spawn paths.
 - Non-Local IPC reject; `cli_lock_protect=false` does not exclude remote leftover.
 - Leftover: lock canonical/link excluded; lock-named mapped agent copy
   excluded; unlocked sibling copy still listed; remote scan ignores local lock.
@@ -243,4 +252,22 @@ spawn_add().await; // leftover apply / install_skill can write the same path
 let _lease = state.skills_cli_jobs.acquire(&job_id)?;
 let _guard = acquire_target_mutation_guard(&ActiveTarget::Local, "Skills CLI global install", timeout).await?;
 spawn_add().await;
+```
+
+```rust
+// Wrong: doctor resolves NodeLauncher (npx-cli.js) then probes `skills --help`.
+doctor_with_launcher(runner, &resolve_launcher()?).await?; // CliUnavailable if npx JS missing
+build_probe_argv(&launcher); // extra spawn + network
+
+// Correct: doctor only resolves node and runs `node --version`.
+doctor_with_program(runner, &resolve_node_program()?).await?;
+// Map Start-phase spawn failure to NodeMissing so the header never shows cli_unavailable.
+```
+
+```tsx
+// Wrong: any doctor/runtime error locks uninstall, link, unlink, export, detail.
+const runtimeBlocked = runtimeError !== null;
+
+// Correct: Install is fail-closed; other surfaces stay usable.
+// cli_unavailable is spawn-path only (add/preview). Add non-zero is skills_cli.cli_failed.
 ```

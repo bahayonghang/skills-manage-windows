@@ -39,6 +39,15 @@ pub enum SkillSource {
 }
 
 impl SkillSource {
+    /// Static classification for structured logs. Never the raw source string.
+    pub fn source_kind(&self) -> &'static str {
+        match self {
+            Self::Shorthand { .. } => "shorthand",
+            Self::WebUrl { .. } => "web_url",
+            Self::SshUrl { .. } => "ssh_url",
+        }
+    }
+
     /// The literal text passed to the CLI as `<source>`.
     pub fn as_argv_value(&self) -> std::borrow::Cow<'_, str> {
         match self {
@@ -210,6 +219,23 @@ pub fn find_node_in_paths(search_dirs: &[PathBuf]) -> Option<PathBuf> {
         .find(|candidate| candidate.is_file())
 }
 
+/// Resolve the Node.js program from a PATH string without requiring `npx-cli.js`.
+///
+/// `path_var` mirrors `$PATH`; tests inject synthetic directories.
+pub fn resolve_node_program(path_var: &str) -> Result<PathBuf, super::SkillsCliError> {
+    let search_dirs: Vec<PathBuf> = std::env::split_paths(path_var).collect();
+    resolve_node_program_from_dirs(&search_dirs)
+}
+
+pub(crate) fn resolve_node_program_from_dirs(
+    search_dirs: &[PathBuf],
+) -> Result<PathBuf, super::SkillsCliError> {
+    find_node_in_paths(search_dirs)
+        .ok_or(super::SkillsCliError::NodeMissing)?
+        .canonicalize()
+        .map_err(|_| super::SkillsCliError::NodeMissing)
+}
+
 /// Resolve the launcher from a PATH string and the user's home directory.
 ///
 /// `path_var` mirrors `$PATH`; tests inject synthetic directories.
@@ -221,10 +247,7 @@ pub fn resolve_node_launcher(path_var: &str) -> Result<NodeLauncher, super::Skil
 pub(crate) fn resolve_node_launcher_from_dirs(
     search_dirs: &[PathBuf],
 ) -> Result<NodeLauncher, super::SkillsCliError> {
-    let program = find_node_in_paths(search_dirs)
-        .ok_or(super::SkillsCliError::NodeMissing)?
-        .canonicalize()
-        .map_err(|_| super::SkillsCliError::NodeMissing)?;
+    let program = resolve_node_program_from_dirs(search_dirs)?;
     let node_dir = program
         .parent()
         .ok_or(super::SkillsCliError::NodeMissing)?

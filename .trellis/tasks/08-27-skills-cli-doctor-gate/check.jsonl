@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "核对 spec 修订与实现一致，无 Local-only/探测描述的矛盾中间态"}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "核对 cli_unavailable 只在 spawn 路径产生"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "核对 stderr 哨兵测试覆盖 IPC message 与操作日志两处"}
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "just ci 门禁；任务 PR 目标分支为 dev"}
+{"file": ".trellis/spec/quality/test-suite-layout.md", "reason": "改写既有用例时保持测试文件归属与命名约定"}
+{"file": ".trellis/spec/quality/index.md", "reason": "质量层 Quality Check 入口"}
+{"file": ".trellis/spec/frontend/skill-card-scenarios.md", "reason": "卡片 isLoading 改动后 skillsCli variant 的负向测试仍需成立"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "核对安装失败的 toast 语义与 formatBackendError 使用"}
+{"file": ".trellis/tasks/08-27-skills-cli-doctor-gate/design.md", "reason": "核对四段改动是否与设计的目标结构一致"}

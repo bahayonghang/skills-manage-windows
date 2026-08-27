@@ -76,6 +76,7 @@
       "local_target_only": "Skills CLI 仅可在本机 Local 目标上使用。",
       "node_missing": "需要 Node.js 22.20 或更高版本。",
       "cli_unavailable": "无法执行 Skills CLI 软件包。",
+      "cli_failed": "Skills CLI 命令未成功完成。",
       "source_invalid": "该技能来源不被允许。",
       "preview_unparsed": "无法解析技能预览结果。",
       "selection_empty": "请至少选择一个技能和一个平台。",
@@ -378,7 +379,6 @@
     "addSuccess": "已将 {{count}} 个技能安装到 {{platforms}} 个平台。",
     "removeSuccess": "已卸载 {{name}}。",
     "installHeading": "从技能来源安装",
-    "runtimeBlocked": "运行时检查未通过，安装与卸载已停用。请先处理上方的运行时状态，再刷新。",
     "pathsCanonical": "规范根目录：{{root}}",
     "pathsLock": "Lock 文件：{{lock}}",
     "ownershipNote": "SkillPort 并不拥有整个 ~/.agents/skills/ 目录。",
@@ -520,7 +520,6 @@
       "revealError": "{{error}}",
       "uninstall": "卸载",
       "update": "更新",
-      "offlineHint": "本地运行时就绪前，平台和文件夹操作不可用。",
       "mutationError": "{{error}}"
     },
     "census": {

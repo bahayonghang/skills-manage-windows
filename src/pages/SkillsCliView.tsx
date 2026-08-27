@@ -148,7 +148,6 @@ export function SkillsCliView() {
     });
   }, [skills]);
 
-  const runtimeBlocked = runtimeError !== null;
   const showInventoryEmpty = skills.length === 0 && !isLoading && !inventoryError;
   const showLoading = isLoading && skills.length === 0 && !inventoryError;
   const enabledIds = useMemo(() => enabledTargetIdSet(targets), [targets]);
@@ -521,7 +520,7 @@ export function SkillsCliView() {
                                   openSkillsCliUninstall([skill.name]),
                                 );
                               }}
-                              isLoading={isMutating || runtimeBlocked}
+                              isLoading={isMutating}
                             />
                           ))}
                         </div>
@@ -552,7 +551,6 @@ export function SkillsCliView() {
           summaries={linkSummaries}
           unlinkEnabled={unlinkEnabled}
           busy={isMutating}
-          runtimeBlocked={runtimeBlocked}
           exporting={isExporting}
           linkMenuOpen={linkMenuOpen}
           onLinkMenuOpenChange={setLinkMenuOpen}
@@ -584,12 +582,8 @@ export function SkillsCliView() {
         open={activeSurface?.kind === "uninstall"}
         skillNames={uninstallNames}
         isMutating={isMutating}
-        runtimeBlocked={runtimeBlocked}
         returnFocusRef={returnFocusRef}
         onOpenChange={(open) => {
-          if (open && runtimeBlocked) {
-            return;
-          }
           if (!open) {
             setActiveSurface(closeSkillsCliSurface());
           }
@@ -611,7 +605,6 @@ export function SkillsCliView() {
             : null,
         )}
         focusSection={detailFocus}
-        runtimeBlocked={runtimeBlocked}
         isMutating={isMutating}
         returnFocusRef={returnFocusRef}
         onClose={handleDetailClose}

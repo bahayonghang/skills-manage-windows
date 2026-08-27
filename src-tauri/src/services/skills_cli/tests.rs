@@ -11,8 +11,8 @@ use tempfile::TempDir;
 
 use super::argv::{
     build_add_global_argv, build_list_global_argv, build_node_version_argv, build_preview_argv,
-    build_remove_global_argv, parse_skill_source, resolve_node_launcher_from_dirs, NodeLauncher,
-    SkillSource, SKILLS_CLI_NPM_SPEC,
+    build_remove_global_argv, parse_skill_source, resolve_node_launcher_from_dirs,
+    resolve_node_program_from_dirs, NodeLauncher, SkillSource, SKILLS_CLI_NPM_SPEC,
 };
 use super::error::SkillsCliError;
 use super::lock::{
@@ -20,10 +20,11 @@ use super::lock::{
     LinkOrigin,
 };
 use super::runner::{
-    bulk_transfer_policy, standard_policy, CliOutput, RunnerRequest, SkillsCliRunner,
+    bulk_transfer_policy, map_runner_error, standard_policy, CliOutput, RunnerRequest,
+    SkillsCliRunner,
 };
 use super::{
-    add_global, add_global_with_lock_at, doctor_with_launcher, ensure_local_target,
+    add_global, add_global_with_lock_at, doctor_with_program, ensure_local_target,
     install_targets, list_global_at, preview_source_with_launcher, AddGlobalLockRequest,
     SkillsCliInstallKind, SkillsCliSourceTypeBucket, SKILLS_CLI_AGENT_MAP, SKILLS_CLI_UNSUPPORTED,
 };
@@ -37,7 +38,8 @@ use crate::services::central_updates::inventory::{
     DeletedPlatformCopyRemoval, SkillUpdateApplyResult,
 };
 use crate::targets::{
-    ActiveTarget, ProcessClass, ProcessPolicy, RemoteTargetConfig, SshAuthMethod, WslTargetConfig,
+    ActiveTarget, ProcessClass, ProcessPolicy, RemoteTargetConfig, RunnerError, RunnerPhase,
+    SshAuthMethod, WslTargetConfig,
 };
 use crate::test_support::{mem_pool, set_agent_dir, symlink_dir};
 
@@ -59,6 +61,7 @@ fn fake_launcher() -> NodeLauncher {
 fn ok_output(stdout: &str) -> CliOutput {
     CliOutput {
         status_success: true,
+        exit_code: Some(0),
         stdout: stdout.as_bytes().to_vec(),
         stderr: Vec::new(),
     }
@@ -331,6 +334,13 @@ fn ac14_ipc_message_never_contains_stderr() {
         assert!(!ipc.message.contains("npm ERR!"));
         assert!(!error.to_string().contains(planted));
     }
+    assert_eq!(
+        SkillsCliError::CliFailed.ipc_code(),
+        "skills_cli.cli_failed"
+    );
+    let cli_failed = public_message_for_code("skills_cli.cli_failed").unwrap();
+    let cli_unavailable = public_message_for_code("skills_cli.cli_unavailable").unwrap();
+    assert_ne!(cli_failed, cli_unavailable);
 }
 
 /// `io::Write` adapter appending into a shared test log buffer.
@@ -347,8 +357,7 @@ impl std::io::Write for SharedLogBuffer {
     }
 }
 
-#[tokio::test]
-async fn ac10_doctor_probe_failure_warns_without_stderr_and_keeps_public_message() {
+fn capture_logs() -> (Arc<Mutex<Vec<u8>>>, tracing::subscriber::DefaultGuard) {
     let logs: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
     let log_buffer = logs.clone();
     let subscriber = tracing_subscriber::fmt()
@@ -356,37 +365,117 @@ async fn ac10_doctor_probe_failure_warns_without_stderr_and_keeps_public_message
         .with_ansi(false)
         .compact()
         .finish();
-    let _guard = tracing::subscriber::set_default(subscriber);
+    (logs, tracing::subscriber::set_default(subscriber))
+}
 
+#[tokio::test]
+async fn ac7_add_nonzero_exit_warns_without_stderr() {
+    let (logs, _guard) = capture_logs();
     let runner = FakeCliRunner::new();
-    runner.push_ok("v26.7.0\n");
     runner.push_output(CliOutput {
         status_success: false,
+        exit_code: Some(1),
         stdout: Vec::new(),
         stderr: b"npm ERR! SECRET_STDERR_TOKEN".to_vec(),
     });
+    let temp = TempDir::new().unwrap();
+    let error = add_global_with_lock_at(AddGlobalLockRequest {
+        lock_path: temp.path().join("cli.lock"),
+        runner: &runner,
+        launcher: &fake_launcher(),
+        source: "owner/repo",
+        skill_names: vec!["demo".to_string()],
+        skillport_agent_ids: vec!["cursor".to_string()],
+        cancel: None,
+        timeout: Duration::from_secs(2),
+    })
+    .await
+    .unwrap_err();
+    assert!(matches!(error, SkillsCliError::CliFailed));
+    assert_eq!(error.ipc_code(), "skills_cli.cli_failed");
 
-    let error = doctor_with_launcher(&runner, &fake_launcher())
-        .await
-        .unwrap_err();
-    assert!(matches!(error, SkillsCliError::CliUnavailable));
-
-    let code = error.ipc_code();
-    let message = public_message_for_code(code)
+    let message = public_message_for_code(error.ipc_code())
         .unwrap_or("The operation failed. See runtime logs for details.");
-    let ipc = IpcError::new(code, message, error.retryable());
-    assert_eq!(ipc.message, "The Skills CLI package could not be executed.");
+    let ipc = IpcError::new(error.ipc_code(), message, error.retryable());
+    assert_eq!(
+        ipc.message,
+        "The Skills CLI command did not complete successfully."
+    );
     assert!(!ipc.message.contains("SECRET_STDERR_TOKEN"));
 
     let logged = String::from_utf8(logs.lock().unwrap().clone()).unwrap();
-    assert!(logged.contains("Skills CLI doctor probe failed"));
+    assert!(
+        logged.contains("Skills CLI add command failed"),
+        "missing add warn: {logged}"
+    );
+    assert!(logged.contains("operation"), "missing operation field: {logged}");
+    assert!(
+        logged.contains("skills_cli.add_global"),
+        "missing operation value: {logged}"
+    );
+    assert!(logged.contains("exit_code"), "missing exit_code field: {logged}");
     assert!(!logged.contains("SECRET_STDERR_TOKEN"));
     assert!(!logged.contains("npm ERR!"));
 }
 
 #[test]
+fn ac7b_start_phase_io_maps_to_cli_unavailable_without_source_display() {
+    let (logs, _guard) = capture_logs();
+    const PLANTED: &str = r"PLANTED_SPAWN_PATH C:\secret\node.exe";
+    let mapped = map_runner_error(RunnerError::Io {
+        phase: RunnerPhase::Start,
+        source: std::io::Error::new(std::io::ErrorKind::NotFound, PLANTED),
+    });
+    assert!(matches!(mapped, SkillsCliError::CliUnavailable));
+    assert_eq!(mapped.ipc_code(), "skills_cli.cli_unavailable");
+    let message = public_message_for_code(mapped.ipc_code()).unwrap();
+    let ipc = IpcError::new(mapped.ipc_code(), message, mapped.retryable());
+    assert_eq!(
+        ipc.message,
+        "The Skills CLI package could not be executed."
+    );
+    assert!(!ipc.message.contains(PLANTED));
+
+    let logged = String::from_utf8(logs.lock().unwrap().clone()).unwrap();
+    assert!(
+        logged.contains("Skills CLI process failed to start"),
+        "missing spawn warn: {logged}"
+    );
+    assert!(logged.contains("phase"), "missing phase field: {logged}");
+    assert!(logged.contains("io_kind"), "missing io_kind field: {logged}");
+    assert!(
+        !logged.contains("PLANTED_SPAWN_PATH"),
+        "source Display leaked: {logged}"
+    );
+    assert!(!logged.contains(r"C:\secret"));
+}
+
+#[tokio::test]
+async fn ac1_doctor_spawns_only_node_version() {
+    let runner = FakeCliRunner::new();
+    runner.push_ok("v26.7.0\n");
+    let report = doctor_with_program(&runner, &fake_launcher().program)
+        .await
+        .unwrap();
+    assert_eq!(report.node_version, "v26.7.0");
+    assert_eq!(report.npm_spec, SKILLS_CLI_NPM_SPEC);
+    let recorded = runner.recorded();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(recorded[0].args, vec!["--version".to_string()]);
+    assert!(
+        !recorded[0].args.iter().any(|arg| arg.contains("skills")
+            || arg.contains("--help")
+            || arg.contains("npx")),
+        "doctor must not probe the Skills CLI package: {:?}",
+        recorded[0].args
+    );
+}
+
+#[test]
 fn ac8_doctor_reports_missing_node_without_path_mutation() {
     let err = resolve_node_launcher_from_dirs(&[]).unwrap_err();
+    assert!(matches!(err, SkillsCliError::NodeMissing));
+    let err = resolve_node_program_from_dirs(&[]).unwrap_err();
     assert!(matches!(err, SkillsCliError::NodeMissing));
 }
 
@@ -395,15 +484,48 @@ fn ac8_doctor_reports_missing_npx_js_without_path_mutation() {
     let temp = TempDir::new().unwrap();
     let node_name = if cfg!(windows) { "node.exe" } else { "node" };
     std::fs::write(temp.path().join(node_name), b"").unwrap();
-    let err = resolve_node_launcher_from_dirs(&[temp.path().to_path_buf()]).unwrap_err();
+    let search = [temp.path().to_path_buf()];
+    let err = resolve_node_launcher_from_dirs(&search).unwrap_err();
     assert!(matches!(err, SkillsCliError::CliUnavailable));
+    let program = resolve_node_program_from_dirs(&search).unwrap();
+    assert!(program.ends_with(node_name));
+}
+
+#[tokio::test]
+async fn ac2_doctor_succeeds_when_npx_js_is_missing() {
+    let temp = TempDir::new().unwrap();
+    let node_name = if cfg!(windows) { "node.exe" } else { "node" };
+    std::fs::write(temp.path().join(node_name), b"").unwrap();
+    let search = [temp.path().to_path_buf()];
+    assert!(matches!(
+        resolve_node_launcher_from_dirs(&search).unwrap_err(),
+        SkillsCliError::CliUnavailable
+    ));
+    let program = resolve_node_program_from_dirs(&search).unwrap();
+    let runner = FakeCliRunner::new();
+    runner.push_ok("v22.20.0\n");
+    let report = doctor_with_program(&runner, &program).await.unwrap();
+    assert_eq!(report.node_version, "v22.20.0");
+    assert_eq!(report.npm_spec, SKILLS_CLI_NPM_SPEC);
+    assert_eq!(runner.recorded().len(), 1);
+}
+
+#[tokio::test]
+async fn ac5c_doctor_remaps_cli_unavailable_spawn_to_node_missing() {
+    let runner = FakeCliRunner::new();
+    runner.push_err(SkillsCliError::CliUnavailable);
+    let err = doctor_with_program(&runner, &fake_launcher().program)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, SkillsCliError::NodeMissing));
+    assert_eq!(err.ipc_code(), "skills_cli.node_missing");
 }
 
 #[tokio::test]
 async fn ac8_doctor_rejects_old_node() {
     let runner = FakeCliRunner::new();
     runner.push_ok("v18.20.0\n");
-    let err = doctor_with_launcher(&runner, &fake_launcher())
+    let err = doctor_with_program(&runner, &fake_launcher().program)
         .await
         .unwrap_err();
     assert!(matches!(err, SkillsCliError::NodeTooOld { .. }));

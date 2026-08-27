@@ -28,7 +28,6 @@ const baseProps = {
   summaries,
   unlinkEnabled: true,
   busy: false,
-  runtimeBlocked: false,
   exporting: false,
   linkMenuOpen: false,
   onLinkMenuOpenChange: vi.fn(),

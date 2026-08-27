@@ -87,6 +87,11 @@ fn skills_cli_contract_codes_keep_reviewed_public_messages() {
             false,
         ),
         (
+            "skills_cli.cli_failed",
+            "The Skills CLI command did not complete successfully.",
+            false,
+        ),
+        (
             "skills_cli.recovery_required",
             "A previous Skills CLI remove needs recovery.",
             true,

@@ -297,36 +297,49 @@ describe("SkillsCliView", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps the inventory rendered once when doctor reports cli_unavailable", async () => {
+  it("keeps inventory and non-install actions when doctor reports node_missing", async () => {
     mockIpcCommands({
       skills_cli_doctor: () => {
         throw ipcFixtureError(
-          "skills_cli.cli_unavailable",
-          "The Skills CLI package could not be executed.",
+          "skills_cli.node_missing",
+          "Node.js 22.20 or later is required.",
         );
       },
       skills_cli_list_global: listGlobal,
       skills_cli_install_targets: targets,
       skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+      skills_cli_preview_remove_global: ({ skillName }: { skillName: string }) => ({
+        skillName,
+        ownedCanonical: true,
+        managedPlacements: [],
+        retainedDirectCopies: [],
+        conflicts: [],
+        confirmable: true,
+      }),
     });
     render(<SkillsCliView />);
 
     await screen.findByText("demo-skill");
-    expect(
-      screen.getAllByText("无法执行 Skills CLI 软件包。"),
-    ).toHaveLength(1);
     expect(screen.getByTestId("skills-cli-doctor")).toHaveTextContent(
-      "无法执行 Skills CLI 软件包。",
+      "需要 Node.js 22.20 或更高版本。",
     );
+    expect(
+      screen.queryByText("无法执行 Skills CLI 软件包。"),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "安装技能" })).toBeDisabled();
     expect(screen.queryByRole("dialog", { name: "安装技能" })).not.toBeInTheDocument();
-    expect(screen.getByTestId("skills-cli-active-surface")).toHaveAttribute(
-      "data-kind",
-      "none",
-    );
+    expect(screen.getByRole("button", { name: "导出全部" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "查看 demo-skill 的详情" })).toBeEnabled();
+    const uninstall = screen.getByRole("button", { name: "卸载 demo-skill" });
+    expect(uninstall).toBeEnabled();
+    fireEvent.click(uninstall);
     expect(
-      screen.getByRole("button", { name: "卸载 demo-skill" }),
-    ).toBeDisabled();
+      await screen.findByRole(
+        "dialog",
+        { name: /卸载 demo-skill/ },
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      ),
+    ).toBeInTheDocument();
   });
 
   it("keeps the stale list visible when a refresh fails", async () => {
@@ -989,12 +1002,12 @@ describe("SkillsCliView", () => {
     expect(ipcInvokeCalls("skills_cli_unlink_platform")).toHaveLength(0);
   });
 
-  it("keeps Check updates enabled when the runtime is blocked", async () => {
+  it("keeps Check updates enabled when doctor reports node_missing", async () => {
     mockIpcCommands({
       skills_cli_doctor: () => {
         throw ipcFixtureError(
-          "skills_cli.cli_unavailable",
-          "The Skills CLI package could not be executed.",
+          "skills_cli.node_missing",
+          "Node.js 22.20 or later is required.",
         );
       },
       skills_cli_list_global: listGlobal,
@@ -1005,6 +1018,205 @@ describe("SkillsCliView", () => {
     await screen.findByText("demo-skill");
     expect(screen.getByTestId("skills-cli-check-updates")).toBeEnabled();
     expect(screen.getByRole("button", { name: "刷新" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "安装技能" })).toBeDisabled();
+  });
+
+  it("disables Install for timeout and unexpected doctor failures without clearing inventory", async () => {
+    mockIpcCommands({
+      skills_cli_doctor: () => {
+        throw ipcFixtureError(
+          "skills_cli.timeout",
+          "The Skills CLI command timed out.",
+        );
+      },
+      skills_cli_list_global: listGlobal,
+      skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+    });
+    const { unmount } = render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+    expect(screen.getByTestId("skills-cli-doctor")).toHaveTextContent(
+      "Skills CLI 命令超时。",
+    );
+    expect(screen.getByRole("button", { name: "安装技能" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "刷新" })).toBeEnabled();
+    unmount();
+
+    mockIpcCommands({
+      skills_cli_doctor: () => {
+        throw ipcFixtureError(
+          "internal.unexpected",
+          "The operation failed. See runtime logs for details.",
+        );
+      },
+      skills_cli_list_global: listGlobal,
+      skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+    });
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+    expect(screen.getByTestId("skills-cli-doctor")).toHaveTextContent(
+      "The operation failed. See runtime logs for details.",
+    );
+    expect(screen.getByRole("button", { name: "安装技能" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "刷新" })).toBeEnabled();
+  });
+
+  it("keeps uninstall and batch mutations usable when doctor succeeds", async () => {
+    const managedSkill = {
+      ...skills[0],
+      placements: [
+        {
+          agentId: "cursor",
+          displayName: "Cursor",
+          targetPath: "/tmp/cursor/skills/demo-skill",
+          state: "managed_link" as const,
+          managedLinkKind: "windows_junction" as const,
+          reasonCode: null,
+        },
+      ],
+    };
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: { ...listGlobal, skills: [managedSkill] },
+      skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+      skills_cli_preview_remove_global: ({ skillName }: { skillName: string }) => ({
+        skillName,
+        ownedCanonical: true,
+        managedPlacements: [{ agentId: "cursor", displayName: "Cursor" }],
+        retainedDirectCopies: [],
+        conflicts: [],
+        confirmable: true,
+      }),
+      skills_cli_remove_global: {
+        removedCanonical: true,
+        removedManagedAgentIds: ["cursor"],
+        retainedDirectCopyAgentIds: [],
+      },
+      skills_cli_unlink_platform: {
+        agentId: "cursor",
+        displayName: "Cursor",
+        targetPath: "/tmp/cursor/skills/demo-skill",
+        state: "missing",
+        managedLinkKind: null,
+        reasonCode: null,
+      },
+    });
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+    expect(screen.getByRole("button", { name: "卸载 demo-skill" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "选择" }));
+    fireEvent.click(screen.getByLabelText("选择技能"));
+    const batch = await screen.findByTestId("skills-cli-batch-bar");
+    expect(within(batch).getByRole("button", { name: "取消链接" })).toBeEnabled();
+    expect(within(batch).getByRole("button", { name: "卸载" })).toBeEnabled();
+    fireEvent.click(within(batch).getByRole("button", { name: "取消链接" }));
+    await waitFor(
+      () => {
+        expect(ipcInvokeCalls("skills_cli_unlink_platform")).toHaveLength(1);
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    fireEvent.click(within(batch).getByRole("button", { name: "卸载" }));
+    const dialog = await screen.findByRole(
+      "dialog",
+      { name: /卸载 demo-skill/ },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    const confirm = within(dialog).getByRole("button", { name: "卸载" });
+    await waitFor(() => expect(confirm).toBeEnabled(), {
+      timeout: ASYNC_UI_TIMEOUT_MS,
+    });
+    fireEvent.click(confirm);
+    await waitFor(() => {
+      expect(ipcInvokeCalls("skills_cli_remove_global")).toHaveLength(1);
+    });
+  });
+
+  it("toasts add cli_unavailable without changing the doctor status line", async () => {
+    mockHappyPath();
+    mockIpcCommands({
+      skills_cli_preview_source: {
+        source: "owner/repo",
+        skills: ["helper-skill"],
+      },
+      skills_cli_add_global: () => {
+        throw ipcFixtureError(
+          "skills_cli.cli_unavailable",
+          "The Skills CLI package could not be executed.",
+        );
+      },
+      get_setting: "[]",
+    });
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+    fireEvent.click(screen.getByRole("button", { name: "安装技能" }));
+    const wizard = within(
+      await screen.findByRole(
+        "dialog",
+        { name: "安装技能" },
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      ),
+    );
+    fireEvent.change(wizard.getByLabelText("技能来源"), {
+      target: { value: "owner/repo" },
+    });
+    fireEvent.click(wizard.getByRole("button", { name: "预览技能" }));
+    fireEvent.click(
+      await wizard.findByRole(
+        "button",
+        { name: "继续" },
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      ),
+    );
+    const install = await wizard.findByRole(
+      "button",
+      { name: "安装" },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    await waitFor(() => {
+      expect(install).toBeEnabled();
+    });
+    fireEvent.click(install);
+    await waitFor(() => {
+      expect(ipcInvokeCalls("skills_cli_add_global")).toHaveLength(1);
+    });
+    expect(showSkillsCliActionToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        semantic: "error",
+        message: expect.stringContaining("无法执行 Skills CLI 软件包。"),
+      }),
+    );
+    expect(screen.getByTestId("skills-cli-doctor")).toHaveTextContent(
+      "skills@1.5.23",
+    );
+    expect(screen.getByTestId("skills-cli-doctor")).not.toHaveTextContent(
+      "无法执行 Skills CLI 软件包。",
+    );
+    fireEvent.click(wizard.getByRole("button", { name: "关闭" }));
+    await waitFor(
+      () => {
+        expect(screen.queryByRole("dialog", { name: "安装技能" })).not.toBeInTheDocument();
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    const uninstall = screen.getByRole("button", { name: "卸载 demo-skill" });
+    expect(uninstall).toBeEnabled();
+    fireEvent.click(uninstall);
+    const uninstallDialog = await screen.findByRole(
+      "dialog",
+      { name: /卸载 demo-skill/ },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    const confirm = within(uninstallDialog).getByRole("button", { name: "卸载" });
+    await waitFor(() => expect(confirm).toBeEnabled(), {
+      timeout: ASYNC_UI_TIMEOUT_MS,
+    });
+    fireEvent.click(confirm);
+    await waitFor(() => {
+      expect(ipcInvokeCalls("skills_cli_remove_global")).toHaveLength(1);
+    });
   });
 
   it("opens the update drawer from Update all and from detail Update with the current skill", async () => {

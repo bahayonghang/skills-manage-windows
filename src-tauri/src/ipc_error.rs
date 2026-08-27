@@ -456,6 +456,9 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
         "skills_cli.cli_unavailable" => {
             Some("The Skills CLI package could not be executed.")
         }
+        "skills_cli.cli_failed" => {
+            Some("The Skills CLI command did not complete successfully.")
+        }
         "skills_cli.source_invalid" => Some("The skill source is not allowed."),
         "skills_cli.preview_unparsed" => Some("The skill preview could not be parsed."),
         "skills_cli.selection_empty" => {

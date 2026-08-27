@@ -103,11 +103,11 @@ describe("skillsCliStore", () => {
     expect(useSkillsCliStore.getState().inventoryError).toBeNull();
   });
 
-  it("keeps the inventory when doctor rejects cli_unavailable", async () => {
+  it("keeps the inventory when doctor rejects node_missing", async () => {
     mockIpcCommand("skills_cli_doctor", () => {
       throw ipcFixtureError(
-        "skills_cli.cli_unavailable",
-        "The Skills CLI package could not be executed.",
+        "skills_cli.node_missing",
+        "Node.js 22.20 or later is required.",
       );
     });
     mockIpcCommand("skills_cli_list_global", listGlobal);
@@ -116,9 +116,29 @@ describe("skillsCliStore", () => {
     await useSkillsCliStore.getState().loadAll();
 
     expect(useSkillsCliStore.getState().runtimeError).toContain(
-      "skills_cli.cli_unavailable",
+      "skills_cli.node_missing",
     );
     expect(useSkillsCliStore.getState().runtimeError).not.toContain("npm ERR!");
+    expect(useSkillsCliStore.getState().inventoryError).toBeNull();
+    expect(useSkillsCliStore.getState().skills).toEqual(skills);
+    expect(useSkillsCliStore.getState().doctor).toBeNull();
+  });
+
+  it("keeps the inventory when doctor rejects timeout", async () => {
+    mockIpcCommand("skills_cli_doctor", () => {
+      throw ipcFixtureError(
+        "skills_cli.timeout",
+        "The Skills CLI command timed out.",
+      );
+    });
+    mockIpcCommand("skills_cli_list_global", listGlobal);
+    mockIpcCommand("skills_cli_install_targets", targets);
+
+    await useSkillsCliStore.getState().loadAll();
+
+    expect(useSkillsCliStore.getState().runtimeError).toContain(
+      "skills_cli.timeout",
+    );
     expect(useSkillsCliStore.getState().inventoryError).toBeNull();
     expect(useSkillsCliStore.getState().skills).toEqual(skills);
     expect(useSkillsCliStore.getState().doctor).toBeNull();

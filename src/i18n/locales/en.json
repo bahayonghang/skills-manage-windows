@@ -76,6 +76,7 @@
       "local_target_only": "Skills CLI is available only on the Local target.",
       "node_missing": "Node.js 22.20 or later is required.",
       "cli_unavailable": "The Skills CLI package could not be executed.",
+      "cli_failed": "The Skills CLI command did not complete successfully.",
       "source_invalid": "The skill source is not allowed.",
       "preview_unparsed": "The skill preview could not be parsed.",
       "selection_empty": "Select at least one skill and one platform.",
@@ -378,7 +379,6 @@
     "addSuccess": "Installed {{count}} skill(s) onto {{platforms}} platform(s).",
     "removeSuccess": "Uninstalled {{name}}.",
     "installHeading": "Install from a skill source",
-    "runtimeBlocked": "The runtime check has not passed, so install and uninstall are disabled. Resolve the runtime status above, then refresh.",
     "pathsCanonical": "Canonical root: {{root}}",
     "pathsLock": "Lock file: {{lock}}",
     "ownershipNote": "SkillPort does not own all of ~/.agents/skills/.",
@@ -520,7 +520,6 @@
       "revealError": "{{error}}",
       "uninstall": "Uninstall",
       "update": "Update",
-      "offlineHint": "Platform and folder actions are unavailable until the local runtime is ready.",
       "mutationError": "{{error}}"
     },
     "census": {

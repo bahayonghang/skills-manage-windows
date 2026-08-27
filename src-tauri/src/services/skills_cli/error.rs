@@ -25,7 +25,7 @@ pub enum SkillsCliError {
     },
 
     /// The pinned `skills` npm package could not be executed (npx entry
-    /// script missing, spawn failure, or probe command failed).
+    /// script missing, or the process could not be spawned).
     #[error("The pinned Skills CLI package could not be executed")]
     CliUnavailable,
 
@@ -166,9 +166,8 @@ impl SkillsCliError {
             Self::Busy => "skills_cli.busy",
             Self::Timeout(_) => "skills_cli.timeout",
             Self::Cancelled => "skills_cli.cancelled",
-            Self::OutputLimitExceeded { .. } | Self::CliFailed | Self::ListUnparsed => {
-                "internal.unexpected"
-            }
+            Self::CliFailed => "skills_cli.cli_failed",
+            Self::OutputLimitExceeded { .. } | Self::ListUnparsed => "internal.unexpected",
             Self::Io { .. } | Self::TaskJoin { .. } => "internal.unexpected",
             Self::SkillNotOwned => "skills_cli.skill_not_owned",
             Self::CanonicalMissing => "skills_cli.canonical_missing",

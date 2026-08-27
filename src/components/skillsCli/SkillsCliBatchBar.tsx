@@ -11,7 +11,6 @@ export interface SkillsCliBatchBarProps {
   summaries: readonly SkillsCliLinkTargetSummary[];
   unlinkEnabled: boolean;
   busy: boolean;
-  runtimeBlocked: boolean;
   exporting: boolean;
   linkMenuOpen: boolean;
   onLinkMenuOpenChange: (open: boolean) => void;
@@ -30,7 +29,6 @@ export function SkillsCliBatchBar({
   summaries,
   unlinkEnabled,
   busy,
-  runtimeBlocked,
   exporting,
   linkMenuOpen,
   onLinkMenuOpenChange,
@@ -44,7 +42,7 @@ export function SkillsCliBatchBar({
   if (selectedCount <= 0) {
     return null;
   }
-  const mutationsLocked = busy || runtimeBlocked;
+  const mutationsLocked = busy;
   const anyLinkable = summaries.some((item) => item.linkableCount > 0);
 
   return (
