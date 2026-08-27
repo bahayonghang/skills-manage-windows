@@ -14,15 +14,26 @@ export interface SkillsCliBatchBarProps {
   exporting: boolean;
   linkMenuOpen: boolean;
   onLinkMenuOpenChange: (open: boolean) => void;
+  unlinkMenuOpen: boolean;
+  onUnlinkMenuOpenChange: (open: boolean) => void;
   onLink: (agentId: string) => void;
   onUnlink: () => void;
+  onUnlinkPlatform: (agentId: string) => void;
+  onUpdate: () => void;
   onExportSelected: () => void;
   onUninstall: () => void;
   onClear: () => void;
 }
 
-const ICON_HIT =
+export const ICON_HIT =
   "relative size-8 after:absolute after:left-1/2 after:top-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']";
+
+const MENU_POPUP_CLASS = cn(
+  "min-w-[16rem] rounded-lg bg-popover p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none",
+  "data-[starting-style]:animate-in data-[starting-style]:fade-in-0 data-[starting-style]:zoom-in-95",
+  "data-[ending-style]:animate-out data-[ending-style]:fade-out-0 data-[ending-style]:zoom-out-95",
+  "animation-duration-100",
+);
 
 export function SkillsCliBatchBar({
   selectedCount,
@@ -32,8 +43,12 @@ export function SkillsCliBatchBar({
   exporting,
   linkMenuOpen,
   onLinkMenuOpenChange,
+  unlinkMenuOpen,
+  onUnlinkMenuOpenChange,
   onLink,
   onUnlink,
+  onUnlinkPlatform,
+  onUpdate,
   onExportSelected,
   onUninstall,
   onClear,
@@ -56,6 +71,17 @@ export function SkillsCliBatchBar({
       <p className="text-sm font-medium tabular-nums">
         {t("skillsCli.batch.selectedCount", { count: selectedCount })}
       </p>
+      <Button
+        type="button"
+        variant="outline"
+        className="min-h-10"
+        disabled={mutationsLocked}
+        onClick={onUpdate}
+        aria-label={t("skillsCli.batch.updateAria")}
+        data-testid="skills-cli-batch-update"
+      >
+        {t("skillsCli.batch.update")}
+      </Button>
       <MenuPrimitive.Root
         open={linkMenuOpen}
         onOpenChange={onLinkMenuOpenChange}
@@ -80,14 +106,7 @@ export function SkillsCliBatchBar({
             sideOffset={4}
             className="z-50 outline-none"
           >
-            <MenuPrimitive.Popup
-              className={cn(
-                "min-w-[16rem] rounded-lg bg-popover p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none",
-                "data-[starting-style]:animate-in data-[starting-style]:fade-in-0 data-[starting-style]:zoom-in-95",
-                "data-[ending-style]:animate-out data-[ending-style]:fade-out-0 data-[ending-style]:zoom-out-95",
-                "animation-duration-100",
-              )}
-            >
+            <MenuPrimitive.Popup className={MENU_POPUP_CLASS}>
               {summaries.map((summary) => {
                 const disabled = summary.linkableCount === 0 || mutationsLocked;
                 return (
@@ -133,15 +152,83 @@ export function SkillsCliBatchBar({
           </MenuPrimitive.Positioner>
         </MenuPrimitive.Portal>
       </MenuPrimitive.Root>
-      <Button
-        type="button"
-        variant="outline"
-        className="min-h-10"
-        disabled={mutationsLocked || !unlinkEnabled}
-        onClick={onUnlink}
+      <MenuPrimitive.Root
+        open={unlinkMenuOpen}
+        onOpenChange={onUnlinkMenuOpenChange}
       >
-        {t("skillsCli.batch.unlink")}
-      </Button>
+        <MenuPrimitive.Trigger
+          disabled={mutationsLocked || !unlinkEnabled}
+          render={
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-10"
+              aria-label={t("skillsCli.batch.unlinkMenuAria")}
+              data-testid="skills-cli-batch-unlink"
+            />
+          }
+        >
+          {t("skillsCli.batch.unlink")}
+        </MenuPrimitive.Trigger>
+        <MenuPrimitive.Portal>
+          <MenuPrimitive.Positioner
+            align="start"
+            sideOffset={4}
+            className="z-50 outline-none"
+          >
+            <MenuPrimitive.Popup className={MENU_POPUP_CLASS}>
+              {summaries.map((summary) => {
+                const disabled = summary.managedCount === 0 || mutationsLocked;
+                return (
+                  <MenuPrimitive.Item
+                    key={summary.agentId}
+                    disabled={disabled}
+                    label={t("skillsCli.batch.unlinkTargetAria", {
+                      name: summary.displayName,
+                      managed: summary.managedCount,
+                      copies: summary.directCopyCount,
+                      blocked: summary.blockedCount,
+                    })}
+                    onClick={() => onUnlinkPlatform(summary.agentId)}
+                    data-testid={`skills-cli-batch-unlink-${summary.agentId}`}
+                    className={cn(
+                      "flex cursor-pointer flex-col gap-0.5 rounded-md px-2.5 py-1.5 outline-none data-[highlighted]:bg-accent/60",
+                      disabled && "cursor-default opacity-50",
+                    )}
+                  >
+                    <span>{summary.displayName}</span>
+                    <span className="text-ui-meta text-muted-foreground">
+                      {t("skillsCli.batch.managed", {
+                        count: summary.managedCount,
+                      })}
+                      {" · "}
+                      {t("skillsCli.batch.directCopy", {
+                        count: summary.directCopyCount,
+                      })}
+                      {" · "}
+                      {t("skillsCli.batch.blocked", {
+                        count: summary.blockedCount,
+                      })}
+                    </span>
+                  </MenuPrimitive.Item>
+                );
+              })}
+              <MenuPrimitive.Item
+                disabled={mutationsLocked || !unlinkEnabled}
+                label={t("skillsCli.batch.unlinkAllAria")}
+                onClick={onUnlink}
+                data-testid="skills-cli-batch-unlink-all"
+                className={cn(
+                  "flex cursor-pointer flex-col gap-0.5 rounded-md px-2.5 py-1.5 outline-none data-[highlighted]:bg-accent/60",
+                  (mutationsLocked || !unlinkEnabled) && "cursor-default opacity-50",
+                )}
+              >
+                {t("skillsCli.batch.unlinkAll")}
+              </MenuPrimitive.Item>
+            </MenuPrimitive.Popup>
+          </MenuPrimitive.Positioner>
+        </MenuPrimitive.Portal>
+      </MenuPrimitive.Root>
       <Button
         type="button"
         variant="outline"

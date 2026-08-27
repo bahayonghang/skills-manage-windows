@@ -5,10 +5,16 @@ import {
   emptyPlacementOutcome,
   partitionLinkBatch,
   partitionUnlinkBatch,
+  partitionUnlinkBatchForAgent,
+  selectedSkillsInStoreOrder,
   SKILLS_CLI_SKIP_NO_PLACEMENT,
   type PlacementMutationOutcome,
   type PlacementPartitionItem,
 } from "@/pages/skillsCliBatchModel";
+import {
+  applySelectionsForNames,
+  groupSkillNamesByRepositoryKey,
+} from "@/pages/skillsCliViewModel";
 import {
   applySkillDocResponse,
   type SkillsCliDocState,
@@ -30,18 +36,59 @@ import {
   BUSY_ENVELOPE,
   SELECTION_EMPTY_ENVELOPE,
 } from "./skillsCliStore.updateSlice";
-import type { SkillsCliState } from "./skillsCliStore.types";
+import type {
+  SkillsCliBatchOperation,
+  SkillsCliState,
+} from "./skillsCliStore.types";
 
 export type { SkillsCliDocState };
 export type { PlacementMutationOutcome };
 export type {
   SkillsCliAddInput,
+  SkillsCliBatchOperation,
+  SkillsCliBatchProgress,
   SkillsCliExportInventoryInput,
   SkillsCliUpdateJob,
 } from "./skillsCliStore.types";
 
 function errorCodeFrom(error: unknown): string {
   return parseBackendError(error).code ?? "internal.unexpected";
+}
+
+function beginBatchProgress(
+  set: (patch: Partial<SkillsCliState>) => void,
+  operation: SkillsCliBatchOperation,
+  total: number,
+): void {
+  set({
+    batchProgress: { operation, completed: 0, total },
+  });
+}
+
+function incrementBatchProgress(
+  get: () => SkillsCliState,
+  set: (patch: Partial<SkillsCliState>) => void,
+): void {
+  const current = get().batchProgress;
+  if (!current) {
+    return;
+  }
+  set({
+    batchProgress: {
+      ...current,
+      completed: current.completed + 1,
+    },
+  });
+}
+
+function clearBatchProgress(
+  set: (patch: Partial<SkillsCliState>) => void,
+): void {
+  set({ batchProgress: null });
+}
+
+function batchAlreadyRunning(state: SkillsCliState): boolean {
+  return state.batchProgress !== null;
 }
 
 function replacePlacement(
@@ -120,7 +167,12 @@ async function runPlacementBatch(
   kind: "link" | "unlink",
 ): Promise<PlacementMutationOutcome> {
   const outcome = emptyPlacementOutcome();
+  if (items.length === 0) {
+    return outcome;
+  }
+  const operation: SkillsCliBatchOperation = kind === "link" ? "link" : "unlink";
   set({ isMutating: true, actionError: null });
+  beginBatchProgress(set, operation, items.length);
   try {
     for (const item of items) {
       const jobId = newJobId();
@@ -183,8 +235,10 @@ async function runPlacementBatch(
           errorCode: errorCodeFrom(error),
         });
       }
+      incrementBatchProgress(get, set);
     }
   } finally {
+    clearBatchProgress(set);
     if (get().isMutating) {
       set({ isMutating: false, jobId: null });
     }
@@ -230,6 +284,7 @@ const emptyState = {
   updateJob: EMPTY_UPDATE_JOB,
   updateError: null as string | null,
   updateProgress: null as SkillsCliUpdateProgress | null,
+  batchProgress: null as SkillsCliState["batchProgress"],
 };
 
 export const useSkillsCliStore = create<SkillsCliState>((set, get) => ({
@@ -407,7 +462,7 @@ export const useSkillsCliStore = create<SkillsCliState>((set, get) => ({
   },
 
   async unlinkPlatform(skillName, agentId) {
-    if (skillsCliOperationBusy(get())) {
+    if (batchAlreadyRunning(get()) || skillsCliOperationBusy(get())) {
       throw new Error(BUSY_ENVELOPE);
     }
     const partition = partitionUnlinkBatch(get().skills, [skillName]);
@@ -438,7 +493,7 @@ export const useSkillsCliStore = create<SkillsCliState>((set, get) => ({
   },
 
   async linkPlatformBatch(skillNames, agentId) {
-    if (skillsCliOperationBusy(get())) {
+    if (batchAlreadyRunning(get()) || skillsCliOperationBusy(get())) {
       throw new Error(BUSY_ENVELOPE);
     }
     const partition = partitionLinkBatch(get().skills, skillNames, agentId);
@@ -454,7 +509,7 @@ export const useSkillsCliStore = create<SkillsCliState>((set, get) => ({
   },
 
   async unlinkManagedBatch(skillNames) {
-    if (skillsCliOperationBusy(get())) {
+    if (batchAlreadyRunning(get()) || skillsCliOperationBusy(get())) {
       throw new Error(BUSY_ENVELOPE);
     }
     const partition = partitionUnlinkBatch(get().skills, skillNames);
@@ -469,8 +524,28 @@ export const useSkillsCliStore = create<SkillsCliState>((set, get) => ({
     return outcome;
   },
 
+  async unlinkPlatformBatch(skillNames, agentId) {
+    if (batchAlreadyRunning(get()) || skillsCliOperationBusy(get())) {
+      throw new Error(BUSY_ENVELOPE);
+    }
+    const partition = partitionUnlinkBatchForAgent(
+      get().skills,
+      skillNames,
+      agentId,
+    );
+    const outcome = emptyPlacementOutcome();
+    outcome.skipped.push(...partition.skipped);
+    if (partition.allowed.length === 0) {
+      return outcome;
+    }
+    const ran = await runPlacementBatch(get, set, partition.allowed, "unlink");
+    outcome.succeeded.push(...ran.succeeded);
+    outcome.failed.push(...ran.failed);
+    return outcome;
+  },
+
   async removeGlobalBatch(skillNames) {
-    if (skillsCliOperationBusy(get())) {
+    if (batchAlreadyRunning(get()) || skillsCliOperationBusy(get())) {
       throw new Error(BUSY_ENVELOPE);
     }
     const outcome = emptyPlacementOutcome();
@@ -478,6 +553,7 @@ export const useSkillsCliStore = create<SkillsCliState>((set, get) => ({
       return outcome;
     }
     set({ isMutating: true, actionError: null });
+    beginBatchProgress(set, "cleanup", skillNames.length);
     try {
       for (const skillName of skillNames) {
         const jobId = newJobId();
@@ -501,12 +577,68 @@ export const useSkillsCliStore = create<SkillsCliState>((set, get) => ({
             errorCode: errorCodeFrom(error),
           });
         }
+        incrementBatchProgress(get, set);
       }
     } finally {
+      clearBatchProgress(set);
       if (get().isMutating) {
         set({ isMutating: false, jobId: null });
       }
       await refreshInventoryAfterMutation(get, set);
+    }
+    return outcome;
+  },
+
+  async applyUpdatesBatch(skillNames) {
+    if (batchAlreadyRunning(get())) {
+      return emptyPlacementOutcome();
+    }
+    if (skillsCliOperationBusy(get())) {
+      throw new Error(BUSY_ENVELOPE);
+    }
+    const outcome = emptyPlacementOutcome();
+    const ordered = selectedSkillsInStoreOrder(
+      get().skills,
+      new Set(skillNames),
+    ).map((skill) => skill.name);
+    const inventory = get().updateInventory;
+    const groups = groupSkillNamesByRepositoryKey(ordered, inventory)
+      .map((group) => {
+        const skillNames = group.skillNames.filter(
+          (name) => applySelectionsForNames(inventory, [name]).length > 0,
+        );
+        return {
+          repositoryKey: group.repositoryKey,
+          skillNames,
+          selections: applySelectionsForNames(inventory, skillNames),
+        };
+      })
+      .filter((group) => group.selections.length > 0);
+    if (groups.length === 0) {
+      return outcome;
+    }
+    beginBatchProgress(set, "update", groups.length);
+    try {
+      for (const group of groups) {
+        try {
+          const result = await get().applyUpdates({
+            repositoryKey: group.repositoryKey,
+            skillNames: group.skillNames,
+            selections: group.selections,
+          });
+          for (const skillName of result.appliedSkillNames) {
+            outcome.succeeded.push({ skillName });
+          }
+        } catch (error) {
+          const errorCode = errorCodeFrom(error);
+          for (const skillName of group.skillNames) {
+            outcome.failed.push({ skillName, errorCode });
+          }
+        }
+        incrementBatchProgress(get, set);
+      }
+    } finally {
+      clearBatchProgress(set);
     }
     return outcome;
   },

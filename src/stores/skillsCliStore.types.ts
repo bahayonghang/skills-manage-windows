@@ -4,6 +4,7 @@ import type {
   SkillsCliAddResult,
   SkillsCliApplyRecoveryResult,
   SkillsCliApplyResult,
+  SkillsCliApplySelection,
   SkillsCliDoctorReport,
   SkillsCliGlobalSkill,
   SkillsCliInstallTarget,
@@ -16,6 +17,14 @@ import type {
 } from "@/types";
 
 export type { SkillsCliDocState };
+
+export type SkillsCliBatchOperation = "cleanup" | "update" | "unlink" | "link";
+
+export interface SkillsCliBatchProgress {
+  operation: SkillsCliBatchOperation;
+  completed: number;
+  total: number;
+}
 
 export interface SkillsCliExportInventoryInput {
   path: string;
@@ -58,6 +67,7 @@ export interface SkillsCliState {
   updateJob: SkillsCliUpdateJob;
   updateError: string | null;
   updateProgress: SkillsCliUpdateProgress | null;
+  batchProgress: SkillsCliBatchProgress | null;
 
   loadAll: () => Promise<void>;
   loadUpdateInventory: () => Promise<void>;
@@ -66,6 +76,7 @@ export interface SkillsCliState {
   applyUpdates: (input: {
     repositoryKey: string;
     skillNames: string[];
+    selections?: SkillsCliApplySelection[];
   }) => Promise<SkillsCliApplyResult>;
   retryUpdateRecovery: (
     operationId: string,
@@ -86,7 +97,12 @@ export interface SkillsCliState {
     agentId: string,
   ) => Promise<PlacementMutationOutcome>;
   unlinkManagedBatch: (skillNames: string[]) => Promise<PlacementMutationOutcome>;
+  unlinkPlatformBatch: (
+    skillNames: string[],
+    agentId: string,
+  ) => Promise<PlacementMutationOutcome>;
   removeGlobalBatch: (skillNames: string[]) => Promise<PlacementMutationOutcome>;
+  applyUpdatesBatch: (skillNames: string[]) => Promise<PlacementMutationOutcome>;
   exportInventory: (input: SkillsCliExportInventoryInput) => Promise<void>;
   cancelJob: () => Promise<void>;
   resetForTargetChange: () => void;

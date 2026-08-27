@@ -37,7 +37,7 @@ export function SkillsCliGroupHeader({
     >
       <button
         type="button"
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-expanded={expanded}
         aria-controls={panelId}
         onClick={onToggle}
@@ -49,36 +49,49 @@ export function SkillsCliGroupHeader({
           )}
           aria-hidden
         />
-        <span className="truncate">{label}</span>
-        <span className="text-ui-meta font-normal tabular-nums text-muted-foreground">
-          {t("skillsCli.groupCount", {
-            skills: bucket.skillCount,
-            links: bucket.managedLinkCount,
-          })}
+        <span
+          data-testid={`skills-cli-group-title-${bucket.id}`}
+          className="truncate text-sm font-medium"
+        >
+          {label}
         </span>
       </button>
       <span
-        data-testid={`skills-cli-update-badge-${bucket.id}`}
-        className={cn(
-          "min-w-6 rounded-full px-1.5 py-0.5 text-center text-ui-micro tabular-nums",
-          updateCount > 0
-            ? "bg-warning/10 text-warning-foreground"
-            : "text-muted-foreground",
-        )}
-        aria-label={t("skillsCli.updateBadge", { count: updateCount })}
+        data-testid={`skills-cli-group-count-${bucket.id}`}
+        className="text-ui-meta font-normal tabular-nums text-muted-foreground"
       >
-        {updateCount > 0 ? updateCount : ""}
+        {t("skillsCli.groupCount", {
+          skills: bucket.skillCount,
+          links: bucket.managedLinkCount,
+        })}
       </span>
-      {onSelectAll ? (
-        <Button type="button" size="sm" variant="ghost" onClick={onSelectAll}>
-          {t("skillsCli.selectAll")}
-        </Button>
-      ) : null}
-      {onUpdateAll ? (
-        <Button type="button" size="sm" variant="ghost" onClick={onUpdateAll}>
-          {t("skillsCli.updateAll")}
-        </Button>
-      ) : null}
+      <div
+        data-testid={`skills-cli-group-actions-${bucket.id}`}
+        className="flex flex-wrap items-center gap-2"
+      >
+        <span
+          data-testid={`skills-cli-update-badge-${bucket.id}`}
+          className={cn(
+            "min-w-6 rounded-full px-1.5 py-0.5 text-center text-ui-micro tabular-nums",
+            updateCount > 0
+              ? "bg-warning/10 text-warning-foreground"
+              : "text-muted-foreground",
+          )}
+          aria-label={t("skillsCli.updateBadge", { count: updateCount })}
+        >
+          {updateCount > 0 ? updateCount : ""}
+        </span>
+        {onSelectAll ? (
+          <Button type="button" size="sm" variant="ghost" onClick={onSelectAll}>
+            {t("skillsCli.selectAll")}
+          </Button>
+        ) : null}
+        {onUpdateAll ? (
+          <Button type="button" size="sm" variant="ghost" onClick={onUpdateAll}>
+            {t("skillsCli.updateAll")}
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }

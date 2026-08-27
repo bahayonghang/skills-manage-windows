@@ -8,7 +8,7 @@ import { ipcFixtureError } from "@/lib/ipc/errors";
 import { SKILLS_CLI_GRID_CLASS } from "@/pages/skillsCliViewModel";
 import { useSkillsCliStore } from "@/stores/skillsCliStore";
 import { useTargetStore } from "@/stores/targetStore";
-import { ipcInvokeCalls, mockIpcCommands } from "@/test/support/ipcMock";
+import { ipcInvokeCalls, ipcInvokedCommands, mockIpcCommands } from "@/test/support/ipcMock";
 import {
   EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
   type SkillsCliUpdateInventory,
@@ -211,6 +211,7 @@ describe("SkillsCliView", () => {
       updateJob: { jobId: null, phase: null },
       updateError: null,
       updateProgress: null,
+      batchProgress: null,
     });
     showSkillsCliActionToast.mockClear();
     saveMock.mockReset();
@@ -824,7 +825,14 @@ describe("SkillsCliView", () => {
     render(<SkillsCliView />);
     await screen.findByText("demo-skill");
     fireEvent.click(screen.getByRole("button", { name: "全选" }));
-    fireEvent.click(screen.getByRole("button", { name: "取消链接" }));
+    fireEvent.click(screen.getByTestId("skills-cli-batch-unlink"));
+    fireEvent.click(
+      await screen.findByTestId(
+        "skills-cli-batch-unlink-all",
+        {},
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      ),
+    );
     await waitFor(
       () => {
         expect(ipcInvokeCalls("skills_cli_unlink_platform")).toHaveLength(1);
@@ -1109,9 +1117,16 @@ describe("SkillsCliView", () => {
     fireEvent.click(screen.getByRole("button", { name: "选择" }));
     fireEvent.click(screen.getByLabelText("选择技能"));
     const batch = await screen.findByTestId("skills-cli-batch-bar");
-    expect(within(batch).getByRole("button", { name: "取消链接" })).toBeEnabled();
+    expect(within(batch).getByTestId("skills-cli-batch-unlink")).toBeEnabled();
     expect(within(batch).getByRole("button", { name: "卸载" })).toBeEnabled();
-    fireEvent.click(within(batch).getByRole("button", { name: "取消链接" }));
+    fireEvent.click(within(batch).getByTestId("skills-cli-batch-unlink"));
+    fireEvent.click(
+      await screen.findByTestId(
+        "skills-cli-batch-unlink-all",
+        {},
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      ),
+    );
     await waitFor(
       () => {
         expect(ipcInvokeCalls("skills_cli_unlink_platform")).toHaveLength(1);
@@ -1270,5 +1285,401 @@ describe("SkillsCliView", () => {
       jobId: string;
     };
     expect(args.jobId).toMatch(/\S/);
+  });
+
+  it("disables cleanup when no Unavailable skills exist and does not send IPC", async () => {
+    mockHappyPath();
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+    expect(screen.getByTestId("skills-cli-cleanup")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("skills-cli-cleanup"));
+    expect(screen.getByTestId("skills-cli-active-surface")).toHaveAttribute(
+      "data-kind",
+      "none",
+    );
+    expect(ipcInvokeCalls("skills_cli_preview_remove_global")).toHaveLength(0);
+    expect(ipcInvokeCalls("skills_cli_remove_global")).toHaveLength(0);
+  });
+
+  it("opens cleanup then reuses preview and removeGlobalBatch for stale entries", async () => {
+    const ghost = {
+      ...skills[0],
+      name: "ghost",
+      placements: [
+        {
+          agentId: "cursor",
+          displayName: "Cursor",
+          targetPath: "/tmp/cursor/skills/ghost",
+          state: "unavailable" as const,
+          managedLinkKind: null,
+          reasonCode: "canonical_missing",
+        },
+      ],
+    };
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: { ...listGlobal, skills: [ghost] },
+      skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+      skills_cli_preview_remove_global: ({ skillName }: { skillName: string }) => ({
+        skillName,
+        ownedCanonical: false,
+        managedPlacements: [],
+        retainedDirectCopies: [],
+        conflicts: [],
+        confirmable: true,
+      }),
+      skills_cli_remove_global: {
+        removedCanonical: false,
+        removedManagedAgentIds: [],
+        retainedDirectCopyAgentIds: [],
+      },
+    });
+    render(<SkillsCliView />);
+    await screen.findByText("ghost");
+    fireEvent.click(screen.getByTestId("skills-cli-cleanup"));
+    const cleanup = await screen.findByRole(
+      "dialog",
+      { name: /清理 Unavailable/ },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    expect(ipcInvokeCalls("skills_cli_preview_remove_global")).toHaveLength(0);
+    fireEvent.click(within(cleanup).getByRole("button", { name: "查看卸载影响" }));
+    const uninstall = await screen.findByRole(
+      "dialog",
+      { name: /卸载 ghost/ },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    await waitFor(
+      () => {
+        expect(ipcInvokeCalls("skills_cli_preview_remove_global")).toHaveLength(1);
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    const confirm = within(uninstall).getByRole("button", { name: "卸载" });
+    await waitFor(() => expect(confirm).toBeEnabled(), {
+      timeout: ASYNC_UI_TIMEOUT_MS,
+    });
+    fireEvent.click(confirm);
+    await waitFor(
+      () => {
+        expect(ipcInvokeCalls("skills_cli_remove_global")).toHaveLength(1);
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    expect(ipcInvokedCommands().filter((name) => name.includes("remove"))).toEqual([
+      "skills_cli_preview_remove_global",
+      "skills_cli_remove_global",
+    ]);
+  });
+
+  it("blocks uninstall confirm when cleanup preview reports a conflict", async () => {
+    const ghost = {
+      ...skills[0],
+      name: "ghost",
+      placements: [
+        {
+          agentId: "cursor",
+          displayName: "Cursor",
+          targetPath: "/tmp/cursor/skills/ghost",
+          state: "unavailable" as const,
+          managedLinkKind: null,
+          reasonCode: "canonical_missing",
+        },
+      ],
+    };
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: { ...listGlobal, skills: [ghost] },
+      skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+      skills_cli_preview_remove_global: {
+        skillName: "ghost",
+        ownedCanonical: true,
+        managedPlacements: [],
+        retainedDirectCopies: [
+          { agentId: "amp", displayName: "Amp" },
+        ],
+        conflicts: [
+          {
+            agentId: "codex",
+            displayName: "Codex",
+            reasonCode: "skills_cli.placement_conflict",
+          },
+        ],
+        confirmable: false,
+      },
+    });
+    render(<SkillsCliView />);
+    await screen.findByText("ghost");
+    fireEvent.click(screen.getByTestId("skills-cli-cleanup"));
+    const cleanup = await screen.findByRole(
+      "dialog",
+      { name: /清理 Unavailable/ },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    fireEvent.click(within(cleanup).getByRole("button", { name: "查看卸载影响" }));
+    const uninstall = await screen.findByRole(
+      "dialog",
+      { name: /卸载 ghost/ },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    await waitFor(
+      () => {
+        expect(
+          within(uninstall).getByTestId("skills-cli-uninstall-conflicts"),
+        ).toBeInTheDocument();
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    expect(within(uninstall).getByRole("button", { name: "卸载" })).toBeDisabled();
+    expect(ipcInvokeCalls("skills_cli_remove_global")).toHaveLength(0);
+    expect(within(uninstall).getByTestId("skills-cli-uninstall-retained")).toBeInTheDocument();
+  });
+
+  it("toasts checkFirst and does not apply when updates have not been checked", async () => {
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: listGlobal,
+      skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+    });
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+    fireEvent.click(screen.getByRole("button", { name: "全选" }));
+    fireEvent.click(screen.getByTestId("skills-cli-batch-update"));
+    expect(ipcInvokeCalls("skills_cli_apply_updates")).toHaveLength(0);
+    expect(showSkillsCliActionToast).toHaveBeenCalledWith({
+      semantic: "error",
+      message: "请先检查更新，再应用。",
+    });
+  });
+
+  it("applies selected updates serially across repositories and ignores a second click", async () => {
+    const alpha = {
+      ...skills[0],
+      name: "alpha",
+      source: "owner/alpha",
+    };
+    const beta = {
+      ...skills[0],
+      name: "beta",
+      source: "owner/beta",
+    };
+    const inventory: SkillsCliUpdateInventory = {
+      ...EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+      lastSuccessAt: "2026-08-26T00:00:00.000Z",
+      skills: [
+        {
+          ...pendingUpdateInventory.skills[0],
+          skillName: "alpha",
+          repositoryKey: "owner/alpha@main",
+          skillPath: "alpha",
+        },
+        {
+          ...pendingUpdateInventory.skills[0],
+          skillName: "beta",
+          repositoryKey: "owner/beta@main",
+          skillPath: "beta",
+        },
+      ],
+    };
+    let releaseFirst: (() => void) | undefined;
+    let releaseSecond: (() => void) | undefined;
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: { ...listGlobal, skills: [alpha, beta] },
+      skills_cli_install_targets: targets,
+      skills_cli_update_inventory: inventory,
+      skills_cli_apply_updates: ({
+        request,
+      }: {
+        request: { repositoryKey: string };
+      }) => {
+        if (request.repositoryKey === "owner/alpha@main") {
+          return new Promise((resolve) => {
+            releaseFirst = () =>
+              resolve({
+                appliedSkillNames: ["alpha"],
+                installedRevisionSha: "aaa",
+              });
+          });
+        }
+        return new Promise((resolve) => {
+          releaseSecond = () =>
+            resolve({
+              appliedSkillNames: ["beta"],
+              installedRevisionSha: "bbb",
+            });
+        });
+      },
+    });
+    render(<SkillsCliView />);
+    await screen.findByText("alpha");
+    fireEvent.click(screen.getByRole("button", { name: "选择" }));
+    fireEvent.click(screen.getByTestId("skills-cli-dense-card-alpha"));
+    fireEvent.click(screen.getByTestId("skills-cli-dense-card-beta"));
+    fireEvent.click(screen.getByTestId("skills-cli-batch-update"));
+    expect(await screen.findByTestId("skills-cli-batch-progress")).toHaveTextContent(
+      "0 / 2",
+    );
+    expect(screen.getByTestId("skills-cli-batch-update")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("skills-cli-batch-update"));
+    await waitFor(() => {
+      expect(ipcInvokeCalls("skills_cli_apply_updates")).toHaveLength(1);
+    });
+    releaseFirst?.();
+    expect(
+      await screen.findByTestId(
+        "skills-cli-batch-progress",
+        {},
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      ),
+    ).toHaveTextContent("1 / 2");
+    await waitFor(
+      () => {
+        expect(ipcInvokeCalls("skills_cli_apply_updates")).toHaveLength(2);
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    const jobIds = ipcInvokeCalls("skills_cli_apply_updates").map((call) => {
+      const args = call.args as { request: { jobId: string } };
+      return args.request.jobId;
+    });
+    expect(jobIds[0]).not.toEqual(jobIds[1]);
+    fireEvent.click(screen.getByTestId("skills-cli-batch-update"));
+    expect(ipcInvokeCalls("skills_cli_apply_updates")).toHaveLength(2);
+    releaseSecond?.();
+    await waitFor(() => {
+      expect(screen.queryByTestId("skills-cli-batch-progress")).not.toBeInTheDocument();
+    });
+  });
+
+  it("skips non-managed placements when unlinking one platform", async () => {
+    const linked = {
+      ...skills[0],
+      name: "linked-skill",
+      placements: [
+        {
+          agentId: "cursor",
+          displayName: "Cursor",
+          targetPath: "/tmp/cursor/skills/linked-skill",
+          state: "managed_link" as const,
+          managedLinkKind: "windows_junction" as const,
+          reasonCode: null,
+        },
+      ],
+    };
+    const copy = {
+      ...skills[0],
+      name: "copy-skill",
+      placements: [
+        {
+          agentId: "cursor",
+          displayName: "Cursor",
+          targetPath: "/tmp/cursor/skills/copy-skill",
+          state: "direct_copy" as const,
+          managedLinkKind: null,
+          reasonCode: null,
+        },
+      ],
+    };
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: { ...listGlobal, skills: [linked, copy] },
+      skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+      skills_cli_unlink_platform: {
+        agentId: "cursor",
+        displayName: "Cursor",
+        targetPath: "/tmp/cursor/skills/linked-skill",
+        state: "missing",
+        managedLinkKind: null,
+        reasonCode: null,
+      },
+    });
+    render(<SkillsCliView />);
+    await screen.findByText("linked-skill");
+    fireEvent.click(screen.getByRole("button", { name: "选择" }));
+    fireEvent.click(screen.getByTestId("skills-cli-dense-card-linked-skill"));
+    fireEvent.click(screen.getByTestId("skills-cli-dense-card-copy-skill"));
+    fireEvent.click(screen.getByTestId("skills-cli-batch-unlink"));
+    fireEvent.click(
+      await screen.findByTestId(
+        "skills-cli-batch-unlink-cursor",
+        {},
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      ),
+    );
+    await waitFor(
+      () => {
+        expect(ipcInvokeCalls("skills_cli_unlink_platform")).toHaveLength(1);
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    expect(ipcInvokeCalls("skills_cli_unlink_platform")[0]?.args).toMatchObject({
+      skillName: "linked-skill",
+      skillportAgentId: "cursor",
+    });
+    expect(showSkillsCliActionToast).toHaveBeenCalledWith({
+      semantic: "error",
+      message: expect.stringContaining("直接副本不能链接或取消链接。"),
+    });
+  });
+
+  it("disables per-platform unlink while a batch is in flight and does not start a second batch", async () => {
+    const linkedSkill = {
+      ...skills[0],
+      placements: [
+        {
+          agentId: "cursor",
+          displayName: "Cursor",
+          targetPath: "/tmp/cursor/skills/demo-skill",
+          state: "managed_link" as const,
+          managedLinkKind: "windows_junction" as const,
+          reasonCode: null,
+        },
+      ],
+    };
+    let releaseUnlink: (() => void) | undefined;
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: { ...listGlobal, skills: [linkedSkill] },
+      skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+      skills_cli_unlink_platform: () =>
+        new Promise((resolve) => {
+          releaseUnlink = () =>
+            resolve({
+              agentId: "cursor",
+              displayName: "Cursor",
+              targetPath: "/tmp/cursor/skills/demo-skill",
+              state: "missing",
+              managedLinkKind: null,
+              reasonCode: null,
+            });
+        }),
+    });
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+    fireEvent.click(screen.getByRole("button", { name: "全选" }));
+    fireEvent.click(screen.getByTestId("skills-cli-batch-unlink"));
+    fireEvent.click(
+      await screen.findByTestId(
+        "skills-cli-batch-unlink-cursor",
+        {},
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      ),
+    );
+    expect(await screen.findByTestId("skills-cli-batch-progress")).toHaveTextContent(
+      "0 / 1",
+    );
+    expect(screen.getByTestId("skills-cli-batch-unlink")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("skills-cli-batch-unlink"));
+    expect(ipcInvokeCalls("skills_cli_unlink_platform")).toHaveLength(1);
+    releaseUnlink?.();
+    await waitFor(() => {
+      expect(screen.queryByTestId("skills-cli-batch-progress")).not.toBeInTheDocument();
+    });
   });
 });

@@ -76,5 +76,20 @@ describe("SkillsCliGroupHeader", () => {
     fireEvent.click(screen.getByRole("button", { name: "全部更新" }));
     expect(onSelectAll).toHaveBeenCalledTimes(1);
     expect(onUpdateAll).toHaveBeenCalledTimes(1);
+    const header = screen.getByTestId("skills-cli-group-header-repo:owner/repo");
+    const title = screen.getByTestId("skills-cli-group-title-repo:owner/repo");
+    const count = screen.getByTestId("skills-cli-group-count-repo:owner/repo");
+    const actions = screen.getByTestId("skills-cli-group-actions-repo:owner/repo");
+    expect(title.className).toContain("text-sm");
+    expect(count.className).toContain("text-ui-meta");
+    expect(
+      title.compareDocumentPosition(count) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      count.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(header.className).not.toMatch(/text-\[[0-9]/);
+    expect(title.className).not.toMatch(/text-\[[0-9]/);
+    expect(count.className).not.toMatch(/text-\[[0-9]/);
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import { SkillsCliBatchBar } from "@/components/skillsCli/SkillsCliBatchBar";
+import { SkillsCliBatchBar, ICON_HIT } from "@/components/skillsCli/SkillsCliBatchBar";
 import type { SkillsCliLinkTargetSummary } from "@/pages/skillsCliBatchModel";
 
 const summaries: SkillsCliLinkTargetSummary[] = [
@@ -31,8 +31,12 @@ const baseProps = {
   exporting: false,
   linkMenuOpen: false,
   onLinkMenuOpenChange: vi.fn(),
+  unlinkMenuOpen: false,
+  onUnlinkMenuOpenChange: vi.fn(),
   onLink: vi.fn(),
   onUnlink: vi.fn(),
+  onUnlinkPlatform: vi.fn(),
+  onUpdate: vi.fn(),
   onExportSelected: vi.fn(),
   onUninstall: vi.fn(),
   onClear: vi.fn(),
@@ -88,7 +92,8 @@ describe("SkillsCliBatchBar", () => {
       "aria-busy",
       "true",
     );
-    expect(screen.getByRole("button", { name: "取消链接" })).toBeDisabled();
+    expect(screen.getByTestId("skills-cli-batch-unlink")).toBeDisabled();
+    expect(screen.getByTestId("skills-cli-batch-update")).toBeDisabled();
     expect(screen.getByRole("button", { name: "导出所选" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "卸载" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "清除选择" }));
@@ -109,5 +114,43 @@ describe("SkillsCliBatchBar", () => {
     fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
     expect(onLinkMenuOpenChange.mock.calls[0]?.[0]).toBe(false);
     expect(onLink).not.toHaveBeenCalled();
+  });
+
+  it("exposes Update and a per-platform unlink menu without oversized min-width", () => {
+    const onUpdate = vi.fn();
+    const onUnlink = vi.fn();
+    const onUnlinkPlatform = vi.fn();
+    render(
+      <SkillsCliBatchBar
+        {...baseProps}
+        unlinkMenuOpen
+        onUpdate={onUpdate}
+        onUnlink={onUnlink}
+        onUnlinkPlatform={onUnlinkPlatform}
+      />,
+    );
+    const bar = screen.getByTestId("skills-cli-batch-bar");
+    expect(bar.className).toContain("flex-wrap");
+    const update = screen.getByTestId("skills-cli-batch-update");
+    expect(update.className).not.toMatch(/min-w-/);
+    fireEvent.click(update);
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId("skills-cli-batch-unlink-cursor"));
+    expect(onUnlinkPlatform).toHaveBeenCalledWith("cursor");
+    fireEvent.click(screen.getByTestId("skills-cli-batch-unlink-all"));
+    expect(onUnlink).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("skills-cli-batch-unlink-amp")).toHaveAttribute(
+      "data-disabled",
+    );
+  });
+
+  it("reuses ICON_HIT for the clear control with a focus-visible ring", () => {
+    render(<SkillsCliBatchBar {...baseProps} />);
+    expect(ICON_HIT).toContain("size-8");
+    expect(ICON_HIT).toContain("after:size-10");
+    const clear = screen.getByRole("button", { name: "清除选择" });
+    expect(clear.className).toContain("after:size-10");
+    expect(clear.className).toContain("focus-visible:ring-2");
+    expect(clear).not.toHaveAttribute("tabIndex", "-1");
   });
 });

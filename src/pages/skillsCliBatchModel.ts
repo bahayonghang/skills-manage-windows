@@ -85,6 +85,95 @@ export const SKILLS_CLI_SKIP_NOT_LINKED = "skills_cli.not_linked";
 export const SKILLS_CLI_SKIP_NO_PLACEMENT = "skills_cli.placement_unavailable";
 export const SKILLS_CLI_SKIP_NOT_OWNED = "skills_cli.skill_not_owned";
 
+export type CleanupGroup = "stale" | "platformUnavailable";
+
+export interface CleanupReason {
+  platform: string;
+  reasonCode: string;
+}
+
+export interface CleanupCandidate {
+  name: string;
+  group: CleanupGroup;
+  reasons: readonly CleanupReason[];
+}
+
+export type CleanupReasonCode =
+  | "canonical_missing"
+  | "platform_unsupported"
+  | "platform_not_detected"
+  | "platform_disabled";
+
+export function allPlacementsUnavailable(
+  placements: readonly SkillsCliPlacement[],
+): boolean {
+  if (placements.length === 0) {
+    return false;
+  }
+  return placements.every((placement) => placement.state === "unavailable");
+}
+
+function isCleanupReasonCode(value: string): value is CleanupReasonCode {
+  return (
+    value === "canonical_missing" ||
+    value === "platform_unsupported" ||
+    value === "platform_not_detected" ||
+    value === "platform_disabled"
+  );
+}
+
+export function cleanupReasonI18nKey(reasonCode: string): string {
+  if (!isCleanupReasonCode(reasonCode)) {
+    return "skillsCli.cleanup.reason.unknown";
+  }
+  switch (reasonCode) {
+    case "canonical_missing":
+      return "skillsCli.cleanup.reason.canonical_missing";
+    case "platform_unsupported":
+      return "skillsCli.cleanup.reason.platform_unsupported";
+    case "platform_not_detected":
+      return "skillsCli.cleanup.reason.platform_not_detected";
+    case "platform_disabled":
+      return "skillsCli.cleanup.reason.platform_disabled";
+    default: {
+      const _exhaustive: never = reasonCode;
+      return _exhaustive;
+    }
+  }
+}
+
+export function deriveCleanupCandidates(
+  skills: readonly SkillsCliGlobalSkill[],
+): readonly CleanupCandidate[] {
+  const candidates: CleanupCandidate[] = [];
+  for (const skill of skills) {
+    if (!allPlacementsUnavailable(skill.placements)) {
+      continue;
+    }
+    const reasons = skill.placements.map((placement) => ({
+      platform: placement.displayName,
+      reasonCode: placement.reasonCode ?? "",
+    }));
+    const stale = skill.placements.some(
+      (placement) => placement.reasonCode === "canonical_missing",
+    );
+    candidates.push({
+      name: skill.name,
+      group: stale ? "stale" : "platformUnavailable",
+      reasons,
+    });
+  }
+  return candidates;
+}
+
+export function defaultCleanupSelectedNames(
+  candidates: readonly CleanupCandidate[],
+): string[] {
+  return candidates
+    .filter((candidate) => candidate.group === "stale")
+    .map((candidate) => candidate.name);
+}
+
 export function emptyPlacementOutcome(): PlacementMutationOutcome {
   return { succeeded: [], failed: [], skipped: [] };
 }
@@ -231,6 +320,42 @@ export function partitionUnlinkBatch(
         placement,
       });
     }
+  }
+  return { allowed, skipped };
+}
+
+export function partitionUnlinkBatchForAgent(
+  skills: readonly SkillsCliGlobalSkill[],
+  skillNames: readonly string[],
+  agentId: string,
+): PlacementPartition {
+  const allowed: PlacementPartitionItem[] = [];
+  const skipped: PlacementPartition["skipped"] = [];
+  for (const skillName of skillNames) {
+    const skill = skillByName(skills, skillName);
+    if (!skill) {
+      skipped.push({
+        skillName,
+        agentId,
+        reasonCode: SKILLS_CLI_SKIP_NOT_OWNED,
+      });
+      continue;
+    }
+    const placement = skill.placements.find((item) => item.agentId === agentId);
+    if (!placement) {
+      skipped.push({
+        skillName,
+        agentId,
+        reasonCode: SKILLS_CLI_SKIP_NO_PLACEMENT,
+      });
+      continue;
+    }
+    const reasonCode = skipReasonForUnlink(placement.state);
+    if (reasonCode) {
+      skipped.push({ skillName, agentId, reasonCode });
+      continue;
+    }
+    allowed.push({ skillName, agentId, placement });
   }
   return { allowed, skipped };
 }

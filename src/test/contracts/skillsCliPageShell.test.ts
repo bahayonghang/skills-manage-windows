@@ -22,6 +22,8 @@ const PAGE_SHELL_SOURCES = [
   "src/components/skillsCli/SkillsCliHeader.tsx",
   "src/components/skillsCli/SkillsCliToolbar.tsx",
   "src/components/skillsCli/SkillsCliGroupHeader.tsx",
+  "src/components/skillsCli/SkillsCliBatchBar.tsx",
+  "src/components/skillsCli/SkillsCliCleanupDialog.tsx",
   "src/components/skillsCli/SkillsCliInstallMount.tsx",
   "src/components/skillsCli/skillsCliActionToast.tsx",
 ];
@@ -53,6 +55,8 @@ describe("Skills CLI page-shell contracts", () => {
     expect(page).toContain("SKILLS_CLI_CONTENT_CONTAINER_CLASS");
     expect(page).toContain("SKILLS_CLI_GRID_CLASS");
     expect(page).not.toMatch(/md:grid-cols-[34]/);
+    expect(page).not.toMatch(/(?:^|\s)(?:md|lg):/);
+    expect(SKILLS_CLI_GRID_CLASS).toContain("gap-3");
   });
 
   it("forbids prototype hex, remote fonts/CDN, and hardcoded display fonts", () => {

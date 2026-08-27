@@ -6,6 +6,7 @@ import { formatBackendError, parseBackendError } from "@/lib/backendError";
 import { isEditableEventTarget } from "@/lib/keyboardShortcuts";
 import {
   emptyPlacementOutcome,
+  selectedSkillsInStoreOrder,
   type PlacementMutationOutcome,
 } from "@/pages/skillsCliBatchModel";
 import {
@@ -15,6 +16,8 @@ import {
 import { exportSkillsCliInventory } from "@/pages/skillsCliExport";
 import {
   closeSkillsCliSurface,
+  groupSkillNamesByRepositoryKey,
+  applySelectionsForNames,
   openSkillsCliUpdate,
   type SkillsCliActiveSurface,
   type SkillsCliBucket,
@@ -25,33 +28,55 @@ import type { SkillsCliGlobalSkill, SkillsCliInstallTarget } from "@/types";
 export function toastSkillsCliPlacementOutcome(
   t: TFunction,
   outcome: PlacementMutationOutcome,
-  kind: "link" | "unlink",
+  kind: "link" | "unlink" | "update",
 ): void {
   const allOk = outcome.failed.length === 0 && outcome.skipped.length === 0;
   const failedMessages = [
     ...new Set(outcome.failed.map((item) => item.errorCode)),
   ].map((code) => formatBackendError(`${code}:`, t));
+  const skippedMessages = [
+    ...new Set(outcome.skipped.map((item) => item.reasonCode)),
+  ].map((code) => formatBackendError(`${code}:`, t));
+  const successKey = ((): string => {
+    switch (kind) {
+      case "link":
+        return "skillsCli.batch.linkSuccess";
+      case "unlink":
+        return "skillsCli.batch.unlinkSuccess";
+      case "update":
+        return "skillsCli.batch.updateSuccess";
+      default: {
+        const _exhaustive: never = kind;
+        return _exhaustive;
+      }
+    }
+  })();
+  const partialKey = ((): string => {
+    switch (kind) {
+      case "link":
+        return "skillsCli.batch.linkPartial";
+      case "unlink":
+        return "skillsCli.batch.unlinkPartial";
+      case "update":
+        return "skillsCli.batch.updatePartial";
+      default: {
+        const _exhaustive: never = kind;
+        return _exhaustive;
+      }
+    }
+  })();
   showSkillsCliActionToast({
     semantic: allOk ? "success" : "error",
     message: allOk
-      ? t(
-          kind === "link"
-            ? "skillsCli.batch.linkSuccess"
-            : "skillsCli.batch.unlinkSuccess",
-          { succeeded: outcome.succeeded.length },
-        )
+      ? t(successKey, { succeeded: outcome.succeeded.length })
       : [
-          t(
-            kind === "link"
-              ? "skillsCli.batch.linkPartial"
-              : "skillsCli.batch.unlinkPartial",
-            {
-              succeeded: outcome.succeeded.length,
-              failed: outcome.failed.length,
-              skipped: outcome.skipped.length,
-            },
-          ),
+          t(partialKey, {
+            succeeded: outcome.succeeded.length,
+            failed: outcome.failed.length,
+            skipped: outcome.skipped.length,
+          }),
           ...failedMessages,
+          ...skippedMessages,
         ]
           .join(" ")
           .trim(),
@@ -62,6 +87,7 @@ export function createSkillsCliPageHandlers(input: {
   t: TFunction;
   activeSurface: SkillsCliActiveSurface;
   linkMenuOpen: boolean;
+  unlinkMenuOpen: boolean;
   selectedCardNames: ReadonlySet<string>;
   targets: readonly SkillsCliInstallTarget[];
   detailSkill: SkillsCliGlobalSkill | null;
@@ -71,12 +97,14 @@ export function createSkillsCliPageHandlers(input: {
   setCollapsedGroupIds: Dispatch<SetStateAction<ReadonlySet<string>>>;
   setActiveSurface: Dispatch<SetStateAction<SkillsCliActiveSurface>>;
   setLinkMenuOpen: Dispatch<SetStateAction<boolean>>;
+  setUnlinkMenuOpen: Dispatch<SetStateAction<boolean>>;
   setIsExporting: Dispatch<SetStateAction<boolean>>;
 }) {
   const {
     t,
     activeSurface,
     linkMenuOpen,
+    unlinkMenuOpen,
     selectedCardNames,
     targets,
     detailSkill,
@@ -86,6 +114,7 @@ export function createSkillsCliPageHandlers(input: {
     setCollapsedGroupIds,
     setActiveSurface,
     setLinkMenuOpen,
+    setUnlinkMenuOpen,
     setIsExporting,
   } = input;
 
@@ -102,6 +131,7 @@ export function createSkillsCliPageHandlers(input: {
     if (
       activeSurface !== null ||
       linkMenuOpen ||
+      unlinkMenuOpen ||
       event.defaultPrevented ||
       isEditableEventTarget(event.target)
     ) {
@@ -179,11 +209,71 @@ export function createSkillsCliPageHandlers(input: {
   }
 
   async function handleUnlink() {
+    setUnlinkMenuOpen(false);
     try {
       const outcome = await useSkillsCliStore
         .getState()
         .unlinkManagedBatch([...selectedCardNames]);
       toastSkillsCliPlacementOutcome(t, outcome, "unlink");
+    } catch (error) {
+      showSkillsCliActionToast({
+        semantic: "error",
+        message: formatBackendError(error, t),
+      });
+    }
+  }
+
+  async function handleUnlinkPlatform(agentId: string) {
+    setUnlinkMenuOpen(false);
+    try {
+      const outcome = await useSkillsCliStore
+        .getState()
+        .unlinkPlatformBatch([...selectedCardNames], agentId);
+      toastSkillsCliPlacementOutcome(t, outcome, "unlink");
+    } catch (error) {
+      showSkillsCliActionToast({
+        semantic: "error",
+        message: formatBackendError(error, t),
+      });
+    }
+  }
+
+  async function handleBatchUpdate() {
+    if (useSkillsCliStore.getState().batchProgress !== null) {
+      return;
+    }
+    const { skills, updateInventory } = useSkillsCliStore.getState();
+    const ordered = selectedSkillsInStoreOrder(skills, selectedCardNames).map(
+      (skill) => skill.name,
+    );
+    const groups = groupSkillNamesByRepositoryKey(ordered, updateInventory);
+    if (groups.length === 0) {
+      showSkillsCliActionToast({
+        semantic: "error",
+        message: t("skillsCli.updates.checkFirst"),
+      });
+      return;
+    }
+    const actionable = groups.filter(
+      (group) => applySelectionsForNames(updateInventory, group.skillNames).length > 0,
+    );
+    if (actionable.length === 0) {
+      showSkillsCliActionToast({
+        semantic: "error",
+        message: t("skillsCli.updates.noActionable"),
+      });
+      return;
+    }
+    try {
+      const outcome = await useSkillsCliStore.getState().applyUpdatesBatch(ordered);
+      if (
+        outcome.succeeded.length === 0 &&
+        outcome.failed.length === 0 &&
+        outcome.skipped.length === 0
+      ) {
+        return;
+      }
+      toastSkillsCliPlacementOutcome(t, outcome, "update");
     } catch (error) {
       showSkillsCliActionToast({
         semantic: "error",
@@ -314,6 +404,8 @@ export function createSkillsCliPageHandlers(input: {
     handleExport,
     handleLink,
     handleUnlink,
+    handleUnlinkPlatform,
+    handleBatchUpdate,
     handleUninstalled,
     handleDetailClose,
     openUpdateSurface,

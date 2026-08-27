@@ -16,7 +16,8 @@ export type SkillsCliActiveSurface =
   | { kind: "install" }
   | { kind: "detail"; skillName: string; focus: null | "links" }
   | { kind: "update"; repositoryKey: string; skillNames: readonly string[] }
-  | { kind: "uninstall"; skillNames: readonly string[] };
+  | { kind: "uninstall"; skillNames: readonly string[] }
+  | { kind: "cleanup" };
 
 export interface SkillsCliCounts {
   installed: number;
@@ -350,6 +351,10 @@ export function openSkillsCliUninstall(
   return { kind: "uninstall", skillNames };
 }
 
+export function openSkillsCliCleanup(): SkillsCliActiveSurface {
+  return { kind: "cleanup" };
+}
+
 export function closeSkillsCliSurface(): SkillsCliActiveSurface {
   return null;
 }
@@ -498,6 +503,31 @@ export function repositoryKeyForSkills(
   }
   const [key] = keys;
   return key ?? null;
+}
+
+export function groupSkillNamesByRepositoryKey(
+  skillNames: readonly string[],
+  inventory: SkillsCliUpdateInventory | null,
+): Array<{ repositoryKey: string; skillNames: string[] }> {
+  const groups = new Map<string, string[]>();
+  const order: string[] = [];
+  for (const name of skillNames) {
+    const key = updateRowForSkill(inventory, name)?.repositoryKey;
+    if (!key) {
+      continue;
+    }
+    const existing = groups.get(key);
+    if (!existing) {
+      order.push(key);
+      groups.set(key, [name]);
+      continue;
+    }
+    existing.push(name);
+  }
+  return order.map((repositoryKey) => ({
+    repositoryKey,
+    skillNames: groups.get(repositoryKey) ?? [],
+  }));
 }
 
 export function applySelectionsForNames(

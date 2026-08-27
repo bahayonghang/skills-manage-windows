@@ -169,10 +169,10 @@ export function createSkillsCliUpdateSlice(
       if (skillsCliOperationBusy(get())) {
         throw new Error(BUSY_ENVELOPE);
       }
-      const selections = applySelectionsForNames(
-        get().updateInventory,
-        input.skillNames,
-      );
+      const selections =
+        input.selections && input.selections.length > 0
+          ? input.selections
+          : applySelectionsForNames(get().updateInventory, input.skillNames);
       if (selections.length === 0) {
         set({ updateError: SELECTION_EMPTY_ENVELOPE });
         throw new Error(SELECTION_EMPTY_ENVELOPE);

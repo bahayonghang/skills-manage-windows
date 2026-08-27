@@ -1,10 +1,19 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
+import en from "@/i18n/locales/en.json";
+import zh from "@/i18n/locales/zh.json";
 import {
   aggregateRemovalImpact,
+  allPlacementsUnavailable,
   buildSkillsCliExportV1,
+  defaultCleanupSelectedNames,
+  deriveCleanupCandidates,
   partitionLinkBatch,
   partitionUnlinkBatch,
+  partitionUnlinkBatchForAgent,
   reconcileSelectedNames,
   selectedSkillsInStoreOrder,
   skillsCliExportFileName,
@@ -23,6 +32,8 @@ import {
   deriveSkillsCliLayoutBands,
   enabledTargetIdSet,
   filterSkillsCli,
+  groupSkillNamesByRepositoryKey,
+  openSkillsCliCleanup,
   openSkillsCliDetail,
   openSkillsCliInstall,
   openSkillsCliUninstall,
@@ -76,6 +87,7 @@ function placement(
   agentId: string,
   state: SkillsCliPlacementState,
   displayName = agentId,
+  reasonCode: string | null = null,
 ): SkillsCliPlacement {
   return {
     agentId,
@@ -83,7 +95,7 @@ function placement(
     targetPath: `/tmp/${agentId}/skills/x`,
     state,
     managedLinkKind: state === "managed_link" ? "windows_junction" : null,
-    reasonCode: null,
+    reasonCode,
   };
 }
 
@@ -335,8 +347,12 @@ describe("deriveSkillsCliLayoutBands", () => {
       grid: "fourColumns",
       drawer: "fixed460",
     });
+    expect(deriveSkillsCliLayoutBands(720).grid).toBe("twoColumns");
+    expect(deriveSkillsCliLayoutBands(1000).grid).toBe("threeColumns");
+    expect(deriveSkillsCliLayoutBands(1280).grid).toBe("fourColumns");
     expect(SKILLS_CLI_THREE_COLUMN_MIN_PX).toBe(900);
     expect(SKILLS_CLI_FOUR_COLUMN_MIN_PX).toBe(1180);
+    expect(SKILLS_CLI_GRID_CLASS).toContain("gap-3");
   });
 
   it("exports the named container grid contract classes", () => {
@@ -345,6 +361,95 @@ describe("deriveSkillsCliLayoutBands", () => {
     expect(SKILLS_CLI_GRID_CLASS).toContain("@min-[900px]/skills-cli:grid-cols-3");
     expect(SKILLS_CLI_GRID_CLASS).toContain("@min-[1180px]/skills-cli:grid-cols-4");
     expect(SKILLS_CLI_GRID_CLASS).not.toMatch(/(?:^|\s)(?:md|lg|xl|min-\[[0-9]+px\]):grid-cols-/);
+  });
+});
+
+describe("cleanup candidate grouping", () => {
+  it("puts canonical_missing skills in the stale group and selects them by default", () => {
+    const stale = skill({
+      name: "ghost",
+      placements: [
+        placement("cursor", "unavailable", "Cursor", "canonical_missing"),
+        placement("amp", "unavailable", "Amp", "canonical_missing"),
+      ],
+    });
+    const candidates = deriveCleanupCandidates([stale]);
+    expect(allPlacementsUnavailable(stale.placements)).toBe(true);
+    expect(candidates).toEqual([
+      {
+        name: "ghost",
+        group: "stale",
+        reasons: [
+          { platform: "Cursor", reasonCode: "canonical_missing" },
+          { platform: "Amp", reasonCode: "canonical_missing" },
+        ],
+      },
+    ]);
+    expect(defaultCleanupSelectedNames(candidates)).toEqual(["ghost"]);
+  });
+
+  it("puts healthy skills that are only platform-unavailable in the unchecked group", () => {
+    const healthy = skill({
+      name: "healthy",
+      placements: [
+        placement("cursor", "unavailable", "Cursor", "platform_not_detected"),
+        placement("amp", "unavailable", "Amp", "platform_disabled"),
+      ],
+    });
+    const candidates = deriveCleanupCandidates([healthy]);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]?.group).toBe("platformUnavailable");
+    expect(candidates[0]?.reasons).toEqual([
+      { platform: "Cursor", reasonCode: "platform_not_detected" },
+      { platform: "Amp", reasonCode: "platform_disabled" },
+    ]);
+    expect(defaultCleanupSelectedNames(candidates)).toEqual([]);
+  });
+
+  it("keeps mixed platform reasons in a single platformUnavailable group", () => {
+    const mixed = skill({
+      name: "mixed-unavailable",
+      placements: [
+        placement("cursor", "unavailable", "Cursor", "platform_not_detected"),
+        placement("amp", "unavailable", "Amp", "platform_disabled"),
+      ],
+    });
+    const linked = skill({
+      name: "still-linked",
+      placements: [placement("cursor", "managed_link", "Cursor")],
+    });
+    const missingBadge = skill({
+      name: "has-missing",
+      placements: [
+        placement("cursor", "unavailable", "Cursor", "platform_disabled"),
+        placement("amp", "missing", "Amp"),
+      ],
+    });
+    const candidates = deriveCleanupCandidates([mixed, linked, missingBadge]);
+    expect(candidates.map((item) => item.name)).toEqual(["mixed-unavailable"]);
+    expect(candidates[0]?.group).toBe("platformUnavailable");
+    expect(candidates[0]?.reasons).toHaveLength(2);
+    expect(allPlacementsUnavailable(missingBadge.placements)).toBe(false);
+  });
+
+  it("puts platform_unsupported skills in the unchecked platformUnavailable group", () => {
+    const unsupported = skill({
+      name: "unsupported-only",
+      placements: [
+        placement("cursor", "unavailable", "Cursor", "platform_unsupported"),
+      ],
+    });
+    const candidates = deriveCleanupCandidates([unsupported]);
+    expect(candidates).toEqual([
+      {
+        name: "unsupported-only",
+        group: "platformUnavailable",
+        reasons: [
+          { platform: "Cursor", reasonCode: "platform_unsupported" },
+        ],
+      },
+    ]);
+    expect(defaultCleanupSelectedNames(candidates)).toEqual([]);
   });
 });
 
@@ -382,13 +487,12 @@ describe("surface helpers", () => {
       repositoryKey: "owner/repo@main",
       skillNames: ["demo"],
     });
+    expect(openSkillsCliCleanup()).toEqual({ kind: "cleanup" });
   });
 });
 
 describe("i18n parity for batch-actions strings", () => {
-  it("keeps en/zh keys aligned for batch, export, uninstall impact, and new backend codes", async () => {
-    const en = (await import("@/i18n/locales/en.json")).default;
-    const zh = (await import("@/i18n/locales/zh.json")).default;
+  it("keeps en/zh keys aligned for batch, export, uninstall impact, and new backend codes", () => {
     function keysOf(value: unknown, prefix = ""): string[] {
       if (!value || typeof value !== "object" || Array.isArray(value)) {
         return prefix ? [prefix] : [];
@@ -402,6 +506,7 @@ describe("i18n parity for batch-actions strings", () => {
     expect(keysOf(en.skillsCli.uninstallImpact)).toEqual(
       keysOf(zh.skillsCli.uninstallImpact),
     );
+    expect(keysOf(en.skillsCli.cleanup)).toEqual(keysOf(zh.skillsCli.cleanup));
     expect(keysOf(en.skillsCli.updates)).toEqual(keysOf(zh.skillsCli.updates));
     expect(keysOf(en.backendErrors.skills_cli)).toEqual(
       keysOf(zh.backendErrors.skills_cli),
@@ -410,14 +515,13 @@ describe("i18n parity for batch-actions strings", () => {
 });
 
 describe("batch-actions source contracts", () => {
-  it("does not add window Escape listeners or sonner/invoke in the new surfaces", async () => {
-    const { readFileSync } = await import("node:fs");
-    const { resolve } = await import("node:path");
+  it("does not add window Escape listeners or sonner/invoke in the new surfaces", () => {
     const root = process.cwd();
     const files = [
       "src/pages/SkillsCliView.tsx",
       "src/components/skillsCli/SkillsCliBatchBar.tsx",
       "src/components/skillsCli/SkillsCliUninstallDialog.tsx",
+      "src/components/skillsCli/SkillsCliCleanupDialog.tsx",
       "src/pages/skillsCliExport.ts",
       "src/components/skillsCli/SkillsCliUpdateDrawer.tsx",
     ];
@@ -427,6 +531,18 @@ describe("batch-actions source contracts", () => {
     expect(joined).not.toMatch(/from ["']sonner["']/);
     expect(joined).not.toMatch(/from ["']@\/lib\/ipc["']/);
     expect(joined).not.toMatch(/#(?:[0-9a-fA-F]{3,8})\b/);
+    const view = readFileSync(resolve(root, "src/pages/SkillsCliView.tsx"), "utf8");
+    expect((view.match(/const \[selectedCardNames/g) ?? []).length).toBe(1);
+    expect(joined).not.toMatch(/\binvoke\s*\(/);
+    expect(view).not.toMatch(/\bruntimeBlocked\b/);
+    const denseRow = readFileSync(
+      resolve(root, "src/components/skill/SkillCardDenseRow.tsx"),
+      "utf8",
+    );
+    expect(denseRow).toContain("allPlacementsUnavailable");
+    expect(denseRow).not.toMatch(
+      /placements\.every\(\s*\((?:placement|item)\)\s*=>\s*(?:placement|item)\.state\s*===\s*["']unavailable["']/,
+    );
   });
 });
 
@@ -505,6 +621,36 @@ describe("placement mutation partition", () => {
           item.reasonCode === "skills_cli.not_linked",
       ),
     ).toBe(true);
+  });
+
+  it("unlinks one agent only and skips other states without creating IPC targets", () => {
+    const cursor = partitionUnlinkBatchForAgent(
+      mixedSkills,
+      ["mixed-skill", "copy-skill", "unlinked-skill"],
+      "cursor",
+    );
+    expect(cursor.allowed.map((item) => item.skillName)).toEqual(["mixed-skill"]);
+    expect(
+      cursor.skipped.map((item) => ({
+        name: item.skillName,
+        reason: item.reasonCode,
+      })),
+    ).toEqual([
+      { name: "copy-skill", reason: "skills_cli.direct_copy_not_toggleable" },
+      { name: "unlinked-skill", reason: "skills_cli.placement_unavailable" },
+    ]);
+    const amp = partitionUnlinkBatchForAgent(
+      mixedSkills,
+      ["mixed-skill", "copy-skill"],
+      "amp",
+    );
+    expect(amp.allowed).toEqual([]);
+    expect(
+      amp.skipped.map((item) => ({ name: item.skillName, reason: item.reasonCode })),
+    ).toEqual([
+      { name: "mixed-skill", reason: "skills_cli.not_linked" },
+      { name: "copy-skill", reason: "skills_cli.placement_unavailable" },
+    ]);
   });
 });
 
@@ -742,6 +888,27 @@ function updateRow(
 }
 
 describe("Skills CLI update view-model", () => {
+  it("groups selected names by repositoryKey in first-seen order", () => {
+    const inventory = {
+      ...EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+      skills: [
+        updateRow({ skillName: "alpha", repositoryKey: "owner/alpha@main" }),
+        updateRow({ skillName: "beta", repositoryKey: "owner/beta@main" }),
+        updateRow({ skillName: "gamma", repositoryKey: "owner/alpha@main" }),
+        updateRow({ skillName: "plain", repositoryKey: null }),
+      ],
+    };
+    expect(
+      groupSkillNamesByRepositoryKey(
+        ["alpha", "beta", "gamma", "plain", "missing"],
+        inventory,
+      ),
+    ).toEqual([
+      { repositoryKey: "owner/alpha@main", skillNames: ["alpha", "gamma"] },
+      { repositoryKey: "owner/beta@main", skillNames: ["beta"] },
+    ]);
+  });
+
   it("exposes the nine update statuses", () => {
     expect(skillsCliUpdateStatuses()).toEqual([
       "not_checked",

@@ -21,6 +21,9 @@ export interface SkillsCliToolbarProps {
   targets: readonly SkillsCliInstallTarget[];
   onExportAll?: () => void;
   isExporting?: boolean;
+  onCleanupUnavailable?: () => void;
+  cleanupUnavailableCount?: number;
+  cleanupDisabled?: boolean;
 }
 
 const GROUP_OPTIONS: { id: SkillsCliGroupBy; labelKey: string }[] = [
@@ -47,9 +50,16 @@ export function SkillsCliToolbar({
   targets,
   onExportAll,
   isExporting = false,
+  onCleanupUnavailable,
+  cleanupUnavailableCount = 0,
+  cleanupDisabled = false,
 }: SkillsCliToolbarProps) {
   const { t } = useTranslation();
   const exportDisabled = onExportAll == null || isExporting;
+  const cleanupUnavailableDisabled =
+    onCleanupUnavailable == null ||
+    cleanupDisabled ||
+    cleanupUnavailableCount === 0;
 
   return (
     <div
@@ -157,6 +167,16 @@ export function SkillsCliToolbar({
       >
         {t("skillsCli.selectMode")}
       </button>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={cleanupUnavailableDisabled}
+        onClick={() => onCleanupUnavailable?.()}
+        aria-label={t("skillsCli.cleanupUnavailableAria")}
+        data-testid="skills-cli-cleanup"
+      >
+        {t("skillsCli.cleanupUnavailable")}
+      </Button>
       <Button
         type="button"
         variant="outline"

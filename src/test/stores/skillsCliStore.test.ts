@@ -72,6 +72,7 @@ function resetState() {
     updateJob: { jobId: null, phase: null },
     updateError: null,
     updateProgress: null,
+    batchProgress: null,
   });
 }
 
@@ -398,6 +399,32 @@ function globalSkill(
   };
 }
 
+function pendingUpdateRow(skillName: string, repositoryKey: string) {
+  return {
+    skillName,
+    repositoryKey,
+    normalizedSource: `https://github.com/${repositoryKey.split("@")[0]}`,
+    skillPath: skillName,
+    status: "update_available" as const,
+    installedRevisionSha: "aaa",
+    observedRevisionSha: "bbb",
+    pendingRevisionSha: "bbb",
+    installedLocalDigest: "sha256-v1:a",
+    observedUpstreamDigest: "sha256-v1:b",
+    pendingUpstreamDigest: "sha256-v1:b",
+    isStale: false,
+    lastErrorCode: null,
+    changeSummary: [] as string[],
+    blockers: [] as Array<{ code: string; skillName: string }>,
+    argvPreview: [
+      "refresh",
+      "owned-canonical",
+      "from-pinned-github-snapshot",
+      skillName,
+    ],
+  };
+}
+
 const linkedPlacement = {
   agentId: "cursor",
   displayName: "Cursor",
@@ -572,6 +599,36 @@ describe("skillsCliStore placement mutations", () => {
     expect(JSON.stringify(args)).not.toContain("--keep-links");
   });
 
+  it("unlinks one platform's managed_link rows and skips other states without IPC", async () => {
+    useSkillsCliStore.setState({
+      skills: [
+        globalSkill("linked", [placement("cursor", "managed_link")]),
+        globalSkill("copy", [placement("cursor", "direct_copy")]),
+        globalSkill("conflict", [placement("cursor", "conflict")]),
+        globalSkill("gone", [placement("cursor", "unavailable")]),
+      ],
+      doctor,
+      targets,
+    });
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_install_targets: targets,
+      skills_cli_list_global: listGlobal,
+      skills_cli_unlink_platform: missingPlacement,
+    });
+    const outcome = await useSkillsCliStore.getState().unlinkPlatformBatch(
+      ["linked", "copy", "conflict", "gone"],
+      "cursor",
+    );
+    expect(outcome.succeeded).toEqual([{ skillName: "linked", agentId: "cursor" }]);
+    expect(outcome.skipped.map((item) => item.reasonCode).sort()).toEqual([
+      "skills_cli.direct_copy_not_toggleable",
+      "skills_cli.placement_conflict",
+      "skills_cli.placement_unavailable",
+    ].sort());
+    expect(ipcInvokeCalls("skills_cli_unlink_platform")).toHaveLength(1);
+  });
+
   it("removes serially, restores a failed name, and still refreshes afterwards", async () => {
     const keep = globalSkill("keep", [placement("cursor", "managed_link")]);
     const drop = globalSkill("drop", [placement("cursor", "managed_link")]);
@@ -610,6 +667,97 @@ describe("skillsCliStore placement mutations", () => {
       "keep",
     ]);
     expect(ipcInvokeCalls("skills_cli_remove_global")).toHaveLength(2);
+  });
+
+  it("tracks cleanup progress, continues after skills_cli.busy, and clears progress on partial failure", async () => {
+    const keep = globalSkill("keep", [placement("cursor", "managed_link")]);
+    const drop = globalSkill("drop", [placement("cursor", "managed_link")]);
+    useSkillsCliStore.setState({ skills: [keep, drop], doctor, targets });
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_install_targets: targets,
+      skills_cli_list_global: {
+        skills: [keep],
+        canonicalRoot: "/tmp/agents",
+        lockPath: "/tmp/agents/skills.lock",
+      },
+      skills_cli_remove_global: ({ skillName }: { skillName: string }) => {
+        if (skillName === "keep") {
+          throw ipcFixtureError(
+            "skills_cli.busy",
+            "Another skill operation is using this target.",
+          );
+        }
+        return {
+          removedCanonical: true,
+          removedManagedAgentIds: ["cursor"],
+          retainedDirectCopyAgentIds: [],
+        };
+      },
+    });
+    const outcome = await useSkillsCliStore.getState().removeGlobalBatch([
+      "keep",
+      "drop",
+    ]);
+    expect(outcome.failed).toEqual([
+      { skillName: "keep", errorCode: "skills_cli.busy" },
+    ]);
+    expect(outcome.succeeded).toEqual([{ skillName: "drop" }]);
+    expect(useSkillsCliStore.getState().batchProgress).toBeNull();
+    expect(ipcInvokeCalls("skills_cli_remove_global")).toHaveLength(2);
+  });
+
+  it("does not start a second cleanup batch while progress is in flight", async () => {
+    const first = globalSkill("first", [placement("cursor", "managed_link")]);
+    const second = globalSkill("second", [placement("cursor", "managed_link")]);
+    useSkillsCliStore.setState({ skills: [first, second], doctor, targets });
+    let releaseFirst: (() => void) | undefined;
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_install_targets: targets,
+      skills_cli_list_global: {
+        skills: [second],
+        canonicalRoot: "/tmp/agents",
+        lockPath: "/tmp/agents/skills.lock",
+      },
+      skills_cli_remove_global: ({ skillName }: { skillName: string }) => {
+        if (skillName === "first") {
+          return new Promise((resolve) => {
+            releaseFirst = () =>
+              resolve({
+                removedCanonical: true,
+                removedManagedAgentIds: ["cursor"],
+                retainedDirectCopyAgentIds: [],
+              });
+          });
+        }
+        return {
+          removedCanonical: true,
+          removedManagedAgentIds: ["cursor"],
+          retainedDirectCopyAgentIds: [],
+        };
+      },
+    });
+    const pending = useSkillsCliStore.getState().removeGlobalBatch([
+      "first",
+      "second",
+    ]);
+    expect(useSkillsCliStore.getState().batchProgress).toEqual({
+      operation: "cleanup",
+      completed: 0,
+      total: 2,
+    });
+    await expect(
+      useSkillsCliStore.getState().removeGlobalBatch(["first", "second"]),
+    ).rejects.toThrow(/skills_cli\.busy/);
+    expect(ipcInvokeCalls("skills_cli_remove_global")).toHaveLength(1);
+    releaseFirst?.();
+    const outcome = await pending;
+    expect(outcome.succeeded.map((item) => item.skillName)).toEqual([
+      "first",
+      "second",
+    ]);
+    expect(useSkillsCliStore.getState().batchProgress).toBeNull();
   });
 
   it("writes export JSON through IPC and surfaces a coded failure", async () => {
@@ -759,7 +907,10 @@ describe("skillsCliStore doc and reveal", () => {
     expect(store).toContain("async unlinkPlatform(");
     expect(store).toContain("async linkPlatformBatch(");
     expect(store).toContain("async unlinkManagedBatch(");
+    expect(store).toContain("async unlinkPlatformBatch(");
     expect(store).toContain("async removeGlobalBatch(");
+    expect(store).toContain("async applyUpdatesBatch(");
+    expect(store).toContain("batchProgress");
     expect(store).toContain("async exportInventory(");
     expect(store).toContain("async readSkillDoc(");
     expect(store).toContain("async revealSkillFolder(");
@@ -968,6 +1119,171 @@ describe("skillsCliStore doc and reveal", () => {
     expect(useSkillsCliStore.getState().updateError).toContain(
       "skills_cli.update_migration",
     );
+  });
+
+  it("applies updates serially per repository with distinct job ids and continues after a group failure", async () => {
+    const alpha = globalSkill("alpha", [placement("cursor", "managed_link")]);
+    const beta = globalSkill("beta", [placement("cursor", "managed_link")]);
+    useSkillsCliStore.setState({
+      skills: [alpha, beta],
+      doctor,
+      targets,
+      updateInventory: {
+        ...EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+        lastSuccessAt: "2026-08-26T00:00:00.000Z",
+        skills: [
+          pendingUpdateRow("alpha", "owner/alpha@main"),
+          pendingUpdateRow("beta", "owner/beta@main"),
+        ],
+      },
+    });
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_install_targets: targets,
+      skills_cli_list_global: {
+        skills: [alpha, beta],
+        canonicalRoot: "/tmp/agents",
+        lockPath: "/tmp/agents/skills.lock",
+      },
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+      skills_cli_apply_updates: ({
+        request,
+      }: {
+        request: { repositoryKey: string };
+      }) => {
+        if (request.repositoryKey === "owner/alpha@main") {
+          throw ipcFixtureError(
+            "skills_cli.update_check_failed",
+            "Repository check failed.",
+          );
+        }
+        return {
+          appliedSkillNames: ["beta"],
+          installedRevisionSha: "bbb",
+        };
+      },
+    });
+    const outcome = await useSkillsCliStore.getState().applyUpdatesBatch([
+      "alpha",
+      "beta",
+    ]);
+    expect(outcome.failed).toEqual([
+      { skillName: "alpha", errorCode: "skills_cli.update_check_failed" },
+    ]);
+    expect(outcome.succeeded).toEqual([{ skillName: "beta" }]);
+    const applies = ipcInvokeCalls("skills_cli_apply_updates");
+    expect(applies).toHaveLength(2);
+    const jobIds = applies.map((call) => {
+      const args = call.args as { request: { jobId: string; repositoryKey: string } };
+      return args.request.jobId;
+    });
+    expect(jobIds[0]).not.toEqual(jobIds[1]);
+    expect(jobIds[0]).toBeTruthy();
+    expect(jobIds[1]).toBeTruthy();
+    expect(useSkillsCliStore.getState().batchProgress).toBeNull();
+  });
+
+  it("does not start a second apply batch while the first group is in flight", async () => {
+    const alpha = globalSkill("alpha", [placement("cursor", "managed_link")]);
+    const beta = globalSkill("beta", [placement("cursor", "managed_link")]);
+    useSkillsCliStore.setState({
+      skills: [alpha, beta],
+      doctor,
+      targets,
+      updateInventory: {
+        ...EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+        lastSuccessAt: "2026-08-26T00:00:00.000Z",
+        skills: [
+          pendingUpdateRow("alpha", "owner/alpha@main"),
+          pendingUpdateRow("beta", "owner/beta@main"),
+        ],
+      },
+    });
+    let releaseFirst: (() => void) | undefined;
+    let releaseSecond: (() => void) | undefined;
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_install_targets: targets,
+      skills_cli_list_global: {
+        skills: [alpha, beta],
+        canonicalRoot: "/tmp/agents",
+        lockPath: "/tmp/agents/skills.lock",
+      },
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+      skills_cli_apply_updates: ({
+        request,
+      }: {
+        request: { repositoryKey: string };
+      }) => {
+        if (request.repositoryKey === "owner/alpha@main") {
+          return new Promise((resolve) => {
+            releaseFirst = () =>
+              resolve({
+                appliedSkillNames: ["alpha"],
+                installedRevisionSha: "aaa",
+              });
+          });
+        }
+        return new Promise((resolve) => {
+          releaseSecond = () =>
+            resolve({
+              appliedSkillNames: ["beta"],
+              installedRevisionSha: "bbb",
+            });
+        });
+      },
+    });
+    const snapshots: Array<{ completed: number; total: number } | null> = [];
+    const unsubscribe = useSkillsCliStore.subscribe((state) => {
+      snapshots.push(
+        state.batchProgress
+          ? {
+              completed: state.batchProgress.completed,
+              total: state.batchProgress.total,
+            }
+          : null,
+      );
+    });
+    const pending = useSkillsCliStore.getState().applyUpdatesBatch([
+      "alpha",
+      "beta",
+    ]);
+    await vi.waitFor(() => {
+      expect(useSkillsCliStore.getState().batchProgress).toEqual({
+        operation: "update",
+        completed: 0,
+        total: 2,
+      });
+    });
+    const duplicate = await useSkillsCliStore.getState().applyUpdatesBatch([
+      "alpha",
+      "beta",
+    ]);
+    expect(duplicate).toEqual({ succeeded: [], failed: [], skipped: [] });
+    await vi.waitFor(() => {
+      expect(ipcInvokeCalls("skills_cli_apply_updates")).toHaveLength(1);
+    });
+    releaseFirst?.();
+    await vi.waitFor(() => {
+      expect(useSkillsCliStore.getState().batchProgress).toEqual({
+        operation: "update",
+        completed: 1,
+        total: 2,
+      });
+    });
+    releaseSecond?.();
+    const outcome = await pending;
+    unsubscribe();
+    expect(outcome.succeeded.map((item) => item.skillName)).toEqual([
+      "alpha",
+      "beta",
+    ]);
+    expect(ipcInvokeCalls("skills_cli_apply_updates")).toHaveLength(2);
+    expect(snapshots).toContainEqual({ completed: 0, total: 2 });
+    expect(snapshots).toContainEqual({ completed: 1, total: 2 });
+    expect(snapshots).toContainEqual({ completed: 2, total: 2 });
+    expect(snapshots[snapshots.length - 1]).toBeNull();
+    expect(useSkillsCliStore.getState().batchProgress).toBeNull();
   });
 });
 

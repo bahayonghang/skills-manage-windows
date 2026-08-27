@@ -96,5 +96,29 @@ describe("SkillsCliToolbar", () => {
     fireEvent.click(screen.getByRole("button", { name: "导出全部" }));
     expect(onExportAll).toHaveBeenCalledTimes(1);
     expect(onExportAll).toHaveBeenCalledWith();
+
+    expect(screen.getByTestId("skills-cli-cleanup")).toBeDisabled();
+    const onCleanupUnavailable = vi.fn();
+    rerender(
+      <SkillsCliToolbar
+        {...baseProps}
+        onCleanupUnavailable={onCleanupUnavailable}
+        cleanupUnavailableCount={0}
+      />,
+    );
+    expect(screen.getByTestId("skills-cli-cleanup")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("skills-cli-cleanup"));
+    expect(onCleanupUnavailable).not.toHaveBeenCalled();
+
+    rerender(
+      <SkillsCliToolbar
+        {...baseProps}
+        onCleanupUnavailable={onCleanupUnavailable}
+        cleanupUnavailableCount={2}
+      />,
+    );
+    expect(screen.getByTestId("skills-cli-cleanup")).toBeEnabled();
+    fireEvent.click(screen.getByTestId("skills-cli-cleanup"));
+    expect(onCleanupUnavailable).toHaveBeenCalledTimes(1);
   });
 });

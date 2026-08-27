@@ -64,6 +64,8 @@ pub async fn skills_cli_retry_update_recovery(
 Frontend: only `src/stores/skillsCliStore.ts` may `invoke` these commands.
 Renderer job IDs follow `job-correlation-cancellation.md`. Reveal does not accept a path.
 Export writer owns atomic persist; the renderer never receives filesystem write authority.
+`batchProgress` is the duplicate-submit lock for serial store loops (cleanup, apply-by-repo, per-platform unlink). Do not fold that lock into `skillsCliOperationBusy`: serial `applyUpdates` clears the exclusive job between groups and would throw busy mid-batch.
+Cleanup candidates are skills whose placements are all `unavailable`. Group `stale` iff any placement `reasonCode` is `canonical_missing` (default selected); other unavailable reasonCodes are `platformUnavailable` (default unchecked, real uninstall). Confirm still uses `skills_cli_preview_remove_global` + existing `removeGlobalBatch`. The "all placements unavailable" predicate lives in one shared helper used by both the Unavailable badge and the cleanup set.
 
 ## 3. Contracts
 

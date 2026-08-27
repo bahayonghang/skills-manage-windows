@@ -6,6 +6,7 @@ import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { Checkbox } from "@/components/ui/checkbox";
 import { statusChipClass } from "@/lib/statusTone";
 import { cn } from "@/lib/utils";
+import { allPlacementsUnavailable } from "@/pages/skillsCliBatchModel";
 import type { SkillsCliPlacement } from "@/types";
 
 import { cardShellClass } from "./UnifiedSkillCard.styles";
@@ -30,6 +31,9 @@ type DenseRowStatus = "copy" | "conflict" | "missing" | "unavailable";
 function denseRowStatus(
   placements: readonly SkillsCliPlacement[],
 ): DenseRowStatus | null {
+  if (allPlacementsUnavailable(placements)) {
+    return "unavailable";
+  }
   let status: DenseRowStatus | null = null;
   for (const placement of placements) {
     switch (placement.state) {

@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { Terminal } from "lucide-react";
 
 import { SkillsCliBatchBar } from "@/components/skillsCli/SkillsCliBatchBar";
+import { SkillsCliCleanupDialog } from "@/components/skillsCli/SkillsCliCleanupDialog";
 import { SkillsCliDetailDrawer } from "@/components/skillsCli/SkillsCliDetailDrawer";
 import { SkillsCliGroupHeader } from "@/components/skillsCli/SkillsCliGroupHeader";
 import { SkillsCliHeader } from "@/components/skillsCli/SkillsCliHeader";
@@ -26,6 +27,7 @@ import { formatBackendError } from "@/lib/backendError";
 import { isLocalTarget } from "@/lib/targetKind";
 import { cn } from "@/lib/utils";
 import {
+  deriveCleanupCandidates,
   reconcileSelectedNames,
   selectedHasManagedLink,
   summarizeLinkTargets,
@@ -41,6 +43,7 @@ import {
   deriveSkillsCliLayoutBands,
   enabledTargetIdSet,
   filterSkillsCli,
+  openSkillsCliCleanup,
   openSkillsCliDetail,
   openSkillsCliInstall,
   openSkillsCliUninstall,
@@ -78,6 +81,7 @@ export function SkillsCliView() {
   const isLoading = useSkillsCliStore((state) => state.isLoading);
   const isRefreshing = useSkillsCliStore((state) => state.isRefreshing);
   const isMutating = useSkillsCliStore((state) => state.isMutating);
+  const batchProgress = useSkillsCliStore((state) => state.batchProgress);
   const runtimeError = useSkillsCliStore((state) => state.runtimeError);
   const inventoryError = useSkillsCliStore((state) => state.inventoryError);
   const loadAll = useSkillsCliStore((state) => state.loadAll);
@@ -103,6 +107,7 @@ export function SkillsCliView() {
   const [activeSurface, setActiveSurface] = useState<SkillsCliActiveSurface>(null);
   const [contentWidthPx, setContentWidthPx] = useState<number | null>(null);
   const [linkMenuOpen, setLinkMenuOpen] = useState(false);
+  const [unlinkMenuOpen, setUnlinkMenuOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const installButtonRef = useRef<HTMLButtonElement>(null);
@@ -180,6 +185,11 @@ export function SkillsCliView() {
     [skills, selectedCardNames, targets],
   );
   const unlinkEnabled = selectedHasManagedLink(skills, selectedCardNames);
+  const cleanupCandidates = useMemo(
+    () => deriveCleanupCandidates(skills),
+    [skills],
+  );
+  const batchBusy = isMutating || batchProgress !== null;
   const detailName =
     activeSurface?.kind === "detail" ? activeSurface.skillName : null;
   const detailFocus =
@@ -223,6 +233,8 @@ export function SkillsCliView() {
     handleExport,
     handleLink,
     handleUnlink,
+    handleUnlinkPlatform,
+    handleBatchUpdate,
     handleUninstalled,
     handleDetailClose,
     openUpdateSurface,
@@ -235,6 +247,7 @@ export function SkillsCliView() {
     t,
     activeSurface,
     linkMenuOpen,
+    unlinkMenuOpen,
     selectedCardNames,
     targets,
     detailSkill,
@@ -244,6 +257,7 @@ export function SkillsCliView() {
     setCollapsedGroupIds,
     setActiveSurface,
     setLinkMenuOpen,
+    setUnlinkMenuOpen,
     setIsExporting,
   });
 
@@ -321,7 +335,34 @@ export function SkillsCliView() {
               skills.length > 0 ? () => void handleExport("all") : undefined
             }
             isExporting={isExporting}
+            onCleanupUnavailable={() => {
+              if (cleanupCandidates.length === 0 || batchBusy) {
+                return;
+              }
+              captureReturnFocus(document.activeElement);
+              setActiveSurface(openSkillsCliCleanup());
+            }}
+            cleanupUnavailableCount={cleanupCandidates.length}
+            cleanupDisabled={batchBusy}
           />
+
+          {batchProgress ? (
+            <p
+              role="status"
+              aria-live="polite"
+              data-testid="skills-cli-batch-progress"
+              aria-label={t("skillsCli.batch.progressAria", {
+                completed: batchProgress.completed,
+                total: batchProgress.total,
+              })}
+              className="text-xs tabular-nums text-muted-foreground"
+            >
+              {t("skillsCli.batch.progress", {
+                completed: batchProgress.completed,
+                total: batchProgress.total,
+              })}
+            </p>
+          ) : null}
 
           {updateInventory.lastSuccessAt ? (
             <p
@@ -550,12 +591,16 @@ export function SkillsCliView() {
           selectedCount={selectedCardNames.size}
           summaries={linkSummaries}
           unlinkEnabled={unlinkEnabled}
-          busy={isMutating}
+          busy={batchBusy}
           exporting={isExporting}
           linkMenuOpen={linkMenuOpen}
           onLinkMenuOpenChange={setLinkMenuOpen}
+          unlinkMenuOpen={unlinkMenuOpen}
+          onUnlinkMenuOpenChange={setUnlinkMenuOpen}
           onLink={(agentId) => void handleLink(agentId)}
           onUnlink={() => void handleUnlink()}
+          onUnlinkPlatform={(agentId) => void handleUnlinkPlatform(agentId)}
+          onUpdate={() => void handleBatchUpdate()}
           onExportSelected={() => void handleExport("selected")}
           onUninstall={() =>
             setActiveSurface(openSkillsCliUninstall([...selectedCardNames]))
@@ -576,6 +621,21 @@ export function SkillsCliView() {
         }}
         returnFocusRef={installButtonRef}
         contentWidthPx={contentWidthPx}
+      />
+
+      <SkillsCliCleanupDialog
+        open={activeSurface?.kind === "cleanup"}
+        candidates={cleanupCandidates}
+        busy={batchBusy}
+        returnFocusRef={returnFocusRef}
+        onOpenChange={(open) => {
+          if (!open) {
+            setActiveSurface(closeSkillsCliSurface());
+          }
+        }}
+        onConfirm={(names) => {
+          setActiveSurface(openSkillsCliUninstall(names));
+        }}
       />
 
       <SkillsCliUninstallDialog
