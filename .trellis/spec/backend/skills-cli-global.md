@@ -11,10 +11,12 @@ This is **not** SkillPort Central (`~/.skillsmanage/skills/`) and **not** the
 `skillport-cli` binary (`shared-local-cli.md`). The npm package is pinned
 (`SKILLS_CLI_NPM_SPEC = "skills@1.5.23"`). Commands freeze a TargetContext,
 query `ensure_capability_for_target`, then build `SkillsCliTransport` only when
-the capability is open. This inventory task opens **Doctor**, **ListGlobal**,
-**InstallTargets**, **ReadSkillMd**, and **ExportInventory** on Remote. Remaining
-write capabilities stay `skills_cli.local_target_only` until a later child opens
-them. `RevealFolder` is permanently unsupported on Remote (no host file manager).
+the capability is open. Inventory opened **Doctor**, **ListGlobal**,
+**InstallTargets**, **ReadSkillMd**, and **ExportInventory** on Remote. This
+mutate task opens **LinkPlatform**, **UnlinkPlatform**, **PreviewRemove**,
+**RemoveGlobal**, and **LeftoverScan**. Remaining install/update capabilities
+stay `skills_cli.local_target_only`. `RevealFolder` is permanently unsupported
+on Remote (no host file manager).
 
 ## 2. Signatures
 
@@ -44,11 +46,19 @@ pub async fn skills_cli_link_platform(
     skill_name: String,
     skillport_agent_id: String,
 ) -> IpcResult<SkillsCliPlacement>;
+pub async fn skills_cli_link_platform_batch(
+    job_id: String,
+    items: Vec<SkillsCliPlacementBatchItem>,
+) -> IpcResult<SkillsCliPlacementMutationOutcome>;
 pub async fn skills_cli_unlink_platform(
     job_id: String,
     skill_name: String,
     skillport_agent_id: String,
 ) -> IpcResult<SkillsCliPlacement>;
+pub async fn skills_cli_unlink_platform_batch(
+    job_id: String,
+    items: Vec<SkillsCliPlacementBatchItem>,
+) -> IpcResult<SkillsCliPlacementMutationOutcome>;
 pub async fn skills_cli_export_inventory(path: String, json: String) -> IpcResult<()>;
 pub async fn cancel_skills_cli_job(job_id: String) -> IpcResult<bool>;
 pub async fn skills_cli_check_updates(job_id: String) -> IpcResult<SkillsCliUpdateInventory>;
@@ -69,7 +79,8 @@ pub async fn skills_cli_retry_update_recovery(
 Frontend: only `src/stores/skillsCliStore.ts` may `invoke` these commands.
 Renderer job IDs follow `job-correlation-cancellation.md`. Reveal does not accept a path.
 Export writer owns atomic persist; the renderer never receives filesystem write authority.
-`batchProgress` is the duplicate-submit lock for serial store loops (cleanup, apply-by-repo, per-platform unlink). Do not fold that lock into `skillsCliOperationBusy`: serial `applyUpdates` clears the exclusive job between groups and would throw busy mid-batch.
+`batchProgress` is the duplicate-submit lock for serial store loops (cleanup, apply-by-repo, Local per-item unlink). Do not fold that lock into `skillsCliOperationBusy`: serial `applyUpdates` clears the exclusive job between groups and would throw busy mid-batch.
+Remote link/unlink batches call `skills_cli_link_platform_batch` / `skills_cli_unlink_platform_batch` once so SSH round-trips stay `ceil(N/K)+C`. Local keeps the per-item commands.
 Cleanup candidates are skills whose placements are all `unavailable`. Group `stale` iff any placement `reasonCode` is `canonical_missing` (default selected); other unavailable reasonCodes are `platformUnavailable` (default unchecked, real uninstall). Confirm still uses `skills_cli_preview_remove_global` + existing `removeGlobalBatch`. The "all placements unavailable" predicate lives in one shared helper used by both the Unavailable badge and the cleanup set.
 
 ## 3. Contracts
@@ -80,12 +91,12 @@ Cleanup candidates are skills whose placements are all `unavailable`. Group `sta
   spawn, lock reads, leftover CLI protection, or origin annotation, and are
   zero-write. Do not use this machine's lock to protect remote leftover.
 
-| Capability | Local | Remote (inventory) | Opens in |
+| Capability | Local | Remote | Opens in |
 | --- | --- | --- | --- |
 | doctor | supported | supported | seam |
 | list / install_targets / read / export | supported | supported | inventory |
 | reveal | supported | permanently unsupported | — |
-| link / unlink / preview_remove / remove / leftover | supported | `local_target_only` | mutate |
+| link / unlink / preview_remove / remove / leftover | supported | supported | mutate |
 | preview_source / add / update family | supported | `local_target_only` | install-update |
 | cancel_job | supported | `local_target_only` | stays gated until a child opens the matching mutation |
 - **Ownership**: a path is CLI-owned only when `.skill-lock.json` (version 3)
@@ -124,15 +135,29 @@ Cleanup candidates are skills whose placements are all `unavailable`. Group `sta
   machine's home. Connect/auth failure is `skills_cli.remote_unavailable`
   (retryable); timeout stays `skills_cli.timeout`. Windows remote `dir` is
   `direct_copy`; do not guess junctions.
-- **Directory links**: Skills CLI managed links are Windows junctions (reparse
-  API, no `cmd.exe`/`mklink`/symlink privilege/copy fallback) or Unix directory
-  symlinks. Never auto-convert `direct_copy` into a junction/symlink. Never
-  delete an ordinary directory or call `remove_dir_all` on a platform path.
+- **Directory links**: Skills CLI managed links are Windows junctions (local
+  reparse API, no `cmd.exe`/`mklink`/symlink privilege/copy fallback) or Unix
+  directory symlinks. Remote Unix uses `ln -s`. Remote Windows uses
+  `cmd.exe //c mklink /J` through the remote `sh` layer because this process
+  has no reparse API on the remote host — the local mklink ban's premise does
+  not hold there. Never fall back to copy on Remote or Local. Never
+  auto-convert `direct_copy` into a junction/symlink. Never delete an ordinary
+  directory or call `remove_dir_all` on a platform path. Platform-slot delete
+  is Unix `rm -f` only when `[ -L ]`, or Windows `rmdir` for junctions;
+  ordinary directories report `skipped_not_link`. `rm -rf` is allowed only on
+  SkillPort-generated canonical backup paths (`.skillport-remove-<id>`), never
+  on a platform slot. Do not reuse `InstallTransport::remove_install` or
+  `ConnectedRemoteTarget::remove_tree` to delete a platform slot. Live SSH and
+  live Windows junction-via-sh remain UNVERIFIED.
 - **Remove recovery**: `skills_cli_remove_global` does not spawn `skills remove`
   and never uses unverified `--force`/`--keep-links`. Domain-local manifests live
-  under `skills_cli_remove_recovery_dir()`. Phases: prepared → staged →
-  metadata_committed → cleanup. Lock fingerprint CAS. Conflict is zero-write.
-  Direct copies are byte-preserved and never entered in the mutation path.
+  under `skills_cli_remove_recovery_dir()` on **this machine**. Local keeps that
+  path with no target subdirectory. Remote namespaces
+  `{app_data}/skills-cli/remove-recovery/{target_id}/`. Phases: prepared → staged →
+  metadata_committed → cleanup. Lock fingerprint SHA-256 is computed locally from
+  bytes. Conflict is zero-write. Direct copies are byte-preserved and never
+  entered in the mutation path. Remote leftover uses the remote lock, never this
+  machine's lock, and leftover apply holds that target's guard.
 - **Settings**: exact generic key `skills_cli.recent_sources` with
   `SettingCategory::SkillsCli`. Array, 0–8 items, 16 KiB serialized, 2048-byte
   item, no control chars, exact-trim, BTreeSet dedupe, Skills CLI source
@@ -160,9 +185,10 @@ Cleanup candidates are skills whose placements are all `unavailable`. Group `sta
 - **Leftover**: Local scan sets `cli_lock_protect=true` and excludes lock-owned
   canonicals, resolved links, **and** `{mapped_detected_agent.global_skills_dir}/<name>`
   when the lock contains `name`. Unlocked copies under the Universal root stay
-  eligible. Do not exclude the whole Universal root. Remote leftover must not
-  use this machine's lock. Local leftover apply holds the Local guard for the
-  whole delete loop; remote leftover apply holds that target's guard.
+  eligible. Do not exclude the whole Universal root. Remote leftover uses that
+  target's lock via `SkillsCliTransport` and must not read this machine's lock.
+  Local leftover apply holds the Local guard for the whole delete loop; remote
+  leftover apply holds that target's guard.
 - **Origin**: Local `get_skills_by_agent` annotates `install_origin` via
   `classify_local_path_origin`. Renderer never reads the lock.
   `link_type === "symlink"` is not automatically Central
@@ -232,11 +258,13 @@ command layer remaps it to `skills_cli.busy` so the UI sees one envelope.
   Remote doctor: constant remote command count for 1 vs 6 platforms; Node
   missing and too-old both `skills_cli.node_missing`; no `skills --help`.
 - Capability matrix: Remote + unopened capability → `skills_cli.local_target_only`
-  and zero writes; Remote + Doctor → Ok; Local + any capability → Ok.
-  `cli_lock_protect=false` does not exclude remote leftover.
+  and zero writes; Remote + Doctor / inventory reads / link / unlink /
+  preview_remove / remove / leftover → Ok; Local + any capability → Ok.
+  `cli_lock_protect=false` does not exclude remote leftover using this
+  machine's lock; remote leftover injects that target's lock ownership.
 - Leftover: lock canonical/link excluded; lock-named mapped agent copy
-  excluded; unlocked sibling copy still listed; remote scan ignores local lock
-  (lands in `remote-mutate`; this seam only keeps the lock-isolation rule).
+  excluded; unlocked sibling copy still listed; remote scan never reads the
+  local lock path.
 - Inventory: copy-only (no canonical) still listed with `installKind=copy`;
   lock name with no directories listed as `missing`; unknown `sourceType` →
   `sourceTypeBucket=unknown`; `placements` five-state table; compatible `agents`

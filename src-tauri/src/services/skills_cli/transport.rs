@@ -14,7 +14,9 @@ use std::time::Duration;
 use async_trait::async_trait;
 use tempfile::Builder;
 
-use crate::services::installation::fs_util::is_reparse_or_symlink;
+use crate::services::installation::fs_util::{
+    create_skills_cli_directory_link, is_reparse_or_symlink, ManagedDirectoryLinkKind,
+};
 use crate::targets::{
     connect_remote_target, remote_file_type_is_dir, shell_quote, ActiveTarget,
     ConnectedRemoteTarget, RemoteDirEntry, RemotePathInfo, TargetsError,
@@ -26,6 +28,12 @@ use super::argv::{
 use super::error::SkillsCliError;
 use super::lock::{remote_lock_path, skills_cli_lock_path_from_env};
 use super::probe::{build_path_probe_script, parse_path_probe_output, PathProbe, PathProbeKind};
+use super::remote_scripts::{
+    build_atomic_replace_script, build_create_managed_link_script,
+    build_create_managed_links_script, build_remove_canonical_backup_script, build_rename_script,
+    build_verified_link_remove_script, is_skillport_canonical_backup_path, is_windows_remote_os,
+    parse_verified_link_remove_output, VerifiedLinkRemoveStatus,
+};
 use super::runner::{CliOutput, NodeProcessRunner, RunnerRequest, SkillsCliRunner};
 use super::SkillsCliManagedLinkKind;
 use super::{doctor_with_program, resolve_node_program_from_env, SkillsCliDoctorReport};
@@ -40,8 +48,9 @@ fi
 "#;
 
 /// One Skills CLI IPC capability. Inventory opens ListGlobal / InstallTargets /
-/// ReadSkillMd / ExportInventory on Remote. RevealFolder stays permanently
-/// unsupported. Write capabilities stay gated until later children.
+/// ReadSkillMd / ExportInventory on Remote. This mutate task also opens
+/// LinkPlatform, UnlinkPlatform, PreviewRemove, RemoveGlobal, and LeftoverScan.
+/// RevealFolder stays permanently unsupported. Install/update stay gated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SkillsCliCapability {
     Doctor,
@@ -104,15 +113,15 @@ fn remote_capability_support(cap: SkillsCliCapability) -> RemoteCapabilitySuppor
         | SkillsCliCapability::ListGlobal
         | SkillsCliCapability::InstallTargets
         | SkillsCliCapability::ReadSkillMd
-        | SkillsCliCapability::ExportInventory => RemoteCapabilitySupport::Supported,
-        SkillsCliCapability::RevealFolder => RemoteCapabilitySupport::PermanentlyUnsupported,
-        SkillsCliCapability::PreviewSource
-        | SkillsCliCapability::AddGlobal
+        | SkillsCliCapability::ExportInventory
         | SkillsCliCapability::LinkPlatform
         | SkillsCliCapability::UnlinkPlatform
         | SkillsCliCapability::PreviewRemove
         | SkillsCliCapability::RemoveGlobal
-        | SkillsCliCapability::LeftoverScan
+        | SkillsCliCapability::LeftoverScan => RemoteCapabilitySupport::Supported,
+        SkillsCliCapability::RevealFolder => RemoteCapabilitySupport::PermanentlyUnsupported,
+        SkillsCliCapability::PreviewSource
+        | SkillsCliCapability::AddGlobal
         | SkillsCliCapability::CancelJob
         | SkillsCliCapability::CheckUpdates
         | SkillsCliCapability::UpdateInventory
@@ -163,6 +172,21 @@ pub(crate) trait SkillsCliFs: Send + Sync {
     async fn create_dir_all(&self, path: &str) -> Result<(), SkillsCliError>;
     async fn exists(&self, path: &str) -> Result<bool, SkillsCliError>;
     async fn probe_paths(&self, paths: &[String]) -> Result<Vec<PathProbe>, SkillsCliError>;
+    async fn create_managed_link(
+        &self,
+        target: &str,
+        link: &str,
+    ) -> Result<SkillsCliManagedLinkKind, SkillsCliError>;
+    async fn create_managed_links(&self, pairs: &[(String, String)]) -> Result<(), SkillsCliError>;
+    async fn remove_verified_link(
+        &self,
+        link: &str,
+    ) -> Result<VerifiedLinkRemoveStatus, SkillsCliError>;
+    async fn remove_verified_links(
+        &self,
+        links: &[String],
+    ) -> Result<Vec<(String, VerifiedLinkRemoveStatus)>, SkillsCliError>;
+    async fn rename(&self, from: &str, to: &str) -> Result<(), SkillsCliError>;
 }
 
 #[derive(Debug, Clone)]
@@ -226,10 +250,7 @@ impl SkillsCliPaths {
         if self.posix {
             crate::targets::remote_join(parent, child)
         } else {
-            Path::new(parent)
-                .join(child)
-                .to_string_lossy()
-                .into_owned()
+            Path::new(parent).join(child).to_string_lossy().into_owned()
         }
     }
 
@@ -357,6 +378,20 @@ impl SkillsCliTransport {
 
     pub(crate) fn is_remote(&self) -> bool {
         matches!(self.scope, SkillsCliScope::Remote(_))
+    }
+
+    pub(crate) fn mutation_target(&self) -> ActiveTarget {
+        match &self.scope {
+            SkillsCliScope::Local => ActiveTarget::Local,
+            SkillsCliScope::Remote(connection) => connection.active_target(),
+        }
+    }
+
+    pub(crate) fn recovery_target_id(&self) -> Option<&str> {
+        match &self.scope {
+            SkillsCliScope::Local => None,
+            SkillsCliScope::Remote(connection) => Some(connection.target_id()),
+        }
     }
 
     pub(crate) fn managed_link_kind(&self) -> SkillsCliManagedLinkKind {
@@ -494,8 +529,75 @@ fn parse_doctor_probe(stdout: &str) -> DoctorProbe {
     }
 }
 
-fn is_windows_remote_os(remote_os: &str) -> bool {
-    remote_os.eq_ignore_ascii_case("windows")
+fn local_remove_verified_link(
+    link: &str,
+    writes: &AtomicUsize,
+) -> Result<VerifiedLinkRemoveStatus, SkillsCliError> {
+    let path = Path::new(link);
+    let metadata = match std::fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(VerifiedLinkRemoveStatus::Absent);
+        }
+        Err(error) => {
+            return Err(SkillsCliError::Io {
+                context: "inspect link",
+                source: error,
+            });
+        }
+    };
+    if !is_reparse_or_symlink(&metadata) {
+        return Ok(VerifiedLinkRemoveStatus::SkippedNotLink);
+    }
+    writes.fetch_add(1, Ordering::SeqCst);
+    let result = if cfg!(windows) {
+        std::fs::remove_dir(path).or_else(|_| std::fs::remove_file(path))
+    } else {
+        std::fs::remove_file(path).or_else(|_| std::fs::remove_dir(path))
+    };
+    result
+        .map(|_| VerifiedLinkRemoveStatus::Removed)
+        .map_err(|error| SkillsCliError::Io {
+            context: "remove verified link",
+            source: error,
+        })
+}
+
+fn to_ipc_link_kind(kind: ManagedDirectoryLinkKind) -> SkillsCliManagedLinkKind {
+    match kind {
+        ManagedDirectoryLinkKind::WindowsJunction => SkillsCliManagedLinkKind::WindowsJunction,
+        ManagedDirectoryLinkKind::Symlink => SkillsCliManagedLinkKind::Symlink,
+    }
+}
+
+fn map_directory_link_error(
+    error: crate::services::installation::InstallationError,
+) -> SkillsCliError {
+    match error {
+        crate::services::installation::InstallationError::ManagedDirectoryLinkUnsupported => {
+            SkillsCliError::PlacementUnavailable
+        }
+        crate::services::installation::InstallationError::ManagedDirectoryLinkTargetMismatch => {
+            SkillsCliError::PlacementConflict
+        }
+        other => SkillsCliError::Io {
+            context: "managed directory link",
+            source: std::io::Error::other(other.to_string()),
+        },
+    }
+}
+
+fn map_create_link_error(error: TargetsError) -> SkillsCliError {
+    match error {
+        TargetsError::ProcessTimedOut { timeout_ms, .. } => {
+            SkillsCliError::Timeout(Duration::from_millis(timeout_ms as u64))
+        }
+        TargetsError::ProcessCancelled(_) => SkillsCliError::Cancelled,
+        _ => {
+            tracing::warn!("Skills CLI remote managed link could not be created");
+            SkillsCliError::PlacementUnavailable
+        }
+    }
 }
 
 fn map_connect_error(error: TargetsError) -> SkillsCliError {
@@ -764,6 +866,53 @@ impl SkillsCliFs for LocalSkillsCliFs {
     async fn probe_paths(&self, paths: &[String]) -> Result<Vec<PathProbe>, SkillsCliError> {
         paths.iter().map(|path| probe_local_path(path)).collect()
     }
+
+    async fn create_managed_link(
+        &self,
+        target: &str,
+        link: &str,
+    ) -> Result<SkillsCliManagedLinkKind, SkillsCliError> {
+        self.writes.fetch_add(1, Ordering::SeqCst);
+        let kind = create_skills_cli_directory_link(Path::new(target), Path::new(link))
+            .map_err(map_directory_link_error)?;
+        Ok(to_ipc_link_kind(kind))
+    }
+
+    async fn create_managed_links(&self, pairs: &[(String, String)]) -> Result<(), SkillsCliError> {
+        for (target, link) in pairs {
+            self.create_managed_link(target, link).await?;
+        }
+        Ok(())
+    }
+
+    async fn remove_verified_link(
+        &self,
+        link: &str,
+    ) -> Result<VerifiedLinkRemoveStatus, SkillsCliError> {
+        local_remove_verified_link(link, &self.writes)
+    }
+
+    async fn remove_verified_links(
+        &self,
+        links: &[String],
+    ) -> Result<Vec<(String, VerifiedLinkRemoveStatus)>, SkillsCliError> {
+        let mut out = Vec::with_capacity(links.len());
+        for link in links {
+            out.push((
+                link.clone(),
+                local_remove_verified_link(link, &self.writes)?,
+            ));
+        }
+        Ok(out)
+    }
+
+    async fn rename(&self, from: &str, to: &str) -> Result<(), SkillsCliError> {
+        self.writes.fetch_add(1, Ordering::SeqCst);
+        std::fs::rename(from, to).map_err(|error| SkillsCliError::Io {
+            context: "rename path",
+            source: error,
+        })
+    }
 }
 
 #[async_trait]
@@ -795,10 +944,7 @@ impl SkillsCliFs for RemoteSkillsCliFs {
             | Err(TargetsError::WslPathMissing(_))
             | Err(TargetsError::RemoteFileReadFailed { .. }) => Err(SkillsCliError::Io {
                 context: "read file",
-                source: std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "remote path missing",
-                ),
+                source: std::io::Error::new(std::io::ErrorKind::NotFound, "remote path missing"),
             }),
             Err(error) => Err(map_remote_error("read file", error)),
         }
@@ -806,9 +952,21 @@ impl SkillsCliFs for RemoteSkillsCliFs {
 
     async fn atomic_write(&self, path: &str, bytes: &[u8]) -> Result<(), SkillsCliError> {
         self.writes.fetch_add(1, Ordering::SeqCst);
+        let parent = crate::targets::remote_parent(path).unwrap_or_else(|| ".".to_string());
+        let temp = format!(
+            "{}/.skillport-skills-cli-lock-{}",
+            parent.trim_end_matches('/'),
+            uuid::Uuid::new_v4()
+        );
         self.connection
-            .write_file(path, bytes)
+            .write_file(&temp, bytes)
             .await
+            .map_err(|error| map_remote_error("atomic write", error))?;
+        let script = build_atomic_replace_script(&temp, path);
+        self.connection
+            .run_script(&script, &[])
+            .await
+            .map(|_| ())
             .map_err(|error| map_remote_error("atomic write", error))
     }
 
@@ -829,11 +987,19 @@ impl SkillsCliFs for RemoteSkillsCliFs {
     }
 
     async fn remove_tree(&self, path: &str) -> Result<(), SkillsCliError> {
+        if !is_skillport_canonical_backup_path(path) {
+            return Err(SkillsCliError::Io {
+                context: "remove tree",
+                source: std::io::Error::other("refused non-backup recursive delete"),
+            });
+        }
         self.writes.fetch_add(1, Ordering::SeqCst);
+        let script = build_remove_canonical_backup_script(path)?;
         self.connection
-            .remove_tree(path)
+            .run_script(&script, &[])
             .await
-            .map_err(|error| map_remote_error("remove tree", error))
+            .map(|_| ())
+            .map_err(|error| map_remote_error("remove backup", error))
     }
 
     async fn create_dir_all(&self, path: &str) -> Result<(), SkillsCliError> {
@@ -862,6 +1028,106 @@ impl SkillsCliFs for RemoteSkillsCliFs {
             .await
             .map_err(|error| map_remote_error("probe paths", error))?;
         Ok(parse_path_probe_output(paths, &stdout))
+    }
+
+    async fn create_managed_link(
+        &self,
+        target: &str,
+        link: &str,
+    ) -> Result<SkillsCliManagedLinkKind, SkillsCliError> {
+        let windows = is_windows_remote_os(self.connection.remote_os());
+        let script = build_create_managed_link_script(windows, target, link)?;
+        self.writes.fetch_add(1, Ordering::SeqCst);
+        if let Err(error) = self.connection.run_script(&script, &[]).await {
+            let _ = self.remove_verified_link(link).await;
+            return Err(map_create_link_error(error));
+        }
+        let link_path = link.to_string();
+        let probes = self.probe_paths(std::slice::from_ref(&link_path)).await;
+        let probe = match probes {
+            Ok(list) => list.into_iter().next(),
+            Err(error) => {
+                let _ = self.remove_verified_link(link).await;
+                return Err(error);
+            }
+        };
+        let kind = if windows {
+            SkillsCliManagedLinkKind::WindowsJunction
+        } else {
+            SkillsCliManagedLinkKind::Symlink
+        };
+        let posix = true;
+        let slot = probe
+            .as_ref()
+            .map(|item| super::probe::observed_slot_from_probe(item, target, kind, posix))
+            .unwrap_or(super::placement::ObservedSlot::Absent);
+        match slot {
+            super::placement::ObservedSlot::ManagedLink {
+                resolves_to_canonical: true,
+                kind: confirmed,
+            } => Ok(confirmed),
+            _ => {
+                let _ = self.remove_verified_link(link).await;
+                Err(SkillsCliError::PlacementUnavailable)
+            }
+        }
+    }
+
+    async fn create_managed_links(&self, pairs: &[(String, String)]) -> Result<(), SkillsCliError> {
+        if pairs.is_empty() {
+            return Ok(());
+        }
+        let windows = is_windows_remote_os(self.connection.remote_os());
+        let script = build_create_managed_links_script(windows, pairs)?;
+        self.writes.fetch_add(1, Ordering::SeqCst);
+        self.connection
+            .run_script(&script, &[])
+            .await
+            .map(|_| ())
+            .map_err(map_create_link_error)
+    }
+
+    async fn remove_verified_link(
+        &self,
+        link: &str,
+    ) -> Result<VerifiedLinkRemoveStatus, SkillsCliError> {
+        let link_path = link.to_string();
+        let results = self
+            .remove_verified_links(std::slice::from_ref(&link_path))
+            .await?;
+        Ok(results
+            .into_iter()
+            .next()
+            .map(|(_, status)| status)
+            .unwrap_or(VerifiedLinkRemoveStatus::Absent))
+    }
+
+    async fn remove_verified_links(
+        &self,
+        links: &[String],
+    ) -> Result<Vec<(String, VerifiedLinkRemoveStatus)>, SkillsCliError> {
+        if links.is_empty() {
+            return Ok(Vec::new());
+        }
+        let windows = is_windows_remote_os(self.connection.remote_os());
+        let script = build_verified_link_remove_script(windows, links);
+        self.writes.fetch_add(1, Ordering::SeqCst);
+        let stdout = self
+            .connection
+            .run_script(&script, &[])
+            .await
+            .map_err(|error| map_remote_error("remove verified link", error))?;
+        Ok(parse_verified_link_remove_output(links, &stdout))
+    }
+
+    async fn rename(&self, from: &str, to: &str) -> Result<(), SkillsCliError> {
+        self.writes.fetch_add(1, Ordering::SeqCst);
+        let script = build_rename_script(from, to);
+        self.connection
+            .run_script(&script, &[])
+            .await
+            .map(|_| ())
+            .map_err(|error| map_remote_error("rename path", error))
     }
 }
 

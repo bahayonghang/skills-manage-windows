@@ -42,10 +42,11 @@ pub(crate) async fn scan_platform_duplicate_skills_with_pool(
 
 /// 内核版本：扫描平台目录中 Central 已不存在但仍可删除的本平台副本。
 ///
-/// `cli_lock_protect` 仅在 Local target 为 true：读取本机 Skills CLI lock，
-/// 排除 lock 拥有的 canonical 目录及指向它们的 symlink/junction。远程扫描
-/// 不得使用本机 lock 证据（零 CLI 保护）。禁止仅因路径位于
-/// `~/.agents/skills/` 就整棵排除——无 lock 条目的副本仍是合法 leftover。
+/// `cli_lock_protect` only reads this machine's Skills CLI lock. Remote leftover
+/// protection must inject lock ownership via
+/// [`scan_deleted_platform_copies_with_ownership`] or
+/// [`scan_deleted_platform_copies_for_target`] so this machine's lock is never
+/// consulted.
 pub(crate) async fn scan_deleted_platform_copies_with_pool(
     pool: &DbPool,
     agent_ids: Option<Vec<String>>,
@@ -65,10 +66,52 @@ pub(crate) async fn scan_deleted_platform_copies_with_pool(
     .await
 }
 
+/// Leftover scan for the frozen target: Local uses this machine's lock;
+/// Remote loads that target's lock through SkillsCliTransport and never
+/// [`load_local_cli_lock_ownership`].
+pub(crate) async fn scan_deleted_platform_copies_for_target(
+    pool: &DbPool,
+    agent_ids: Option<Vec<String>>,
+    target: &crate::targets::ActiveTarget,
+) -> Result<Vec<DeletedPlatformCopyGroup>, CentralUpdatesError> {
+    use crate::services::skills_cli::{
+        load_lock_from_transport, SkillsCliCapability, SkillsCliTransport,
+    };
+    SkillsCliTransport::ensure_capability_for_target(target, SkillsCliCapability::LeftoverScan)
+        .map_err(map_cli_lock_error)?;
+    if SkillsCliTransport::uses_local_cli_lock(target) {
+        return scan_deleted_platform_copies_with_pool(pool, agent_ids, true).await;
+    }
+    let tx = SkillsCliTransport::for_target(target)
+        .await
+        .map_err(map_cli_lock_error)?;
+    let ownership = load_lock_from_transport(&tx)
+        .await
+        .map_err(map_cli_lock_error)?;
+    let root = std::path::PathBuf::from(tx.paths().canonical_root());
+    scan_deleted_platform_copies_with_ownership(pool, agent_ids, Some(&ownership), &root).await
+}
+
+fn map_cli_lock_error(error: crate::services::skills_cli::SkillsCliError) -> CentralUpdatesError {
+    match error {
+        crate::services::skills_cli::SkillsCliError::RemoteUnavailable => {
+            CentralUpdatesError::Remote(error.to_string())
+        }
+        crate::services::skills_cli::SkillsCliError::Io { context, source } => {
+            CentralUpdatesError::Io {
+                context: context.to_string(),
+                source,
+            }
+        }
+        other => CentralUpdatesError::Batch(other.to_string()),
+    }
+}
+
 /// Scan leftover copies against an injected lock-ownership snapshot.
 ///
-/// `ownership = None` is the remote / unprotected path. Tests inject a parsed
-/// lock and a temp Universal root so they never read the machine HOME lock.
+/// `cli_ownership = None` disables Skills CLI lock protection (tests / unprotected
+/// scans). Remote leftover must inject that target's lock ownership, never this
+/// machine's lock file.
 pub(crate) async fn scan_deleted_platform_copies_with_ownership(
     pool: &DbPool,
     agent_ids: Option<Vec<String>>,

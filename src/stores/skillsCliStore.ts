@@ -7,7 +7,9 @@ import {
   partitionUnlinkBatch,
   partitionUnlinkBatchForAgent,
   selectedSkillsInStoreOrder,
+  SKILLS_CLI_SKIP_ALREADY_LINKED,
   SKILLS_CLI_SKIP_NO_PLACEMENT,
+  SKILLS_CLI_SKIP_NOT_LINKED,
   type PlacementMutationOutcome,
   type PlacementPartitionItem,
 } from "@/pages/skillsCliBatchModel";
@@ -36,6 +38,7 @@ import {
   BUSY_ENVELOPE,
   SELECTION_EMPTY_ENVELOPE,
 } from "./skillsCliStore.updateSlice";
+import { useTargetStore } from "./targetStore";
 import type {
   SkillsCliBatchOperation,
   SkillsCliState,
@@ -160,6 +163,15 @@ function optimisticPlacement(
   };
 }
 
+function isRemoteSkillsCliTarget(): boolean {
+  const kind = useTargetStore.getState().activeTarget.kind;
+  return kind === "ssh" || kind === "wsl";
+}
+
+function placementKey(skillName: string, agentId: string): string {
+  return `${skillName}\0${agentId}`;
+}
+
 async function runPlacementBatch(
   get: () => SkillsCliState,
   set: (patch: Partial<SkillsCliState>) => void,
@@ -169,6 +181,9 @@ async function runPlacementBatch(
   const outcome = emptyPlacementOutcome();
   if (items.length === 0) {
     return outcome;
+  }
+  if (isRemoteSkillsCliTarget()) {
+    return runRemotePlacementBatch(get, set, items, kind);
   }
   const operation: SkillsCliBatchOperation = kind === "link" ? "link" : "unlink";
   set({ isMutating: true, actionError: null });
@@ -236,6 +251,156 @@ async function runPlacementBatch(
         });
       }
       incrementBatchProgress(get, set);
+    }
+  } finally {
+    clearBatchProgress(set);
+    if (get().isMutating) {
+      set({ isMutating: false, jobId: null });
+    }
+    await refreshInventoryAfterMutation(get, set);
+  }
+  return outcome;
+}
+
+async function runRemotePlacementBatch(
+  get: () => SkillsCliState,
+  set: (patch: Partial<SkillsCliState>) => void,
+  items: PlacementPartitionItem[],
+  kind: "link" | "unlink",
+): Promise<PlacementMutationOutcome> {
+  const outcome = emptyPlacementOutcome();
+  const operation: SkillsCliBatchOperation = kind === "link" ? "link" : "unlink";
+  const defaultSkip =
+    kind === "link" ? SKILLS_CLI_SKIP_ALREADY_LINKED : SKILLS_CLI_SKIP_NOT_LINKED;
+  const previousByKey = new Map<string, SkillsCliPlacement>();
+  set({ isMutating: true, actionError: null });
+  beginBatchProgress(set, operation, items.length);
+  const jobId = newJobId();
+  set({ jobId });
+  try {
+    for (const item of items) {
+      const previous =
+        get().skills
+          .find((skill) => skill.name === item.skillName)
+          ?.placements.find((placement) => placement.agentId === item.agentId) ??
+        item.placement;
+      previousByKey.set(placementKey(item.skillName, item.agentId), previous);
+      set({
+        skills: replacePlacement(
+          get().skills,
+          item.skillName,
+          item.agentId,
+          optimisticPlacement(previous, kind),
+        ),
+      });
+    }
+    const batchItems = items.map((item) => ({
+      skillName: item.skillName,
+      skillportAgentId: item.agentId,
+    }));
+    let result;
+    switch (kind) {
+      case "link":
+        result = await invoke("skills_cli_link_platform_batch", {
+          jobId,
+          items: batchItems,
+        });
+        break;
+      case "unlink":
+        result = await invoke("skills_cli_unlink_platform_batch", {
+          jobId,
+          items: batchItems,
+        });
+        break;
+      default: {
+        const _exhaustive: never = kind;
+        throw new Error(_exhaustive);
+      }
+    }
+    if (get().jobId === jobId) {
+      for (const item of result.failed) {
+        const previous = previousByKey.get(
+          placementKey(item.skillName, item.agentId),
+        );
+        if (previous) {
+          set({
+            skills: replacePlacement(
+              get().skills,
+              item.skillName,
+              item.agentId,
+              previous,
+            ),
+          });
+        }
+      }
+      for (const item of result.skipped) {
+        const previous = previousByKey.get(
+          placementKey(item.skillName, item.agentId),
+        );
+        if (previous) {
+          set({
+            skills: replacePlacement(
+              get().skills,
+              item.skillName,
+              item.agentId,
+              previous,
+            ),
+          });
+        }
+      }
+    }
+    for (const item of result.succeeded) {
+      outcome.succeeded.push({
+        skillName: item.skillName,
+        agentId: item.agentId,
+      });
+    }
+    for (const item of result.failed) {
+      outcome.failed.push({
+        skillName: item.skillName,
+        agentId: item.agentId,
+        errorCode: item.errorCode,
+      });
+    }
+    for (const item of result.skipped) {
+      outcome.skipped.push({
+        skillName: item.skillName,
+        agentId: item.agentId,
+        reasonCode: defaultSkip,
+      });
+    }
+    const progress = get().batchProgress;
+    if (progress) {
+      set({
+        batchProgress: { ...progress, completed: progress.total },
+      });
+    }
+  } catch (error) {
+    if (get().jobId === jobId) {
+      for (const item of items) {
+        const previous = previousByKey.get(
+          placementKey(item.skillName, item.agentId),
+        );
+        if (previous) {
+          set({
+            skills: replacePlacement(
+              get().skills,
+              item.skillName,
+              item.agentId,
+              previous,
+            ),
+          });
+        }
+      }
+      set({ actionError: backendErrorStateValue(error) });
+    }
+    const errorCode = errorCodeFrom(error);
+    for (const item of items) {
+      outcome.failed.push({
+        skillName: item.skillName,
+        agentId: item.agentId,
+        errorCode,
+      });
     }
   } finally {
     clearBatchProgress(set);

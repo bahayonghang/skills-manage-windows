@@ -66,6 +66,7 @@ export const GENERATED_IPC_COMMANDS = {
   skills_cli_export_inventory: command<{ path: string; json: string }, null>(),
   skills_cli_install_targets: command<undefined, SkillsCliInstallTarget[]>(),
   skills_cli_link_platform: command<{ jobId: string; skillName: string; skillportAgentId: string }, SkillsCliPlacement>(),
+  skills_cli_link_platform_batch: command<{ jobId: string; items: SkillsCliPlacementBatchItem[] }, SkillsCliPlacementMutationOutcome>(),
   skills_cli_list_global: command<undefined, SkillsCliGlobalSnapshot>(),
   skills_cli_preview_remove_global: command<{ skillName: string }, SkillsCliRemovePlan>(),
   skills_cli_preview_source: command<{ source: string }, SkillsCliSourcePreview>(),
@@ -74,6 +75,7 @@ export const GENERATED_IPC_COMMANDS = {
   skills_cli_retry_update_recovery: command<{ jobId: string; operationId: string }, SkillsCliApplyRecoveryResult>(),
   skills_cli_reveal_skill_folder: command<{ skillName: string }, null>(),
   skills_cli_unlink_platform: command<{ jobId: string; skillName: string; skillportAgentId: string }, SkillsCliPlacement>(),
+  skills_cli_unlink_platform_batch: command<{ jobId: string; items: SkillsCliPlacementBatchItem[] }, SkillsCliPlacementMutationOutcome>(),
   skills_cli_update_inventory: command<undefined, SkillsCliUpdateInventory>(),
   skills_cli_verify_update_baseline: command<{ jobId: string; skillNames: string[] }, SkillsCliUpdateInventory>(),
   test_ai_connection: command<undefined, AiConnectionTestResult_Serialize>(),
@@ -130,6 +132,7 @@ export const GENERATED_IPC_COMMAND_NAMES = [
   "skills_cli_export_inventory",
   "skills_cli_install_targets",
   "skills_cli_link_platform",
+  "skills_cli_link_platform_batch",
   "skills_cli_list_global",
   "skills_cli_preview_remove_global",
   "skills_cli_preview_source",
@@ -138,6 +141,7 @@ export const GENERATED_IPC_COMMAND_NAMES = [
   "skills_cli_retry_update_recovery",
   "skills_cli_reveal_skill_folder",
   "skills_cli_unlink_platform",
+  "skills_cli_unlink_platform_batch",
   "skills_cli_update_inventory",
   "skills_cli_verify_update_baseline",
   "test_ai_connection",
@@ -1056,10 +1060,36 @@ export type SkillsCliPlacement = {
 	reasonCode: string | null,
 };
 
+export type SkillsCliPlacementBatchItem = {
+	skillName: string,
+	skillportAgentId: string,
+};
+
 export type SkillsCliPlacementConflict = {
 	agentId: string,
 	displayName: string,
 	reasonCode: string,
+};
+
+export type SkillsCliPlacementMutationFailure = {
+	skillName: string,
+	agentId: string,
+	errorCode: string,
+};
+
+export type SkillsCliPlacementMutationItem = {
+	skillName: string,
+	agentId: string,
+};
+
+/**
+ *  Batch result for Skills CLI link/unlink. Remote callers must use this
+ *  entry so round-trips stay `ceil(N / K) + C` instead of N handshakes.
+ */
+export type SkillsCliPlacementMutationOutcome = {
+	succeeded: SkillsCliPlacementMutationItem[],
+	failed: SkillsCliPlacementMutationFailure[],
+	skipped: SkillsCliPlacementMutationItem[],
 };
 
 export type SkillsCliPlacementState = "managed_link" | "direct_copy" | "missing" | "conflict" | "unavailable";

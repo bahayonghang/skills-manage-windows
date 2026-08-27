@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "R1-R6 的权威契约：链接实现禁止项、Missing↔ManagedLink 互转、卸载四阶段与 lock fingerprint CAS、leftover 远端不读本机 lock"}
+{"file": ".trellis/spec/backend/skill-deletion-integrity.md", "reason": "R3/R4 安全卸载：禁止删除普通目录、禁止对平台路径递归删除、direct copies 按字节保留"}
+{"file": ".trellis/spec/backend/central-mutation-lock.md", "reason": "R5 锁顺序中的 acquire_target_mutation_guard，需确认其 target-scoped 语义可直接传远端 target"}
+{"file": ".trellis/spec/backend/exclusive-job-lifecycle.md", "reason": "R5 锁顺序的第一环 skills_cli lease，以及 Busy 的返回语义"}
+{"file": ".trellis/spec/backend/fs-db-operation-journal.md", "reason": "R4/R8 prepared→staged→metadata_committed→cleanup 阶段模型与 recovery manifest 的既有实现约定"}
+{"file": ".trellis/spec/backend/transactional-mutations.md", "reason": "R4 conflict 零写与「先 stage 后提交」的事务性写入约定"}
+{"file": ".trellis/spec/backend/startup-recovery.md", "reason": "R8 远端中断后的 recovery 需可重试并收敛，复用既有恢复入口语义"}
+{"file": ".trellis/spec/backend/transport-seam.md", "reason": "R1 远端链接操作走 seam，按 remote_os 分支而非在业务逻辑里 match target"}
+{"file": ".trellis/spec/backend/process-supervision.md", "reason": "R7 批量 link/unlink 的 SSH 往返控制与超时策略"}
+{"file": ".trellis/spec/backend/best-effort-writes.md", "reason": "R7 部分失败保留成功项并汇总 partial outcome 的既有约定"}
+{"file": ".trellis/tasks/08-27-skills-cli-availability-remote/research/current-state-evidence.md", "reason": "PlacementMutationOutcome 语义与本机 junction/symlink 实现位置的 file:line 证据"}

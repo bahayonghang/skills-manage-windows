@@ -146,6 +146,14 @@ export function registerSkillsCliFixtures(): void {
       managedLinkKind: "windows_junction",
       reasonCode: null,
     }),
+    skills_cli_link_platform_batch: ({ items }) => ({
+      succeeded: items.map((item) => ({
+        skillName: item.skillName,
+        agentId: item.skillportAgentId,
+      })),
+      failed: [],
+      skipped: [],
+    }),
     skills_cli_unlink_platform: ({ skillportAgentId }) => ({
       agentId: skillportAgentId,
       displayName: "Cursor",
@@ -153,6 +161,14 @@ export function registerSkillsCliFixtures(): void {
       state: "missing",
       managedLinkKind: null,
       reasonCode: null,
+    }),
+    skills_cli_unlink_platform_batch: ({ items }) => ({
+      succeeded: items.map((item) => ({
+        skillName: item.skillName,
+        agentId: item.skillportAgentId,
+      })),
+      failed: [],
+      skipped: [],
     }),
     skills_cli_reveal_skill_folder: () => null,
     skills_cli_export_inventory: () => null,

@@ -16,7 +16,7 @@ use crate::services::central_updates::inventory::{
     apply_skill_update_decisions_impl, clear_skill_update_inventory_impl,
     force_mirror_central_repositories_impl, force_update_central_skills_impl,
     get_skill_update_inventory_impl_scoped, refresh_skill_update_inventory_impl,
-    retry_failed_repositories_impl, scan_deleted_platform_copies_with_pool,
+    retry_failed_repositories_impl, scan_deleted_platform_copies_for_target,
     scan_platform_duplicate_skills_with_pool, DeletedPlatformCopyGroup,
     ForceRepositoryMirrorRequest, ForceRepositoryMirrorResult, ForceSkillUpdateRequest,
     ForceSkillUpdateResult, PlatformDuplicateGroup, SkillRefreshMode, SkillRefreshScope,
@@ -768,12 +768,6 @@ pub async fn scan_deleted_platform_copies(
             let active_target = request_context.target().clone();
             let pool = request_context.db().clone();
             let (_, target) = audit_target(&active_target);
-            // CLI lock protection applies only to the Local target; remote
-            // scans never consult this machine's lock file.
-            let cli_lock_protect =
-                crate::services::skills_cli::SkillsCliTransport::uses_local_cli_lock(
-                    &active_target,
-                );
             let definition = operation_definition("scan_deleted_platform_copies");
             crate::observability::run_operation(
                 &state,
@@ -784,7 +778,7 @@ pub async fn scan_deleted_platform_copies(
                         .count(SafeDetailKey::AffectedCount, groups.len() as u64)
                 },
                 || async {
-                    scan_deleted_platform_copies_with_pool(&pool, agent_ids, cli_lock_protect)
+                    scan_deleted_platform_copies_for_target(&pool, agent_ids, &active_target)
                         .await
                         .map_err(|error| central_failure(definition, error))
                 },

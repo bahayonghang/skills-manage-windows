@@ -624,6 +624,11 @@ fn ac2_capability_matrix_opens_inventory_reads_on_remote() {
         SkillsCliCapability::InstallTargets,
         SkillsCliCapability::ReadSkillMd,
         SkillsCliCapability::ExportInventory,
+        SkillsCliCapability::LinkPlatform,
+        SkillsCliCapability::UnlinkPlatform,
+        SkillsCliCapability::PreviewRemove,
+        SkillsCliCapability::RemoveGlobal,
+        SkillsCliCapability::LeftoverScan,
     ];
     for cap in open_on_remote {
         assert!(
@@ -1024,7 +1029,8 @@ fn skills_cli_business_logic_does_not_match_active_target() {
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("");
-        if file_name == "transport.rs" || file_name == "tests.rs" {
+        if file_name == "transport.rs" || file_name == "tests.rs" || file_name == "mutate_tests.rs"
+        {
             continue;
         }
         let source = std::fs::read_to_string(&path).unwrap();
@@ -1218,7 +1224,9 @@ fn assert_no_cli_spawn(runner: &crate::test_support::FakeRunner) {
 }
 
 async fn remote_list_call_count(skill_count: usize) -> usize {
-    let names: Vec<String> = (0..skill_count).map(|index| format!("skill-{index}")).collect();
+    let names: Vec<String> = (0..skill_count)
+        .map(|index| format!("skill-{index}"))
+        .collect();
     let name_refs: Vec<&str> = names.iter().map(String::as_str).collect();
     let runner = std::sync::Arc::new(crate::test_support::FakeRunner::new());
     runner.push_success(&lock_json(&name_refs));
@@ -1264,18 +1272,24 @@ async fn remote_list_round_trips_are_constant_and_do_not_spawn_cli() {
 async fn remote_missing_and_empty_lock_return_empty_skills_with_paths() {
     let runner = std::sync::Arc::new(crate::test_support::FakeRunner::new());
     runner.push_output(1, "", "");
-    let missing = list_global(&remote_tx(runner), &four_platform_pool("/mnt/remote-seam-home").await)
-        .await
-        .unwrap();
+    let missing = list_global(
+        &remote_tx(runner),
+        &four_platform_pool("/mnt/remote-seam-home").await,
+    )
+    .await
+    .unwrap();
     assert!(missing.skills.is_empty());
     assert!(missing.canonical_root.starts_with("/mnt/remote-seam-home"));
     assert!(missing.lock_path.starts_with("/mnt/remote-seam-home"));
 
     let empty = std::sync::Arc::new(crate::test_support::FakeRunner::new());
     empty.push_success(r#"{"version":3,"skills":{}}"#);
-    let snapshot = list_global(&remote_tx(empty), &four_platform_pool("/mnt/remote-seam-home").await)
-        .await
-        .unwrap();
+    let snapshot = list_global(
+        &remote_tx(empty),
+        &four_platform_pool("/mnt/remote-seam-home").await,
+    )
+    .await
+    .unwrap();
     assert!(snapshot.skills.is_empty());
     assert!(!snapshot.canonical_root.is_empty());
     assert!(!snapshot.lock_path.is_empty());
@@ -1364,12 +1378,11 @@ fn remote_unavailable_and_timeout_are_distinct() {
         timeout_ms: 10_000,
     });
     assert_eq!(timeout.ipc_code(), "skills_cli.timeout");
-    let unavailable = SkillsCliTransport::map_remote_error_for_tests(
-        TargetsError::RemoteCommandFailed {
+    let unavailable =
+        SkillsCliTransport::map_remote_error_for_tests(TargetsError::RemoteCommandFailed {
             status: exit_status(255),
             detail: "permission denied".to_string(),
-        },
-    );
+        });
     assert_eq!(unavailable.ipc_code(), "skills_cli.remote_unavailable");
     let connect = SkillsCliTransport::map_connect_error_for_tests(TargetsError::io(
         "Failed to start ssh",
@@ -1416,4 +1429,3 @@ async fn remote_list_timeout_and_stderr_sentinel_stay_out_of_ipc() {
     let logged = String::from_utf8(logs.lock().unwrap().clone()).unwrap();
     assert!(!logged.contains(SENTINEL), "{logged}");
 }
-

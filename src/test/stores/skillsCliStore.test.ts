@@ -10,6 +10,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 import { ipcFixtureError } from "@/lib/ipc/errors";
 import { useSkillsCliStore } from "@/stores/skillsCliStore";
+import { useTargetStore } from "@/stores/targetStore";
 import { ipcInvokeCalls, ipcInvokedCommands, mockIpcCommand, mockIpcCommands } from "@/test/support/ipcMock";
 import {
   EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
@@ -441,7 +442,17 @@ const missingPlacement = {
 };
 
 describe("skillsCliStore placement mutations", () => {
-  beforeEach(resetState);
+  beforeEach(() => {
+    resetState();
+    useTargetStore.setState({
+      activeTarget: {
+        id: "local",
+        kind: "local",
+        label: "Local",
+        isActive: true,
+      },
+    });
+  });
 
   it("skips link/unlink IPC for direct_copy, conflict, and unavailable", async () => {
     useSkillsCliStore.setState({
@@ -627,6 +638,119 @@ describe("skillsCliStore placement mutations", () => {
       "skills_cli.placement_unavailable",
     ].sort());
     expect(ipcInvokeCalls("skills_cli_unlink_platform")).toHaveLength(1);
+  });
+
+  it("issues one remote batch IPC instead of N per-skill handshakes", async () => {
+    useTargetStore.setState({
+      activeTarget: {
+        id: "ssh-1",
+        kind: "ssh",
+        label: "SSH",
+        isActive: true,
+      },
+    });
+    const missingA = globalSkill("alpha", [placement("cursor", "missing")]);
+    const missingB = globalSkill("beta", [placement("cursor", "missing")]);
+    const copyC = globalSkill("gamma", [placement("cursor", "direct_copy")]);
+    useSkillsCliStore.setState({
+      skills: [missingA, missingB, copyC],
+      targets,
+      doctor,
+    });
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_install_targets: targets,
+      skills_cli_list_global: listGlobal,
+      skills_cli_link_platform_batch: ({
+        items,
+      }: {
+        items: Array<{ skillName: string; skillportAgentId: string }>;
+      }) => ({
+        succeeded: items.map((item) => ({
+          skillName: item.skillName,
+          agentId: item.skillportAgentId,
+        })),
+        failed: [],
+        skipped: [],
+      }),
+    });
+
+    const outcome = await useSkillsCliStore.getState().linkPlatformBatch(
+      ["alpha", "beta", "gamma"],
+      "cursor",
+    );
+
+    expect(outcome.succeeded).toEqual([
+      { skillName: "alpha", agentId: "cursor" },
+      { skillName: "beta", agentId: "cursor" },
+    ]);
+    expect(outcome.skipped).toEqual([
+      {
+        skillName: "gamma",
+        agentId: "cursor",
+        reasonCode: "skills_cli.direct_copy_not_toggleable",
+      },
+    ]);
+    expect(ipcInvokeCalls("skills_cli_link_platform")).toHaveLength(0);
+    expect(ipcInvokeCalls("skills_cli_link_platform_batch")).toHaveLength(1);
+    const args = ipcInvokeCalls("skills_cli_link_platform_batch")[0]?.args as {
+      items: Array<{ skillName: string; skillportAgentId: string }>;
+    };
+    expect(args.items).toEqual([
+      { skillName: "alpha", skillportAgentId: "cursor" },
+      { skillName: "beta", skillportAgentId: "cursor" },
+    ]);
+  });
+
+  it("keeps remote unlink on one batch IPC and preserves earlier successes in the outcome", async () => {
+    useTargetStore.setState({
+      activeTarget: {
+        id: "wsl-1",
+        kind: "wsl",
+        label: "WSL",
+        isActive: true,
+      },
+    });
+    useSkillsCliStore.setState({
+      skills: [
+        globalSkill("linked-a", [placement("cursor", "managed_link")]),
+        globalSkill("linked-b", [placement("cursor", "managed_link")]),
+      ],
+      doctor,
+      targets,
+    });
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_install_targets: targets,
+      skills_cli_list_global: listGlobal,
+      skills_cli_unlink_platform_batch: () => ({
+        succeeded: [{ skillName: "linked-a", agentId: "cursor" }],
+        failed: [
+          {
+            skillName: "linked-b",
+            agentId: "cursor",
+            errorCode: "skills_cli.busy",
+          },
+        ],
+        skipped: [],
+      }),
+    });
+    const outcome = await useSkillsCliStore.getState().unlinkPlatformBatch(
+      ["linked-a", "linked-b"],
+      "cursor",
+    );
+    expect(outcome.succeeded).toEqual([
+      { skillName: "linked-a", agentId: "cursor" },
+    ]);
+    expect(outcome.failed).toEqual([
+      {
+        skillName: "linked-b",
+        agentId: "cursor",
+        errorCode: "skills_cli.busy",
+      },
+    ]);
+    expect(ipcInvokeCalls("skills_cli_unlink_platform")).toHaveLength(0);
+    expect(ipcInvokeCalls("skills_cli_unlink_platform_batch")).toHaveLength(1);
   });
 
   it("removes serially, restores a failed name, and still refreshes afterwards", async () => {

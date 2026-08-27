@@ -24,6 +24,7 @@ export interface SkillsCliBatchBarProps {
   onUninstall: () => void;
   onClear: () => void;
   mutationLockReason?: string;
+  updateLockReason?: string;
 }
 
 export const ICON_HIT =
@@ -54,12 +55,14 @@ export function SkillsCliBatchBar({
   onUninstall,
   onClear,
   mutationLockReason,
+  updateLockReason,
 }: SkillsCliBatchBarProps) {
   const { t } = useTranslation();
   if (selectedCount <= 0) {
     return null;
   }
-  const mutationsLocked = busy || Boolean(mutationLockReason);
+  const placementLocked = busy || Boolean(mutationLockReason);
+  const updateLocked = busy || Boolean(updateLockReason);
   const anyLinkable = summaries.some((item) => item.linkableCount > 0);
 
   return (
@@ -77,8 +80,8 @@ export function SkillsCliBatchBar({
         type="button"
         variant="outline"
         className="min-h-10"
-        disabled={mutationsLocked}
-        title={mutationLockReason}
+        disabled={updateLocked}
+        title={updateLockReason}
         onClick={onUpdate}
         aria-label={t("skillsCli.batch.updateAria")}
         data-testid="skills-cli-batch-update"
@@ -90,7 +93,7 @@ export function SkillsCliBatchBar({
         onOpenChange={onLinkMenuOpenChange}
       >
         <MenuPrimitive.Trigger
-          disabled={mutationsLocked || !anyLinkable}
+          disabled={placementLocked || !anyLinkable}
           render={
             <Button
               type="button"
@@ -112,7 +115,7 @@ export function SkillsCliBatchBar({
           >
             <MenuPrimitive.Popup className={MENU_POPUP_CLASS}>
               {summaries.map((summary) => {
-                const disabled = summary.linkableCount === 0 || mutationsLocked;
+                const disabled = summary.linkableCount === 0 || placementLocked;
                 return (
                   <MenuPrimitive.Item
                     key={summary.agentId}
@@ -161,7 +164,7 @@ export function SkillsCliBatchBar({
         onOpenChange={onUnlinkMenuOpenChange}
       >
         <MenuPrimitive.Trigger
-          disabled={mutationsLocked || !unlinkEnabled}
+          disabled={placementLocked || !unlinkEnabled}
           render={
             <Button
               type="button"
@@ -183,7 +186,7 @@ export function SkillsCliBatchBar({
           >
             <MenuPrimitive.Popup className={MENU_POPUP_CLASS}>
               {summaries.map((summary) => {
-                const disabled = summary.managedCount === 0 || mutationsLocked;
+                const disabled = summary.managedCount === 0 || placementLocked;
                 return (
                   <MenuPrimitive.Item
                     key={summary.agentId}
@@ -219,13 +222,13 @@ export function SkillsCliBatchBar({
                 );
               })}
               <MenuPrimitive.Item
-                disabled={mutationsLocked || !unlinkEnabled}
+                disabled={placementLocked || !unlinkEnabled}
                 label={t("skillsCli.batch.unlinkAllAria")}
                 onClick={onUnlink}
                 data-testid="skills-cli-batch-unlink-all"
                 className={cn(
                   "flex cursor-pointer flex-col gap-0.5 rounded-md px-2.5 py-1.5 outline-none data-[highlighted]:bg-accent/60",
-                  (mutationsLocked || !unlinkEnabled) && "cursor-default opacity-50",
+                  (placementLocked || !unlinkEnabled) && "cursor-default opacity-50",
                 )}
               >
                 {t("skillsCli.batch.unlinkAll")}
@@ -247,7 +250,7 @@ export function SkillsCliBatchBar({
         type="button"
         variant="destructive"
         className="min-h-10"
-        disabled={mutationsLocked}
+        disabled={placementLocked}
         title={mutationLockReason}
         onClick={onUninstall}
       >

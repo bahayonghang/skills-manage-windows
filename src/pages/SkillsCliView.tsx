@@ -71,7 +71,7 @@ export function SkillsCliView() {
   const { t } = useTranslation();
   const activeTarget = useTargetStore((state) => state.activeTarget);
   const isLocal = isLocalTarget(activeTarget);
-  const mutationLockReason = skillsCliRemoteMutationLockReason(isLocal, t);
+  const installUpdateLockReason = skillsCliRemoteMutationLockReason(isLocal, t);
 
   const skills = useSkillsCliStore((state) => state.skills);
   const targets = useSkillsCliStore((state) => state.targets);
@@ -282,7 +282,7 @@ export function SkillsCliView() {
         isRefreshing={isRefreshing}
         isCheckingUpdates={updateJob.phase === "checking"}
         installAvailable={SKILLS_CLI_INSTALL_SURFACE_AVAILABLE}
-        mutationLockReason={mutationLockReason}
+        mutationLockReason={installUpdateLockReason}
         onRefresh={() => void loadAll()}
         onCheckUpdates={() => {
           void useSkillsCliStore
@@ -325,11 +325,7 @@ export function SkillsCliView() {
             }
             isExporting={isExporting}
             onCleanupUnavailable={() => {
-              if (
-                cleanupCandidates.length === 0 ||
-                batchBusy ||
-                mutationLockReason
-              ) {
+              if (cleanupCandidates.length === 0 || batchBusy) {
                 return;
               }
               captureReturnFocus(document.activeElement);
@@ -337,7 +333,6 @@ export function SkillsCliView() {
             }}
             cleanupUnavailableCount={cleanupCandidates.length}
             cleanupDisabled={batchBusy}
-            mutationLockReason={mutationLockReason}
           />
 
           {batchProgress ? (
@@ -506,7 +501,7 @@ export function SkillsCliView() {
                         onSelectAll={() => handleSelectAll(bucket)}
                         updateCount={updateCount}
                         onUpdateAll={
-                          mutationLockReason
+                          installUpdateLockReason
                             ? undefined
                             : updateCount > 0 && groupRepositoryKey
                             ? () =>
@@ -558,7 +553,6 @@ export function SkillsCliView() {
                                 );
                               }}
                               isLoading={isMutating}
-                              uninstallLockReason={mutationLockReason}
                             />
                           ))}
                         </div>
@@ -606,7 +600,7 @@ export function SkillsCliView() {
             setSelectMode(false);
             setSelectedCardNames(new Set());
           }}
-          mutationLockReason={mutationLockReason}
+          updateLockReason={installUpdateLockReason}
         />
       ) : null}
 
@@ -702,7 +696,7 @@ export function SkillsCliView() {
           }
           setActiveSurface(openSkillsCliUninstall([detailSkill.name]));
         }}
-        mutationLockReason={mutationLockReason}
+        mutationLockReason={installUpdateLockReason}
       />
 
       <SkillsCliUpdateDrawer

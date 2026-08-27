@@ -221,7 +221,8 @@ export function SkillsCliDetailDrawer({
       ? formatRelativeTime(timeValue, i18n.language, nowMs ?? Date.now())
       : null;
   const showUpdateButton = updateAvailable && onUpdate != null;
-  const actionsLocked = isMutating || aggregateBusy || Boolean(mutationLockReason);
+  const placementLocked = isMutating || aggregateBusy;
+  const installUpdateLocked = isMutating || Boolean(mutationLockReason);
   const docBusy = visibleDoc.status === "loading";
 
   function markBusy(ids: readonly string[], next: boolean) {
@@ -436,7 +437,7 @@ export function SkillsCliDetailDrawer({
                         variant="outline"
                         size="sm"
                         data-testid="skills-cli-detail-link-all"
-                        disabled={actionsLocked}
+                        disabled={placementLocked}
                         title={mutationLockReason}
                         onClick={() => void runAggregate("linkAll")}
                       >
@@ -449,7 +450,7 @@ export function SkillsCliDetailDrawer({
                         size="sm"
                         data-testid="skills-cli-detail-unlink-all"
                         disabled={
-                          actionsLocked || summary.aggregate === "disabled"
+                          placementLocked || summary.aggregate === "disabled"
                         }
                         title={
                           mutationLockReason ??
@@ -477,7 +478,7 @@ export function SkillsCliDetailDrawer({
                       const reason = rowReason(row, t);
                       const rowBusy = busy.has(row.agentId);
                       const switchDisabled =
-                        row.switchDisabled || actionsLocked || rowBusy;
+                        row.switchDisabled || placementLocked || rowBusy;
                       const switchLabel = switchDisabled
                         ? t("skillsCli.detail.switchDisabled", {
                             platform: row.displayName,
@@ -609,7 +610,7 @@ export function SkillsCliDetailDrawer({
                   <Button
                     type="button"
                     data-testid="skills-cli-detail-update"
-                    disabled={isMutating || Boolean(mutationLockReason)}
+                    disabled={installUpdateLocked}
                     title={mutationLockReason}
                     onClick={onUpdate}
                   >
@@ -631,8 +632,7 @@ export function SkillsCliDetailDrawer({
                   type="button"
                   variant="destructive"
                   data-testid="skills-cli-detail-uninstall"
-                  disabled={isMutating || Boolean(mutationLockReason)}
-                  title={mutationLockReason}
+                  disabled={isMutating}
                   onClick={onUninstall}
                 >
                   <Trash2 className="size-4" />

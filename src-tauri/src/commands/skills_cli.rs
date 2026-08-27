@@ -23,7 +23,8 @@ use crate::services::skills_cli::updates::{
 };
 use crate::services::skills_cli::{
     SkillsCliAddResult, SkillsCliCapability, SkillsCliDoctorReport, SkillsCliError,
-    SkillsCliGlobalSnapshot, SkillsCliInstallTarget, SkillsCliPlacement, SkillsCliRemovePlan,
+    SkillsCliGlobalSnapshot, SkillsCliInstallTarget, SkillsCliPlacement,
+    SkillsCliPlacementBatchItem, SkillsCliPlacementMutationOutcome, SkillsCliRemovePlan,
     SkillsCliRemoveResult, SkillsCliSkillDoc, SkillsCliSourcePreview, SkillsCliTransport,
 };
 use crate::targets::ActiveTarget;
@@ -416,6 +417,114 @@ pub async fn skills_cli_unlink_platform(
                 )
                 .await
                 .map_err(|error| skills_cli_failure(definition, &error))
+            },
+        )
+        .await
+    })
+}
+
+#[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn skills_cli_link_platform_batch(
+    state: State<'_, AppState>,
+    job_id: String,
+    items: Vec<SkillsCliPlacementBatchItem>,
+) -> crate::ipc_error::IpcResult<SkillsCliPlacementMutationOutcome> {
+    crate::ipc_boundary_async!("skills_cli_link_platform_batch", {
+        if items.is_empty() {
+            return Ok(SkillsCliPlacementMutationOutcome::default());
+        }
+        let lease = state
+            .skills_cli_jobs
+            .acquire(&job_id)
+            .map_err(job_lease_error)?;
+        let context = state.resolve_target_context().await?;
+        let active_target = context.target().clone();
+        let pool = context.db().clone();
+        require_capability(&active_target, SkillsCliCapability::LinkPlatform)?;
+        let tx = open_transport(&active_target).await?;
+        let pairs: Vec<(String, String)> = items
+            .iter()
+            .map(|item| (item.skill_name.clone(), item.skillport_agent_id.clone()))
+            .collect();
+        let requested = pairs.len() as u64;
+        let definition = operation_definition("skills_cli_link_platform_batch");
+        let subject = items[0].skill_name.clone();
+        let operation_context = OperationContext::new(OperationTarget::local())
+            .subject(OperationSubjectKind::Skill, SafeIdentifier::new(&subject));
+        crate::observability::run_operation(
+            &state,
+            definition,
+            operation_context,
+            move |outcome: &SkillsCliPlacementMutationOutcome| {
+                SafeOperationResult::succeeded("Linked Skills CLI platform placements.")
+                    .flag(SafeDetailKey::Changed, !outcome.succeeded.is_empty())
+                    .count(SafeDetailKey::RequestedCount, requested)
+                    .count(
+                        SafeDetailKey::SucceededCount,
+                        outcome.succeeded.len() as u64,
+                    )
+                    .count(SafeDetailKey::FailedCount, outcome.failed.len() as u64)
+                    .count(SafeDetailKey::SkippedCount, outcome.skipped.len() as u64)
+            },
+            || async move {
+                domain::link_platforms_batch(&tx, &pool, &pairs, Some(lease.cancel_flag()))
+                    .await
+                    .map_err(|error| skills_cli_failure(definition, &error))
+            },
+        )
+        .await
+    })
+}
+
+#[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
+pub async fn skills_cli_unlink_platform_batch(
+    state: State<'_, AppState>,
+    job_id: String,
+    items: Vec<SkillsCliPlacementBatchItem>,
+) -> crate::ipc_error::IpcResult<SkillsCliPlacementMutationOutcome> {
+    crate::ipc_boundary_async!("skills_cli_unlink_platform_batch", {
+        if items.is_empty() {
+            return Ok(SkillsCliPlacementMutationOutcome::default());
+        }
+        let lease = state
+            .skills_cli_jobs
+            .acquire(&job_id)
+            .map_err(job_lease_error)?;
+        let context = state.resolve_target_context().await?;
+        let active_target = context.target().clone();
+        let pool = context.db().clone();
+        require_capability(&active_target, SkillsCliCapability::UnlinkPlatform)?;
+        let tx = open_transport(&active_target).await?;
+        let pairs: Vec<(String, String)> = items
+            .iter()
+            .map(|item| (item.skill_name.clone(), item.skillport_agent_id.clone()))
+            .collect();
+        let requested = pairs.len() as u64;
+        let definition = operation_definition("skills_cli_unlink_platform_batch");
+        let subject = items[0].skill_name.clone();
+        let operation_context = OperationContext::new(OperationTarget::local())
+            .subject(OperationSubjectKind::Skill, SafeIdentifier::new(&subject));
+        crate::observability::run_operation(
+            &state,
+            definition,
+            operation_context,
+            move |outcome: &SkillsCliPlacementMutationOutcome| {
+                SafeOperationResult::succeeded("Unlinked Skills CLI platform placements.")
+                    .flag(SafeDetailKey::Changed, !outcome.succeeded.is_empty())
+                    .count(SafeDetailKey::RequestedCount, requested)
+                    .count(
+                        SafeDetailKey::SucceededCount,
+                        outcome.succeeded.len() as u64,
+                    )
+                    .count(SafeDetailKey::FailedCount, outcome.failed.len() as u64)
+                    .count(SafeDetailKey::SkippedCount, outcome.skipped.len() as u64)
+            },
+            || async move {
+                domain::unlink_platforms_batch(&tx, &pool, &pairs, Some(lease.cancel_flag()))
+                    .await
+                    .map_err(|error| skills_cli_failure(definition, &error))
             },
         )
         .await

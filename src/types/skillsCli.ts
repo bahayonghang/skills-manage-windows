@@ -16,6 +16,10 @@ export type {
   SkillsCliRemoveResult,
   SkillsCliRemovePlacementSummary,
   SkillsCliPlacementConflict,
+  SkillsCliPlacementBatchItem,
+  SkillsCliPlacementMutationOutcome,
+  SkillsCliPlacementMutationItem,
+  SkillsCliPlacementMutationFailure,
 } from "@/lib/ipc/generatedCommandMap";
 
 export interface SkillsCliInstallTarget {

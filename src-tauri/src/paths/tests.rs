@@ -243,6 +243,22 @@ fn skills_cli_remove_recovery_dir_is_under_app_data() {
 }
 
 #[test]
+fn skills_cli_remove_recovery_local_path_has_no_target_subdirectory() {
+    let app_data = Path::new("/tmp/.skillsmanage");
+    let local = skills_cli_remove_recovery_dir_from_app_data(app_data);
+    let remote = skills_cli_remove_recovery_dir_for_target_from_app_data(app_data, "ssh-cli-test");
+    assert_eq!(
+        local,
+        Path::new("/tmp/.skillsmanage/skills-cli/remove-recovery")
+    );
+    assert_eq!(
+        remote,
+        Path::new("/tmp/.skillsmanage/skills-cli/remove-recovery/ssh-cli-test")
+    );
+    assert_ne!(local, remote);
+}
+
+#[test]
 fn expand_remote_home_path_preserves_root_home() {
     let expanded = expand_remote_home_path("~", "/");
     assert_eq!(expanded, "/");

@@ -1,9 +1,9 @@
 //! Skills CLI global management service.
 //!
 //! Wraps the official `skills` npm package (PIN: [`SKILLS_CLI_NPM_SPEC`]) for
-//! the `-g` lifecycle. Local and Remote share one transport seam; this task
-//! opens doctor plus read inventory capabilities on Remote. Write capabilities
-//! stay gated.
+//! the `-g` lifecycle. Local and Remote share one transport seam. This mutate
+//! task opens LinkPlatform, UnlinkPlatform, PreviewRemove, RemoveGlobal, and
+//! LeftoverScan on Remote. Install/update capabilities stay gated.
 
 mod agent_map;
 mod argv;
@@ -15,6 +15,7 @@ mod link;
 mod lock;
 mod placement;
 mod probe;
+mod remote_scripts;
 mod remove;
 mod runner;
 mod transport;
@@ -33,7 +34,9 @@ pub use argv::{
 pub use error::SkillsCliError;
 pub(crate) use export::export_inventory;
 pub(crate) use files::{read_skill_md, reveal_skill_folder};
-pub(crate) use link::{link_platform, unlink_platform};
+pub(crate) use link::{
+    link_platform, link_platforms_batch, unlink_platform, unlink_platforms_batch,
+};
 pub use lock::{
     annotate_platform_install_origins, annotate_platform_install_origins_with,
     classify_local_path_origin, is_mapped_agent_lock_copy, is_path_inside_owned_canonical,
@@ -242,6 +245,42 @@ pub struct SkillsCliRemoveResult {
     pub retained_direct_copy_agent_ids: Vec<String>,
 }
 
+/// Batch result for Skills CLI link/unlink. Remote callers must use this
+/// entry so round-trips stay `ceil(N / K) + C` instead of N handshakes.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
+pub struct SkillsCliPlacementMutationOutcome {
+    pub succeeded: Vec<SkillsCliPlacementMutationItem>,
+    pub failed: Vec<SkillsCliPlacementMutationFailure>,
+    pub skipped: Vec<SkillsCliPlacementMutationItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
+pub struct SkillsCliPlacementMutationItem {
+    pub skill_name: String,
+    pub agent_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
+pub struct SkillsCliPlacementMutationFailure {
+    pub skill_name: String,
+    pub agent_id: String,
+    pub error_code: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
+pub struct SkillsCliPlacementBatchItem {
+    pub skill_name: String,
+    pub skillport_agent_id: String,
+}
+
 // ─── Launcher helpers ────────────────────────────────────────────────────────
 
 fn resolve_launcher() -> Result<NodeLauncher, SkillsCliError> {
@@ -350,7 +389,7 @@ fn is_missing_path(error: &SkillsCliError) -> bool {
     matches!(error, SkillsCliError::Io { source, .. } if source.kind() == std::io::ErrorKind::NotFound)
 }
 
-async fn load_lock_from_transport(
+pub(crate) async fn load_lock_from_transport(
     tx: &SkillsCliTransport,
 ) -> Result<lock::CliLockOwnership, SkillsCliError> {
     match tx
@@ -433,16 +472,13 @@ pub(crate) async fn list_global(
     let mut skills = Vec::new();
     for (name, entry) in ownership.iter() {
         let canonical = paths.join_child(paths.canonical_root(), name);
-        let canonical_owned =
-            probe::canonical_owned_from_probe(probe_map.get(&canonical));
+        let canonical_owned = probe::canonical_owned_from_probe(probe_map.get(&canonical));
         let mut slots = HashMap::new();
         for (agent, platform) in mapped.iter().zip(placement_platforms.iter()) {
             let target_path = paths.join_child(&agent.global_skills_dir, name);
             let slot = probe_map
                 .get(&target_path)
-                .map(|item| {
-                    probe::observed_slot_from_probe(item, &canonical, link_kind, posix)
-                })
+                .map(|item| probe::observed_slot_from_probe(item, &canonical, link_kind, posix))
                 .unwrap_or(placement::ObservedSlot::Absent);
             slots.insert(platform.agent_id.clone(), (target_path, slot));
         }
@@ -505,6 +541,43 @@ pub(crate) fn mapped_inventory_platforms(
         });
     }
     platforms
+}
+
+pub(crate) async fn mapped_inventory_platforms_via_transport(
+    tx: &SkillsCliTransport,
+    pool: &DbPool,
+) -> Result<Vec<inventory::InventoryPlatform>, SkillsCliError> {
+    let agents = crate::db::get_all_agents(pool)
+        .await
+        .map_err(|error| SkillsCliError::Io {
+            context: "read platforms",
+            source: std::io::Error::other(error.to_string()),
+        })?;
+    if !tx.is_remote() {
+        return Ok(mapped_inventory_platforms(&agents));
+    }
+    Ok(SKILLS_CLI_AGENT_MAP
+        .iter()
+        .filter_map(|(id, _)| agents.iter().find(|agent| agent.id == *id))
+        .map(|agent| inventory::InventoryPlatform {
+            agent_id: agent.id.clone(),
+            display_name: agent.display_name.clone(),
+            global_skills_dir: PathBuf::from(&agent.global_skills_dir),
+            is_enabled: agent.is_enabled,
+            is_detected: true,
+            supports_local_placement: true,
+        })
+        .collect())
+}
+
+pub(crate) fn remove_recovery_dir_for_transport(tx: &SkillsCliTransport) -> PathBuf {
+    match tx.recovery_target_id() {
+        Some(target_id) if cfg!(test) => std::env::temp_dir()
+            .join("skillport-skills-cli-remove-recovery")
+            .join(target_id),
+        Some(target_id) => crate::paths::skills_cli_remove_recovery_dir_for_target(target_id),
+        None => crate::paths::skills_cli_remove_recovery_dir(),
+    }
 }
 
 // ─── Install targets ─────────────────────────────────────────────────────────
@@ -791,5 +864,7 @@ pub(crate) async fn add_global_with_lock_at(
     .await
 }
 
+#[cfg(test)]
+mod mutate_tests;
 #[cfg(test)]
 mod tests;

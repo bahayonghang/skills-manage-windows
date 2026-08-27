@@ -510,8 +510,8 @@ describe("SkillsCliView", () => {
     );
     expect(screen.getByRole("button", { name: "导出全部" })).toBeEnabled();
     const uninstall = screen.getByTestId("uninstall-skills-cli-demo-skill");
-    expect(uninstall).toBeDisabled();
-    expect(uninstall).toHaveAttribute("title", localOnly);
+    expect(uninstall).toBeEnabled();
+    expect(uninstall).not.toHaveAttribute("title", localOnly);
     expect(screen.queryByTestId("skills-cli-update-cache-error")).not.toBeInTheDocument();
   });
 
