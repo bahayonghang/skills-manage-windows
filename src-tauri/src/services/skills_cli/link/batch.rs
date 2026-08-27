@@ -232,7 +232,7 @@ async fn mutate_platforms_batch(
                     .collect();
                 match tx.fs().remove_verified_links(&links).await {
                     Ok(results) => {
-                        for (index, (_, status)) in chunk.iter().zip(results.into_iter()) {
+                        for (index, (_, status)) in chunk.iter().zip(results) {
                             match status {
                                 VerifiedLinkRemoveStatus::Removed => {
                                     outcome.succeeded.push(batch_item(&jobs[*index]));
