@@ -117,6 +117,7 @@ pub const REVIEWED_IPC_ERROR_CODES: &[&str] = &[
     "skills_cli.placement_unavailable",
     "skills_cli.preview_unparsed",
     "skills_cli.recovery_required",
+    "skills_cli.remote_unavailable",
     "skills_cli.reveal_failed",
     "skills_cli.selection_empty",
     "skills_cli.skill_doc_invalid_utf8",

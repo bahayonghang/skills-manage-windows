@@ -169,6 +169,7 @@ export interface SkillsCliSkillCardProps extends SkillCardCoreProps {
   onManageLinks?: () => void;
   onUninstall: () => void;
   isLoading?: boolean;
+  uninstallLockReason?: string;
 }
 
 /**

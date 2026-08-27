@@ -97,6 +97,7 @@
       "export_invalid": "The export snapshot is not valid.",
       "export_failed": "The export file could not be written.",
       "recovery_required": "A previous Skills CLI change needs recovery before continuing.",
+      "remote_unavailable": "The remote Skills CLI host is unavailable.",
       "reveal_failed": "The skill folder could not be opened.",
       "update_stale": "The update is out of date. Refresh, then try again.",
       "update_baseline_required": "This skill has no installed baseline, so it cannot be treated as current.",

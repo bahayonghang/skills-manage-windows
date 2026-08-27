@@ -2,7 +2,8 @@
 //!
 //! Wraps the official `skills` npm package (PIN: [`SKILLS_CLI_NPM_SPEC`]) for
 //! the `-g` lifecycle. Local and Remote share one transport seam; this task
-//! opens doctor on Remote and keeps other capabilities gated.
+//! opens doctor plus read inventory capabilities on Remote. Write capabilities
+//! stay gated.
 
 mod agent_map;
 mod argv;
@@ -13,6 +14,7 @@ mod inventory;
 mod link;
 mod lock;
 mod placement;
+mod probe;
 mod remove;
 mod runner;
 mod transport;
@@ -47,6 +49,7 @@ pub use updates::{
     SkillsCliUpdateStatus,
 };
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
@@ -341,13 +344,127 @@ pub(crate) async fn doctor_with_program(
 
 // ─── List ────────────────────────────────────────────────────────────────────
 
+const LOCK_READ_LIMIT: u64 = 1_048_576;
+
+fn is_missing_path(error: &SkillsCliError) -> bool {
+    matches!(error, SkillsCliError::Io { source, .. } if source.kind() == std::io::ErrorKind::NotFound)
+}
+
+async fn load_lock_from_transport(
+    tx: &SkillsCliTransport,
+) -> Result<lock::CliLockOwnership, SkillsCliError> {
+    match tx
+        .fs()
+        .read_file_bounded(tx.paths().lock_path(), LOCK_READ_LIMIT)
+        .await
+    {
+        Ok(bytes) => Ok(lock::parse_lock_content(&String::from_utf8_lossy(&bytes))),
+        Err(error) if is_missing_path(&error) => Ok(lock::CliLockOwnership::default()),
+        Err(error) => Err(error),
+    }
+}
+
 /// List global Skills CLI skills from lock v3 + filesystem. Does not spawn.
+///
+/// Local keeps `observe_directory_slot` via `list_global_at`. Remote round-trips
+/// are RT1 lock read + RT2 one `probe_paths`. Those two are the entire remote
+/// command budget; a per-skill remote call here is a regression against
+/// constant round-trips.
 pub(crate) async fn list_global(
     tx: &SkillsCliTransport,
     pool: &DbPool,
 ) -> Result<SkillsCliGlobalSnapshot, SkillsCliError> {
     let paths = tx.paths();
-    list_global_at(pool, &paths.canonical_root_path(), &paths.lock_path_buf()).await
+    if !tx.is_remote() {
+        return list_global_at(pool, &paths.canonical_root_path(), &paths.lock_path_buf()).await;
+    }
+    let ownership = load_lock_from_transport(tx).await?;
+    let agents = crate::db::get_all_agents(pool)
+        .await
+        .map_err(|error| SkillsCliError::Io {
+            context: "read platforms",
+            source: std::io::Error::other(error.to_string()),
+        })?;
+    let mapped: Vec<&crate::db::Agent> = SKILLS_CLI_AGENT_MAP
+        .iter()
+        .filter_map(|(id, _)| agents.iter().find(|agent| agent.id == *id))
+        .collect();
+    let platform_dirs: Vec<String> = mapped
+        .iter()
+        .map(|agent| agent.global_skills_dir.clone())
+        .collect();
+    let probe_path_list = probe::collect_inventory_probe_paths(
+        ownership.names().map(str::to_string),
+        paths.canonical_root(),
+        &platform_dirs,
+        |parent, child| paths.join_child(parent, child),
+        |path| paths.parent_of(path),
+    );
+    let probes = if ownership.is_empty() {
+        Vec::new()
+    } else {
+        tx.fs().probe_paths(&probe_path_list).await?
+    };
+    let probe_map = probe::index_probes(&probes);
+    let platforms: Vec<inventory::InventoryPlatform> = mapped
+        .iter()
+        .map(|agent| {
+            let dir = agent.global_skills_dir.as_str();
+            let detected = probe::probe_exists(&probe_map, dir)
+                || paths
+                    .parent_of(dir)
+                    .is_some_and(|parent| probe::probe_exists(&probe_map, &parent));
+            inventory::InventoryPlatform {
+                agent_id: agent.id.clone(),
+                display_name: agent.display_name.clone(),
+                global_skills_dir: PathBuf::from(&agent.global_skills_dir),
+                is_enabled: agent.is_enabled,
+                is_detected: detected,
+                supports_local_placement: cfg!(any(unix, windows)),
+            }
+        })
+        .collect();
+    let placement_platforms: Vec<placement::PlacementPlatform> = platforms
+        .iter()
+        .map(inventory::InventoryPlatform::as_placement_platform)
+        .collect();
+    let link_kind = tx.managed_link_kind();
+    let posix = paths.uses_posix();
+    let mut skills = Vec::new();
+    for (name, entry) in ownership.iter() {
+        let canonical = paths.join_child(paths.canonical_root(), name);
+        let canonical_owned =
+            probe::canonical_owned_from_probe(probe_map.get(&canonical));
+        let mut slots = HashMap::new();
+        for (agent, platform) in mapped.iter().zip(placement_platforms.iter()) {
+            let target_path = paths.join_child(&agent.global_skills_dir, name);
+            let slot = probe_map
+                .get(&target_path)
+                .map(|item| {
+                    probe::observed_slot_from_probe(item, &canonical, link_kind, posix)
+                })
+                .unwrap_or(placement::ObservedSlot::Absent);
+            slots.insert(platform.agent_id.clone(), (target_path, slot));
+        }
+        let placements = placement::classify_placements_observed(
+            name,
+            canonical_owned,
+            &placement_platforms,
+            &slots,
+        );
+        skills.push(inventory::skill_from_lock_entry(
+            name,
+            entry,
+            &canonical,
+            canonical_owned,
+            placements,
+        ));
+    }
+    Ok(SkillsCliGlobalSnapshot {
+        skills,
+        canonical_root: paths.canonical_root().to_string(),
+        lock_path: paths.lock_path().to_string(),
+    })
 }
 
 pub(crate) async fn list_global_at(
@@ -405,7 +522,7 @@ fn is_platform_detected(global_skills_dir: &str) -> bool {
 /// Unsupported builtins are hidden from the selector entirely; custom agents
 /// never appear because they have no reviewed mapping.
 pub async fn install_targets(
-    _tx: &SkillsCliTransport,
+    tx: &SkillsCliTransport,
     pool: &DbPool,
 ) -> Result<Vec<SkillsCliInstallTarget>, SkillsCliError> {
     let agents = crate::db::get_all_agents(pool)
@@ -414,6 +531,24 @@ pub async fn install_targets(
             context: "read platforms",
             source: std::io::Error::other(error.to_string()),
         })?;
+    let paths = tx.paths();
+    let mut probe_dirs = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for agent in &agents {
+        if !agent.is_builtin || cli_agent_for_skillport_id(&agent.id).is_none() {
+            continue;
+        }
+        if seen.insert(agent.global_skills_dir.clone()) {
+            probe_dirs.push(agent.global_skills_dir.clone());
+        }
+        if let Some(parent) = paths.parent_of(&agent.global_skills_dir) {
+            if seen.insert(parent.clone()) {
+                probe_dirs.push(parent);
+            }
+        }
+    }
+    let probes = tx.fs().probe_paths(&probe_dirs).await?;
+    let probe_map = probe::index_probes(&probes);
 
     let mut targets = Vec::new();
     for agent in agents {
@@ -423,7 +558,11 @@ pub async fn install_targets(
         let Some(cli_agent) = cli_agent_for_skillport_id(&agent.id) else {
             continue;
         };
-        if !is_platform_detected(&agent.global_skills_dir) {
+        let detected = probe::probe_exists(&probe_map, &agent.global_skills_dir)
+            || paths
+                .parent_of(&agent.global_skills_dir)
+                .is_some_and(|parent| probe::probe_exists(&probe_map, &parent));
+        if !detected {
             continue;
         }
         targets.push(SkillsCliInstallTarget {

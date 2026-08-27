@@ -334,6 +334,9 @@ export const useSkillsCliStore = create<SkillsCliState>((set, get) => ({
       patch.updateInventory =
         updateCache.value ?? EMPTY_SKILLS_CLI_UPDATE_INVENTORY;
       patch.updateError = null;
+    } else if (errorCodeFrom(updateCache.reason) === "skills_cli.local_target_only") {
+      patch.updateInventory = EMPTY_SKILLS_CLI_UPDATE_INVENTORY;
+      patch.updateError = null;
     } else {
       patch.updateError = backendErrorStateValue(updateCache.reason);
     }

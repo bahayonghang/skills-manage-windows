@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "AC2 核对列举路径零 CLI spawn；AC3/AC5 核对五态、四 reason_code 与空 lock 语义与本机逐字段一致"}
+{"file": ".trellis/spec/backend/process-supervision.md", "reason": "AC1 核对 3×4 与 30×4 输入下远端命令调用次数相同"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "AC8 哨兵 token 不出现在 IPC message 与操作日志"}
+{"file": ".trellis/spec/backend/test-support.md", "reason": "AC1 的 fake runner 归属既有测试支撑设施"}
+{"file": ".trellis/spec/frontend/skill-card-scenarios.md", "reason": "AC6 远端库存复用 UnifiedSkillCard 的 skillsCli variant，既有负向测试仍成立"}
+{"file": ".trellis/spec/frontend/async-ui-test-stability.md", "reason": "AC6/AC7 切 target 后的加载与错误态断言需稳定，不依赖固定延时"}
+{"file": ".trellis/spec/quality/test-suite-layout.md", "reason": "新增前后端测试的文件归属与命名约定"}
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "AC10 just ci 通过；真实 SSH 主机行为标记 UNVERIFIED"}
+{"file": ".trellis/spec/quality/index.md", "reason": "质量层 Quality Check 入口"}

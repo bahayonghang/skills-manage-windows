@@ -8,8 +8,9 @@ use crate::services::installation::fs_util::is_reparse_or_symlink;
 
 use super::error::SkillsCliError;
 use super::is_valid_skill_token;
-use super::lock::load_cli_lock_ownership;
+use super::lock::{load_cli_lock_ownership, parse_lock_content};
 use super::placement::canonical_is_owned_directory;
+use super::probe;
 use super::SkillsCliSkillDoc;
 
 const SKILL_DOC_LIMIT: u64 = 1_048_576;
@@ -84,13 +85,61 @@ pub(crate) async fn read_skill_md(
     tx: &super::SkillsCliTransport,
     skill_name: &str,
 ) -> Result<SkillsCliSkillDoc, SkillsCliError> {
+    if !tx.is_remote() {
+        let paths = tx.paths();
+        return read_skill_md_at(
+            skill_name,
+            &paths.canonical_root_path(),
+            &paths.lock_path_buf(),
+        )
+        .await;
+    }
+    if !is_valid_skill_token(skill_name) || skill_name_escapes(skill_name) {
+        return Err(SkillsCliError::SkillNotOwned);
+    }
     let paths = tx.paths();
-    read_skill_md_at(
-        skill_name,
-        &paths.canonical_root_path(),
-        &paths.lock_path_buf(),
-    )
-    .await
+    let ownership = match tx
+        .fs()
+        .read_file_bounded(paths.lock_path(), SKILL_DOC_LIMIT)
+        .await
+    {
+        Ok(bytes) => parse_lock_content(&String::from_utf8_lossy(&bytes)),
+        Err(SkillsCliError::Io { source, .. })
+            if source.kind() == std::io::ErrorKind::NotFound =>
+        {
+            super::lock::CliLockOwnership::default()
+        }
+        Err(error) => return Err(error),
+    };
+    if !ownership.contains_name(skill_name) {
+        return Err(SkillsCliError::SkillNotOwned);
+    }
+    let canonical = paths.join_child(paths.canonical_root(), skill_name);
+    let probes = tx.fs().probe_paths(std::slice::from_ref(&canonical)).await?;
+    if !probe::canonical_owned_from_probe(probes.first()) {
+        return Err(SkillsCliError::CanonicalMissing);
+    }
+    let md_path = paths.join_child(&canonical, "SKILL.md");
+    let bytes = match tx.fs().read_file_bounded(&md_path, SKILL_DOC_LIMIT).await {
+        Ok(bytes) => bytes,
+        Err(SkillsCliError::Io { source, .. })
+            if source.kind() == std::io::ErrorKind::NotFound =>
+        {
+            return Err(SkillsCliError::SkillDocMissing);
+        }
+        Err(error) => return Err(error),
+    };
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > SKILL_DOC_LIMIT {
+        return Err(SkillsCliError::SkillDocTooLarge);
+    }
+    let content =
+        String::from_utf8(bytes).map_err(|_| SkillsCliError::SkillDocInvalidUtf8)?;
+    let byte_size = u32::try_from(content.len()).unwrap_or(u32::MAX);
+    Ok(SkillsCliSkillDoc {
+        skill_name: skill_name.to_string(),
+        content,
+        byte_size,
+    })
 }
 
 pub(crate) async fn read_skill_md_at(

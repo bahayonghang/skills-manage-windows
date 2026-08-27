@@ -91,6 +91,7 @@ interface SkillCardModel {
   placements?: readonly SkillsCliPlacement[];
   updateAvailable?: boolean;
   onManageLinks?: () => void;
+  uninstallLockReason?: string;
 }
 
 /** 场景 → 渲染模型的唯一映射点：每分支只拷贝该场景合法字段。 */
@@ -203,6 +204,7 @@ function toModel(props: SkillCardTypes.UnifiedSkillCardProps): SkillCardModel {
         onManageLinks: props.onManageLinks,
         onUninstall: props.onUninstall,
         isLoading: props.isLoading,
+        uninstallLockReason: props.uninstallLockReason,
       };
     default: {
       const _exhaustive: never = props;
@@ -228,6 +230,7 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
         onManageLinks={model.onManageLinks}
         onUninstall={model.onUninstall}
         isLoading={model.isLoading}
+        uninstallLockReason={model.uninstallLockReason}
       />
     );
   }

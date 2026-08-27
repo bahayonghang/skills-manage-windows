@@ -465,7 +465,8 @@ describe("SkillsCliView", () => {
     );
   });
 
-  it("hides the sidebar entry unless ActiveTarget is Local", () => {
+  it("shows the sidebar entry and remote inventory on a non-Local target", async () => {
+    const localOnly = "Skills CLI 仅可在本机 Local 目标上使用。";
     useTargetStore.setState({
       activeTarget: {
         id: "ssh-1",
@@ -474,18 +475,69 @@ describe("SkillsCliView", () => {
         isActive: true,
       },
     });
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: listGlobal,
+      skills_cli_install_targets: targets,
+      skills_cli_update_inventory: () => {
+        throw ipcFixtureError(
+          "skills_cli.local_target_only",
+          "Skills CLI is available only on the Local target.",
+        );
+      },
+    });
     const { unmount } = render(
       <MemoryRouter>
         <Sidebar />
       </MemoryRouter>,
     );
-    expect(screen.queryByRole("button", { name: "Skills CLI 全局" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Skills CLI 全局" })).toBeInTheDocument();
     unmount();
 
     render(<SkillsCliView />);
+    expect(await screen.findByText("demo-skill")).toBeInTheDocument();
+    expect(screen.getByTestId("skills-cli-inventory")).toBeInTheDocument();
     expect(
-      screen.getByText("Skills CLI 全局管理仅可在本机 Local 目标上使用。"),
-    ).toBeInTheDocument();
+      screen.queryByText("Skills CLI 全局管理仅可在本机 Local 目标上使用。"),
+    ).not.toBeInTheDocument();
+    const install = screen.getByRole("button", { name: "安装技能" });
+    expect(install).toBeDisabled();
+    expect(install).toHaveAttribute("title", localOnly);
+    expect(screen.getByTestId("skills-cli-check-updates")).toBeDisabled();
+    expect(screen.getByTestId("skills-cli-check-updates")).toHaveAttribute(
+      "title",
+      localOnly,
+    );
+    expect(screen.getByRole("button", { name: "导出全部" })).toBeEnabled();
+    const uninstall = screen.getByTestId("uninstall-skills-cli-demo-skill");
+    expect(uninstall).toBeDisabled();
+    expect(uninstall).toHaveAttribute("title", localOnly);
+    expect(screen.queryByTestId("skills-cli-update-cache-error")).not.toBeInTheDocument();
+  });
+
+  it("keeps a stale inventory when remote list rejects remote_unavailable", async () => {
+    mockHappyPath();
+    render(<SkillsCliView />);
+    await screen.findByText("demo-skill");
+
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_list_global: () => {
+        throw ipcFixtureError(
+          "skills_cli.remote_unavailable",
+          "The remote Skills CLI host is unavailable.",
+          true,
+        );
+      },
+      skills_cli_install_targets: targets,
+      skills_cli_update_inventory: EMPTY_SKILLS_CLI_UPDATE_INVENTORY,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "刷新" }));
+
+    const alert = await screen.findByTestId("skills-cli-inventory-error");
+    expect(alert).toHaveTextContent("无法连接到远端 Skills CLI 主机。");
+    expect(screen.getByText("demo-skill")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
   });
 
   it("locks the named content container and 2/3/4-column grid classes", async () => {

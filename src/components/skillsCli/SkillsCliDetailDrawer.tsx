@@ -68,6 +68,7 @@ export interface SkillsCliDetailDrawerProps {
   onUpdate?: () => void;
   onRevealFolder: () => void | Promise<void>;
   onUninstall: () => void;
+  mutationLockReason?: string;
 }
 
 function rowReason(
@@ -134,6 +135,7 @@ export function SkillsCliDetailDrawer({
   onUpdate,
   onRevealFolder,
   onUninstall,
+  mutationLockReason,
 }: SkillsCliDetailDrawerProps) {
   const { t, i18n } = useTranslation();
   const titleId = useId();
@@ -219,7 +221,7 @@ export function SkillsCliDetailDrawer({
       ? formatRelativeTime(timeValue, i18n.language, nowMs ?? Date.now())
       : null;
   const showUpdateButton = updateAvailable && onUpdate != null;
-  const actionsLocked = isMutating || aggregateBusy;
+  const actionsLocked = isMutating || aggregateBusy || Boolean(mutationLockReason);
   const docBusy = visibleDoc.status === "loading";
 
   function markBusy(ids: readonly string[], next: boolean) {
@@ -435,6 +437,7 @@ export function SkillsCliDetailDrawer({
                         size="sm"
                         data-testid="skills-cli-detail-link-all"
                         disabled={actionsLocked}
+                        title={mutationLockReason}
                         onClick={() => void runAggregate("linkAll")}
                       >
                         {t("skillsCli.detail.linkAll")}
@@ -449,9 +452,10 @@ export function SkillsCliDetailDrawer({
                           actionsLocked || summary.aggregate === "disabled"
                         }
                         title={
-                          summary.aggregate === "disabled"
+                          mutationLockReason ??
+                          (summary.aggregate === "disabled"
                             ? t("skillsCli.detail.aggregateDisabled")
-                            : undefined
+                            : undefined)
                         }
                         onClick={() => void runAggregate("unlinkAll")}
                       >
@@ -477,7 +481,7 @@ export function SkillsCliDetailDrawer({
                       const switchLabel = switchDisabled
                         ? t("skillsCli.detail.switchDisabled", {
                             platform: row.displayName,
-                            reason: reason ?? row.displayName,
+                            reason: mutationLockReason ?? reason ?? row.displayName,
                           })
                         : t(
                             row.action === "unlink"
@@ -605,7 +609,8 @@ export function SkillsCliDetailDrawer({
                   <Button
                     type="button"
                     data-testid="skills-cli-detail-update"
-                    disabled={isMutating}
+                    disabled={isMutating || Boolean(mutationLockReason)}
+                    title={mutationLockReason}
                     onClick={onUpdate}
                   >
                     {t("skillsCli.detail.update")}
@@ -615,7 +620,8 @@ export function SkillsCliDetailDrawer({
                   type="button"
                   variant="outline"
                   data-testid="skills-cli-detail-reveal"
-                  disabled={isMutating}
+                  disabled={isMutating || Boolean(mutationLockReason)}
+                  title={mutationLockReason}
                   onClick={() => void runReveal()}
                 >
                   <FolderOpen className="size-4" />
@@ -625,7 +631,8 @@ export function SkillsCliDetailDrawer({
                   type="button"
                   variant="destructive"
                   data-testid="skills-cli-detail-uninstall"
-                  disabled={isMutating}
+                  disabled={isMutating || Boolean(mutationLockReason)}
+                  title={mutationLockReason}
                   onClick={onUninstall}
                 >
                   <Trash2 className="size-4" />

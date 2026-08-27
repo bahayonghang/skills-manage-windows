@@ -6,8 +6,6 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { Terminal } from "lucide-react";
-
 import { SkillsCliBatchBar } from "@/components/skillsCli/SkillsCliBatchBar";
 import { SkillsCliCleanupDialog } from "@/components/skillsCli/SkillsCliCleanupDialog";
 import { SkillsCliDetailDrawer } from "@/components/skillsCli/SkillsCliDetailDrawer";
@@ -51,6 +49,7 @@ import {
   pendingUpdateCountForSkills,
   repositoryKeyForSkills,
   skillHasPendingUpdate,
+  skillsCliRemoteMutationLockReason,
   updateRowForSkill,
   type SkillsCliActiveSurface,
   type SkillsCliGroupBy,
@@ -72,6 +71,7 @@ export function SkillsCliView() {
   const { t } = useTranslation();
   const activeTarget = useTargetStore((state) => state.activeTarget);
   const isLocal = isLocalTarget(activeTarget);
+  const mutationLockReason = skillsCliRemoteMutationLockReason(isLocal, t);
 
   const skills = useSkillsCliStore((state) => state.skills);
   const targets = useSkillsCliStore((state) => state.targets);
@@ -114,11 +114,8 @@ export function SkillsCliView() {
   const returnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (!isLocal) {
-      return;
-    }
     void loadAll();
-  }, [isLocal, loadAll]);
+  }, [loadAll]);
 
   useEffect(() => {
     const node = contentRef.current;
@@ -133,7 +130,7 @@ export function SkillsCliView() {
     });
     observer.observe(node);
     return () => observer.disconnect();
-  }, [isLocal]);
+  }, []);
 
   useEffect(() => {
     setSelectedCardNames((current) => {
@@ -216,15 +213,6 @@ export function SkillsCliView() {
     });
   }, []);
 
-  if (!isLocal) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 p-8">
-        <Terminal className="size-10 text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">{t("skillsCli.localOnly")}</p>
-      </div>
-    );
-  }
-
   const {
     captureReturnFocus,
     handlePageKeyDown,
@@ -294,6 +282,7 @@ export function SkillsCliView() {
         isRefreshing={isRefreshing}
         isCheckingUpdates={updateJob.phase === "checking"}
         installAvailable={SKILLS_CLI_INSTALL_SURFACE_AVAILABLE}
+        mutationLockReason={mutationLockReason}
         onRefresh={() => void loadAll()}
         onCheckUpdates={() => {
           void useSkillsCliStore
@@ -336,7 +325,11 @@ export function SkillsCliView() {
             }
             isExporting={isExporting}
             onCleanupUnavailable={() => {
-              if (cleanupCandidates.length === 0 || batchBusy) {
+              if (
+                cleanupCandidates.length === 0 ||
+                batchBusy ||
+                mutationLockReason
+              ) {
                 return;
               }
               captureReturnFocus(document.activeElement);
@@ -344,6 +337,7 @@ export function SkillsCliView() {
             }}
             cleanupUnavailableCount={cleanupCandidates.length}
             cleanupDisabled={batchBusy}
+            mutationLockReason={mutationLockReason}
           />
 
           {batchProgress ? (
@@ -512,7 +506,9 @@ export function SkillsCliView() {
                         onSelectAll={() => handleSelectAll(bucket)}
                         updateCount={updateCount}
                         onUpdateAll={
-                          updateCount > 0 && groupRepositoryKey
+                          mutationLockReason
+                            ? undefined
+                            : updateCount > 0 && groupRepositoryKey
                             ? () =>
                                 openUpdateSurface({
                                   repositoryKey: groupRepositoryKey,
@@ -562,6 +558,7 @@ export function SkillsCliView() {
                                 );
                               }}
                               isLoading={isMutating}
+                              uninstallLockReason={mutationLockReason}
                             />
                           ))}
                         </div>
@@ -609,6 +606,7 @@ export function SkillsCliView() {
             setSelectMode(false);
             setSelectedCardNames(new Set());
           }}
+          mutationLockReason={mutationLockReason}
         />
       ) : null}
 
@@ -704,6 +702,7 @@ export function SkillsCliView() {
           }
           setActiveSurface(openSkillsCliUninstall([detailSkill.name]));
         }}
+        mutationLockReason={mutationLockReason}
       />
 
       <SkillsCliUpdateDrawer

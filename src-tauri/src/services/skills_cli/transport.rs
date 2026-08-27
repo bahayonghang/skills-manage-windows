@@ -14,6 +14,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use tempfile::Builder;
 
+use crate::services::installation::fs_util::is_reparse_or_symlink;
 use crate::targets::{
     connect_remote_target, remote_file_type_is_dir, shell_quote, ActiveTarget,
     ConnectedRemoteTarget, RemoteDirEntry, RemotePathInfo, TargetsError,
@@ -24,7 +25,9 @@ use super::argv::{
 };
 use super::error::SkillsCliError;
 use super::lock::{remote_lock_path, skills_cli_lock_path_from_env};
+use super::probe::{build_path_probe_script, parse_path_probe_output, PathProbe, PathProbeKind};
 use super::runner::{CliOutput, NodeProcessRunner, RunnerRequest, SkillsCliRunner};
+use super::SkillsCliManagedLinkKind;
 use super::{doctor_with_program, resolve_node_program_from_env, SkillsCliDoctorReport};
 
 const DOCTOR_PROBE_SCRIPT: &str = r#"printf 'XDG=%s\n' "${XDG_STATE_HOME-}"
@@ -36,7 +39,9 @@ else
 fi
 "#;
 
-/// One Skills CLI IPC capability. This task opens [`Self::Doctor`] only.
+/// One Skills CLI IPC capability. Inventory opens ListGlobal / InstallTargets /
+/// ReadSkillMd / ExportInventory on Remote. RevealFolder stays permanently
+/// unsupported. Write capabilities stay gated until later children.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SkillsCliCapability {
     Doctor,
@@ -95,13 +100,13 @@ enum RemoteCapabilitySupport {
 
 fn remote_capability_support(cap: SkillsCliCapability) -> RemoteCapabilitySupport {
     match cap {
-        SkillsCliCapability::Doctor => RemoteCapabilitySupport::Supported,
-        SkillsCliCapability::RevealFolder => RemoteCapabilitySupport::PermanentlyUnsupported,
-        SkillsCliCapability::ListGlobal
+        SkillsCliCapability::Doctor
+        | SkillsCliCapability::ListGlobal
         | SkillsCliCapability::InstallTargets
         | SkillsCliCapability::ReadSkillMd
-        | SkillsCliCapability::ExportInventory
-        | SkillsCliCapability::PreviewSource
+        | SkillsCliCapability::ExportInventory => RemoteCapabilitySupport::Supported,
+        SkillsCliCapability::RevealFolder => RemoteCapabilitySupport::PermanentlyUnsupported,
+        SkillsCliCapability::PreviewSource
         | SkillsCliCapability::AddGlobal
         | SkillsCliCapability::LinkPlatform
         | SkillsCliCapability::UnlinkPlatform
@@ -157,12 +162,14 @@ pub(crate) trait SkillsCliFs: Send + Sync {
     async fn remove_tree(&self, path: &str) -> Result<(), SkillsCliError>;
     async fn create_dir_all(&self, path: &str) -> Result<(), SkillsCliError>;
     async fn exists(&self, path: &str) -> Result<bool, SkillsCliError>;
+    async fn probe_paths(&self, paths: &[String]) -> Result<Vec<PathProbe>, SkillsCliError>;
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct SkillsCliPaths {
     canonical_root: String,
     lock_path: String,
+    posix: bool,
 }
 
 impl SkillsCliPaths {
@@ -178,6 +185,7 @@ impl SkillsCliPaths {
             )
             .to_string_lossy()
             .into_owned(),
+            posix: false,
         }
     }
 
@@ -188,6 +196,7 @@ impl SkillsCliPaths {
                 crate::paths::UNIVERSAL_SKILLS_REL,
             ),
             lock_path: remote_lock_path(xdg_state_home, remote_home),
+            posix: true,
         }
     }
 
@@ -207,6 +216,32 @@ impl SkillsCliPaths {
 
     pub(crate) fn lock_path_buf(&self) -> PathBuf {
         PathBuf::from(&self.lock_path)
+    }
+
+    pub(crate) fn uses_posix(&self) -> bool {
+        self.posix
+    }
+
+    pub(crate) fn join_child(&self, parent: &str, child: &str) -> String {
+        if self.posix {
+            crate::targets::remote_join(parent, child)
+        } else {
+            Path::new(parent)
+                .join(child)
+                .to_string_lossy()
+                .into_owned()
+        }
+    }
+
+    pub(crate) fn parent_of(&self, path: &str) -> Option<String> {
+        if self.posix {
+            crate::targets::remote_parent(path)
+        } else {
+            Path::new(path)
+                .parent()
+                .map(|parent| parent.to_string_lossy().into_owned())
+                .filter(|value| !value.is_empty())
+        }
     }
 }
 
@@ -318,6 +353,29 @@ impl SkillsCliTransport {
     #[allow(dead_code)]
     pub(crate) fn fs(&self) -> &dyn SkillsCliFs {
         self.fs.as_ref()
+    }
+
+    pub(crate) fn is_remote(&self) -> bool {
+        matches!(self.scope, SkillsCliScope::Remote(_))
+    }
+
+    pub(crate) fn managed_link_kind(&self) -> SkillsCliManagedLinkKind {
+        match &self.scope {
+            SkillsCliScope::Local => {
+                if cfg!(windows) {
+                    SkillsCliManagedLinkKind::WindowsJunction
+                } else {
+                    SkillsCliManagedLinkKind::Symlink
+                }
+            }
+            SkillsCliScope::Remote(connection) => {
+                if is_windows_remote_os(connection.remote_os()) {
+                    SkillsCliManagedLinkKind::WindowsJunction
+                } else {
+                    SkillsCliManagedLinkKind::Symlink
+                }
+            }
+        }
     }
 
     pub(crate) fn runner(&self) -> &dyn SkillsCliRunner {
@@ -436,8 +494,21 @@ fn parse_doctor_probe(stdout: &str) -> DoctorProbe {
     }
 }
 
+fn is_windows_remote_os(remote_os: &str) -> bool {
+    remote_os.eq_ignore_ascii_case("windows")
+}
+
 fn map_connect_error(error: TargetsError) -> SkillsCliError {
-    map_remote_error("connect remote target", error)
+    match error {
+        TargetsError::ProcessTimedOut { timeout_ms, .. } => {
+            SkillsCliError::Timeout(Duration::from_millis(timeout_ms as u64))
+        }
+        TargetsError::ProcessCancelled(_) => SkillsCliError::Cancelled,
+        _ => {
+            tracing::warn!("Skills CLI remote host is unavailable");
+            SkillsCliError::RemoteUnavailable
+        }
+    }
 }
 
 fn map_doctor_remote_error(error: TargetsError) -> SkillsCliError {
@@ -459,6 +530,10 @@ fn map_remote_error(context: &'static str, error: TargetsError) -> SkillsCliErro
             SkillsCliError::Timeout(Duration::from_millis(timeout_ms as u64))
         }
         TargetsError::ProcessCancelled(_) => SkillsCliError::Cancelled,
+        TargetsError::RemoteCommandFailed { .. } | TargetsError::WslCommandFailed { .. } => {
+            tracing::warn!(context, "Skills CLI remote host is unavailable");
+            SkillsCliError::RemoteUnavailable
+        }
         _ => {
             tracing::warn!(context, "Skills CLI remote transport failed");
             SkillsCliError::Io {
@@ -467,6 +542,45 @@ fn map_remote_error(context: &'static str, error: TargetsError) -> SkillsCliErro
             }
         }
     }
+}
+
+fn probe_local_path(path: &str) -> Result<PathProbe, SkillsCliError> {
+    let metadata = match std::fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(PathProbe {
+                path: path.to_string(),
+                kind: PathProbeKind::Absent,
+                link_target: None,
+            });
+        }
+        Err(error) => {
+            return Err(SkillsCliError::Io {
+                context: "probe path",
+                source: error,
+            });
+        }
+    };
+    if is_reparse_or_symlink(&metadata) {
+        let link_target = std::fs::read_link(path)
+            .ok()
+            .map(|target| target.to_string_lossy().into_owned());
+        return Ok(PathProbe {
+            path: path.to_string(),
+            kind: PathProbeKind::Link,
+            link_target,
+        });
+    }
+    let kind = if metadata.is_dir() {
+        PathProbeKind::Dir
+    } else {
+        PathProbeKind::File
+    };
+    Ok(PathProbe {
+        path: path.to_string(),
+        kind,
+        link_target: None,
+    })
 }
 
 #[allow(dead_code)]
@@ -646,6 +760,10 @@ impl SkillsCliFs for LocalSkillsCliFs {
     async fn exists(&self, path: &str) -> Result<bool, SkillsCliError> {
         Ok(Path::new(path).exists())
     }
+
+    async fn probe_paths(&self, paths: &[String]) -> Result<Vec<PathProbe>, SkillsCliError> {
+        paths.iter().map(|path| probe_local_path(path)).collect()
+    }
 }
 
 #[async_trait]
@@ -668,10 +786,22 @@ impl SkillsCliFs for RemoteSkillsCliFs {
         path: &str,
         max_bytes: u64,
     ) -> Result<Vec<u8>, SkillsCliError> {
-        self.connection
-            .read_file_bounded(path, max_bytes)
-            .await
-            .map_err(|error| map_remote_error("read file", error))
+        match self.connection.read_file_bounded(path, max_bytes).await {
+            Ok(bytes) => Ok(bytes),
+            // Bounded-read never emits RemotePathMissing: missing files and other
+            // non-44/45 failures become RemoteFileReadFailed. Inventory maps that
+            // to NotFound so a missing lock is an empty snapshot, not an error.
+            Err(TargetsError::RemotePathMissing(_))
+            | Err(TargetsError::WslPathMissing(_))
+            | Err(TargetsError::RemoteFileReadFailed { .. }) => Err(SkillsCliError::Io {
+                context: "read file",
+                source: std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "remote path missing",
+                ),
+            }),
+            Err(error) => Err(map_remote_error("read file", error)),
+        }
     }
 
     async fn atomic_write(&self, path: &str, bytes: &[u8]) -> Result<(), SkillsCliError> {
@@ -719,6 +849,19 @@ impl SkillsCliFs for RemoteSkillsCliFs {
             .exists(path)
             .await
             .map_err(|error| map_remote_error("exists", error))
+    }
+
+    async fn probe_paths(&self, paths: &[String]) -> Result<Vec<PathProbe>, SkillsCliError> {
+        if paths.is_empty() {
+            return Ok(Vec::new());
+        }
+        let script = build_path_probe_script(paths);
+        let stdout = self
+            .connection
+            .run_script(&script, &[])
+            .await
+            .map_err(|error| map_remote_error("probe paths", error))?;
+        Ok(parse_path_probe_output(paths, &stdout))
     }
 }
 
@@ -769,6 +912,14 @@ fn map_runner_error_from_targets(error: TargetsError) -> SkillsCliError {
 impl SkillsCliTransport {
     pub(crate) fn for_tests_remote(connection: ConnectedRemoteTarget) -> Self {
         Self::for_remote(Arc::new(connection))
+    }
+
+    pub(crate) fn map_remote_error_for_tests(error: TargetsError) -> SkillsCliError {
+        map_remote_error("test remote", error)
+    }
+
+    pub(crate) fn map_connect_error_for_tests(error: TargetsError) -> SkillsCliError {
+        map_connect_error(error)
     }
 
     pub(crate) async fn doctor_ignoring_platforms(

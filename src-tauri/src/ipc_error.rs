@@ -486,6 +486,9 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
         "skills_cli.recovery_required" => {
             Some("A previous Skills CLI remove needs recovery.")
         }
+        "skills_cli.remote_unavailable" => {
+            Some("The remote Skills CLI host is unavailable.")
+        }
         "skills_cli.update_stale" => {
             Some("The update is out of date. Refresh, then try again.")
         }

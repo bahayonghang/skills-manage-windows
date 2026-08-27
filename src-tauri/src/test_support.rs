@@ -189,6 +189,16 @@ impl FakeRunner {
         self.push_output_bytes(code, stdout.as_bytes(), stderr.as_bytes());
     }
 
+    pub(crate) fn push_timeout(&self) {
+        self.responses
+            .lock()
+            .unwrap()
+            .push_back(FakeResponse::Error(crate::targets::RunnerError::TimedOut {
+                class: crate::targets::ProcessClass::Standard,
+                deadline: std::time::Duration::from_secs(10),
+            }));
+    }
+
     /// Queue raw output for protocol tests that need non-UTF-8 bytes.
     pub fn push_output_bytes(&self, code: i32, stdout: &[u8], stderr: &[u8]) {
         self.responses

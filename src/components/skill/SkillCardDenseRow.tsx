@@ -24,6 +24,7 @@ export interface SkillCardDenseRowProps {
   onManageLinks?: () => void;
   onUninstall?: () => void;
   isLoading?: boolean;
+  uninstallLockReason?: string;
 }
 
 type DenseRowStatus = "copy" | "conflict" | "missing" | "unavailable";
@@ -81,6 +82,7 @@ export function SkillCardDenseRow({
   onManageLinks,
   onUninstall,
   isLoading,
+  uninstallLockReason,
 }: SkillCardDenseRowProps) {
   const { t } = useTranslation();
   const managed = placements.filter(
@@ -173,8 +175,8 @@ export function SkillCardDenseRow({
           {onUninstall && (
             <CardActionButton
               onClick={() => onUninstall()}
-              disabled={isLoading}
-              title={t("skillsCli.uninstall", { name })}
+              disabled={isLoading || Boolean(uninstallLockReason)}
+              title={uninstallLockReason ?? t("skillsCli.uninstall", { name })}
               ariaLabel={t("skillsCli.uninstall", { name })}
               testId={`uninstall-skills-cli-${name}`}
               danger

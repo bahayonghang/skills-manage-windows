@@ -97,6 +97,7 @@
       "export_invalid": "导出快照无效。",
       "export_failed": "无法写入导出文件。",
       "recovery_required": "需要先恢复上一次 Skills CLI 变更，才能继续。",
+      "remote_unavailable": "无法连接到远端 Skills CLI 主机。",
       "reveal_failed": "无法打开该技能文件夹。",
       "update_stale": "更新信息已过期，请刷新后再试。",
       "update_baseline_required": "该技能还没有已安装基线，不能视为已是最新。",

@@ -53,6 +53,10 @@ pub enum SkillsCliError {
     #[error("The Skills CLI command timed out")]
     Timeout(Duration),
 
+    /// Remote SSH/WSL connection or authentication failed.
+    #[error("The remote Skills CLI host is unavailable")]
+    RemoteUnavailable,
+
     /// The job was cancelled through its exclusive lease flag.
     #[error("The Skills CLI operation was cancelled")]
     Cancelled,
@@ -165,6 +169,7 @@ impl SkillsCliError {
             Self::AgentUnmapped(_) => "skills_cli.agent_unmapped",
             Self::Busy => "skills_cli.busy",
             Self::Timeout(_) => "skills_cli.timeout",
+            Self::RemoteUnavailable => "skills_cli.remote_unavailable",
             Self::Cancelled => "skills_cli.cancelled",
             Self::CliFailed => "skills_cli.cli_failed",
             Self::OutputLimitExceeded { .. } | Self::ListUnparsed => "internal.unexpected",
@@ -198,6 +203,7 @@ impl SkillsCliError {
         matches!(
             self,
             Self::Busy
+                | Self::RemoteUnavailable
                 | Self::RecoveryRequired
                 | Self::UpdateStale
                 | Self::UpdateRateLimited { .. }

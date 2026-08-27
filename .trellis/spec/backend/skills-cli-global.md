@@ -11,9 +11,10 @@ This is **not** SkillPort Central (`~/.skillsmanage/skills/`) and **not** the
 `skillport-cli` binary (`shared-local-cli.md`). The npm package is pinned
 (`SKILLS_CLI_NPM_SPEC = "skills@1.5.23"`). Commands freeze a TargetContext,
 query `ensure_capability_for_target`, then build `SkillsCliTransport` only when
-the capability is open. This seam task opens **Doctor** on Remote; other
-capabilities stay `skills_cli.local_target_only` until a later child opens them.
-`RevealFolder` is permanently unsupported on Remote (no host file manager).
+the capability is open. This inventory task opens **Doctor**, **ListGlobal**,
+**InstallTargets**, **ReadSkillMd**, and **ExportInventory** on Remote. Remaining
+write capabilities stay `skills_cli.local_target_only` until a later child opens
+them. `RevealFolder` is permanently unsupported on Remote (no host file manager).
 
 ## 2. Signatures
 
@@ -79,10 +80,10 @@ Cleanup candidates are skills whose placements are all `unavailable`. Group `sta
   spawn, lock reads, leftover CLI protection, or origin annotation, and are
   zero-write. Do not use this machine's lock to protect remote leftover.
 
-| Capability | Local | Remote (this seam) | Opens in |
+| Capability | Local | Remote (inventory) | Opens in |
 | --- | --- | --- | --- |
 | doctor | supported | supported | seam |
-| list / install_targets / read / export | supported | `local_target_only` | inventory |
+| list / install_targets / read / export | supported | supported | inventory |
 | reveal | supported | permanently unsupported | — |
 | link / unlink / preview_remove / remove / leftover | supported | `local_target_only` | mutate |
 | preview_source / add / update family | supported | `local_target_only` | install-update |
@@ -116,7 +117,13 @@ Cleanup candidates are skills whose placements are all `unavailable`. Group `sta
   when `classify_local_path_origin` is `Other`. Missing lock or empty lock
   returns an empty `skills` array with `canonicalRoot` and `lockPath` still
   set — not an error. List IO maps to `internal.unexpected`, never
-  `skills_cli.cli_unavailable`.
+  `skills_cli.cli_unavailable`. Remote list is lock read + one `probe_paths`
+  (paths inlined in the script body, not argv); round-trips stay constant in
+  skill × platform count. Classification stays in Rust. Detected/enabled
+  platforms come from the remote target DB + probe; do not fall back to this
+  machine's home. Connect/auth failure is `skills_cli.remote_unavailable`
+  (retryable); timeout stays `skills_cli.timeout`. Windows remote `dir` is
+  `direct_copy`; do not guess junctions.
 - **Directory links**: Skills CLI managed links are Windows junctions (reparse
   API, no `cmd.exe`/`mklink`/symlink privilege/copy fallback) or Unix directory
   symlinks. Never auto-convert `direct_copy` into a junction/symlink. Never
@@ -178,6 +185,7 @@ Cleanup candidates are skills whose placements are all `unavailable`. Group `sta
 | Selected SkillPort id has no `--agent` mapping | `skills_cli.agent_unmapped` | false |
 | Target mutation lock or same-family job busy | `skills_cli.busy` | true |
 | Process deadline exceeded | `skills_cli.timeout` | false |
+| Remote SSH/WSL connect or authentication failed | `skills_cli.remote_unavailable` | true |
 | Exclusive-job cancel | `skills_cli.cancelled` | false |
 | lock/FS IO, output cap, listing parse failure | `internal.unexpected` | false |
 | Lock does not own the name | `skills_cli.skill_not_owned` | false |
@@ -249,7 +257,7 @@ command layer remaps it to `skills_cli.busy` so the UI sees one envelope.
 - Source `&|^%!` rejected; stderr absent from `IpcError.message`.
 - Contention: held Local guard → leftover apply and `acquire_target_mutation_guard` Busy/Timeout.
 - Vitest: list, default platform checks, changed add payload, uninstall confirm
-  stays open on failure, non-Local sidebar hidden, doctor error. No public network.
+  stays open on failure, non-Local sidebar visible and inventory loads, doctor error. No public network.
 - Update statuses: assert `local_modified` and `unsupported` from classify/check
   (not only the nine-label UI list); empty cache yields `not_checked`; pending
   update rows survive file-DB close/reopen. Parent AC9 stays fail until these exist.

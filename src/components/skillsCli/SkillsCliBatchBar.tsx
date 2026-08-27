@@ -23,6 +23,7 @@ export interface SkillsCliBatchBarProps {
   onExportSelected: () => void;
   onUninstall: () => void;
   onClear: () => void;
+  mutationLockReason?: string;
 }
 
 export const ICON_HIT =
@@ -52,12 +53,13 @@ export function SkillsCliBatchBar({
   onExportSelected,
   onUninstall,
   onClear,
+  mutationLockReason,
 }: SkillsCliBatchBarProps) {
   const { t } = useTranslation();
   if (selectedCount <= 0) {
     return null;
   }
-  const mutationsLocked = busy;
+  const mutationsLocked = busy || Boolean(mutationLockReason);
   const anyLinkable = summaries.some((item) => item.linkableCount > 0);
 
   return (
@@ -76,6 +78,7 @@ export function SkillsCliBatchBar({
         variant="outline"
         className="min-h-10"
         disabled={mutationsLocked}
+        title={mutationLockReason}
         onClick={onUpdate}
         aria-label={t("skillsCli.batch.updateAria")}
         data-testid="skills-cli-batch-update"
@@ -93,6 +96,7 @@ export function SkillsCliBatchBar({
               type="button"
               variant="outline"
               className="min-h-10"
+              title={mutationLockReason}
               aria-label={t("skillsCli.batch.linkMenuAria")}
               data-testid="skills-cli-batch-link"
             />
@@ -163,6 +167,7 @@ export function SkillsCliBatchBar({
               type="button"
               variant="outline"
               className="min-h-10"
+              title={mutationLockReason}
               aria-label={t("skillsCli.batch.unlinkMenuAria")}
               data-testid="skills-cli-batch-unlink"
             />
@@ -243,6 +248,7 @@ export function SkillsCliBatchBar({
         variant="destructive"
         className="min-h-10"
         disabled={mutationsLocked}
+        title={mutationLockReason}
         onClick={onUninstall}
       >
         {t("skillsCli.batch.uninstall")}

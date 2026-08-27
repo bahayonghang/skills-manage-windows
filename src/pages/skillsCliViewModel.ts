@@ -11,6 +11,13 @@ export type SkillsCliGroupBy = "repo" | "platform" | "status" | "none";
 export type SkillsCliLayoutBand = "twoColumns" | "threeColumns" | "fourColumns";
 export type SkillsCliDrawerBand = "fullWidth" | "fixed460";
 
+export function skillsCliRemoteMutationLockReason(
+  isLocal: boolean,
+  translate: (key: string) => string,
+): string | undefined {
+  return isLocal ? undefined : translate("backendErrors.skills_cli.local_target_only");
+}
+
 export type SkillsCliActiveSurface =
   | null
   | { kind: "install" }

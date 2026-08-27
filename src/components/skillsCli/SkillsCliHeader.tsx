@@ -16,6 +16,7 @@ export interface SkillsCliHeaderProps {
   isRefreshing: boolean;
   isCheckingUpdates?: boolean;
   installAvailable: boolean;
+  mutationLockReason?: string;
   onRefresh: () => void;
   onCheckUpdates: () => void;
   onCancelUpdate?: () => void;
@@ -31,6 +32,7 @@ export function SkillsCliHeader({
   isRefreshing,
   isCheckingUpdates = false,
   installAvailable,
+  mutationLockReason,
   onRefresh,
   onCheckUpdates,
   onCancelUpdate,
@@ -48,7 +50,9 @@ export function SkillsCliHeader({
       : runtimeError
         ? formatBackendError(runtimeError, t)
         : t("skillsCli.doctorUnknown");
-  const installDisabled = !installAvailable || runtimeError !== null;
+  const installDisabled =
+    !installAvailable || runtimeError !== null || Boolean(mutationLockReason);
+  const updatesDisabled = Boolean(mutationLockReason);
 
   return (
     <header className="border-b border-border px-6 py-4">
@@ -72,6 +76,8 @@ export function SkillsCliHeader({
             type="button"
             variant="outline"
             onClick={onCheckUpdates}
+            disabled={updatesDisabled}
+            title={mutationLockReason}
             aria-label={t("skillsCli.updates.checkUpdates")}
             data-testid="skills-cli-check-updates"
           >
@@ -95,6 +101,7 @@ export function SkillsCliHeader({
             type="button"
             onClick={onOpenInstall}
             disabled={installDisabled}
+            title={mutationLockReason}
             aria-label={t("skillsCli.installSkills")}
           >
             {t("skillsCli.installSkills")}

@@ -24,6 +24,7 @@ export interface SkillsCliToolbarProps {
   onCleanupUnavailable?: () => void;
   cleanupUnavailableCount?: number;
   cleanupDisabled?: boolean;
+  mutationLockReason?: string;
 }
 
 const GROUP_OPTIONS: { id: SkillsCliGroupBy; labelKey: string }[] = [
@@ -53,13 +54,15 @@ export function SkillsCliToolbar({
   onCleanupUnavailable,
   cleanupUnavailableCount = 0,
   cleanupDisabled = false,
+  mutationLockReason,
 }: SkillsCliToolbarProps) {
   const { t } = useTranslation();
   const exportDisabled = onExportAll == null || isExporting;
   const cleanupUnavailableDisabled =
     onCleanupUnavailable == null ||
     cleanupDisabled ||
-    cleanupUnavailableCount === 0;
+    cleanupUnavailableCount === 0 ||
+    Boolean(mutationLockReason);
 
   return (
     <div
@@ -171,6 +174,7 @@ export function SkillsCliToolbar({
         type="button"
         variant="outline"
         disabled={cleanupUnavailableDisabled}
+        title={mutationLockReason}
         onClick={() => onCleanupUnavailable?.()}
         aria-label={t("skillsCli.cleanupUnavailableAria")}
         data-testid="skills-cli-cleanup"

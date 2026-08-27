@@ -17,8 +17,6 @@ import {
 import { useTranslation } from "react-i18next";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { usePlatformStore } from "@/stores/platformStore";
-import { useTargetStore } from "@/stores/targetStore";
-import { isLocalTarget } from "@/lib/targetKind";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import {
   getPlatformTargetGroups,
@@ -110,8 +108,6 @@ export function Sidebar() {
   const isLoading = usePlatformStore((s) => s.isLoading);
   const isRefreshing = usePlatformStore((s) => s.isRefreshing);
   const scanState = usePlatformStore((s) => s.scanState);
-  const activeTarget = useTargetStore((s) => s.activeTarget);
-  const showSkillsCli = isLocalTarget(activeTarget);
   const categoryVisibility =
     usePlatformStore((s) => s.categoryVisibility) ??
     DEFAULT_PLATFORM_CATEGORY_VISIBILITY;
@@ -234,15 +230,13 @@ export function Sidebar() {
           count={skillsByAgent["central"]}
         />
 
-        {showSkillsCli && (
-          <NavItem
-            label={t("sidebar.skillsCli")}
-            isActive={pathname === "/skills-cli"}
-            onClick={() => navigate("/skills-cli")}
-            icon={<Terminal className="size-4" />}
-            expanded={expanded}
-          />
-        )}
+        <NavItem
+          label={t("sidebar.skillsCli")}
+          isActive={pathname === "/skills-cli"}
+          onClick={() => navigate("/skills-cli")}
+          icon={<Terminal className="size-4" />}
+          expanded={expanded}
+        />
 
         {/* Projects (project-level skill management) */}
         <NavItem
