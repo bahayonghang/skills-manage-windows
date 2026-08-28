@@ -8,10 +8,10 @@
 
 use std::path::{Path, PathBuf};
 
-/// Frozen npm package spec for the official Skills CLI.
-pub const SKILLS_CLI_NPM_SPEC: &str = "skills@1.5.23";
+/// Frozen npm package spec for the official Skills CLI (npm `latest` dist-tag).
+pub const SKILLS_CLI_NPM_SPEC: &str = "skills";
 
-/// Minimum Node version declared by the PIN package (`engines.node`).
+/// Minimum Node version declared by the official `skills` package (`engines.node`).
 pub const SKILLS_CLI_MIN_NODE: (u32, u32, u32) = (22, 20, 0);
 pub const SKILLS_CLI_MIN_NODE_DISPLAY: &str = "22.20.0";
 
@@ -191,6 +191,7 @@ impl NodeLauncher {
 pub(crate) const NPX_JS_POSIX_RELATIVE: &[&str] = &[
     "node_modules/npm/bin/npx-cli.js",
     "lib/node_modules/npm/bin/npx-cli.js",
+    "../lib/node_modules/npm/bin/npx-cli.js",
     "../npm/node_modules/npm/bin/npx-cli.js",
 ];
 
@@ -198,6 +199,7 @@ pub(crate) const NPX_JS_POSIX_WELL_KNOWN: &[&str] = &[
     "/usr/lib/node_modules/npm/bin/npx-cli.js",
     "/usr/local/lib/node_modules/npm/bin/npx-cli.js",
     "/opt/homebrew/lib/node_modules/npm/bin/npx-cli.js",
+    "/home/linuxbrew/.linuxbrew/lib/node_modules/npm/bin/npx-cli.js",
 ];
 
 /// Candidate npm layouts relative to the resolved `node` directory, plus

@@ -8,6 +8,13 @@ use crate::targets::{remote_join, remote_parent, shell_quote};
 use super::argv::{NPX_JS_POSIX_RELATIVE, NPX_JS_POSIX_WELL_KNOWN};
 use super::error::SkillsCliError;
 
+/// Shared by remote doctor and the launcher probe so non-interactive SSH sees
+/// Linuxbrew / Homebrew Node. Never wrap the probe in `bash -lc`.
+pub(crate) const REMOTE_NODE_PATH_EXPORT: &str = concat!(
+    r#"export PATH="/home/linuxbrew/.linuxbrew/bin:"#,
+    r#"${HOME}/.linuxbrew/bin:/opt/homebrew/bin:/usr/local/bin:${PATH}""#,
+);
+
 pub(crate) const SKILLS_CLI_REMOTE_MUTATION_CHUNK_SIZE: usize = 32;
 #[allow(dead_code)]
 pub(crate) const SKILLS_CLI_REMOTE_MUTATION_PROBE_OVERHEAD: usize = 1;
@@ -61,10 +68,28 @@ pub(crate) fn remote_update_staging_dir(canonical_root: &str, operation_id: &str
     )
 }
 
+pub(crate) fn build_remote_doctor_probe_script() -> String {
+    let mut script = String::from(REMOTE_NODE_PATH_EXPORT);
+    script.push('\n');
+    script.push_str(
+        r#"printf 'XDG=%s\n' "${XDG_STATE_HOME-}"
+printf 'HOME=%s\n' "$HOME"
+if command -v node >/dev/null 2>&1; then
+  printf 'NODEV=%s\n' "$(node --version 2>/dev/null)"
+else
+  printf 'NODEV=\n'
+fi
+"#,
+    );
+    script
+}
+
 /// One round-trip: resolve `node` then probe `npx-cli.js` in the same order as
 /// local [`super::argv::npx_js_candidates`] POSIX entries.
 pub(crate) fn build_remote_launcher_probe_script() -> String {
-    let mut script = String::from(
+    let mut script = String::from(REMOTE_NODE_PATH_EXPORT);
+    script.push('\n');
+    script.push_str(
         r#"set -eu
 NODE=$(command -v node 2>/dev/null || true)
 printf 'NODE=%s\n' "$NODE"
@@ -417,11 +442,33 @@ mod tests {
         ])
         .unwrap();
         assert!(cleanup.contains("rm -rf --"));
+    }
+
+    #[test]
+    fn remote_node_probes_share_linuxbrew_path_and_npx_layout() {
         let probe = build_remote_launcher_probe_script();
         assert!(probe.contains("command -v node"));
         assert!(probe.contains("node_modules/npm/bin/npx-cli.js"));
+        assert!(probe.contains("/home/linuxbrew/.linuxbrew/bin"));
+        assert!(probe.contains("${HOME}/.linuxbrew/bin"));
+        assert!(probe.contains("/opt/homebrew/bin"));
+        assert!(probe.contains("/usr/local/bin"));
+        assert!(probe.contains("../lib/node_modules/npm/bin/npx-cli.js"));
         assert!(!probe.contains("npx.cmd"));
         assert!(!probe.contains("cmd /c"));
+        assert!(!probe.contains("bash -lc"));
+        assert!(!probe.contains("zsh -lic"));
+        let doctor = build_remote_doctor_probe_script();
+        assert!(doctor.contains("/home/linuxbrew/.linuxbrew/bin"));
+        assert!(doctor.contains("${HOME}/.linuxbrew/bin"));
+        assert!(doctor.contains("NODEV"));
+        assert!(!doctor.contains("bash -lc"));
+        assert!(!doctor.contains("zsh -lic"));
+        assert_eq!(
+            doctor.lines().next(),
+            probe.lines().next(),
+            "doctor and launcher must share the PATH export"
+        );
     }
 
     #[test]

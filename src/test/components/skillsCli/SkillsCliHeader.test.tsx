@@ -15,7 +15,7 @@ describe("SkillsCliHeader", () => {
     render(
       <SkillsCliHeader
         counts={counts}
-        doctor={{ nodeVersion: "v22.20.0", npmSpec: "skills@1.5.23" }}
+        doctor={{ nodeVersion: "v22.20.0", npmSpec: "skills" }}
         runtimeError={null}
         isLoading={false}
         isRefreshing={false}
@@ -31,7 +31,7 @@ describe("SkillsCliHeader", () => {
     expect(strip).toHaveTextContent("1");
     expect(strip).toHaveTextContent("3");
     expect(screen.getByTestId("skills-cli-doctor")).toHaveTextContent(
-      "skills@1.5.23",
+      "skills",
     );
     expect(screen.getByRole("button", { name: "安装技能" })).toBeEnabled();
   });
@@ -63,7 +63,7 @@ describe("SkillsCliHeader", () => {
     render(
       <SkillsCliHeader
         counts={counts}
-        doctor={{ nodeVersion: "v22.20.0", npmSpec: "skills@1.5.23" }}
+        doctor={{ nodeVersion: "v22.20.0", npmSpec: "skills" }}
         runtimeError={null}
         isLoading={false}
         isRefreshing

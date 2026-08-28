@@ -261,16 +261,17 @@ describe("skill and platform selection helpers", () => {
 describe("buildInstallCommandPreview", () => {
   it("renders npx tokens in build_add_global_argv order with repeated flags", () => {
     const preview = buildInstallCommandPreview({
-      npmSpec: "skills@1.5.23",
+      npmSpec: "skills",
       source: "owner/repo",
       skillNames: ["demo-skill", "helper-skill", "demo-skill"],
       cliAgents: ["cursor", "claude", "cursor"],
     });
     expect(preview).toBe(
-      "npx skills@1.5.23 add owner/repo -s demo-skill -s helper-skill -g -a cursor -a claude -y",
+      "npx skills add owner/repo -s demo-skill -s helper-skill -g -a cursor -a claude -y",
     );
     expect(preview).not.toContain("--force");
     expect(preview).not.toContain("--keep-links");
+    expect(preview).not.toContain("--copy");
     expect(preview).not.toMatch(/-a\s+\S+,/);
     expect(preview).not.toMatch(/-s\s+\S+,/);
   });
@@ -278,7 +279,7 @@ describe("buildInstallCommandPreview", () => {
   it("returns empty preview when a required selection is missing", () => {
     expect(
       buildInstallCommandPreview({
-        npmSpec: "skills@1.5.23",
+        npmSpec: "skills",
         source: "owner/repo",
         skillNames: [],
         cliAgents: ["cursor"],

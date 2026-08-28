@@ -22,7 +22,7 @@ vi.mock("@/components/skillsCli/skillsCliActionToast", () => ({
 
 const ASYNC_UI_TIMEOUT_MS = 5_000;
 
-const doctor = { nodeVersion: "v22.20.0", npmSpec: "skills@1.5.23" };
+const doctor = { nodeVersion: "v22.20.0", npmSpec: "skills" };
 const targets = [
   {
     id: "cursor",

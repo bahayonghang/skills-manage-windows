@@ -165,7 +165,7 @@ export const EMPTY_SKILLS_CLI_UPDATE_INVENTORY: SkillsCliUpdateInventory = {
   lastSuccessAt: null,
   pendingRecovery: null,
   capability: {
-    npmSpec: "skills@1.5.23",
+    npmSpec: "skills",
     forceFlag: "verified_unsupported",
     keepLinksFlag: "verified_unsupported",
     pinnedFullShaSource: "unverified",

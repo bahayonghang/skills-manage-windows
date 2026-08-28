@@ -168,6 +168,9 @@ fn ac1_remote_argv_shape_matches_pin() {
     assert!(!quoted.contains("--all"));
     assert!(!quoted.contains("npx.cmd"));
     assert!(!quoted.contains("cmd /c"));
+    assert!(!quoted.contains("--copy"));
+    assert_eq!(SKILLS_CLI_NPM_SPEC, "skills");
+    assert!(!argv.iter().any(|item| item == "--copy"));
     assert!(!argv.iter().any(|item| item == "*" || item.contains('*')));
 }
 
@@ -214,6 +217,18 @@ async fn ac1_remote_preview_quotes_pin_without_npx_cmd() {
     assert!(!blob.contains("cmd /c"));
     assert!(!blob.contains("--all"));
     let calls = runner.calls();
+    let launcher_stdin =
+        String::from_utf8_lossy(calls[0].stdin.as_deref().unwrap_or(&[])).into_owned();
+    assert!(
+        launcher_stdin.contains("/home/linuxbrew/.linuxbrew/bin"),
+        "{launcher_stdin}"
+    );
+    assert!(
+        launcher_stdin.contains("../lib/node_modules/npm/bin/npx-cli.js"),
+        "{launcher_stdin}"
+    );
+    assert!(!launcher_stdin.contains("bash -lc"), "{launcher_stdin}");
+    assert!(!launcher_stdin.contains("zsh -lic"), "{launcher_stdin}");
     let preview = calls.last().expect("preview invocation");
     assert_eq!(preview.policy.class, ProcessClass::Standard);
 }

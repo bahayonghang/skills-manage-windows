@@ -23,22 +23,13 @@ use super::argv::{
 use super::error::SkillsCliError;
 use super::lock::{remote_lock_path, skills_cli_lock_path_from_env};
 use super::remote_scripts::{
-    build_extract_tar_command, build_remote_launcher_probe_script,
-    build_remove_update_scratch_script, is_windows_remote_os, parse_remote_launcher_probe,
-    REMOTE_SKILL_HASH_SCRIPT,
+    build_extract_tar_command, build_remote_doctor_probe_script,
+    build_remote_launcher_probe_script, build_remove_update_scratch_script, is_windows_remote_os,
+    parse_remote_launcher_probe, REMOTE_SKILL_HASH_SCRIPT,
 };
 use super::runner::{CliOutput, NodeProcessRunner, RunnerRequest, SkillsCliRunner};
 use super::SkillsCliManagedLinkKind;
 use super::{doctor_with_program, resolve_node_program_from_env, SkillsCliDoctorReport};
-
-const DOCTOR_PROBE_SCRIPT: &str = r#"printf 'XDG=%s\n' "${XDG_STATE_HOME-}"
-printf 'HOME=%s\n' "$HOME"
-if command -v node >/dev/null 2>&1; then
-  printf 'NODEV=%s\n' "$(node --version 2>/dev/null)"
-else
-  printf 'NODEV=\n'
-fi
-"#;
 
 /// Inventory opened ListGlobal / InstallTargets / ReadSkillMd / ExportInventory
 /// on Remote. Mutate opened Link/Unlink/PreviewRemove/RemoveGlobal/LeftoverScan.
@@ -490,7 +481,7 @@ impl SkillsCliTransport {
         connection: &ConnectedRemoteTarget,
     ) -> Result<SkillsCliDoctorReport, SkillsCliError> {
         let stdout = connection
-            .run_script(DOCTOR_PROBE_SCRIPT, &[])
+            .run_script(&build_remote_doctor_probe_script(), &[])
             .await
             .map_err(map_doctor_remote_error)?;
         let probe = parse_doctor_probe(&stdout);

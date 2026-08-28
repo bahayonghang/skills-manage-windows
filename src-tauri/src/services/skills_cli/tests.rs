@@ -166,9 +166,13 @@ fn assert_npx_prefix(args: &[String], launcher: &NodeLauncher) {
     assert_eq!(args[2], format!("--package={SKILLS_CLI_NPM_SPEC}"));
     assert_eq!(args[3], "--");
     assert_eq!(args[4], "skills");
+    assert_eq!(SKILLS_CLI_NPM_SPEC, "skills");
     let joined = args.join(" ");
     assert!(!joined.contains("npx.cmd"));
-    assert!(!args.iter().any(|arg| arg == "--all" || arg == "*"));
+    assert!(!args
+        .iter()
+        .any(|arg| arg == "--all" || arg == "*" || arg == "--copy"));
+    assert!(!args.iter().any(|arg| arg.contains("1.5.23")));
     assert!(!args
         .iter()
         .any(|arg| arg.eq_ignore_ascii_case("npx.cmd") || arg.contains("cmd /c")));
@@ -1138,6 +1142,12 @@ async fn remote_doctor_round_trips_are_constant_and_map_node_errors() {
         let stdin = String::from_utf8_lossy(calls[0].stdin.as_deref().unwrap_or(&[]));
         assert!(!stdin.contains("skills --help"), "{stdin}");
         assert!(stdin.contains("NODEV"), "{stdin}");
+        assert!(stdin.contains("/home/linuxbrew/.linuxbrew/bin"), "{stdin}");
+        assert!(stdin.contains("${HOME}/.linuxbrew/bin"), "{stdin}");
+        assert!(stdin.contains("/opt/homebrew/bin"), "{stdin}");
+        assert!(stdin.contains("/usr/local/bin"), "{stdin}");
+        assert!(!stdin.contains("bash -lc"), "{stdin}");
+        assert!(!stdin.contains("zsh -lic"), "{stdin}");
     }
 
     let missing = std::sync::Arc::new(crate::test_support::FakeRunner::new());

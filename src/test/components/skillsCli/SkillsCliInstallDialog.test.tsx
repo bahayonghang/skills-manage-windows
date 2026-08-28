@@ -68,7 +68,7 @@ function renderDialog(
     open: true,
     onOpenChange: vi.fn(),
     canonicalRoot: "/tmp/agents",
-    npmSpec: "skills@1.5.23",
+    npmSpec: "skills",
     targets,
     platformTargets: targets.map(cliTargetToPlatformTarget),
     installedNames: new Set(["demo-skill"]),
@@ -354,7 +354,7 @@ describe("SkillsCliInstallDialog", () => {
     });
     expect(wizard.getByLabelText("Claude Code")).toHaveAttribute("data-checked");
     expect(wizard.getByLabelText("Amp")).not.toHaveAttribute("data-checked");
-    expect(wizard.getByText("npx skills@1.5.23 add owner/repo -s helper-skill -g -a cursor -a claude -y")).toBeInTheDocument();
+    expect(wizard.getByText("npx skills add owner/repo -s helper-skill -g -a cursor -a claude -y")).toBeInTheDocument();
     expect(wizard.queryByText(/--force/)).not.toBeInTheDocument();
     expect(wizard.queryByText(/--keep-links/)).not.toBeInTheDocument();
     fireEvent.click(wizard.getByRole("button", { name: "安装" }));

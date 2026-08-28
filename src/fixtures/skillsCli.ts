@@ -70,7 +70,7 @@ const FIXTURE_PREVIEW: SkillsCliSourcePreview = {
 
 const FIXTURE_DOCTOR: SkillsCliDoctorReport = {
   nodeVersion: "v22.20.0",
-  npmSpec: "skills@1.5.23",
+  npmSpec: "skills",
 };
 
 const FIXTURE_UPDATE_INVENTORY: SkillsCliUpdateInventory = {

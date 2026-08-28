@@ -1,6 +1,6 @@
-//! Local process execution seam for the pinned Skills CLI.
+//! Local process execution seam for the official Skills CLI.
 //!
-//! Production runs `node <npx-cli.js> --yes --package=skills@1.5.23 -- …`
+//! Production runs `node <npx-cli.js> --yes --package=skills -- …`
 //! through the shared `targets` supervisor, which provides bounded output,
 //! deadlines, cancellation polling, and Windows Job Object / Unix process
 //! group teardown. Tests inject [`FakeRunner`]-style doubles.
