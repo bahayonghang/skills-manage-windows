@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "远端树四个子任务共同修订的契约；中层父任务负责保证 Local-only 断言被逐能力矩阵完整取代且无矛盾中间态"}
+{"file": ".trellis/spec/backend/target-context.md", "reason": "所有远端能力的共同前置：命令入口冻结 target + DbPool，禁止 .await 中途重解析"}
+{"file": ".trellis/spec/backend/transport-seam.md", "reason": "接缝范式的权威来源；四个子任务必须共用同一接缝而非各自 match ActiveTarget"}
+{"file": ".trellis/spec/backend/process-supervision.md", "reason": "远端命令执行的 ProcessPolicy、超时与输出上限贯穿 doctor/列举/写操作/安装"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "远端 stdout/stderr/路径/URL 的脱敏是四个子任务共同的横切约束"}
+{"file": ".trellis/spec/backend/index.md", "reason": "后端层 Pre-Development Checklist 入口"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "远端化跨 seam、服务、IPC、store、组件，集成评审需按跨层视角检查"}
+{"file": ".trellis/tasks/08-27-skills-cli-availability-remote/research/current-state-evidence.md", "reason": "远端闸门位置（ensure_local_target、SkillsCliView、Sidebar）与 SSH 执行模型的 file:line 证据"}
