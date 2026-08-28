@@ -257,16 +257,15 @@ describe("CollectionView", () => {
       JSON.stringify({ version: 1, name: "Frontend", skills: ["frontend-design"] })
     );
 
-    // Mock URL.createObjectURL and anchor click
+    // Mock URL.createObjectURL and anchor click. The stub must be restored:
+    // react-router's navigator calls `new URL(...)` while navigating, so a
+    // leaked non-constructor URL breaks every later navigation in this file.
     const createObjectURL = vi.fn().mockReturnValue("blob:mock");
     const revokeObjectURL = vi.fn();
     const anchorClick = vi
       .spyOn(HTMLAnchorElement.prototype, "click")
       .mockImplementation(() => undefined);
-    Object.defineProperty(window, "URL", {
-      value: { createObjectURL, revokeObjectURL },
-      writable: true,
-    });
+    vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
 
     try {
       renderCollectionView();
@@ -278,6 +277,7 @@ describe("CollectionView", () => {
       });
       expect(anchorClick).toHaveBeenCalledOnce();
     } finally {
+      vi.unstubAllGlobals();
       anchorClick.mockRestore();
     }
   });
