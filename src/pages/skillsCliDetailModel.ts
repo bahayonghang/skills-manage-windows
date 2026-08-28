@@ -1,4 +1,6 @@
 import { SKILLS_CLI_DRAWER_BAND_MIN_PX } from "@/pages/skillsCliViewModel";
+import { formatBackendError } from "@/lib/backendError";
+import type { TFunction } from "i18next";
 import type {
   SkillsCliGlobalSkill,
   SkillsCliInstallTarget,
@@ -35,6 +37,37 @@ export interface SkillsCliDetailPlacementRow {
   action: SkillsCliDetailRowAction;
   reasonCode: string | null;
   reasonKind: SkillsCliDetailReasonKind;
+  forceUnlinkable: boolean;
+}
+
+export function isForceUnlinkableConflict(
+  state: SkillsCliPlacementState,
+  reasonCode: string | null,
+): boolean {
+  if (state !== "conflict" || !reasonCode) {
+    return false;
+  }
+  switch (reasonCode) {
+    case "wrong_link_target":
+    case "broken_link":
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function formatSkillsCliReasonCode(
+  reasonCode: string,
+  t: TFunction,
+): string {
+  const formatted = formatBackendError(`${reasonCode}:`, t);
+  if (formatted !== `${reasonCode}:`) {
+    return formatted;
+  }
+  const translated = t(`skillsCli.placementReasons.${reasonCode}`, {
+    defaultValue: "",
+  }) as string;
+  return translated || reasonCode;
 }
 
 export function isAssociatedPlacement(state: SkillsCliPlacementState): boolean {
@@ -70,6 +103,7 @@ function toDetailRow(placement: SkillsCliPlacement): SkillsCliDetailPlacementRow
         switchDisabled: false,
         action: "unlink",
         reasonKind: null,
+        forceUnlinkable: false,
       };
     case "missing":
       return {
@@ -79,6 +113,7 @@ function toDetailRow(placement: SkillsCliPlacement): SkillsCliDetailPlacementRow
         switchDisabled: false,
         action: "link",
         reasonKind: null,
+        forceUnlinkable: false,
       };
     case "direct_copy":
       return {
@@ -88,6 +123,7 @@ function toDetailRow(placement: SkillsCliPlacement): SkillsCliDetailPlacementRow
         switchDisabled: true,
         action: null,
         reasonKind: "direct_copy",
+        forceUnlinkable: false,
       };
     case "conflict":
       return {
@@ -97,6 +133,10 @@ function toDetailRow(placement: SkillsCliPlacement): SkillsCliDetailPlacementRow
         switchDisabled: true,
         action: null,
         reasonKind: "conflict",
+        forceUnlinkable: isForceUnlinkableConflict(
+          placement.state,
+          placement.reasonCode,
+        ),
       };
     case "unavailable":
       return {
@@ -106,6 +146,7 @@ function toDetailRow(placement: SkillsCliPlacement): SkillsCliDetailPlacementRow
         switchDisabled: true,
         action: null,
         reasonKind: "unavailable",
+        forceUnlinkable: false,
       };
     default: {
       const _exhaustive: never = placement.state;

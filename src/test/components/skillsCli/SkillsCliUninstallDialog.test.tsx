@@ -76,7 +76,8 @@ describe("SkillsCliUninstallDialog", () => {
     expect(surface.getByTestId("skills-cli-uninstall-conflicts")).toHaveTextContent(
       "该平台路径与受管技能冲突",
     );
-    expect(surface.getByRole("button", { name: "卸载" })).toBeDisabled();
+    expect(surface.getByRole("button", { name: "强制卸载" })).toBeDisabled();
+    expect(surface.getByTestId("skills-cli-uninstall-force-ack")).toBeInTheDocument();
     expect(dialog.textContent).not.toMatch(/--keep-links|--force|skills remove/);
     expect(dialog.textContent).not.toContain("/tmp/");
   });
@@ -128,7 +129,9 @@ describe("SkillsCliUninstallDialog", () => {
       timeout: ASYNC_UI_TIMEOUT_MS,
     });
     fireEvent.click(confirm);
-    await waitFor(() => expect(removeGlobalBatch).toHaveBeenCalledWith(["claude-handoff"]), {
+    await waitFor(() => expect(removeGlobalBatch).toHaveBeenCalledWith(["claude-handoff"], {
+      force: false,
+    }), {
       timeout: ASYNC_UI_TIMEOUT_MS,
     });
   });
@@ -198,5 +201,63 @@ describe("SkillsCliUninstallDialog", () => {
     ).toHaveTextContent("无法执行 Skills CLI 软件包");
     expect(surface.getByRole("button", { name: "卸载" })).toBeDisabled();
     expect(dialog).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("enables Force uninstall after extra confirmation and does not render empty reason codes", async () => {
+    const removeGlobalBatch = vi.fn(async () => ({
+      succeeded: [{ skillName: "demo-skill" }],
+      failed: [],
+      skipped: [],
+    }));
+    render(
+      <SkillsCliUninstallDialog
+        open
+        skillNames={["demo-skill"]}
+        isMutating={false}
+        onOpenChange={vi.fn()}
+        previewRemoveGlobal={async () =>
+          plan({
+            retainedDirectCopies: [{ agentId: "amp", displayName: "Amp" }],
+            conflicts: [
+              {
+                agentId: "claude-code",
+                displayName: "Claude Code",
+                reasonCode: "wrong_link_target",
+              },
+            ],
+            confirmable: false,
+          })
+        }
+        removeGlobalBatch={removeGlobalBatch}
+        onRemoved={vi.fn()}
+      />,
+    );
+    const dialog = await screen.findByRole(
+      "dialog",
+      { name: /卸载 demo-skill/ },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    const surface = within(dialog);
+    const conflicts = await surface.findByTestId(
+      "skills-cli-uninstall-conflicts",
+      {},
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    expect(conflicts.textContent).not.toContain("wrong_link_target:");
+    expect(conflicts).toHaveTextContent("该链接指向其他目录");
+    const confirm = surface.getByRole("button", { name: "强制卸载" });
+    expect(confirm).toBeDisabled();
+    fireEvent.click(surface.getByRole("checkbox"));
+    await waitFor(() => expect(confirm).toBeEnabled(), {
+      timeout: ASYNC_UI_TIMEOUT_MS,
+    });
+    fireEvent.click(confirm);
+    await waitFor(
+      () =>
+        expect(removeGlobalBatch).toHaveBeenCalledWith(["demo-skill"], {
+          force: true,
+        }),
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
   });
 });

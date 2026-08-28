@@ -91,7 +91,11 @@ export interface SkillsCliState {
   clearSkillDoc: (skillName?: string) => void;
   revealSkillFolder: (skillName: string) => Promise<void>;
   linkPlatform: (skillName: string, agentId: string) => Promise<void>;
-  unlinkPlatform: (skillName: string, agentId: string) => Promise<void>;
+  unlinkPlatform: (
+    skillName: string,
+    agentId: string,
+    options?: { force?: boolean },
+  ) => Promise<void>;
   linkPlatformBatch: (
     skillNames: string[],
     agentId: string,
@@ -101,7 +105,10 @@ export interface SkillsCliState {
     skillNames: string[],
     agentId: string,
   ) => Promise<PlacementMutationOutcome>;
-  removeGlobalBatch: (skillNames: string[]) => Promise<PlacementMutationOutcome>;
+  removeGlobalBatch: (
+    skillNames: string[],
+    options?: { force?: boolean },
+  ) => Promise<PlacementMutationOutcome>;
   applyUpdatesBatch: (skillNames: string[]) => Promise<PlacementMutationOutcome>;
   exportInventory: (input: SkillsCliExportInventoryInput) => Promise<void>;
   cancelJob: () => Promise<void>;

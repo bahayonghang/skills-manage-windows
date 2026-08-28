@@ -37,9 +37,10 @@ pub(crate) async fn unlink_platforms_batch(
     tx: &SkillsCliTransport,
     pool: &DbPool,
     items: &[(String, String)],
+    force: bool,
     cancel: Option<&AtomicBool>,
 ) -> Result<SkillsCliPlacementMutationOutcome, SkillsCliError> {
-    mutate_platforms_batch(tx, pool, items, cancel, PlacementAction::Unlink).await
+    mutate_platforms_batch(tx, pool, items, cancel, PlacementAction::Unlink { force }).await
 }
 
 struct BatchJob {
@@ -78,7 +79,7 @@ async fn mutate_platforms_batch(
     check_cancel(cancel)?;
     let operation = match action {
         PlacementAction::Link => LINK_LOCK_OPERATION,
-        PlacementAction::Unlink => UNLINK_LOCK_OPERATION,
+        PlacementAction::Unlink { .. } => UNLINK_LOCK_OPERATION,
     };
     let _guard = acquire_target_mutation_guard(
         &tx.mutation_target(),
@@ -183,7 +184,7 @@ async fn mutate_platforms_batch(
                 Ok(LinkOp::Create) => mutate_indexes.push(index),
                 Err(error) => push_failed(&mut outcome, job, error.ipc_code().to_string()),
             },
-            PlacementAction::Unlink => match decide_unlink(current.state) {
+            PlacementAction::Unlink { force } => match decide_unlink(current.state, force) {
                 Ok(UnlinkOp::Noop) => outcome.skipped.push(batch_item(job)),
                 Ok(UnlinkOp::Remove) => mutate_indexes.push(index),
                 Err(SkillsCliError::DirectCopyNotToggleable) => {
@@ -225,7 +226,7 @@ async fn mutate_platforms_batch(
                     }
                 }
             }
-            PlacementAction::Unlink => {
+            PlacementAction::Unlink { .. } => {
                 let links: Vec<String> = chunk
                     .iter()
                     .map(|index| jobs[*index].slot.clone())
@@ -268,8 +269,8 @@ async fn mutate_platforms_batch_local(
         check_cancel(cancel)?;
         let result = match action {
             PlacementAction::Link => link_platform(tx, pool, skill_name, agent_id, cancel).await,
-            PlacementAction::Unlink => {
-                unlink_platform(tx, pool, skill_name, agent_id, cancel).await
+            PlacementAction::Unlink { force } => {
+                unlink_platform(tx, pool, skill_name, agent_id, force, cancel).await
             }
         };
         match result {
@@ -278,7 +279,7 @@ async fn mutate_platforms_batch_local(
                 agent_id: agent_id.clone(),
             }),
             Err(SkillsCliError::DirectCopyNotToggleable)
-                if matches!(action, PlacementAction::Unlink) =>
+                if matches!(action, PlacementAction::Unlink { .. }) =>
             {
                 outcome.skipped.push(SkillsCliPlacementMutationItem {
                     skill_name: skill_name.clone(),

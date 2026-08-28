@@ -22,8 +22,9 @@ use crate::services::central_mutation::{
     DEFAULT_CENTRAL_MUTATION_TIMEOUT,
 };
 use crate::services::installation::fs_util::{
-    create_skills_cli_directory_link, observe_directory_slot, remove_verified_directory_link,
-    DirectorySlotObservation,
+    create_skills_cli_directory_link, observe_directory_slot, remove_directory_link_slot,
+    remove_verified_directory_link, slot_is_directory_link, DirectorySlotObservation,
+    REASON_BROKEN_LINK, REASON_WRONG_LINK_TARGET,
 };
 use crate::targets::ActiveTarget;
 
@@ -140,10 +141,11 @@ pub(crate) async fn remove_global(
     tx: &SkillsCliTransport,
     pool: &DbPool,
     skill_name: &str,
+    force: bool,
     cancel: Option<&AtomicBool>,
 ) -> Result<SkillsCliRemoveResult, SkillsCliError> {
     if tx.is_remote() {
-        return remote::remove_global_remote(tx, pool, skill_name, cancel).await;
+        return remote::remove_global_remote(tx, pool, skill_name, force, cancel).await;
     }
     let paths = tx.paths();
     remove_global_at(
@@ -155,6 +157,7 @@ pub(crate) async fn remove_global(
         None,
         remove_recovery_dir_for_transport(tx),
         DEFAULT_CENTRAL_MUTATION_TIMEOUT,
+        force,
     )
     .await
 }
@@ -169,6 +172,7 @@ pub(crate) async fn remove_global_at(
     mutation_lock_path: Option<PathBuf>,
     recovery_root: PathBuf,
     timeout: Duration,
+    force: bool,
 ) -> Result<SkillsCliRemoveResult, SkillsCliError> {
     if !is_valid_skill_token(skill_name) {
         return Err(SkillsCliError::SkillNotOwned);
@@ -214,6 +218,7 @@ pub(crate) async fn remove_global_at(
                     &lock_path,
                     &recovery_root,
                     &platforms,
+                    force,
                 )
             })();
             #[cfg(test)]
@@ -336,12 +341,13 @@ fn execute_remove(
     lock_path: &Path,
     recovery_root: &Path,
     platforms: &[InventoryPlatform],
+    force: bool,
 ) -> Result<SkillsCliRemoveResult, SkillsCliError> {
     let plan = build_remove_plan(skill_name, canonical_root, lock_path, platforms)?;
-    if !plan.conflicts.is_empty() {
+    if !plan.conflicts.is_empty() && !force {
         return Err(SkillsCliError::PlacementConflict);
     }
-    if !plan.owned_canonical && plan.managed_placements.is_empty() {
+    if !plan.owned_canonical && plan.managed_placements.is_empty() && !force {
         remove_lock_row(lock_path, skill_name, None)?;
         return Ok(SkillsCliRemoveResult {
             removed_canonical: false,
@@ -363,6 +369,23 @@ fn execute_remove(
     let canonical = canonical_root.join(skill_name);
     let backup = canonical_root.join(format!(".skillport-remove-{operation_id}"));
     let managed_links = collect_managed_links(skill_name, canonical_root, lock_path, platforms)?;
+    let force_slots = if force {
+        collect_force_unlink_slots(skill_name, canonical_root, lock_path, platforms)?
+    } else {
+        Vec::new()
+    };
+    if !plan.owned_canonical && managed_links.is_empty() && force_slots.is_empty() {
+        remove_lock_row(lock_path, skill_name, None)?;
+        return Ok(SkillsCliRemoveResult {
+            removed_canonical: false,
+            removed_managed_agent_ids: Vec::new(),
+            retained_direct_copy_agent_ids: plan
+                .retained_direct_copies
+                .iter()
+                .map(|item| item.agent_id.clone())
+                .collect(),
+        });
+    }
     let manifest = RemoveManifestV1 {
         version: MANIFEST_VERSION,
         operation_id: operation_id.clone(),
@@ -395,6 +418,13 @@ fn execute_remove(
         if let Err(error) = remove_verified_directory_link(&path, &backup)
             .or_else(|_| remove_verified_directory_link(&path, &canonical))
         {
+            let _ = recover_manifest(&manifest_file, canonical_root, lock_path);
+            return Err(map_remove_link_error(error));
+        }
+    }
+    for slot in &force_slots {
+        let path = PathBuf::from(&slot.path);
+        if let Err(error) = remove_directory_link_slot(&path) {
             let _ = recover_manifest(&manifest_file, canonical_root, lock_path);
             return Err(map_remove_link_error(error));
         }
@@ -432,13 +462,19 @@ fn execute_remove(
         source,
     })?;
 
+    let mut removed_managed: Vec<String> = plan
+        .managed_placements
+        .iter()
+        .map(|item| item.agent_id.clone())
+        .collect();
+    for slot in &force_slots {
+        if !removed_managed.contains(&slot.agent_id) {
+            removed_managed.push(slot.agent_id.clone());
+        }
+    }
     Ok(SkillsCliRemoveResult {
         removed_canonical: plan.owned_canonical,
-        removed_managed_agent_ids: plan
-            .managed_placements
-            .iter()
-            .map(|item| item.agent_id.clone())
-            .collect(),
+        removed_managed_agent_ids: removed_managed,
         retained_direct_copy_agent_ids: plan
             .retained_direct_copies
             .iter()
@@ -473,6 +509,41 @@ fn collect_managed_links(
             path: placement.target_path,
         })
         .collect())
+}
+
+fn collect_force_unlink_slots(
+    skill_name: &str,
+    canonical_root: &Path,
+    lock_path: &Path,
+    platforms: &[InventoryPlatform],
+) -> Result<Vec<ManagedLinkRecord>, SkillsCliError> {
+    let ownership = load_cli_lock_ownership(lock_path)?;
+    let placement_platforms: Vec<_> = platforms
+        .iter()
+        .map(InventoryPlatform::as_placement_platform)
+        .collect();
+    let placements =
+        classify_placements(&ownership, skill_name, canonical_root, &placement_platforms);
+    Ok(placements
+        .into_iter()
+        .filter(|placement| {
+            placement.state == SkillsCliPlacementState::Conflict
+                && conflict_reason_is_symlink_slot(placement.reason_code.as_deref())
+                && slot_is_directory_link(Path::new(&placement.target_path))
+        })
+        .map(|placement| ManagedLinkRecord {
+            kind: "symlink".to_string(),
+            agent_id: placement.agent_id,
+            path: placement.target_path,
+        })
+        .collect())
+}
+
+pub(super) fn conflict_reason_is_symlink_slot(reason: Option<&str>) -> bool {
+    matches!(
+        reason,
+        Some(REASON_WRONG_LINK_TARGET) | Some(REASON_BROKEN_LINK)
+    )
 }
 
 pub(super) fn persist_manifest(

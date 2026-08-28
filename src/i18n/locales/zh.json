@@ -65,6 +65,10 @@
     "disabled": "禁用"
   },
   "backendErrors": {
+    "wrong_link_target": "该链接指向其他目录。",
+    "broken_link": "该链接已失效。",
+    "not_a_directory": "该路径是文件，不是技能目录。",
+    "unreadable_entry": "无法读取该路径。",
     "job": {
       "central_update_busy": "已有 Central 更新任务正在运行，请等待完成或先取消当前任务。",
       "portability_busy": "已有 SkillPort 状态导入或导出任务正在运行。",
@@ -353,7 +357,7 @@
     "refreshing": "正在刷新…",
     "empty": "尚未安装 Skills CLI 全局技能。",
     "doctorOk": "Node {{version}} · {{spec}}",
-    "doctorChecking": "正在检查 Node.js 与固定版本的 Skills CLI…",
+    "doctorChecking": "正在检查 Node.js 与 Skills CLI…",
     "sourceLabel": "技能来源",
     "sourcePlaceholder": "owner/repo 或 https://github.com/owner/repo",
     "preview": "预览技能",
@@ -369,6 +373,7 @@
     "uninstallTitle": "卸载 {{name}}？",
     "uninstallDescription": "这将删除规范副本、Skills CLI 创建的平台链接，以及 lock 中的对应行。Universal Agents 下的其他文件保持不变。",
     "uninstallConfirm": "卸载",
+    "uninstallForceConfirm": "强制卸载",
     "uninstalling": "正在卸载…",
     "path": "路径：{{path}}",
     "agents": "平台：{{agents}}",
@@ -484,11 +489,13 @@
       "managedLinks": "将删除 {{count}} 个受管链接",
       "retainedCopies": "将保留独立副本",
       "retainedCopyItem": "{{name}}（{{platform}}）",
-      "conflicts": "冲突阻止卸载",
+      "conflicts": "冲突阻止常规卸载",
       "conflictItem": "{{name}}（{{platform}}）：{{reason}}",
       "previewError": "{{error}}",
       "failedItem": "{{name}}：{{error}}",
       "confirmBlocked": "存在冲突时无法确认卸载。",
+      "forceAvailable": "常规卸载被阻止。强制卸载会删除规范目录、lock 行和冲突符号链接。独立副本和普通文件夹会保留。",
+      "forceAcknowledge": "我了解强制卸载会删除规范目录、只摘除冲突符号链接（不跟随链接目标），并保留独立副本。",
       "lockOnly": "没有受管规范目录。卸载会删除 Skills CLI 锁记录；各平台下的独立副本会保留。"
     },
     "cleanup": {
@@ -531,6 +538,12 @@
       "missing": "未链接",
       "unavailable": "不可用"
     },
+    "placementReasons": {
+      "wrong_link_target": "该链接指向其他目录。",
+      "broken_link": "该链接已失效。",
+      "not_a_directory": "该路径是文件，不是技能目录。",
+      "unreadable_entry": "无法读取该路径。"
+    },
     "detail": {
       "dialogAria": "{{name}} 的详情",
       "canonicalPath": "规范路径",
@@ -547,6 +560,7 @@
       "reasonDirectCopy": "该平台保留了直接副本，不能切换。",
       "reasonConflict": "该平台路径与受管技能冲突。",
       "reasonUnavailable": "该平台当前无法链接。",
+      "forceUnlink": "强制取消链接",
       "docHeading": "SKILL.md",
       "docBytes": "{{bytes}} 字节",
       "docLoading": "正在加载 SKILL.md",

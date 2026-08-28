@@ -65,6 +65,10 @@
     "disabled": "Disabled"
   },
   "backendErrors": {
+    "wrong_link_target": "This link points at a different folder.",
+    "broken_link": "This link is broken.",
+    "not_a_directory": "This path is a file, not a skill folder.",
+    "unreadable_entry": "This path could not be read.",
     "job": {
       "central_update_busy": "A Central update is already running. Wait for it to finish or cancel it first.",
       "portability_busy": "A SkillPort state import or export is already running.",
@@ -353,7 +357,7 @@
     "refreshing": "Refreshing…",
     "empty": "No Skills CLI global skills are installed.",
     "doctorOk": "Node {{version}} · {{spec}}",
-    "doctorChecking": "Checking Node.js and the pinned Skills CLI…",
+    "doctorChecking": "Checking Node.js and the Skills CLI…",
     "sourceLabel": "Skill source",
     "sourcePlaceholder": "owner/repo or https://github.com/owner/repo",
     "preview": "Preview skills",
@@ -369,6 +373,7 @@
     "uninstallTitle": "Uninstall {{name}}?",
     "uninstallDescription": "This removes the canonical copy, platform links created by Skills CLI, and the lock row. Other files under Universal Agents are left unchanged.",
     "uninstallConfirm": "Uninstall",
+    "uninstallForceConfirm": "Force uninstall",
     "uninstalling": "Uninstalling…",
     "path": "Path: {{path}}",
     "agents": "Agents: {{agents}}",
@@ -484,11 +489,13 @@
       "managedLinks": "{{count}} managed links will be removed",
       "retainedCopies": "Independent copies will be kept",
       "retainedCopyItem": "{{name}} on {{platform}}",
-      "conflicts": "Conflicts block uninstall",
+      "conflicts": "Conflicts block a regular uninstall",
       "conflictItem": "{{name}} on {{platform}}: {{reason}}",
       "previewError": "{{error}}",
       "failedItem": "{{name}}: {{error}}",
       "confirmBlocked": "Uninstall cannot continue while a conflict remains.",
+      "forceAvailable": "Regular uninstall is blocked. Force uninstall removes the owned folder, lock row, and conflict symlinks. Direct copies and ordinary folders stay.",
+      "forceAcknowledge": "I understand Force uninstall will delete the owned folder, remove conflict symlinks without following their targets, and keep independent copies.",
       "lockOnly": "No owned canonical folder. Uninstall removes the Skills CLI lock entry. Direct copies under agent folders are left unchanged."
     },
     "cleanup": {
@@ -531,6 +538,12 @@
       "missing": "Not linked",
       "unavailable": "Unavailable"
     },
+    "placementReasons": {
+      "wrong_link_target": "This link points at a different folder.",
+      "broken_link": "This link is broken.",
+      "not_a_directory": "This path is a file, not a skill folder.",
+      "unreadable_entry": "This path could not be read."
+    },
     "detail": {
       "dialogAria": "Details for {{name}}",
       "canonicalPath": "Canonical path",
@@ -547,6 +560,7 @@
       "reasonDirectCopy": "This platform has a retained direct copy and cannot be toggled.",
       "reasonConflict": "This platform path conflicts with the owned skill.",
       "reasonUnavailable": "This platform is unavailable for linking.",
+      "forceUnlink": "Force unlink",
       "docHeading": "SKILL.md",
       "docBytes": "{{bytes}} bytes",
       "docLoading": "Loading SKILL.md",

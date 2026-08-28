@@ -229,6 +229,7 @@ export function SkillsCliView() {
     handleDetailClose,
     openUpdateSurface,
     handleDetailToggle,
+    handleDetailForceUnlink,
     handleDetailLinkAll,
     handleDetailUnlinkAll,
     toggleCollapsed,
@@ -668,6 +669,7 @@ export function SkillsCliView() {
         onClose={handleDetailClose}
         onFocusConsumed={handleFocusConsumed}
         onToggleLink={handleDetailToggle}
+        onForceUnlink={handleDetailForceUnlink}
         onLinkAll={handleDetailLinkAll}
         onUnlinkAll={handleDetailUnlinkAll}
         onRetryDoc={() => {

@@ -269,6 +269,7 @@ pub async fn skills_cli_remove_global(
     state: State<'_, AppState>,
     job_id: String,
     skill_name: String,
+    force: bool,
 ) -> crate::ipc_error::IpcResult<SkillsCliRemoveResult> {
     crate::ipc_boundary_async!("skills_cli_remove_global", {
         let lease = state
@@ -302,7 +303,7 @@ pub async fn skills_cli_remove_global(
                     )
             },
             || async move {
-                domain::remove_global(&tx, &pool, &skill_name, Some(lease.cancel_flag()))
+                domain::remove_global(&tx, &pool, &skill_name, force, Some(lease.cancel_flag()))
                     .await
                     .map_err(|error| skills_cli_failure(definition, &error))
             },
@@ -368,6 +369,7 @@ pub async fn skills_cli_unlink_platform(
     job_id: String,
     skill_name: String,
     skillport_agent_id: String,
+    force: bool,
 ) -> crate::ipc_error::IpcResult<SkillsCliPlacement> {
     crate::ipc_boundary_async!("skills_cli_unlink_platform", {
         let lease = state
@@ -401,6 +403,7 @@ pub async fn skills_cli_unlink_platform(
                     &pool,
                     &skill_name,
                     &skillport_agent_id,
+                    force,
                     Some(lease.cancel_flag()),
                 )
                 .await
@@ -471,6 +474,7 @@ pub async fn skills_cli_unlink_platform_batch(
     state: State<'_, AppState>,
     job_id: String,
     items: Vec<SkillsCliPlacementBatchItem>,
+    force: bool,
 ) -> crate::ipc_error::IpcResult<SkillsCliPlacementMutationOutcome> {
     crate::ipc_boundary_async!("skills_cli_unlink_platform_batch", {
         if items.is_empty() {
@@ -510,7 +514,7 @@ pub async fn skills_cli_unlink_platform_batch(
                     .count(SafeDetailKey::SkippedCount, outcome.skipped.len() as u64)
             },
             || async move {
-                domain::unlink_platforms_batch(&tx, &pool, &pairs, Some(lease.cancel_flag()))
+                domain::unlink_platforms_batch(&tx, &pool, &pairs, force, Some(lease.cancel_flag()))
                     .await
                     .map_err(|error| skills_cli_failure(definition, &error))
             },

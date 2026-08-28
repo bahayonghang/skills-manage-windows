@@ -1,6 +1,6 @@
 //! Skills CLI global management service.
 //!
-//! Wraps the official `skills` npm package (PIN: [`SKILLS_CLI_NPM_SPEC`]) for
+//! Wraps the official `skills` npm package ([`SKILLS_CLI_NPM_SPEC`], npm `latest`) for
 //! the `-g` lifecycle. Local and Remote share one transport seam. Install and
 //! update capabilities are open on Remote except RevealFolder and
 //! `install_origin` guessing.
@@ -668,6 +668,8 @@ pub(crate) async fn add_global_with_lock_at(
     .await
 }
 
+#[cfg(test)]
+mod force_mutate_tests;
 #[cfg(test)]
 mod install_update_tests;
 #[cfg(test)]

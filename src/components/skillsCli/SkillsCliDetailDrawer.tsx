@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 import {
   buildSkillsCliDetailRows,
   folderHashPrefix,
+  formatSkillsCliReasonCode,
   skillLocalTimestamp,
   skillsCliDrawerPanelWidth,
   summarizeDetailPlacements,
@@ -62,6 +63,7 @@ export interface SkillsCliDetailDrawerProps {
   onClose: () => void;
   onFocusConsumed?: () => void;
   onToggleLink: (agentId: string, next: boolean) => void | Promise<void>;
+  onForceUnlink?: (agentId: string) => void | Promise<void>;
   onLinkAll: () => void | Promise<void>;
   onUnlinkAll: () => void | Promise<void>;
   onRetryDoc: () => void;
@@ -80,7 +82,7 @@ function rowReason(
     return null;
   }
   if (row.reasonCode) {
-    return formatBackendError(`${row.reasonCode}:`, t);
+    return formatSkillsCliReasonCode(row.reasonCode, t);
   }
   switch (row.reasonKind) {
     case "direct_copy":
@@ -130,6 +132,7 @@ export function SkillsCliDetailDrawer({
   onClose,
   onFocusConsumed,
   onToggleLink,
+  onForceUnlink,
   onLinkAll,
   onUnlinkAll,
   onRetryDoc,
@@ -239,6 +242,27 @@ export function SkillsCliDetailDrawer({
       }
       return copy;
     });
+  }
+
+  async function runForceUnlink(agentId: string) {
+    if (!onForceUnlink) {
+      return;
+    }
+    setMutationError(null);
+    markBusy([agentId], true);
+    try {
+      await onForceUnlink(agentId);
+      showSkillsCliActionToast({
+        semantic: "success",
+        message: t("skillsCli.batch.unlinkSuccess", { succeeded: 1 }),
+      });
+    } catch (error) {
+      const message = formatBackendError(error, t);
+      setMutationError(t("skillsCli.detail.mutationError", { error: message }));
+      showSkillsCliActionToast({ semantic: "error", message });
+    } finally {
+      markBusy([agentId], false);
+    }
   }
 
   async function runToggle(agentId: string, next: boolean) {
@@ -522,17 +546,32 @@ export function SkillsCliDetailDrawer({
                               </p>
                             ) : null}
                           </div>
-                          <Switch
-                            checked={row.switchChecked}
-                            disabled={switchDisabled}
-                            aria-label={switchLabel}
-                            onCheckedChange={(checked) => {
-                              if (row.action == null) {
-                                return;
-                              }
-                              void runToggle(row.agentId, checked);
-                            }}
-                          />
+                          <div className="flex shrink-0 items-center gap-2">
+                            {row.forceUnlinkable ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                data-testid={`skills-cli-force-unlink-${row.agentId}`}
+                                disabled={placementLocked || rowBusy}
+                                title={mutationLockReason}
+                                onClick={() => void runForceUnlink(row.agentId)}
+                              >
+                                {t("skillsCli.detail.forceUnlink")}
+                              </Button>
+                            ) : null}
+                            <Switch
+                              checked={row.switchChecked}
+                              disabled={switchDisabled}
+                              aria-label={switchLabel}
+                              onCheckedChange={(checked) => {
+                                if (row.action == null) {
+                                  return;
+                                }
+                                void runToggle(row.agentId, checked);
+                              }}
+                            />
+                          </div>
                         </li>
                       );
                     })}

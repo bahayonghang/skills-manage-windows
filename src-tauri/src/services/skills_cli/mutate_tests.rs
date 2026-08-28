@@ -13,7 +13,7 @@ use super::remote_scripts::{
     is_skillport_canonical_backup_path, remote_mutation_command_budget,
     SKILLS_CLI_REMOTE_MUTATION_CHUNK_SIZE, SKILLS_CLI_REMOTE_MUTATION_PROBE_OVERHEAD,
 };
-use super::remove::{preview_remove_global, recover_pending_via_transport, remove_global};
+use super::remove::{recover_pending_via_transport, remove_global};
 use super::{SkillsCliPlacementState, SkillsCliTransport};
 use crate::ipc_error::public_message_for_code;
 use crate::services::central_mutation::acquire_central_mutation_guard_at;
@@ -23,7 +23,7 @@ use crate::targets::{
 use crate::test_support::{mem_pool_with_home, FakeRunner};
 
 const SENTINEL: &str = "SENTINEL_TOKEN_SKILLS_CLI_STDERR";
-const HOME: &str = "/mnt/remote-seam-home";
+pub(super) const HOME: &str = "/mnt/remote-seam-home";
 
 fn ssh_config() -> RemoteTargetConfig {
     RemoteTargetConfig {
@@ -43,7 +43,7 @@ fn ssh_config() -> RemoteTargetConfig {
     }
 }
 
-fn remote_tx(runner: Arc<FakeRunner>) -> SkillsCliTransport {
+pub(super) fn remote_tx(runner: Arc<FakeRunner>) -> SkillsCliTransport {
     SkillsCliTransport::for_tests_remote(ConnectedRemoteTarget::Ssh(
         ConnectedSshTarget::for_tests_with_runner(ssh_config(), runner),
     ))
@@ -57,7 +57,7 @@ fn windows_tx(runner: Arc<FakeRunner>) -> SkillsCliTransport {
     ))
 }
 
-fn lock_json(names: &[&str]) -> String {
+pub(super) fn lock_json(names: &[&str]) -> String {
     let skills = names
         .iter()
         .map(|name| format!("\"{name}\":{{}}"))
@@ -66,16 +66,16 @@ fn lock_json(names: &[&str]) -> String {
     format!(r#"{{"version":3,"skills":{{{skills}}}}}"#)
 }
 
-fn probe_line(path: &str, kind: &str, target: &str) -> String {
+pub(super) fn probe_line(path: &str, kind: &str, target: &str) -> String {
     format!("{path}\t{kind}\t{target}\n")
 }
 
-fn stdin_of(runner: &FakeRunner, index: usize) -> String {
+pub(super) fn stdin_of(runner: &FakeRunner, index: usize) -> String {
     let calls = runner.calls();
     String::from_utf8_lossy(calls[index].stdin.as_deref().unwrap_or(&[])).into_owned()
 }
 
-fn call_count(runner: &FakeRunner) -> usize {
+pub(super) fn call_count(runner: &FakeRunner) -> usize {
     runner.calls().len()
 }
 
@@ -93,7 +93,7 @@ fn mutation_script_count(runner: &FakeRunner) -> usize {
         .count()
 }
 
-async fn four_platform_pool() -> crate::db::DbPool {
+pub(super) async fn four_platform_pool() -> crate::db::DbPool {
     let pool = mem_pool_with_home(HOME).await;
     sqlx::query("DELETE FROM agents WHERE id NOT IN ('cursor', 'amp', 'zed', 'claude-code')")
         .execute(&pool)
@@ -110,7 +110,7 @@ async fn four_platform_pool() -> crate::db::DbPool {
     pool
 }
 
-async fn agent_dir(pool: &crate::db::DbPool, id: &str) -> String {
+pub(super) async fn agent_dir(pool: &crate::db::DbPool, id: &str) -> String {
     sqlx::query_scalar("SELECT global_skills_dir FROM agents WHERE id = ?")
         .bind(id)
         .fetch_one(pool)
@@ -118,7 +118,7 @@ async fn agent_dir(pool: &crate::db::DbPool, id: &str) -> String {
         .unwrap()
 }
 
-fn wipe_skill_recovery(skill: &str) {
+pub(super) fn wipe_skill_recovery(skill: &str) {
     let dir = std::env::temp_dir()
         .join("skillport-skills-cli-remove-recovery")
         .join("ssh-cli-test");
@@ -192,7 +192,7 @@ async fn assert_zero_write_reject(state_probe: &str, link: bool, expected: Skill
             .await
             .unwrap_err()
     } else {
-        unlink_platform(&tx, &pool, "demo", "zed", None)
+        unlink_platform(&tx, &pool, "demo", "zed", false, None)
             .await
             .unwrap_err()
     };
@@ -245,10 +245,15 @@ async fn ac3_ordinary_directory_batch_unlink_is_skipped_without_delete() {
         probe_line(&slot, "dir", "")
     ));
     let tx = remote_tx(runner.clone());
-    let outcome =
-        unlink_platforms_batch(&tx, &pool, &[("demo".to_string(), "zed".to_string())], None)
-            .await
-            .unwrap();
+    let outcome = unlink_platforms_batch(
+        &tx,
+        &pool,
+        &[("demo".to_string(), "zed".to_string())],
+        false,
+        None,
+    )
+    .await
+    .unwrap();
     assert_eq!(outcome.skipped.len(), 1);
     assert!(outcome.succeeded.is_empty());
     assert_eq!(tx.write_count(), 0);
@@ -358,7 +363,7 @@ async fn ac4_remote_remove_keeps_direct_copy_and_conflict_is_zero_write() {
         runner.push_success("");
     }
     let tx = remote_tx(runner.clone());
-    let result = remove_global(&tx, &pool, "ac4", None).await.unwrap();
+    let result = remove_global(&tx, &pool, "ac4", false, None).await.unwrap();
     assert!(result.removed_canonical);
     assert!(result
         .removed_managed_agent_ids
@@ -391,7 +396,7 @@ async fn ac4_remote_remove_keeps_direct_copy_and_conflict_is_zero_write() {
         probe_line(&managed, "file", "")
     ));
     let conflict_tx = remote_tx(conflict_runner.clone());
-    let error = remove_global(&conflict_tx, &pool, "ac4", None)
+    let error = remove_global(&conflict_tx, &pool, "ac4", false, None)
         .await
         .unwrap_err();
     assert_eq!(error.ipc_code(), "skills_cli.placement_conflict");
@@ -511,7 +516,7 @@ async fn ac8_partial_batch_unlink_keeps_earlier_chunk() {
     runner.push_success(&first);
     runner.push_output(1, "", SENTINEL);
     let tx = remote_tx(runner.clone());
-    let outcome = unlink_platforms_batch(&tx, &pool, &items, None)
+    let outcome = unlink_platforms_batch(&tx, &pool, &items, false, None)
         .await
         .unwrap();
     assert_eq!(outcome.succeeded.len(), k);
@@ -573,7 +578,7 @@ async fn ac8b_batch_command_budget_matches_named_constant() {
             runner.push_success("removed\n");
         }
         let tx = remote_tx(runner.clone());
-        unlink_platforms_batch(&tx, &pool, &items, None)
+        unlink_platforms_batch(&tx, &pool, &items, false, None)
             .await
             .unwrap();
         assert_eq!(
@@ -607,7 +612,7 @@ async fn ac8b_batch_command_budget_matches_named_constant() {
         runner.push_success("removed\n");
     }
     let tx = remote_tx(runner.clone());
-    unlink_platforms_batch(&tx, &six_pool, &items, None)
+    unlink_platforms_batch(&tx, &six_pool, &items, false, None)
         .await
         .unwrap();
     assert_eq!(
@@ -669,49 +674,4 @@ fn preview_remove_is_open_on_remote_capability_gate() {
         SkillsCliCapability::PreviewRemove,
     )
     .is_ok());
-}
-
-#[tokio::test]
-async fn preview_remove_conflict_is_zero_write() {
-    wipe_skill_recovery("demo");
-    let pool = four_platform_pool().await;
-    let cursor = agent_dir(&pool, "cursor").await;
-    let canonical = format!("{HOME}/.agents/skills/demo");
-    let slot = format!("{cursor}/demo");
-    let runner = Arc::new(FakeRunner::new());
-    runner.push_success(&lock_json(&["demo"]));
-    runner.push_success(&format!(
-        "{}{}",
-        probe_line(&canonical, "dir", ""),
-        probe_line(&slot, "file", "")
-    ));
-    let tx = remote_tx(runner);
-    let plan = preview_remove_global(&tx, &pool, "demo").await.unwrap();
-    assert!(!plan.conflicts.is_empty());
-    assert!(!plan.confirmable);
-    assert_eq!(tx.write_count(), 0);
-}
-
-#[tokio::test]
-async fn preview_remove_copy_mode_without_canonical_is_confirmable() {
-    wipe_skill_recovery("demo");
-    let pool = four_platform_pool().await;
-    let zed = agent_dir(&pool, "zed").await;
-    let canonical = format!("{HOME}/.agents/skills/demo");
-    let slot = format!("{zed}/demo");
-    let runner = Arc::new(FakeRunner::new());
-    runner.push_success(&lock_json(&["demo"]));
-    runner.push_success(&format!(
-        "{}{}",
-        probe_line(&canonical, "absent", ""),
-        probe_line(&slot, "dir", "")
-    ));
-    let tx = remote_tx(runner);
-    let plan = preview_remove_global(&tx, &pool, "demo").await.unwrap();
-    assert!(plan.confirmable);
-    assert!(!plan.owned_canonical);
-    assert!(plan.conflicts.is_empty());
-    assert!(plan.managed_placements.is_empty());
-    assert_eq!(plan.retained_direct_copies[0].agent_id, "zed");
-    assert_eq!(tx.write_count(), 0);
 }

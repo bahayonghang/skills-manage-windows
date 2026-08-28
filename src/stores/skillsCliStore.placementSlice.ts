@@ -167,13 +167,14 @@ async function runPlacementBatch(
   set: SkillsCliSetter,
   items: PlacementPartitionItem[],
   kind: "link" | "unlink",
+  force = false,
 ): Promise<PlacementMutationOutcome> {
   const outcome = emptyPlacementOutcome();
   if (items.length === 0) {
     return outcome;
   }
   if (isRemoteSkillsCliTarget()) {
-    return runRemotePlacementBatch(get, set, items, kind);
+    return runRemotePlacementBatch(get, set, items, kind, force);
   }
   const operation: SkillsCliBatchOperation = kind === "link" ? "link" : "unlink";
   set({ isMutating: true, actionError: null });
@@ -207,6 +208,7 @@ async function runPlacementBatch(
                 jobId,
                 skillName: item.skillName,
                 skillportAgentId: item.agentId,
+                force,
               });
         if (get().jobId === jobId && result) {
           set({
@@ -257,6 +259,7 @@ async function runRemotePlacementBatch(
   set: SkillsCliSetter,
   items: PlacementPartitionItem[],
   kind: "link" | "unlink",
+  force = false,
 ): Promise<PlacementMutationOutcome> {
   const outcome = emptyPlacementOutcome();
   const operation: SkillsCliBatchOperation = kind === "link" ? "link" : "unlink";
@@ -300,6 +303,7 @@ async function runRemotePlacementBatch(
         result = await invoke("skills_cli_unlink_platform_batch", {
           jobId,
           items: batchItems,
+          force,
         });
         break;
       default: {
@@ -421,9 +425,26 @@ export function createSkillsCliPlacementSlice(
       throwIfSingleOutcomeFailed(outcome);
     },
 
-    async unlinkPlatform(skillName, agentId) {
+    async unlinkPlatform(skillName, agentId, options) {
       if (batchAlreadyRunning(get()) || skillsCliOperationBusy(get())) {
         throw new Error(BUSY_ENVELOPE);
+      }
+      const force = options?.force === true;
+      if (force) {
+        const placement = get()
+          .skills.find((skill) => skill.name === skillName)
+          ?.placements.find((item) => item.agentId === agentId);
+        if (placement?.state === "conflict") {
+          const batchOutcome = await runPlacementBatch(
+            get,
+            set,
+            [{ skillName, agentId, placement }],
+            "unlink",
+            true,
+          );
+          throwIfSingleOutcomeFailed(batchOutcome);
+          return;
+        }
       }
       const partition = partitionUnlinkBatch(get().skills, [skillName]);
       const match = partition.allowed.filter((item) => item.agentId === agentId);
@@ -446,6 +467,7 @@ export function createSkillsCliPlacementSlice(
         set,
         match,
         "unlink",
+        force,
       );
       outcome.succeeded.push(...batchOutcome.succeeded);
       outcome.failed.push(...batchOutcome.failed);
@@ -504,10 +526,11 @@ export function createSkillsCliPlacementSlice(
       return outcome;
     },
 
-    async removeGlobalBatch(skillNames) {
+    async removeGlobalBatch(skillNames, options) {
       if (batchAlreadyRunning(get()) || skillsCliOperationBusy(get())) {
         throw new Error(BUSY_ENVELOPE);
       }
+      const force = options?.force === true;
       const outcome = emptyPlacementOutcome();
       if (skillNames.length === 0) {
         return outcome;
@@ -523,7 +546,7 @@ export function createSkillsCliPlacementSlice(
             set({ skills: omitSkill(get().skills, skillName) });
           }
           try {
-            await invoke("skills_cli_remove_global", { jobId, skillName });
+            await invoke("skills_cli_remove_global", { jobId, skillName, force });
             outcome.succeeded.push({ skillName });
           } catch (error) {
             if (get().jobId === jobId && snapshot) {

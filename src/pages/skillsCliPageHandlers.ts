@@ -330,6 +330,15 @@ export function createSkillsCliPageHandlers(input: {
     await useSkillsCliStore.getState().unlinkPlatform(detailSkill.name, agentId);
   }
 
+  async function handleDetailForceUnlink(agentId: string) {
+    if (!detailSkill) {
+      return;
+    }
+    await useSkillsCliStore
+      .getState()
+      .unlinkPlatform(detailSkill.name, agentId, { force: true });
+  }
+
   async function handleDetailLinkAll() {
     if (!detailSkill) {
       return;
@@ -410,6 +419,7 @@ export function createSkillsCliPageHandlers(input: {
     handleDetailClose,
     openUpdateSurface,
     handleDetailToggle,
+    handleDetailForceUnlink,
     handleDetailLinkAll,
     handleDetailUnlinkAll,
     toggleCollapsed,

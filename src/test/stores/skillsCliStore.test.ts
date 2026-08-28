@@ -17,7 +17,7 @@ import {
   type SkillsCliUpdateInventory,
 } from "@/types";
 
-const doctor = { nodeVersion: "v22.20.0", npmSpec: "skills@1.5.23" };
+const doctor = { nodeVersion: "v22.20.0", npmSpec: "skills" };
 const skills = [
   {
     name: "demo-skill",
@@ -374,7 +374,7 @@ function placement(
     targetPath: `/tmp/${agentId}/skills/x`,
     state,
     managedLinkKind: state === "managed_link" ? ("windows_junction" as const) : null,
-    reasonCode: null,
+    reasonCode: null as string | null,
     installOrigin: null,
   };
 }
@@ -478,6 +478,51 @@ describe("skillsCliStore placement mutations", () => {
     ).rejects.toThrow(/direct_copy_not_toggleable/);
     expect(ipcInvokeCalls("skills_cli_link_platform")).toHaveLength(0);
     expect(ipcInvokeCalls("skills_cli_unlink_platform")).toHaveLength(0);
+  });
+
+  it("force-unlinks a conflict symlink and force-removes with IPC force=true", async () => {
+    const conflictSkill = globalSkill("ask-matt", [
+      {
+        ...placement("claude-code", "conflict", "Claude Code"),
+        reasonCode: "wrong_link_target",
+      },
+    ]);
+    useSkillsCliStore.setState({
+      skills: [conflictSkill, globalSkill("demo", [placement("cursor", "managed_link")])],
+      targets,
+      doctor,
+    });
+    mockIpcCommands({
+      skills_cli_doctor: doctor,
+      skills_cli_install_targets: targets,
+      skills_cli_list_global: {
+        skills: [conflictSkill],
+        canonicalRoot: "/tmp/agents",
+        lockPath: "/tmp/agents/skills.lock",
+      },
+      skills_cli_unlink_platform: missingPlacement,
+      skills_cli_remove_global: {
+        removedCanonical: true,
+        removedManagedAgentIds: ["claude-code"],
+        retainedDirectCopyAgentIds: [],
+      },
+    });
+    await useSkillsCliStore
+      .getState()
+      .unlinkPlatform("ask-matt", "claude-code", { force: true });
+    expect(ipcInvokeCalls("skills_cli_unlink_platform")).toHaveLength(1);
+    expect(ipcInvokeCalls("skills_cli_unlink_platform")[0]?.args).toMatchObject({
+      skillName: "ask-matt",
+      skillportAgentId: "claude-code",
+      force: true,
+    });
+
+    await useSkillsCliStore.getState().removeGlobalBatch(["demo"], { force: true });
+    const removeArgs = ipcInvokeCalls("skills_cli_remove_global")[0]?.args as Record<
+      string,
+      unknown
+    >;
+    expect(removeArgs).toMatchObject({ skillName: "demo", force: true });
   });
 
   it("links only missing placements serially, rolls back a failed item, and keeps a failed refresh from flipping success", async () => {
@@ -605,8 +650,8 @@ describe("skillsCliStore placement mutations", () => {
     expect(args).toMatchObject({
       skillName: "linked",
       skillportAgentId: "cursor",
+      force: false,
     });
-    expect(args).not.toHaveProperty("force");
     expect(args).not.toHaveProperty("keepLinks");
     expect(JSON.stringify(args)).not.toContain("--force");
     expect(JSON.stringify(args)).not.toContain("--keep-links");

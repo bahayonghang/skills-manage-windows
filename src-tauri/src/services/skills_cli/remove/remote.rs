@@ -19,10 +19,10 @@ use super::super::{
     SkillsCliRemoveResult, SkillsCliTransport,
 };
 use super::{
-    hex_digest, hit_fault, injected_fault, persist_manifest, plan_from_classified,
-    recover_pending_via_transport, ManagedLinkRecord, RemoveFault, RemoveManifestV1,
-    LOCK_READ_LIMIT, MANIFEST_VERSION, PHASE_METADATA_COMMITTED, PHASE_PREPARED, PHASE_STAGED,
-    REMOVE_LOCK_OPERATION,
+    conflict_reason_is_symlink_slot, hex_digest, hit_fault, injected_fault, persist_manifest,
+    plan_from_classified, recover_pending_via_transport, ManagedLinkRecord, RemoveFault,
+    RemoveManifestV1, LOCK_READ_LIMIT, MANIFEST_VERSION, PHASE_METADATA_COMMITTED, PHASE_PREPARED,
+    PHASE_STAGED, REMOVE_LOCK_OPERATION,
 };
 
 use std::fs;
@@ -90,6 +90,7 @@ pub(super) async fn remove_global_remote(
     tx: &SkillsCliTransport,
     pool: &DbPool,
     skill_name: &str,
+    force: bool,
     cancel: Option<&AtomicBool>,
 ) -> Result<SkillsCliRemoveResult, SkillsCliError> {
     if !is_valid_skill_token(skill_name) {
@@ -106,16 +107,17 @@ pub(super) async fn remove_global_remote(
     check_cancel(cancel)?;
     recover_pending_via_transport(tx, skill_name).await?;
     check_cancel(cancel)?;
-    execute_remove_via_transport(tx, pool, skill_name).await
+    execute_remove_via_transport(tx, pool, skill_name, force).await
 }
 
 async fn execute_remove_via_transport(
     tx: &SkillsCliTransport,
     pool: &DbPool,
     skill_name: &str,
+    force: bool,
 ) -> Result<SkillsCliRemoveResult, SkillsCliError> {
     let (plan, placements) = classify_remove_plan_remote(tx, pool, skill_name).await?;
-    if !plan.conflicts.is_empty() {
+    if !plan.conflicts.is_empty() && !force {
         return Err(SkillsCliError::PlacementConflict);
     }
     let paths = tx.paths();
@@ -126,11 +128,16 @@ async fn execute_remove_via_transport(
     };
     let fingerprint = hex_digest(&lock_bytes);
     let managed_links = managed_link_records(&placements);
+    let force_slots = if force {
+        force_unlink_records(&placements)
+    } else {
+        Vec::new()
+    };
     let recovery_root = remove_recovery_dir_for_transport(tx);
-    if !plan.owned_canonical && managed_links.is_empty() {
+    if !plan.owned_canonical && managed_links.is_empty() && force_slots.is_empty() {
         let next = lock_without_skill(&lock_bytes, skill_name)?;
         tx.fs().atomic_write(&lock_path, &next).await?;
-        return Ok(result_from_plan(&plan));
+        return Ok(result_from_plan(&plan, &force_slots));
     }
 
     let operation_id = Uuid::new_v4().to_string();
@@ -167,6 +174,14 @@ async fn execute_remove_via_transport(
     let link_paths: Vec<String> = managed_links.iter().map(|item| item.path.clone()).collect();
     if !link_paths.is_empty() {
         if let Err(error) = tx.fs().remove_verified_links(&link_paths).await {
+            let _ = recover_pending_via_transport(tx, skill_name).await;
+            return Err(error);
+        }
+    }
+    let force_paths: Vec<String> = force_slots.iter().map(|item| item.path.clone()).collect();
+    if !force_paths.is_empty() {
+        // Verified-remove scripts only `rm -f` / `rmdir` when `[ -L ]`; dirs/files skip.
+        if let Err(error) = tx.fs().remove_verified_links(&force_paths).await {
             let _ = recover_pending_via_transport(tx, skill_name).await;
             return Err(error);
         }
@@ -214,17 +229,26 @@ async fn execute_remove_via_transport(
         source,
     })?;
     let _ = manifest_file;
-    Ok(result_from_plan(&plan))
+    Ok(result_from_plan(&plan, &force_slots))
 }
 
-fn result_from_plan(plan: &SkillsCliRemovePlan) -> SkillsCliRemoveResult {
+fn result_from_plan(
+    plan: &SkillsCliRemovePlan,
+    force_slots: &[ManagedLinkRecord],
+) -> SkillsCliRemoveResult {
+    let mut removed_managed: Vec<String> = plan
+        .managed_placements
+        .iter()
+        .map(|item| item.agent_id.clone())
+        .collect();
+    for slot in force_slots {
+        if !removed_managed.contains(&slot.agent_id) {
+            removed_managed.push(slot.agent_id.clone());
+        }
+    }
     SkillsCliRemoveResult {
         removed_canonical: plan.owned_canonical,
-        removed_managed_agent_ids: plan
-            .managed_placements
-            .iter()
-            .map(|item| item.agent_id.clone())
-            .collect(),
+        removed_managed_agent_ids: removed_managed,
         retained_direct_copy_agent_ids: plan
             .retained_direct_copies
             .iter()
@@ -243,6 +267,21 @@ fn managed_link_records(placements: &[SkillsCliPlacement]) -> Vec<ManagedLinkRec
                 Some(SkillsCliManagedLinkKind::Symlink) => "symlink".to_string(),
                 None => "symlink".to_string(),
             },
+            agent_id: placement.agent_id.clone(),
+            path: placement.target_path.clone(),
+        })
+        .collect()
+}
+
+fn force_unlink_records(placements: &[SkillsCliPlacement]) -> Vec<ManagedLinkRecord> {
+    placements
+        .iter()
+        .filter(|placement| {
+            placement.state == SkillsCliPlacementState::Conflict
+                && conflict_reason_is_symlink_slot(placement.reason_code.as_deref())
+        })
+        .map(|placement| ManagedLinkRecord {
+            kind: "symlink".to_string(),
             agent_id: placement.agent_id.clone(),
             path: placement.target_path.clone(),
         })

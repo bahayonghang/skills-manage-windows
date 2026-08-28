@@ -144,7 +144,19 @@ describe("skillsCliDetailModel rows", () => {
       switchDisabled: true,
       action: null,
       reasonKind: "conflict",
+      forceUnlinkable: false,
     });
+
+    const relativeConflict = buildSkillsCliDetailRows(
+      skill([
+        {
+          ...placement("amp", "conflict", "Amp"),
+          reasonCode: "wrong_link_target",
+        },
+      ]),
+      targets,
+    );
+    expect(relativeConflict[0]?.forceUnlinkable).toBe(true);
   });
 
   it("counts associated as managed_link plus direct_copy and prefers Link all over Unlink all", () => {

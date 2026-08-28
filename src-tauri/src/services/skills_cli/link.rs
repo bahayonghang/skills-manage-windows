@@ -14,7 +14,7 @@ use crate::services::central_mutation::{
     DEFAULT_CENTRAL_MUTATION_TIMEOUT,
 };
 use crate::services::installation::fs_util::{
-    create_skills_cli_directory_link, inspect_managed_directory_link,
+    create_skills_cli_directory_link, inspect_managed_directory_link, remove_directory_link_slot,
     remove_verified_directory_link,
 };
 use crate::targets::ActiveTarget;
@@ -75,6 +75,7 @@ pub(crate) async fn unlink_platform(
     pool: &DbPool,
     skill_name: &str,
     skillport_agent_id: &str,
+    force: bool,
     cancel: Option<&AtomicBool>,
 ) -> Result<SkillsCliPlacement, SkillsCliError> {
     if tx.is_remote() {
@@ -85,7 +86,7 @@ pub(crate) async fn unlink_platform(
             skillport_agent_id,
             cancel,
             DEFAULT_CENTRAL_MUTATION_TIMEOUT,
-            PlacementAction::Unlink,
+            PlacementAction::Unlink { force },
         )
         .await;
     }
@@ -100,6 +101,7 @@ pub(crate) async fn unlink_platform(
         skillport_agent_id,
         cancel,
         DEFAULT_CENTRAL_MUTATION_TIMEOUT,
+        force,
     )
     .await
 }
@@ -143,6 +145,7 @@ pub(crate) async fn unlink_platform_at(
     skillport_agent_id: &str,
     cancel: Option<&AtomicBool>,
     timeout: Duration,
+    force: bool,
 ) -> Result<SkillsCliPlacement, SkillsCliError> {
     mutate_placement(
         pool,
@@ -155,7 +158,7 @@ pub(crate) async fn unlink_platform_at(
         cancel,
         timeout,
         UNLINK_LOCK_OPERATION,
-        PlacementAction::Unlink,
+        PlacementAction::Unlink { force },
     )
     .await
 }
@@ -163,7 +166,7 @@ pub(crate) async fn unlink_platform_at(
 #[derive(Clone, Copy)]
 pub(super) enum PlacementAction {
     Link,
-    Unlink,
+    Unlink { force: bool },
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -217,7 +220,7 @@ async fn mutate_placement(
                     PlacementAction::Link => {
                         apply_link(&canonical, &current, &platform, &skill_name)?
                     }
-                    PlacementAction::Unlink => apply_unlink(&canonical, &current, &skill_name)?,
+                    PlacementAction::Unlink { force } => apply_unlink(&canonical, &current, force)?,
                 }
                 Ok(classify_one(&skill_name, &canonical, &platform))
             })();
@@ -292,18 +295,33 @@ fn apply_link(
 fn apply_unlink(
     canonical: &Path,
     current: &SkillsCliPlacement,
-    skill_name: &str,
+    force: bool,
 ) -> Result<(), SkillsCliError> {
     match current.state {
         SkillsCliPlacementState::Missing => Ok(()),
         SkillsCliPlacementState::ManagedLink => {
             let link = PathBuf::from(&current.target_path);
-            let _ = skill_name;
             remove_verified_directory_link(&link, canonical).map_err(map_link_error)?;
             Ok(())
         }
         SkillsCliPlacementState::DirectCopy => Err(SkillsCliError::DirectCopyNotToggleable),
-        SkillsCliPlacementState::Conflict => Err(SkillsCliError::PlacementConflict),
+        SkillsCliPlacementState::Conflict => {
+            if !force {
+                return Err(SkillsCliError::PlacementConflict);
+            }
+            let link = PathBuf::from(&current.target_path);
+            let removed = remove_directory_link_slot(&link).map_err(map_link_error)?;
+            if removed {
+                return Ok(());
+            }
+            // Absent is idempotent (same as managed-link remove). Ordinary
+            // directories and files are never deleted.
+            if std::fs::symlink_metadata(&link).is_err() {
+                Ok(())
+            } else {
+                Err(SkillsCliError::DirectCopyNotToggleable)
+            }
+        }
         SkillsCliPlacementState::Unavailable => Err(SkillsCliError::PlacementUnavailable),
     }
 }
@@ -345,12 +363,21 @@ pub(super) fn decide_link(state: SkillsCliPlacementState) -> Result<LinkOp, Skil
     }
 }
 
-pub(super) fn decide_unlink(state: SkillsCliPlacementState) -> Result<UnlinkOp, SkillsCliError> {
+pub(super) fn decide_unlink(
+    state: SkillsCliPlacementState,
+    force: bool,
+) -> Result<UnlinkOp, SkillsCliError> {
     match state {
         SkillsCliPlacementState::Missing => Ok(UnlinkOp::Noop),
         SkillsCliPlacementState::ManagedLink => Ok(UnlinkOp::Remove),
         SkillsCliPlacementState::DirectCopy => Err(SkillsCliError::DirectCopyNotToggleable),
-        SkillsCliPlacementState::Conflict => Err(SkillsCliError::PlacementConflict),
+        SkillsCliPlacementState::Conflict => {
+            if force {
+                Ok(UnlinkOp::Remove)
+            } else {
+                Err(SkillsCliError::PlacementConflict)
+            }
+        }
         SkillsCliPlacementState::Unavailable => Err(SkillsCliError::PlacementUnavailable),
     }
 }
@@ -391,7 +418,7 @@ async fn mutate_placement_remote(
     check_cancel(cancel)?;
     let operation = match action {
         PlacementAction::Link => LINK_LOCK_OPERATION,
-        PlacementAction::Unlink => UNLINK_LOCK_OPERATION,
+        PlacementAction::Unlink { .. } => UNLINK_LOCK_OPERATION,
     };
     let _guard = acquire_target_mutation_guard(&tx.mutation_target(), operation, timeout)
         .await
@@ -439,7 +466,7 @@ async fn mutate_placement_remote(
                 Ok(placement_after_link(current, kind))
             }
         },
-        PlacementAction::Unlink => match decide_unlink(current.state)? {
+        PlacementAction::Unlink { force } => match decide_unlink(current.state, force)? {
             UnlinkOp::Noop => Ok(current),
             UnlinkOp::Remove => {
                 let status = tx.fs().remove_verified_link(&slot).await?;
@@ -591,6 +618,7 @@ mod tests {
             "cursor",
             None,
             Duration::from_secs(2),
+            false,
         )
         .await
         .unwrap();
@@ -633,6 +661,7 @@ mod tests {
             "cursor",
             None,
             Duration::from_secs(2),
+            false,
         )
         .await
         .unwrap_err();
@@ -664,5 +693,60 @@ mod tests {
         crate::services::installation::directory_link::set_create_fault_after_dir(false);
         assert!(matches!(err, SkillsCliError::Io { .. }));
         assert!(!cursor.join("demo").exists());
+    }
+
+    #[tokio::test]
+    async fn force_unlinks_wrong_target_symlink_and_leaves_direct_copy() {
+        let (pool, temp, canonical_root, lock_path, recovery, cursor) = harness().await;
+        let foreign = temp.path().join("central/demo");
+        std::fs::create_dir_all(&foreign).unwrap();
+        std::fs::write(foreign.join("keep.bin"), b"central").unwrap();
+        let slot = cursor.join("demo");
+        create_skills_cli_directory_link(&foreign, &slot).unwrap();
+        let mutation_lock = temp.path().join("mutation.lock");
+        let missing = unlink_platform_at(
+            &pool,
+            &canonical_root,
+            &lock_path,
+            Some(mutation_lock),
+            recovery,
+            "demo",
+            "cursor",
+            None,
+            Duration::from_secs(2),
+            true,
+        )
+        .await
+        .unwrap();
+        assert_eq!(missing.state, SkillsCliPlacementState::Missing);
+        assert!(!slot.exists());
+        assert_eq!(std::fs::read(foreign.join("keep.bin")).unwrap(), b"central");
+    }
+
+    #[tokio::test]
+    async fn force_unlink_skips_ordinary_directory() {
+        let (pool, temp, canonical_root, lock_path, recovery, cursor) = harness().await;
+        std::fs::create_dir_all(cursor.join("demo")).unwrap();
+        std::fs::write(cursor.join("demo/keep.bin"), b"copy").unwrap();
+        let mutation_lock = temp.path().join("mutation.lock");
+        let err = unlink_platform_at(
+            &pool,
+            &canonical_root,
+            &lock_path,
+            Some(mutation_lock),
+            recovery,
+            "demo",
+            "cursor",
+            None,
+            Duration::from_secs(2),
+            true,
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err, SkillsCliError::DirectCopyNotToggleable));
+        assert_eq!(
+            std::fs::read(cursor.join("demo/keep.bin")).unwrap(),
+            b"copy"
+        );
     }
 }

@@ -366,6 +366,33 @@ describe("SkillsCliDetailDrawer", () => {
     expect(surface.queryByTestId("skills-cli-detail-unlink-all")).not.toBeInTheDocument();
   });
 
+  it("offers Force unlink on wrong_link_target conflict rows", async () => {
+    const onForceUnlink = vi.fn();
+    renderDrawer({
+      skill: makeSkill({
+        placements: [
+          {
+            ...placement("codex", "conflict", "Codex"),
+            reasonCode: "wrong_link_target",
+          },
+        ],
+      }),
+      onForceUnlink,
+    });
+    const drawer = await screen.findByRole(
+      "dialog",
+      { name: "demo-skill" },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    const surface = within(drawer);
+    const reason = surface.getByTestId("skills-cli-placement-codex");
+    expect(reason.textContent).not.toContain("wrong_link_target:");
+    fireEvent.click(surface.getByTestId("skills-cli-force-unlink-codex"));
+    await waitFor(() => expect(onForceUnlink).toHaveBeenCalledWith("codex"), {
+      timeout: ASYNC_UI_TIMEOUT_MS,
+    });
+  });
+
   it("closes from overlay and close button without a window listener", async () => {
     const onClose = vi.fn();
     const first = renderDrawer({ onClose });

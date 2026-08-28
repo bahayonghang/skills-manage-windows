@@ -53,7 +53,7 @@ vi.mock("@/stores/platformStore", () => ({
   }),
 }));
 
-const doctor = { nodeVersion: "v22.20.0", npmSpec: "skills@1.5.23" };
+const doctor = { nodeVersion: "v22.20.0", npmSpec: "skills" };
 const skills = [
   {
     name: "demo-skill",
@@ -230,7 +230,7 @@ describe("SkillsCliView", () => {
     render(<SkillsCliView />);
     expect(await screen.findByText("demo-skill")).toBeInTheDocument();
     expect(screen.getByTestId("skills-cli-doctor")).toHaveTextContent(
-      "skills@1.5.23",
+      "skills",
     );
     expect(screen.getByTestId("skills-cli-paths")).toHaveTextContent(
       "/tmp/agents",
@@ -282,7 +282,7 @@ describe("SkillsCliView", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("skills-cli-doctor")).toHaveTextContent(
-        "skills@1.5.23",
+        "skills",
       );
     });
     expect(screen.queryByTestId("skills-cli-census-empty")).not.toBeInTheDocument();
@@ -1282,7 +1282,7 @@ describe("SkillsCliView", () => {
       }),
     );
     expect(screen.getByTestId("skills-cli-doctor")).toHaveTextContent(
-      "skills@1.5.23",
+      "skills",
     );
     expect(screen.getByTestId("skills-cli-doctor")).not.toHaveTextContent(
       "无法执行 Skills CLI 软件包。",
@@ -1512,7 +1512,7 @@ describe("SkillsCliView", () => {
       },
       { timeout: ASYNC_UI_TIMEOUT_MS },
     );
-    expect(within(uninstall).getByRole("button", { name: "卸载" })).toBeDisabled();
+    expect(within(uninstall).getByRole("button", { name: "强制卸载" })).toBeDisabled();
     expect(ipcInvokeCalls("skills_cli_remove_global")).toHaveLength(0);
     expect(within(uninstall).getByTestId("skills-cli-uninstall-retained")).toBeInTheDocument();
   });

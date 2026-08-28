@@ -214,6 +214,34 @@ pub(crate) fn remove_verified_directory_link(
     }
 }
 
+pub(crate) fn slot_is_directory_link(path: &Path) -> bool {
+    std::fs::symlink_metadata(path)
+        .map(|metadata| is_reparse_or_symlink(&metadata))
+        .unwrap_or(false)
+}
+
+/// Remove a junction/symlink slot without following or comparing the target.
+/// Ordinary directories and files are left untouched (`Ok(false)`).
+pub(crate) fn remove_directory_link_slot(link: &Path) -> Result<bool, InstallationError> {
+    let metadata = match std::fs::symlink_metadata(link) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(InstallationError::ManagedDirectoryLinkRemove(error)),
+    };
+    if !is_reparse_or_symlink(&metadata) {
+        return Ok(false);
+    }
+    let kind = inspect_link_kind_and_target(link)
+        .map(|(kind, _)| kind)
+        .unwrap_or(if cfg!(windows) {
+            ManagedDirectoryLinkKind::WindowsJunction
+        } else {
+            ManagedDirectoryLinkKind::Symlink
+        });
+    remove_link_entry(link, kind)?;
+    Ok(true)
+}
+
 fn remove_link_entry(link: &Path, kind: ManagedDirectoryLinkKind) -> Result<(), InstallationError> {
     let result = match kind {
         ManagedDirectoryLinkKind::WindowsJunction => std::fs::remove_dir(link),

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { showSkillsCliActionToast } from "@/components/skillsCli/skillsCliActionToast";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogBody,
@@ -18,6 +19,7 @@ import {
   type PlacementMutationOutcome,
   type RemovalImpact,
 } from "@/pages/skillsCliBatchModel";
+import { formatSkillsCliReasonCode } from "@/pages/skillsCliDetailModel";
 import { useSkillsCliStore } from "@/stores/skillsCliStore";
 import type { SkillsCliRemovePlan } from "@/types";
 
@@ -28,7 +30,10 @@ export interface SkillsCliUninstallDialogProps {
   returnFocusRef?: RefObject<HTMLElement | null>;
   onOpenChange: (open: boolean) => void;
   previewRemoveGlobal: (skillName: string) => Promise<SkillsCliRemovePlan | null>;
-  removeGlobalBatch: (skillNames: string[]) => Promise<PlacementMutationOutcome>;
+  removeGlobalBatch: (
+    skillNames: string[],
+    options?: { force?: boolean },
+  ) => Promise<PlacementMutationOutcome>;
   onRemoved: (succeededNames: string[]) => void;
 }
 
@@ -51,6 +56,7 @@ export function SkillsCliUninstallDialog({
     [],
   );
   const [isPreviewing, setIsPreviewing] = useState(false);
+  const [forceAcknowledged, setForceAcknowledged] = useState(false);
   const incomingNamesKey = skillNames.join("\0");
   const namesKey = remainingNames.join("\0");
 
@@ -62,6 +68,7 @@ export function SkillsCliUninstallDialog({
     setItemErrors([]);
     setPreviewError(null);
     setImpact(null);
+    setForceAcknowledged(false);
   }, [open, incomingNamesKey]);
 
   useEffect(() => {
@@ -132,19 +139,22 @@ export function SkillsCliUninstallDialog({
       : t("skillsCli.uninstallImpact.titleMany", {
           count: remainingNames.length,
         });
+  const hasConflicts = (impact?.conflicts.length ?? 0) > 0;
   const confirmDisabled =
     isMutating ||
     isPreviewing ||
     previewError !== null ||
     impact == null ||
-    !impact.confirmable ||
-    impact.conflicts.length > 0;
+    (hasConflicts ? !forceAcknowledged : !impact.confirmable);
 
   const confirmableNote = useMemo(() => {
     if (!impact) {
       return null;
     }
-    if (impact.conflicts.length > 0 || !impact.confirmable) {
+    if (impact.conflicts.length > 0) {
+      return t("skillsCli.uninstallImpact.forceAvailable");
+    }
+    if (!impact.confirmable) {
       return t("skillsCli.uninstallImpact.confirmBlocked");
     }
     return null;
@@ -157,7 +167,9 @@ export function SkillsCliUninstallDialog({
     setItemErrors([]);
     setPreviewError(null);
     try {
-      const outcome = await removeGlobalBatch(remainingNames);
+      const outcome = await removeGlobalBatch(remainingNames, {
+        force: hasConflicts,
+      });
       const succeeded = outcome.succeeded.map((item) => item.skillName);
       if (succeeded.length > 0) {
         onRemoved(succeeded);
@@ -281,12 +293,26 @@ export function SkillsCliUninstallDialog({
                         {t("skillsCli.uninstallImpact.conflictItem", {
                           name: item.skillName,
                           platform: item.displayName,
-                          reason: formatBackendError(`${item.reasonCode}:`, t),
+                          reason: formatSkillsCliReasonCode(item.reasonCode, t),
                         })}
                       </li>
                     ))}
                   </ul>
                 </div>
+              ) : null}
+              {hasConflicts ? (
+                <label
+                  data-testid="skills-cli-uninstall-force-ack"
+                  className="flex items-start gap-2 rounded-md border border-border p-2 text-sm"
+                >
+                  <Checkbox
+                    checked={forceAcknowledged}
+                    className="mt-0.5"
+                    aria-label={t("skillsCli.uninstallImpact.forceAcknowledge")}
+                    onCheckedChange={(value) => setForceAcknowledged(value === true)}
+                  />
+                  <span>{t("skillsCli.uninstallImpact.forceAcknowledge")}</span>
+                </label>
               ) : null}
               {impact.confirmable &&
               impact.ownedContentCount === 0 &&
@@ -338,7 +364,9 @@ export function SkillsCliUninstallDialog({
           >
             {isMutating
               ? t("skillsCli.uninstalling")
-              : t("skillsCli.uninstallConfirm")}
+              : hasConflicts
+                ? t("skillsCli.uninstallForceConfirm")
+                : t("skillsCli.uninstallConfirm")}
           </Button>
         </DialogFooter>
       </DialogContent>

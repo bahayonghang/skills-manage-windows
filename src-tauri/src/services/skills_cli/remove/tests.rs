@@ -100,6 +100,7 @@ async fn copy_mode_without_canonical_is_confirmable_and_drops_lock_row() {
         Some(temp.path().join("mutation.lock")),
         recovery,
         Duration::from_secs(2),
+        false,
     )
     .await
     .unwrap();
@@ -151,6 +152,7 @@ async fn remove_preserves_direct_copy_bytes_and_drops_canonical_and_link() {
         Some(_temp.path().join("mutation.lock")),
         recovery.clone(),
         Duration::from_secs(2),
+        false,
     )
     .await
     .unwrap();
@@ -187,6 +189,7 @@ async fn conflict_is_zero_write() {
         Some(temp.path().join("mutation.lock")),
         recovery,
         Duration::from_secs(2),
+        false,
     )
     .await
     .unwrap_err();
@@ -213,6 +216,7 @@ async fn prepared_fault_rolls_back() {
         Some(temp.path().join("mutation.lock")),
         recovery.clone(),
         Duration::from_secs(2),
+        false,
     )
     .await
     .unwrap_err();
@@ -238,6 +242,7 @@ async fn fingerprint_drift_fail_closed() {
         Some(temp.path().join("mutation.lock")),
         recovery.clone(),
         Duration::from_secs(2),
+        false,
     )
     .await
     .unwrap_err();
@@ -267,6 +272,7 @@ async fn injected_phase_faults_converge_or_fail_closed() {
             Some(temp.path().join("mutation.lock")),
             recovery.clone(),
             Duration::from_secs(2),
+            false,
         )
         .await
         .unwrap_err();
@@ -288,4 +294,81 @@ async fn injected_phase_faults_converge_or_fail_closed() {
         }
         assert!(!recovery.join("demo.json").exists(), "{fault:?}");
     }
+}
+
+#[tokio::test]
+async fn force_remove_unlinks_foreign_symlink_and_keeps_direct_copy() {
+    let (pool, temp, canonical_root, lock_path, recovery, copy) = harness().await;
+    let zed = temp.path().join("zed");
+    let foreign = temp.path().join("central/ask-matt");
+    std::fs::create_dir_all(&zed).unwrap();
+    std::fs::create_dir_all(&foreign).unwrap();
+    std::fs::write(foreign.join("keep.bin"), b"central-tree").unwrap();
+    set_agent_dir(&pool, "zed", &zed).await;
+    create_skills_cli_directory_link(&foreign, &zed.join("demo")).unwrap();
+
+    let blocked = preview_remove_global_at(&pool, "demo", &canonical_root, &lock_path)
+        .await
+        .unwrap();
+    assert!(!blocked.confirmable);
+    assert_eq!(blocked.conflicts[0].agent_id, "zed");
+
+    let result = remove_global_at(
+        &pool,
+        "demo",
+        None,
+        &canonical_root,
+        &lock_path,
+        Some(temp.path().join("mutation.lock")),
+        recovery,
+        Duration::from_secs(2),
+        true,
+    )
+    .await
+    .unwrap();
+    assert!(result.removed_canonical);
+    assert!(result
+        .removed_managed_agent_ids
+        .contains(&"cursor".to_string()));
+    assert!(result
+        .removed_managed_agent_ids
+        .contains(&"zed".to_string()));
+    assert!(result
+        .retained_direct_copy_agent_ids
+        .contains(&"amp".to_string()));
+    assert!(!canonical_root.join("demo").exists());
+    assert!(!temp.path().join("cursor/demo").exists());
+    assert!(!zed.join("demo").exists());
+    assert_eq!(std::fs::read(copy).unwrap(), b"retain-me");
+    assert_eq!(
+        std::fs::read(foreign.join("keep.bin")).unwrap(),
+        b"central-tree"
+    );
+    let lock = std::fs::read_to_string(&lock_path).unwrap();
+    assert!(!lock.contains("\"demo\""));
+}
+
+#[tokio::test]
+async fn force_remove_does_not_delete_ordinary_conflict_file() {
+    let (pool, temp, canonical_root, lock_path, recovery, copy) = harness().await;
+    let zed = temp.path().join("zed");
+    std::fs::create_dir_all(&zed).unwrap();
+    std::fs::write(zed.join("demo"), b"not-a-dir").unwrap();
+    set_agent_dir(&pool, "zed", &zed).await;
+    let result = remove_global_at(
+        &pool,
+        "demo",
+        None,
+        &canonical_root,
+        &lock_path,
+        Some(temp.path().join("mutation.lock")),
+        recovery,
+        Duration::from_secs(2),
+        true,
+    )
+    .await
+    .unwrap();
+    assert!(result.removed_canonical);
+    assert_eq!(std::fs::read(zed.join("demo")).unwrap(), b"not-a-dir");
+    assert_eq!(std::fs::read(copy).unwrap(), b"retain-me");
 }
