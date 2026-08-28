@@ -1605,3 +1605,44 @@ SSH/WSL Platform leftover apply now validates paths, deletes unique POSIX paths 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 111: Skills CLI 官方相对链接与强制卸载
+
+**Date**: 2026-08-28
+**Task**: Skills CLI 官方相对链接与强制卸载
+**Branch**: `dev`
+
+### Summary
+
+识别官方相对 Claude 链接为 managed_link；解钉 npx skills 并补 Linuxbrew PATH；强制卸载只拆链接、不删 DirectCopy、不跟随 Central。just ci 已通过。未 push。现场 SSH/Linuxbrew 与真实 npx skills add 仍为 UNVERIFIED。
+
+### Main Changes
+
+- 相对 readlink 经词法折叠后与规范路径比较，官方 ../../.agents/skills/<name> 判为 managed_link
+- SKILLS_CLI_NPM_SPEC 改为 skills；SSH doctor/npx 增加 Linuxbrew PATH 与 ../lib/node_modules/npm/bin/npx-cli.js
+- force 卸载/取消链接只删除 symlink/junction；预览冲突仍零写入；DirectCopy 与 Central 目标保留
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6613f2c6` | (see git log) |
+| `198f9410` | (see git log) |
+| `d7e5d81b` | (see git log) |
+| `01845e03` | (see git log) |
+| `46e53f4e` | (see git log) |
+
+### Testing
+
+- [OK] just ci 退出码 0（含 sizecheck 拆分 force_mutate_tests.rs）
+- [OK] cargo test --locked force_mutate：5 passed
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 未 push；需要时再开 PR 到 dev
+- 现场核对 SSH Linuxbrew node、npx skills add -g -y 相对链接、远程 Windows mklink /J
