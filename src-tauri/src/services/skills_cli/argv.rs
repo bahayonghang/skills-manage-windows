@@ -202,27 +202,33 @@ pub(crate) const NPX_JS_POSIX_WELL_KNOWN: &[&str] = &[
     "/home/linuxbrew/.linuxbrew/lib/node_modules/npm/bin/npx-cli.js",
 ];
 
-/// Candidate npm layouts relative to the resolved `node` directory, plus
-/// well-known global roots. Ordered by likelihood.
-pub(crate) fn npx_js_candidates(node_dir: &Path) -> Vec<PathBuf> {
-    let mut candidates: Vec<PathBuf> = NPX_JS_POSIX_RELATIVE
+/// Well-known global roots probed after the node-relative layouts: POSIX
+/// absolute roots plus Windows env-derived npm locations.
+pub(crate) fn npx_js_fallback_candidates() -> Vec<PathBuf> {
+    let mut fallbacks: Vec<PathBuf> = NPX_JS_POSIX_WELL_KNOWN
         .iter()
-        .map(|relative| node_dir.join(relative))
+        .map(|path| PathBuf::from(*path))
         .collect();
-    candidates.extend(
-        NPX_JS_POSIX_WELL_KNOWN
-            .iter()
-            .map(|path| PathBuf::from(*path)),
-    );
     if let Some(program_files) = std::env::var_os("ProgramFiles") {
-        candidates.push(
+        fallbacks.push(
             std::path::PathBuf::from(program_files).join("nodejs/node_modules/npm/bin/npx-cli.js"),
         );
     }
     if let Some(appdata) = std::env::var_os("APPDATA") {
-        candidates
+        fallbacks
             .push(std::path::PathBuf::from(appdata).join("npm/node_modules/npm/bin/npx-cli.js"));
     }
+    fallbacks
+}
+
+/// Candidate npm layouts relative to the resolved `node` directory, plus
+/// explicit well-known global roots. Ordered by likelihood.
+pub(crate) fn npx_js_candidates(node_dir: &Path, fallback_roots: &[PathBuf]) -> Vec<PathBuf> {
+    let mut candidates: Vec<PathBuf> = NPX_JS_POSIX_RELATIVE
+        .iter()
+        .map(|relative| node_dir.join(relative))
+        .collect();
+    candidates.extend(fallback_roots.iter().cloned());
     candidates
 }
 
@@ -264,13 +270,23 @@ pub fn resolve_node_launcher(path_var: &str) -> Result<NodeLauncher, super::Skil
 pub(crate) fn resolve_node_launcher_from_dirs(
     search_dirs: &[PathBuf],
 ) -> Result<NodeLauncher, super::SkillsCliError> {
+    resolve_node_launcher_from_dirs_with(search_dirs, &npx_js_fallback_candidates())
+}
+
+/// Same resolution with an explicit well-known fallback list. Tests inject an
+/// empty slice: hosts that ship npm at a well-known root (CI runners,
+/// Homebrew) must not satisfy the "npx-cli.js missing" contract.
+pub(crate) fn resolve_node_launcher_from_dirs_with(
+    search_dirs: &[PathBuf],
+    fallback_roots: &[PathBuf],
+) -> Result<NodeLauncher, super::SkillsCliError> {
     let program = resolve_node_program_from_dirs(search_dirs)?;
     let node_dir = program
         .parent()
         .ok_or(super::SkillsCliError::NodeMissing)?
         .to_path_buf();
 
-    let candidates = npx_js_candidates(&node_dir);
+    let candidates = npx_js_candidates(&node_dir, fallback_roots);
     match candidates
         .iter()
         .find(|candidate| candidate.is_file())

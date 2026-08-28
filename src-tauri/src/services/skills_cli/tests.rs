@@ -12,7 +12,8 @@ use tempfile::TempDir;
 use super::argv::{
     build_add_global_argv, build_list_global_argv, build_node_version_argv, build_preview_argv,
     build_remove_global_argv, parse_skill_source, resolve_node_launcher_from_dirs,
-    resolve_node_program_from_dirs, NodeLauncher, SkillSource, SKILLS_CLI_NPM_SPEC,
+    resolve_node_launcher_from_dirs_with, resolve_node_program_from_dirs, NodeLauncher,
+    SkillSource, SKILLS_CLI_NPM_SPEC,
 };
 use super::error::SkillsCliError;
 use super::lock::{
@@ -497,7 +498,9 @@ fn ac8_doctor_reports_missing_npx_js_without_path_mutation() {
     let node_name = if cfg!(windows) { "node.exe" } else { "node" };
     std::fs::write(temp.path().join(node_name), b"").unwrap();
     let search = [temp.path().to_path_buf()];
-    let err = resolve_node_launcher_from_dirs(&search).unwrap_err();
+    // Empty fallback roots: hosts that ship npm at a well-known root (CI
+    // runners, Homebrew) must not satisfy the missing-npx-js contract.
+    let err = resolve_node_launcher_from_dirs_with(&search, &[]).unwrap_err();
     assert!(matches!(err, SkillsCliError::CliUnavailable));
     let program = resolve_node_program_from_dirs(&search).unwrap();
     assert!(program.ends_with(node_name));
@@ -510,7 +513,7 @@ async fn ac2_doctor_succeeds_when_npx_js_is_missing() {
     std::fs::write(temp.path().join(node_name), b"").unwrap();
     let search = [temp.path().to_path_buf()];
     assert!(matches!(
-        resolve_node_launcher_from_dirs(&search).unwrap_err(),
+        resolve_node_launcher_from_dirs_with(&search, &[]).unwrap_err(),
         SkillsCliError::CliUnavailable
     ));
     let program = resolve_node_program_from_dirs(&search).unwrap();
@@ -1016,13 +1019,31 @@ fn ac15_missing_npx_js_public_message_omits_candidate_paths() {
         b"",
     )
     .unwrap();
-    let err = resolve_node_launcher_from_dirs(&[node_dir]).unwrap_err();
+    let err = resolve_node_launcher_from_dirs_with(&[node_dir], &[]).unwrap_err();
     assert!(matches!(err, SkillsCliError::CliUnavailable));
     let planted = temp.path().to_string_lossy().into_owned();
     let message = public_message_for_code(err.ipc_code())
         .unwrap_or("The operation failed. See runtime logs for details.");
     assert!(!message.contains(&planted), "{message}");
     assert!(!err.to_string().contains(&planted), "{err}");
+}
+
+#[test]
+fn ac15_well_known_fallback_resolves_npx_js_outside_node_dir() {
+    let temp = TempDir::new().unwrap();
+    let node_dir = temp.path().join("node");
+    std::fs::create_dir_all(&node_dir).unwrap();
+    std::fs::write(
+        node_dir.join(if cfg!(windows) { "node.exe" } else { "node" }),
+        b"",
+    )
+    .unwrap();
+    let npx_js = temp.path().join("system/node_modules/npm/bin/npx-cli.js");
+    std::fs::create_dir_all(npx_js.parent().unwrap()).unwrap();
+    std::fs::write(&npx_js, b"").unwrap();
+    let launcher =
+        resolve_node_launcher_from_dirs_with(&[node_dir], std::slice::from_ref(&npx_js)).unwrap();
+    assert_eq!(launcher.npx_js, npx_js);
 }
 
 fn remote_tx(runner: std::sync::Arc<crate::test_support::FakeRunner>) -> SkillsCliTransport {

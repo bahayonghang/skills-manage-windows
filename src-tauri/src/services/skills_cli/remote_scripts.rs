@@ -85,7 +85,8 @@ fi
 }
 
 /// One round-trip: resolve `node` then probe `npx-cli.js` in the same order as
-/// local [`super::argv::npx_js_candidates`] POSIX entries.
+/// local [`super::argv::NPX_JS_POSIX_RELATIVE`] then
+/// [`super::argv::NPX_JS_POSIX_WELL_KNOWN`] entries.
 pub(crate) fn build_remote_launcher_probe_script() -> String {
     let mut script = String::from(REMOTE_NODE_PATH_EXPORT);
     script.push('\n');
