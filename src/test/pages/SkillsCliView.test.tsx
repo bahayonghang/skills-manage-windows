@@ -746,6 +746,11 @@ describe("SkillsCliView", () => {
     fireEvent.click(screen.getByRole("button", { name: "全选" }));
     expect(screen.getByLabelText("选择技能")).toBeChecked();
     expect(screen.getByTestId("skills-cli-batch-bar")).toHaveTextContent("已选 1 项");
+    fireEvent.click(screen.getByRole("button", { name: "取消全选" }));
+    expect(screen.getByLabelText("选择技能")).not.toBeChecked();
+    expect(screen.queryByTestId("skills-cli-batch-bar")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "全选" }));
+    expect(screen.getByLabelText("选择技能")).toBeChecked();
     fireEvent.click(screen.getByTestId("skills-cli-dense-card-demo-skill"));
     expect(screen.getByLabelText("选择技能")).not.toBeChecked();
     expect(screen.queryByTestId("skills-cli-batch-bar")).not.toBeInTheDocument();

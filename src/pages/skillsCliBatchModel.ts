@@ -192,6 +192,31 @@ export function reconcileSelectedNames(
   return next;
 }
 
+export function isGroupFullySelected(
+  selected: ReadonlySet<string>,
+  skillNames: readonly string[],
+): boolean {
+  return (
+    skillNames.length > 0 && skillNames.every((name) => selected.has(name))
+  );
+}
+
+export function toggleGroupSkillSelection(
+  selected: ReadonlySet<string>,
+  skillNames: readonly string[],
+): Set<string> {
+  const next = new Set(selected);
+  const deselect = isGroupFullySelected(next, skillNames);
+  for (const name of skillNames) {
+    if (deselect) {
+      next.delete(name);
+    } else {
+      next.add(name);
+    }
+  }
+  return next;
+}
+
 export function selectedSkillsInStoreOrder(
   skills: readonly SkillsCliGlobalSkill[],
   selectedNames: ReadonlySet<string>,

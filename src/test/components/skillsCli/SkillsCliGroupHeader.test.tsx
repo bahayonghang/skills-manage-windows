@@ -92,4 +92,24 @@ describe("SkillsCliGroupHeader", () => {
     expect(title.className).not.toMatch(/text-\[[0-9]/);
     expect(count.className).not.toMatch(/text-\[[0-9]/);
   });
+
+  it("labels the control Deselect all when the group is fully selected", () => {
+    const onSelectAll = vi.fn();
+    render(
+      <SkillsCliGroupHeader
+        bucket={bucket}
+        label="owner/repo"
+        expanded
+        panelId="panel"
+        onToggle={vi.fn()}
+        onSelectAll={onSelectAll}
+        allSelected
+      />,
+    );
+    const toggle = screen.getByRole("button", { name: "取消全选" });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(toggle);
+    expect(onSelectAll).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "全选" })).not.toBeInTheDocument();
+  });
 });

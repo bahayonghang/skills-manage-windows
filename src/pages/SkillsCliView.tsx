@@ -26,6 +26,7 @@ import { isLocalTarget } from "@/lib/targetKind";
 import { cn } from "@/lib/utils";
 import {
   deriveCleanupCandidates,
+  isGroupFullySelected,
   reconcileSelectedNames,
   selectedHasManagedLink,
   summarizeLinkTargets,
@@ -500,6 +501,10 @@ export function SkillsCliView() {
                         panelId={panelId}
                         onToggle={() => toggleCollapsed(bucket.id)}
                         onSelectAll={() => handleSelectAll(bucket)}
+                        allSelected={isGroupFullySelected(
+                          selectedCardNames,
+                          bucket.skills.map((skill) => skill.name),
+                        )}
                         updateCount={updateCount}
                         onUpdateAll={
                           installUpdateLockReason

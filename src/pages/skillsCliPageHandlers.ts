@@ -7,6 +7,7 @@ import { isEditableEventTarget } from "@/lib/keyboardShortcuts";
 import {
   emptyPlacementOutcome,
   selectedSkillsInStoreOrder,
+  toggleGroupSkillSelection,
   type PlacementMutationOutcome,
 } from "@/pages/skillsCliBatchModel";
 import {
@@ -150,13 +151,12 @@ export function createSkillsCliPageHandlers(input: {
 
   function handleSelectAll(bucket: SkillsCliBucket) {
     setSelectMode(true);
-    setSelectedCardNames((current) => {
-      const next = new Set(current);
-      for (const skill of bucket.skills) {
-        next.add(skill.name);
-      }
-      return next;
-    });
+    setSelectedCardNames((current) =>
+      toggleGroupSkillSelection(
+        current,
+        bucket.skills.map((skill) => skill.name),
+      ),
+    );
   }
 
   async function handleExport(scope: "all" | "selected") {

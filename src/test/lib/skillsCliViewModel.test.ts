@@ -15,6 +15,8 @@ import {
   partitionUnlinkBatch,
   partitionUnlinkBatchForAgent,
   reconcileSelectedNames,
+  isGroupFullySelected,
+  toggleGroupSkillSelection,
   selectedSkillsInStoreOrder,
   skillsCliExportFileName,
   stringifySkillsCliExportV1,
@@ -557,6 +559,16 @@ describe("selection reconcile", () => {
         (item) => item.name,
       ),
     ).toEqual(["linked-only", "mixed-skill"]);
+  });
+
+  it("toggles a group between select-all and deselect-all without touching other names", () => {
+    const group = ["ask-matt", "code-review"];
+    expect(isGroupFullySelected(new Set(["ask-matt"]), group)).toBe(false);
+    const selected = toggleGroupSkillSelection(new Set(["keep"]), group);
+    expect([...selected].sort()).toEqual(["ask-matt", "code-review", "keep"]);
+    expect(isGroupFullySelected(selected, group)).toBe(true);
+    expect([...toggleGroupSkillSelection(selected, group)].sort()).toEqual(["keep"]);
+    expect(isGroupFullySelected(new Set(), [])).toBe(false);
   });
 });
 

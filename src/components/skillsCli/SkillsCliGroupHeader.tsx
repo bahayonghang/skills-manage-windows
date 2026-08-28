@@ -14,6 +14,7 @@ export interface SkillsCliGroupHeaderProps {
   updateCount?: number;
   onSelectAll?: () => void;
   onUpdateAll?: () => void;
+  allSelected?: boolean;
 }
 
 export function SkillsCliGroupHeader({
@@ -25,6 +26,7 @@ export function SkillsCliGroupHeader({
   updateCount = 0,
   onSelectAll,
   onUpdateAll,
+  allSelected = false,
 }: SkillsCliGroupHeaderProps) {
   const { t } = useTranslation();
   const headerId = `skills-cli-group-${bucket.id}`;
@@ -82,8 +84,14 @@ export function SkillsCliGroupHeader({
           {updateCount > 0 ? updateCount : ""}
         </span>
         {onSelectAll ? (
-          <Button type="button" size="sm" variant="ghost" onClick={onSelectAll}>
-            {t("skillsCli.selectAll")}
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            aria-pressed={allSelected}
+            onClick={onSelectAll}
+          >
+            {t(allSelected ? "skillsCli.deselectAll" : "skillsCli.selectAll")}
           </Button>
         ) : null}
         {onUpdateAll ? (
