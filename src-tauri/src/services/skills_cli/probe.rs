@@ -206,7 +206,35 @@ fn probe_resolves_to_canonical(
                 .into_owned()
         }
     };
-    normalize_compare(&resolved) == normalize_compare(canonical)
+    // Fold `.` / `..` after join so official relative readlink text matches
+    // canonical. Do not use `readlink -f` as the sole compare (it can follow a
+    // foreign target that later loops back). Do not change global `remote_join`.
+    normalize_compare(&fold_posix_dot_segments(&resolved)) == normalize_compare(canonical)
+}
+
+/// POSIX lexical fold: drop `.`, pop one segment on `..`, never climb past `/`.
+fn fold_posix_dot_segments(path: &str) -> String {
+    let normalized = path.replace('\\', "/");
+    let absolute = normalized.starts_with('/');
+    let mut segments: Vec<&str> = Vec::new();
+    for segment in normalized.split('/') {
+        if segment.is_empty() || segment == "." {
+            continue;
+        }
+        if segment == ".." {
+            if !segments.is_empty() {
+                segments.pop();
+            }
+            continue;
+        }
+        segments.push(segment);
+    }
+    let joined = segments.join("/");
+    if absolute {
+        format!("/{joined}")
+    } else {
+        joined
+    }
 }
 
 fn normalize_compare(path: &str) -> String {
@@ -294,5 +322,80 @@ mod tests {
             true,
         );
         assert_eq!(slot, ObservedSlot::PlainDirectory);
+    }
+
+    #[test]
+    fn relative_readlink_to_canonical_is_managed_after_lexical_fold() {
+        let probe = PathProbe {
+            path: "/home/lyh/.claude/skills/ask-matt".to_string(),
+            kind: PathProbeKind::Link,
+            link_target: Some("../../.agents/skills/ask-matt".to_string()),
+        };
+        let slot = observed_slot_from_probe(
+            &probe,
+            "/home/lyh/.agents/skills/ask-matt",
+            SkillsCliManagedLinkKind::Symlink,
+            true,
+        );
+        assert_eq!(
+            slot,
+            ObservedSlot::ManagedLink {
+                kind: SkillsCliManagedLinkKind::Symlink,
+                resolves_to_canonical: true,
+            }
+        );
+    }
+
+    #[test]
+    fn relative_readlink_to_other_path_stays_wrong_link_target() {
+        let probe = PathProbe {
+            path: "/home/lyh/.claude/skills/ask-matt".to_string(),
+            kind: PathProbeKind::Link,
+            link_target: Some("../../.skillsmanage/skills/ask-matt".to_string()),
+        };
+        let slot = observed_slot_from_probe(
+            &probe,
+            "/home/lyh/.agents/skills/ask-matt",
+            SkillsCliManagedLinkKind::Symlink,
+            true,
+        );
+        assert_eq!(
+            slot,
+            ObservedSlot::Conflict {
+                reason_code: crate::services::installation::fs_util::REASON_WRONG_LINK_TARGET
+                    .to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn absolute_wrong_target_is_conflict_without_following_readlink_f() {
+        let probe = PathProbe {
+            path: "/home/lyh/.claude/skills/ask-matt".to_string(),
+            kind: PathProbeKind::Link,
+            link_target: Some("/home/lyh/.skillsmanage/skills/ask-matt".to_string()),
+        };
+        let slot = observed_slot_from_probe(
+            &probe,
+            "/home/lyh/.agents/skills/ask-matt",
+            SkillsCliManagedLinkKind::Symlink,
+            true,
+        );
+        assert_eq!(
+            slot,
+            ObservedSlot::Conflict {
+                reason_code: crate::services::installation::fs_util::REASON_WRONG_LINK_TARGET
+                    .to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn fold_posix_dot_segments_stops_at_root() {
+        assert_eq!(fold_posix_dot_segments("/../../etc"), "/etc");
+        assert_eq!(
+            fold_posix_dot_segments("/home/lyh/.claude/skills/../../.agents/skills/ask-matt"),
+            "/home/lyh/.agents/skills/ask-matt"
+        );
     }
 }
