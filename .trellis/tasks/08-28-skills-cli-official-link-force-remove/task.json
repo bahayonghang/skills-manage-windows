@@ -1,0 +1,28 @@
+{
+  "id": "skills-cli-official-link-force-remove",
+  "name": "skills-cli-official-link-force-remove",
+  "title": "Skills CLI 识别官方相对链接并支持强制卸载",
+  "description": "",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-08-28",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "description": "Recognize official npx skills relative Claude Code symlinks as managed links; add force uninstall/unlink; optional unpin of skills@1.5.23"
+  }
+}

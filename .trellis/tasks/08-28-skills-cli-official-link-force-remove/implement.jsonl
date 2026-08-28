@@ -1,0 +1,5 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/08-28-skills-cli-official-link-force-remove/research/official-relative-symlink-misclassify.md", "reason": "Remote relative symlink vs canonical string compare"}
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "Skills CLI inventory/remove/link contract and PIN"}
+{"file": ".trellis/spec/backend/path-policy.md", "reason": "remote_join is POSIX concat; do not change globally"}
+{"file": ".trellis/tasks/08-28-skills-cli-official-link-force-remove/research/remote-node-linuxbrew-path.md", "reason": "SSH doctor PATH vs Linuxbrew login node"}
