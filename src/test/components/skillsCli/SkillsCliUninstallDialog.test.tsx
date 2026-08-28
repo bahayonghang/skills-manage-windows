@@ -81,6 +81,58 @@ describe("SkillsCliUninstallDialog", () => {
     expect(dialog.textContent).not.toContain("/tmp/");
   });
 
+  it("allows lock-only uninstall when copy-mode has no owned canonical", async () => {
+    const removeGlobalBatch = vi.fn(async () => ({
+      succeeded: [{ skillName: "claude-handoff" }],
+      failed: [],
+      skipped: [],
+    }));
+    render(
+      <SkillsCliUninstallDialog
+        open
+        skillNames={["claude-handoff"]}
+        isMutating={false}
+        onOpenChange={vi.fn()}
+        previewRemoveGlobal={async () =>
+          plan({
+            skillName: "claude-handoff",
+            ownedCanonical: false,
+            managedPlacements: [],
+            retainedDirectCopies: [],
+            conflicts: [],
+            confirmable: true,
+          })
+        }
+        removeGlobalBatch={removeGlobalBatch}
+        onRemoved={vi.fn()}
+      />,
+    );
+    const dialog = await screen.findByRole(
+      "dialog",
+      { name: /卸载 claude-handoff/ },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    const surface = within(dialog);
+    expect(
+      await surface.findByTestId("skills-cli-uninstall-owned", {}, { timeout: ASYNC_UI_TIMEOUT_MS }),
+    ).toHaveTextContent("将删除 0 个受管文件夹");
+    expect(surface.getByTestId("skills-cli-uninstall-managed")).toHaveTextContent(
+      "将删除 0 个受管链接",
+    );
+    expect(surface.getByTestId("skills-cli-uninstall-lock-only")).toHaveTextContent(
+      "没有受管规范目录。卸载会删除 Skills CLI 锁记录；各平台下的独立副本会保留。",
+    );
+    expect(surface.queryByTestId("skills-cli-uninstall-conflicts")).not.toBeInTheDocument();
+    const confirm = surface.getByRole("button", { name: "卸载" });
+    await waitFor(() => expect(confirm).toBeEnabled(), {
+      timeout: ASYNC_UI_TIMEOUT_MS,
+    });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(removeGlobalBatch).toHaveBeenCalledWith(["claude-handoff"]), {
+      timeout: ASYNC_UI_TIMEOUT_MS,
+    });
+  });
+
   it("keeps failed names and uses a destructive toast on partial remove", async () => {
     const onRemoved = vi.fn();
     const onOpenChange = vi.fn();

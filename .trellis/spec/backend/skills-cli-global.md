@@ -291,8 +291,11 @@ command layer remaps it to `skills_cli.busy` so the UI sees one envelope.
   reveal spawn failure. Shared `limit + 1` opened-handle reader.
 - Link/unlink: Missing↔ManagedLink only; ordinary directory / conflict zero-write;
   cancel before guard; busy; partial-create cleanup; operation-log redaction.
-- Safe remove: preview has no paths/argv; conflict zero-write; copy byte
-  preservation; prepared/fingerprint recovery; never spawn `skills remove`.
+- Safe remove: preview has no paths/argv; `confirmable` iff conflicts empty
+  (PIN copy-mode / missing canonical lock-only remove is confirmable; do not
+  require `owned_canonical`); conflict zero-write; copy byte preservation;
+  prepared/fingerprint recovery; never spawn `skills remove`; never delete an
+  ordinary platform directory.
 - Export: v1 envelope exact keys; old target preserved; temp cleanup.
 - Settings: `skills_cli.recent_sources` single/batch zero-write, audit redaction,
   restart roundtrip.

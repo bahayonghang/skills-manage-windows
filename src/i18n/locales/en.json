@@ -441,6 +441,7 @@
     "updateAvailable": "Update",
     "morePlatforms": "+{{count}}",
     "selectAll": "Select all",
+    "deselectAll": "Deselect all",
     "batch": {
       "barAria": "Batch actions",
       "selectedCount": "{{count}} selected",
@@ -487,7 +488,8 @@
       "conflictItem": "{{name}} on {{platform}}: {{reason}}",
       "previewError": "{{error}}",
       "failedItem": "{{name}}: {{error}}",
-      "confirmBlocked": "Uninstall cannot continue while a conflict remains."
+      "confirmBlocked": "Uninstall cannot continue while a conflict remains.",
+      "lockOnly": "No owned canonical folder. Uninstall removes the Skills CLI lock entry. Direct copies under agent folders are left unchanged."
     },
     "cleanup": {
       "title": "Clean up unavailable skills",

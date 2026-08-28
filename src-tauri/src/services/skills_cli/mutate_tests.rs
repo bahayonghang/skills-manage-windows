@@ -691,3 +691,27 @@ async fn preview_remove_conflict_is_zero_write() {
     assert!(!plan.confirmable);
     assert_eq!(tx.write_count(), 0);
 }
+
+#[tokio::test]
+async fn preview_remove_copy_mode_without_canonical_is_confirmable() {
+    wipe_skill_recovery("demo");
+    let pool = four_platform_pool().await;
+    let zed = agent_dir(&pool, "zed").await;
+    let canonical = format!("{HOME}/.agents/skills/demo");
+    let slot = format!("{zed}/demo");
+    let runner = Arc::new(FakeRunner::new());
+    runner.push_success(&lock_json(&["demo"]));
+    runner.push_success(&format!(
+        "{}{}",
+        probe_line(&canonical, "absent", ""),
+        probe_line(&slot, "dir", "")
+    ));
+    let tx = remote_tx(runner);
+    let plan = preview_remove_global(&tx, &pool, "demo").await.unwrap();
+    assert!(plan.confirmable);
+    assert!(!plan.owned_canonical);
+    assert!(plan.conflicts.is_empty());
+    assert!(plan.managed_placements.is_empty());
+    assert_eq!(plan.retained_direct_copies[0].agent_id, "zed");
+    assert_eq!(tx.write_count(), 0);
+}

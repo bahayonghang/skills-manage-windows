@@ -66,6 +66,80 @@ async fn preview_has_no_paths_or_argv_and_conflict_blocks() {
 }
 
 #[tokio::test]
+async fn copy_mode_without_canonical_is_confirmable_and_drops_lock_row() {
+    let pool = mem_pool().await;
+    let temp = TempDir::new().unwrap();
+    let canonical_root = temp.path().join("universal");
+    let cursor = temp.path().join("cursor");
+    std::fs::create_dir_all(&canonical_root).unwrap();
+    std::fs::create_dir_all(cursor.join("claude-handoff")).unwrap();
+    std::fs::write(cursor.join("claude-handoff/SKILL.md"), b"copy").unwrap();
+    set_agent_dir(&pool, "cursor", &cursor).await;
+    let lock_path = temp.path().join(".skill-lock.json");
+    std::fs::write(&lock_path, lock_json("claude-handoff")).unwrap();
+    let recovery = temp.path().join("recovery");
+
+    let plan = preview_remove_global_at(&pool, "claude-handoff", &canonical_root, &lock_path)
+        .await
+        .unwrap();
+    assert!(
+        plan.confirmable,
+        "copy-mode lock-only remove must not fake a conflict"
+    );
+    assert!(!plan.owned_canonical);
+    assert!(plan.conflicts.is_empty());
+    assert!(plan.managed_placements.is_empty());
+    assert_eq!(plan.retained_direct_copies[0].agent_id, "cursor");
+
+    let result = remove_global_at(
+        &pool,
+        "claude-handoff",
+        None,
+        &canonical_root,
+        &lock_path,
+        Some(temp.path().join("mutation.lock")),
+        recovery,
+        Duration::from_secs(2),
+    )
+    .await
+    .unwrap();
+    assert!(!result.removed_canonical);
+    assert!(result.removed_managed_agent_ids.is_empty());
+    assert_eq!(
+        result.retained_direct_copy_agent_ids,
+        vec!["cursor".to_string()]
+    );
+    let lock = std::fs::read_to_string(&lock_path).unwrap();
+    assert!(!lock.contains("claude-handoff"));
+    assert_eq!(
+        std::fs::read(cursor.join("claude-handoff/SKILL.md")).unwrap(),
+        b"copy"
+    );
+}
+
+#[tokio::test]
+async fn lock_only_ghost_without_dirs_is_confirmable() {
+    let pool = mem_pool().await;
+    let temp = TempDir::new().unwrap();
+    let canonical_root = temp.path().join("universal");
+    let cursor = temp.path().join("cursor");
+    std::fs::create_dir_all(&canonical_root).unwrap();
+    std::fs::create_dir_all(&cursor).unwrap();
+    set_agent_dir(&pool, "cursor", &cursor).await;
+    let lock_path = temp.path().join(".skill-lock.json");
+    std::fs::write(&lock_path, lock_json("claude-handoff")).unwrap();
+
+    let plan = preview_remove_global_at(&pool, "claude-handoff", &canonical_root, &lock_path)
+        .await
+        .unwrap();
+    assert!(plan.confirmable);
+    assert!(!plan.owned_canonical);
+    assert!(plan.managed_placements.is_empty());
+    assert!(plan.retained_direct_copies.is_empty());
+    assert!(plan.conflicts.is_empty());
+}
+
+#[tokio::test]
 async fn remove_preserves_direct_copy_bytes_and_drops_canonical_and_link() {
     let (pool, _temp, canonical_root, lock_path, recovery, copy) = harness().await;
     let result = remove_global_at(

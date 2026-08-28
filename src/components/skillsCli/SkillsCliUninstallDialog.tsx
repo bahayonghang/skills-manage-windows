@@ -288,6 +288,16 @@ export function SkillsCliUninstallDialog({
                   </ul>
                 </div>
               ) : null}
+              {impact.confirmable &&
+              impact.ownedContentCount === 0 &&
+              impact.conflicts.length === 0 ? (
+                <p
+                  data-testid="skills-cli-uninstall-lock-only"
+                  className="text-sm text-muted-foreground"
+                >
+                  {t("skillsCli.uninstallImpact.lockOnly")}
+                </p>
+              ) : null}
             </div>
           ) : null}
           {confirmableNote ? (

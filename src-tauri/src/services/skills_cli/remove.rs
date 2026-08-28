@@ -316,7 +316,12 @@ pub(super) fn plan_from_classified(
         }
     }
     SkillsCliRemovePlan {
-        confirmable: owned_canonical && conflicts.is_empty(),
+        // PIN copy-mode (single agent dir) writes the lock row and skips
+        // ~/.agents/skills/<name>. execute_remove already drops that lock row
+        // when there is no owned canonical and no managed links. Requiring
+        // owned_canonical here blocked uninstall of those installs, and also
+        // stale lock-only cleanup, while reporting a fake "conflict".
+        confirmable: conflicts.is_empty(),
         skill_name: skill_name.to_string(),
         owned_canonical,
         managed_placements: managed,
