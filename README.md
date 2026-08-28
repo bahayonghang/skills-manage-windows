@@ -19,7 +19,7 @@
 ## Highlights
 
 - Central skill library plus per-platform install and uninstall flows.
-- Skills CLI global (`npx skills -g`, pinned `skills@1.5.23`) install and uninstall on the Local target. SkillPort does not treat `~/.agents/skills/` as wholly owned by Skills CLI; ownership comes from the Skills CLI lock file.
+- Skills CLI global (`npx skills -g`) install and uninstall on the Local target. SkillPort does not treat `~/.agents/skills/` as wholly owned by Skills CLI; ownership comes from the Skills CLI lock file.
 - Claude Code can surface native skills and read-only marketplace plugin skills in one platform view.
 - Full skill detail view with Markdown preview, raw source view, and AI explanation generation.
 - Collections for organizing skills and batch-installing them to platforms.

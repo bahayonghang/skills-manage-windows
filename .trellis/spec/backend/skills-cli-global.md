@@ -8,8 +8,8 @@ CLI-lock exclusion, leftover apply mutation locking, or platform
 `install_origin` annotation.
 
 This is **not** SkillPort Central (`~/.skillsmanage/skills/`) and **not** the
-`skillport-cli` binary (`shared-local-cli.md`). The npm package is pinned
-(`SKILLS_CLI_NPM_SPEC = "skills@1.5.23"`). Commands freeze a TargetContext,
+`skillport-cli` binary (`shared-local-cli.md`). The npm package follows npm
+`latest` (`SKILLS_CLI_NPM_SPEC = "skills"`). Commands freeze a TargetContext,
 query `ensure_capability_for_target`, then build `SkillsCliTransport` only when
 the capability is open. Inventory opened **Doctor**, **ListGlobal**,
 **InstallTargets**, **ReadSkillMd**, and **ExportInventory** on Remote. Mutate
@@ -38,6 +38,7 @@ pub async fn skills_cli_add_global(
 pub async fn skills_cli_remove_global(
     job_id: String,
     skill_name: String,
+    force: bool,
 ) -> IpcResult<SkillsCliRemoveResult>;
 pub async fn skills_cli_preview_remove_global(
     skill_name: String,
@@ -57,10 +58,12 @@ pub async fn skills_cli_unlink_platform(
     job_id: String,
     skill_name: String,
     skillport_agent_id: String,
+    force: bool,
 ) -> IpcResult<SkillsCliPlacement>;
 pub async fn skills_cli_unlink_platform_batch(
     job_id: String,
     items: Vec<SkillsCliPlacementBatchItem>,
+    force: bool,
 ) -> IpcResult<SkillsCliPlacementMutationOutcome>;
 pub async fn skills_cli_export_inventory(path: String, json: String) -> IpcResult<()>;
 pub async fn cancel_skills_cli_job(job_id: String) -> IpcResult<bool>;
@@ -111,8 +114,14 @@ Cleanup candidates are skills whose placements are all `unavailable`. Group `sta
   Doctor only resolves the node program and runs `node --version`; `npx-cli.js`
   resolution belongs to spawn paths (add/preview). Never `Command::new("npx.cmd")`
   or `cmd /c` string concat. Prefix:
-  `--yes --package=skills@1.5.23 -- skills`. Add/remove then add skills-layer
-  `-g -y` plus at least one `-a` and `-s`. Never default `--all` or `--agent '*'`.
+  `--yes --package=skills -- skills`. Add/remove then add skills-layer
+  `-g -y` plus at least one `-a` and `-s`. Never default `--all`, `--agent '*'`,
+  or `--copy` (symlink is the official default). Remote doctor and the launcher
+  probe share one PATH prefix
+  (`/home/linuxbrew/.linuxbrew/bin`, `$HOME/.linuxbrew/bin`, `/opt/homebrew/bin`,
+  `/usr/local/bin`, then the original PATH) so non-interactive SSH sees Linuxbrew
+  Node. POSIX `npx-cli.js` relative candidates include
+  `../lib/node_modules/npm/bin/npx-cli.js`. Never wrap these probes in `bash -lc`.
 - **Doctor gate (UI)**: a failed doctor (`node_missing`, `timeout`, `cancelled`,
   or `internal.unexpected`) fail-closes Install only. list / remove / link /
   unlink / export / detail stay available regardless of doctor result.
@@ -148,7 +157,11 @@ Cleanup candidates are skills whose placements are all `unavailable`. Group `sta
   auto-convert `direct_copy` into a junction/symlink. Never delete an ordinary
   directory or call `remove_dir_all` on a platform path. Platform-slot delete
   is Unix `rm -f` only when `[ -L ]`, or Windows `rmdir` for junctions;
-  ordinary directories report `skipped_not_link`. `rm -rf` is allowed only on
+  ordinary directories report `skipped_not_link`. `force=true` on remove/unlink
+  may unlink symlink/junction conflict slots (`wrong_link_target`, `broken_link`)
+  without following the link target; it never `rm -rf` an ordinary directory and
+  never deletes the Central/canonical target through the link. Without `force`,
+  conflict remains zero-write. `rm -rf` is allowed only on
   SkillPort-generated canonical backup paths (`.skillport-remove-<id>`), never
   on a platform slot. Do not reuse `InstallTransport::remove_install` or
   `ConnectedRemoteTarget::remove_tree` to delete a platform slot. Live SSH and
@@ -159,7 +172,7 @@ Cleanup candidates are skills whose placements are all `unavailable`. Group `sta
   path with no target subdirectory. Remote namespaces
   `{app_data}/skills-cli/remove-recovery/{target_id}/`. Phases: prepared → staged →
   metadata_committed → cleanup. Lock fingerprint SHA-256 is computed locally from
-  bytes. Conflict is zero-write. Direct copies are byte-preserved and never
+  bytes. Conflict without `force` is zero-write. Direct copies are byte-preserved and never
   entered in the mutation path. Remote leftover uses the remote lock, never this
   machine's lock, and leftover apply holds that target's guard.
 - **Settings**: exact generic key `skills_cli.recent_sources` with
@@ -253,7 +266,7 @@ command layer remaps it to `skills_cli.busy` so the UI sees one envelope.
 ## 5. Good / Base / Bad Cases
 
 - Good: add acquires the `skills_cli` lease, then the target mutation guard,
-  spawns `node` + `npx-cli.js --yes --package=skills@1.5.23 -- skills add … -g -y -a … -s …`
+  spawns `node` + `npx-cli.js --yes --package=skills -- skills add … -g -y -a … -s …`
   (Remote quotes each argv via `shell_quote` after a one-RT launcher probe),
   and leftover local apply / Central install wait Busy until the guard drops.
 - Base: preview is a lock+FS read that may spawn; doctor only probes node
@@ -267,7 +280,7 @@ command layer remaps it to `skills_cli.busy` so the UI sees one envelope.
 
 ## 6. Tests Required
 
-- Argv table: `--yes`, PIN spec, `-g -y -a -s`; assert no `--all`, `*`, `npx.cmd`.
+- Argv table: `--yes`, `--package=skills`, `-g -y -a -s`; assert no `--copy`, `--all`, `*`, `npx.cmd`.
 - Mapping closure: every seed builtin id is mapped or unsupported.
 - Doctor: missing node / too old; missing npx JS only affects spawn paths.
   Remote doctor: constant remote command count for 1 vs 6 platforms; Node
@@ -289,13 +302,18 @@ command layer remaps it to `skills_cli.busy` so the UI sees one envelope.
 - Lock parse: camelCase and snake_case optional fields; empty/missing → `None`.
 - Bounded SKILL.md: exact 1 MiB, growth, UTF-8, missing, escape, non-directory,
   reveal spawn failure. Shared `limit + 1` opened-handle reader.
-- Link/unlink: Missing↔ManagedLink only; ordinary directory / conflict zero-write;
-  cancel before guard; busy; partial-create cleanup; operation-log redaction.
+- Link/unlink: Missing↔ManagedLink only by default; ordinary directory stays
+  `direct_copy_not_toggleable`; conflict is zero-write unless `force=true`, which
+  unlinks symlink/junction slots only (`wrong_link_target`, `broken_link`)
+  without following the target. Relative `../../.agents/skills/<name>` readlink
+  text that folds to canonical is `managed_link`, not `wrong_link_target`.
+  Cancel before guard; busy; partial-create cleanup; operation-log redaction.
 - Safe remove: preview has no paths/argv; `confirmable` iff conflicts empty
-  (PIN copy-mode / missing canonical lock-only remove is confirmable; do not
-  require `owned_canonical`); conflict zero-write; copy byte preservation;
-  prepared/fingerprint recovery; never spawn `skills remove`; never delete an
-  ordinary platform directory.
+  (copy-mode / missing canonical lock-only remove is confirmable; do not
+  require `owned_canonical`); conflict without `force` is zero-write;
+  `force=true` deletes owned canonical + lock and unlinks conflict symlink
+  slots only; copy byte preservation; prepared/fingerprint recovery; never
+  spawn `skills remove`; never delete an ordinary platform directory.
 - Export: v1 envelope exact keys; old target preserved; temp cleanup.
 - Settings: `skills_cli.recent_sources` single/batch zero-write, audit redaction,
   restart roundtrip.
@@ -316,11 +334,11 @@ command layer remaps it to `skills_cli.busy` so the UI sees one envelope.
 
 ```rust
 // Wrong: batch file as program; skills-layer -y stolen by npx.
-Command::new("npx.cmd").args(["-y", "skills@1.5.23", "add", source]);
+Command::new("npx.cmd").args(["-y", "skills", "add", source]);
 
 // Correct: node + npx JS; npx flags before `--`; skills flags after.
 ProcessRequest::new(Command::new(&launcher.program), policy)
-    .args(launcher.npx_argv_prefix()) // npx-cli.js --yes --package=skills@1.5.23 -- skills
+    .args(launcher.npx_argv_prefix()) // npx-cli.js --yes --package=skills -- skills
     .args(["add", source, "-s", name, "-g", "-a", agent, "-y"])
 ```
 
