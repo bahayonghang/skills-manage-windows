@@ -614,27 +614,38 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       }) : {});
       throw err;
     }
-    const [skills, repositories, tags, updateStates] = await Promise.all([
-      invoke<SkillWithLinks[]>("get_central_skills"),
-      invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
-      invoke<SkillTag[]>("get_skill_tags"),
-      invoke("get_central_skill_update_states"),
-    ]);
-    set((state) => state.portabilityJob.jobId === jobId ? ({
-        skills: skills ?? [],
-        repositories: repositories ?? [],
-        tags: tags ?? [],
-        updateStatuses: indexUpdateStates(updateStates ?? []),
+    try {
+      const [skills, repositories, tags, updateStates] = await Promise.all([
+        invoke<SkillWithLinks[]>("get_central_skills"),
+        invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
+        invoke<SkillTag[]>("get_skill_tags"),
+        invoke("get_central_skill_update_states"),
+      ]);
+      set((state) => state.portabilityJob.jobId === jobId ? ({
+          skills: skills ?? [],
+          repositories: repositories ?? [],
+          tags: tags ?? [],
+          updateStatuses: indexUpdateStates(updateStates ?? []),
+          portabilityJob: {
+            ...state.portabilityJob,
+            status: result.cancelled
+              ? "cancelled"
+              : result.failedSkills.length > 0
+                ? "failed"
+                : "completed",
+          },
+        }) : {});
+      return result;
+    } catch (err) {
+      set((state) => state.portabilityJob.jobId === jobId ? ({
         portabilityJob: {
           ...state.portabilityJob,
-          status: result.cancelled
-            ? "cancelled"
-            : result.failedSkills.length > 0
-              ? "failed"
-              : "completed",
+          status: "failed",
+          error: String(err),
         },
       }) : {});
-    return result;
+      throw err;
+    }
   },
 
   resetForTargetChange: () => {
