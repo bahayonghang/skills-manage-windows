@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 111
-- **Last Active**: 2026-08-28
+- **Total Sessions**: 112
+- **Last Active**: 2026-08-30
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1648 | Active |
+| `journal-2.md` | ~1669 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 112 | 2026-08-30 | 全项目依赖审计与分批升级 | `5e63eb02e0cf5e2a31e92048d3eea244afe1339f` | `dev` |
 | 111 | 2026-08-28 | Skills CLI 官方相对链接与强制卸载 | `6613f2c6`, `198f9410`, `d7e5d81b`, `01845e03`, `46e53f4e` | `dev` |
 | 110 | 2026-08-26 | 完成可观测性核心契约与日志系统任务规划 | `1f4d7b80`, `779a5611` | `dev` |
 | 109 | 2026-08-26 | Skills CLI 库存优先页面前端落地与 doctor 非阻塞 | `83f5a391`, `d1f0380b`, `e01ac92f`, `943b8ef2` | `dev` |

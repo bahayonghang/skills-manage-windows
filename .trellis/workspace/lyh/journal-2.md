@@ -1646,3 +1646,24 @@ SSH/WSL Platform leftover apply now validates paths, deletes unique POSIX paths 
 
 - 未 push；需要时再开 PR 到 dev
 - 现场核对 SSH Linuxbrew node、npx skills add -g -y 相对链接、远程 Windows mklink /J
+
+
+## Session 112: 全项目依赖审计与分批升级
+
+**Date**: 2026-08-30
+**Task**: 全项目依赖审计与分批升级
+**Branch**: `dev`
+
+### Summary
+
+完成 npm、Cargo、pnpm、Rust 与 GitHub Actions 分批升级；逐批通过 CI/audit，生成 Windows x64 NSIS；对 TypeScript、reqwest、keyring、SQLx 的高风险迁移精确回退并记录延期边界。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5e63eb02e0cf5e2a31e92048d3eea244afe1339f` | (see git log) |
+
+### Status
+
+[OK] **Completed**
