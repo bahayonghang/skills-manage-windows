@@ -1667,3 +1667,28 @@ SSH/WSL Platform leftover apply now validates paths, deletes unique POSIX paths 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 113: 风险导向测试覆盖补强
+
+**Date**: 2026-08-30
+**Task**: 风险导向测试覆盖补强
+**Branch**: `dev`
+
+### Summary
+
+按业务风险补齐目标删除、项目技能补偿、仓库同步事务、AI 凭据清理与便携导入失败终态测试，并完成最小生产修复、规范沉淀及完整 CI 验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3678384a8ad23a2f06f49af4a068b5ce07220fc6` | (see git log) |
+| `11fdac905a65602095716a93c1116b4b6b5c3e37` | (see git log) |
+| `7a5a657b2f8fa76340f53f3b2146a9acb0a6aadb` | (see git log) |
+| `817be67f5b347b64dbea6791c4d3fda9e042a3e0` | (see git log) |
+| `18586b1977aa7dd054435f45e45da3e20025352c` | (see git log) |
+
+### Status
+
+[OK] **Completed**

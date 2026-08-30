@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 112
+- **Total Sessions**: 113
 - **Last Active**: 2026-08-30
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1669 | Active |
+| `journal-2.md` | ~1694 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 113 | 2026-08-30 | 风险导向测试覆盖补强 | `3678384a8ad23a2f06f49af4a068b5ce07220fc6`, `11fdac905a65602095716a93c1116b4b6b5c3e37`, `7a5a657b2f8fa76340f53f3b2146a9acb0a6aadb`, `817be67f5b347b64dbea6791c4d3fda9e042a3e0`, `18586b1977aa7dd054435f45e45da3e20025352c` | `dev` |
 | 112 | 2026-08-30 | 全项目依赖审计与分批升级 | `5e63eb02e0cf5e2a31e92048d3eea244afe1339f` | `dev` |
 | 111 | 2026-08-28 | Skills CLI 官方相对链接与强制卸载 | `6613f2c6`, `198f9410`, `d7e5d81b`, `01845e03`, `46e53f4e` | `dev` |
 | 110 | 2026-08-26 | 完成可观测性核心契约与日志系统任务规划 | `1f4d7b80`, `779a5611` | `dev` |
