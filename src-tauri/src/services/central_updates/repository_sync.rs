@@ -2,6 +2,7 @@
 //! updates plus remote-added / remote-missing skills, and apply the user's
 //! keep / delete / import decisions.
 
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -30,6 +31,9 @@ use super::snapshots::{
 use super::types::{RemoteSkillLoadError, SkillUpdateStatus, UpdateCounters};
 
 mod summaries;
+
+#[cfg(test)]
+mod tests;
 
 pub(crate) use summaries::build_remote_missing_skills;
 use summaries::build_repository_sync_summaries;
@@ -301,8 +305,10 @@ pub(crate) async fn apply_central_repository_sync_impl(
     pool: &DbPool,
     active_target: &ActiveTarget,
     auth_token: Option<&str>,
-    decisions: CentralRepositorySyncDecisions,
+    mut decisions: CentralRepositorySyncDecisions,
 ) -> Result<CentralRepositorySyncApplyResult, CentralUpdatesError> {
+    let duplicate_skips = normalize_repository_sync_decisions(&mut decisions)?;
+
     let kept_skill_ids =
         keep_remote_missing_central_skills_impl(pool, &decisions.keep_skill_ids).await?;
 
@@ -327,63 +333,19 @@ pub(crate) async fn apply_central_repository_sync_impl(
         }
     };
 
-    let mut skipped_additions = Vec::new();
-    for request in decisions.skip_additions {
-        let source_path = normalize_repo_path(&request.source_path)?;
-        let saved = db::upsert_skill_repository_sync_skip(
-            pool,
-            &request.repository_id,
-            &source_path,
-            &request.skill_id,
-            &request.skill_name,
-        )
-        .await?;
-        skipped_additions.push(CentralRepositoryAdditionSkipRequest {
-            repository_id: saved.repository_id,
-            source_path: saved.source_path,
-            skill_id: saved.skill_id,
-            skill_name: saved.skill_name,
-        });
-    }
-
-    let mut unskipped_additions = Vec::new();
-    for request in decisions.unskip_additions {
-        let source_path = normalize_repo_path(&request.source_path)?;
-        if db::delete_skill_repository_sync_skip(pool, &request.repository_id, &source_path).await?
-        {
-            unskipped_additions.push(CentralRepositoryAdditionUnskipRequest {
-                repository_id: request.repository_id,
-                source_path,
-            });
-        }
-    }
+    let (skipped_additions, unskipped_additions) = persist_repository_sync_skip_decisions(
+        pool,
+        decisions.skip_additions,
+        decisions.unskip_additions,
+        duplicate_skips,
+    )
+    .await?;
 
     let mut import_results = Vec::new();
     let mut failed_repositories = Vec::new();
     for addition in decisions.additions {
         let repository_id = addition.repository_id.clone();
-        let mut import_selections = Vec::new();
-        for selection in addition.selections {
-            if selection.resolution == github_import::DuplicateResolution::Skip {
-                let source_path = normalize_repo_path(&selection.source_path)?;
-                let saved = db::upsert_skill_repository_sync_skip(
-                    pool,
-                    &repository_id,
-                    &source_path,
-                    &source_path,
-                    &source_path,
-                )
-                .await?;
-                skipped_additions.push(CentralRepositoryAdditionSkipRequest {
-                    repository_id: saved.repository_id,
-                    source_path: saved.source_path,
-                    skill_id: saved.skill_id,
-                    skill_name: saved.skill_name,
-                });
-            } else {
-                import_selections.push(selection);
-            }
-        }
+        let import_selections = addition.selections;
 
         if import_selections.is_empty() {
             continue;
@@ -459,6 +421,114 @@ pub(crate) async fn apply_central_repository_sync_impl(
         failed_repositories,
         states,
     })
+}
+
+fn normalize_repository_sync_decisions(
+    decisions: &mut CentralRepositorySyncDecisions,
+) -> Result<Vec<CentralRepositoryAdditionSkipRequest>, CentralUpdatesError> {
+    for request in &mut decisions.skip_additions {
+        request.source_path = normalize_repo_path(&request.source_path)?;
+    }
+    for request in &mut decisions.unskip_additions {
+        request.source_path = normalize_repo_path(&request.source_path)?;
+    }
+
+    let mut duplicate_skips = Vec::new();
+    for addition in &mut decisions.additions {
+        let mut import_selections = Vec::new();
+        for mut selection in std::mem::take(&mut addition.selections) {
+            selection.source_path = normalize_repo_path(&selection.source_path)?;
+            if selection.resolution == github_import::DuplicateResolution::Skip {
+                duplicate_skips.push(CentralRepositoryAdditionSkipRequest {
+                    repository_id: addition.repository_id.clone(),
+                    source_path: selection.source_path.clone(),
+                    skill_id: selection.source_path.clone(),
+                    skill_name: selection.source_path,
+                });
+            } else {
+                import_selections.push(selection);
+            }
+        }
+        addition.selections = import_selections;
+    }
+    Ok(duplicate_skips)
+}
+
+enum PreparedSkipDecision {
+    Skip(CentralRepositoryAdditionSkipRequest),
+    Unskip(CentralRepositoryAdditionUnskipRequest),
+}
+
+async fn persist_repository_sync_skip_decisions(
+    pool: &DbPool,
+    skip_additions: Vec<CentralRepositoryAdditionSkipRequest>,
+    unskip_additions: Vec<CentralRepositoryAdditionUnskipRequest>,
+    duplicate_skips: Vec<CentralRepositoryAdditionSkipRequest>,
+) -> Result<
+    (
+        Vec<CentralRepositoryAdditionSkipRequest>,
+        Vec<CentralRepositoryAdditionUnskipRequest>,
+    ),
+    CentralUpdatesError,
+> {
+    if skip_additions.is_empty() && unskip_additions.is_empty() && duplicate_skips.is_empty() {
+        return Ok((Vec::new(), Vec::new()));
+    }
+
+    let mut transaction = pool.begin().await?;
+    let mut skipped = Vec::with_capacity(skip_additions.len() + duplicate_skips.len());
+    let mut unskipped = Vec::with_capacity(unskip_additions.len());
+    let operations = skip_additions
+        .into_iter()
+        .map(PreparedSkipDecision::Skip)
+        .chain(
+            unskip_additions
+                .into_iter()
+                .map(PreparedSkipDecision::Unskip),
+        )
+        .chain(duplicate_skips.into_iter().map(PreparedSkipDecision::Skip));
+    for operation in operations {
+        match operation {
+            PreparedSkipDecision::Skip(request) => {
+                let now = Utc::now().to_rfc3339();
+                sqlx::query(
+                    "INSERT INTO skill_repository_sync_skips
+                     (repository_id, source_path, skill_id, skill_name, created_at, updated_at, last_seen_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)
+                     ON CONFLICT(repository_id, source_path) DO UPDATE SET
+                       skill_id = excluded.skill_id,
+                       skill_name = excluded.skill_name,
+                       updated_at = excluded.updated_at,
+                       last_seen_at = excluded.last_seen_at",
+                )
+                .bind(&request.repository_id)
+                .bind(&request.source_path)
+                .bind(&request.skill_id)
+                .bind(&request.skill_name)
+                .bind(&now)
+                .bind(&now)
+                .bind(&now)
+                .execute(&mut *transaction)
+                .await?;
+                skipped.push(request);
+            }
+            PreparedSkipDecision::Unskip(request) => {
+                let result = sqlx::query(
+                    "DELETE FROM skill_repository_sync_skips
+                     WHERE repository_id = ? AND source_path = ?",
+                )
+                .bind(&request.repository_id)
+                .bind(&request.source_path)
+                .execute(&mut *transaction)
+                .await?;
+                if result.rows_affected() > 0 {
+                    unskipped.push(request);
+                }
+            }
+        }
+    }
+    transaction.commit().await?;
+    Ok((skipped, unskipped))
 }
 
 fn unique_non_empty(values: Vec<String>) -> Vec<String> {
