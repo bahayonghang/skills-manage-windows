@@ -421,12 +421,19 @@ export function createAiSettingsSlice<TState extends AiSettingsStoreState>(
       }
 
       try {
-        const savedApiKeyState = settings.apiKey.trim()
-          ? await invoke("set_ai_api_key", {
-              provider: settings.provider,
-              value: settings.apiKey,
-            })
-          : get().aiApiKeyState;
+        let savedApiKeyState = get().aiApiKeyState;
+        if (settings.apiKey.trim()) {
+          savedApiKeyState = await invoke("set_ai_api_key", {
+            provider: settings.provider,
+            value: settings.apiKey,
+          });
+          if (sequence === aiSaveSequence) {
+            set({
+              aiSettings: { ...get().aiSettings, apiKey: "" },
+              aiApiKeyState: savedApiKeyState,
+            } as Partial<TState>);
+          }
+        }
         await invoke("set_settings", { values: serializeAiSettings(settings) });
         if (sequence === aiSaveSequence) {
           const latest = get().aiSettings;
