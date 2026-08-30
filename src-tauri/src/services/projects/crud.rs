@@ -28,6 +28,87 @@ where
     crate::fs_util::run_blocking_fs_with(label, task, ProjectsError::task_join).await
 }
 
+async fn remove_project_skill_target(
+    target: PathBuf,
+    link_type: String,
+) -> Result<(), ProjectsError> {
+    run_blocking_fs("project skill removal", move || {
+        if !target.exists() && std::fs::symlink_metadata(&target).is_err() {
+            return Ok(());
+        }
+        if link_type == "symlink" {
+            #[cfg(windows)]
+            {
+                std::fs::remove_dir(&target)
+                    .or_else(|_| std::fs::remove_file(&target))
+                    .map_err(|e| {
+                        ProjectsError::io(
+                            format!("Failed to remove symlink '{}'", target.display()),
+                            e,
+                        )
+                    })
+            }
+            #[cfg(not(windows))]
+            {
+                std::fs::remove_file(&target).map_err(|e| {
+                    ProjectsError::io(
+                        format!("Failed to remove symlink '{}'", target.display()),
+                        e,
+                    )
+                })
+            }
+        } else {
+            std::fs::remove_dir_all(&target).map_err(|e| {
+                ProjectsError::io(format!("Failed to remove '{}'", target.display()), e)
+            })
+        }
+    })
+    .await
+}
+
+async fn existing_project_skill_symlink_target(
+    target: PathBuf,
+) -> Result<Option<PathBuf>, ProjectsError> {
+    run_blocking_fs("project skill symlink inspection", move || {
+        let metadata = match std::fs::symlink_metadata(&target) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => {
+                return Err(ProjectsError::io(
+                    format!(
+                        "Failed to inspect project skill target '{}'",
+                        target.display()
+                    ),
+                    error,
+                ));
+            }
+        };
+        if !metadata.file_type().is_symlink() {
+            return Ok(None);
+        }
+        std::fs::read_link(&target).map(Some).map_err(|error| {
+            ProjectsError::io(
+                format!(
+                    "Failed to read project skill symlink '{}'",
+                    target.display()
+                ),
+                error,
+            )
+        })
+    })
+    .await
+}
+
+async fn restore_project_skill_symlink(
+    target: PathBuf,
+    link_target: PathBuf,
+) -> Result<(), ProjectsError> {
+    run_blocking_fs("project skill symlink restoration", move || {
+        create_symlink(&link_target, &target).map_err(ProjectsError::from)
+    })
+    .await
+}
+
 /// 规范化项目路径：canonicalize 失败时退回到原始字符串，避免阻塞 add。
 pub fn normalize_project_path(input: &str) -> String {
     let trimmed = input.trim();
@@ -379,6 +460,8 @@ pub async fn install_skill_to_project_impl(
     })
     .await?;
 
+    let previous_symlink_target =
+        existing_project_skill_symlink_target(target_path.clone()).await?;
     ensure_replaceable_target(&target_path).await?;
 
     let resolved_method = if method == "copy" { "copy" } else { "symlink" };
@@ -414,7 +497,33 @@ pub async fn install_skill_to_project_impl(
         symlink_target: symlink_target_str,
         created_at: Utc::now().to_rfc3339(),
     };
-    db::upsert_project_skill_installation(pool, &psi).await?;
+    if let Err(db_error) = db::upsert_project_skill_installation(pool, &psi).await {
+        if let Err(cleanup_error) =
+            remove_project_skill_target(target_path.clone(), psi.link_type.clone()).await
+        {
+            tracing::error!(
+                project_id = %project.id,
+                skill_id,
+                agent_id,
+                "Failed to compensate project skill target after installation metadata write failure"
+            );
+            return Err(cleanup_error);
+        }
+        if let Some(previous_target) = previous_symlink_target {
+            if let Err(restore_error) =
+                restore_project_skill_symlink(target_path, previous_target).await
+            {
+                tracing::error!(
+                    project_id = %project.id,
+                    skill_id,
+                    agent_id,
+                    "Failed to restore previous project skill symlink after installation metadata write failure"
+                );
+                return Err(restore_error);
+            }
+        }
+        return Err(db_error.into());
+    }
 
     Ok(psi)
 }
@@ -425,7 +534,7 @@ pub async fn install_skill_to_project_impl(
 /// - 必须在 psi 中存在；否则 `Err`（不做 fallback 推断）。
 /// - `link_type=symlink` → `remove_file`（Unix）/ `remove_dir`（Windows）。
 /// - `link_type=copy`   → `remove_dir_all`。
-/// - 删 psi 行作为最后一步；FS 操作失败不删表，留给用户自查。
+/// - 先删 psi 行，只有数据库删除成功后才改文件系统；FS 操作失败时补回 psi 行。
 pub async fn uninstall_skill_from_project_impl(
     pool: &DbPool,
     project_id: &str,
@@ -440,44 +549,21 @@ pub async fn uninstall_skill_from_project_impl(
             agent_id: agent_id.to_string(),
         })?;
 
-    let target = PathBuf::from(&psi.installed_path);
-    let link_type = psi.link_type.clone();
-    let target_for_remove = target.clone();
-    run_blocking_fs("project skill removal", move || {
-        if !target_for_remove.exists() && std::fs::symlink_metadata(&target_for_remove).is_err() {
-            return Ok(());
-        }
-        if link_type == "symlink" {
-            #[cfg(windows)]
-            {
-                std::fs::remove_dir(&target_for_remove)
-                    .or_else(|_| std::fs::remove_file(&target_for_remove))
-                    .map_err(|e| {
-                        ProjectsError::io(
-                            format!("Failed to remove symlink '{}'", target_for_remove.display()),
-                            e,
-                        )
-                    })
-            }
-            #[cfg(not(windows))]
-            {
-                std::fs::remove_file(&target_for_remove).map_err(|e| {
-                    ProjectsError::io(
-                        format!("Failed to remove symlink '{}'", target_for_remove.display()),
-                        e,
-                    )
-                })
-            }
-        } else {
-            std::fs::remove_dir_all(&target_for_remove).map_err(|e| {
-                ProjectsError::io(
-                    format!("Failed to remove '{}'", target_for_remove.display()),
-                    e,
-                )
-            })
-        }
-    })
-    .await?;
+    db::delete_project_skill_installation(pool, project_id, skill_id, agent_id).await?;
 
-    Ok(db::delete_project_skill_installation(pool, project_id, skill_id, agent_id).await?)
+    let target = PathBuf::from(&psi.installed_path);
+    if let Err(fs_error) = remove_project_skill_target(target, psi.link_type.clone()).await {
+        if let Err(db_error) = db::upsert_project_skill_installation(pool, &psi).await {
+            tracing::error!(
+                project_id,
+                skill_id,
+                agent_id,
+                "Failed to restore project skill metadata after filesystem uninstall failure"
+            );
+            return Err(db_error.into());
+        }
+        return Err(fs_error);
+    }
+
+    Ok(())
 }

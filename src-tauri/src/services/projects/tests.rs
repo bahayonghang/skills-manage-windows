@@ -494,6 +494,58 @@ async fn install_skill_copy_writes_psi_and_copies_dir() {
 }
 
 #[tokio::test]
+async fn install_skill_copy_db_failure_removes_target_and_preserves_central_source() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    let canonical = tmp.path().join(".agents/skills/install-rollback");
+    seed_central_skill(&pool, &canonical, "install-rollback").await;
+    let canonical_before = std::fs::read(canonical.join("SKILL.md")).unwrap();
+
+    let project_root = tmp.path().join("proj");
+    std::fs::create_dir_all(&project_root).unwrap();
+    let project = add_project_impl(&pool, project_root.to_str().unwrap())
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "CREATE TRIGGER fail_project_skill_install
+         BEFORE INSERT ON project_skill_installations
+         WHEN NEW.skill_id = 'install-rollback'
+         BEGIN SELECT RAISE(ABORT, 'injected project skill install failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let result = install_skill_to_project_impl(
+        &pool,
+        &project.id,
+        "install-rollback",
+        "claude-code",
+        "copy",
+    )
+    .await;
+
+    assert!(result.is_err(), "injected installation write must fail");
+    let target = project_root.join(".claude/skills/install-rollback");
+    assert!(
+        !target.exists(),
+        "failed install must compensate the copied project target"
+    );
+    let row =
+        db::get_project_skill_installation(&pool, &project.id, "install-rollback", "claude-code")
+            .await
+            .unwrap();
+    assert!(row.is_none(), "failed install must not leave a PSI row");
+    assert_eq!(
+        std::fs::read(canonical.join("SKILL.md")).unwrap(),
+        canonical_before,
+        "install compensation must not alter the Central source"
+    );
+}
+
+#[tokio::test]
 async fn rescan_preserves_central_origin_for_symlinked_central_install() {
     let tmp = TempDir::new().unwrap();
     let pool = setup_test_db().await;
@@ -561,6 +613,72 @@ async fn install_skill_symlink_writes_psi_and_creates_link() {
     let link_path = project_root.join(".claude/skills/linker");
     let meta = std::fs::symlink_metadata(&link_path).unwrap();
     assert!(meta.file_type().is_symlink(), "target must be a symlink");
+}
+
+#[tokio::test]
+async fn reinstall_symlink_db_failure_restores_previous_link_and_psi() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    let canonical = tmp.path().join(".agents/skills/reinstall-link");
+    seed_central_skill(&pool, &canonical, "reinstall-link").await;
+    let project_root = tmp.path().join("proj");
+    std::fs::create_dir_all(&project_root).unwrap();
+    let project = add_project_impl(&pool, project_root.to_str().unwrap())
+        .await
+        .unwrap();
+
+    let first = install_skill_to_project_impl(
+        &pool,
+        &project.id,
+        "reinstall-link",
+        "claude-code",
+        "symlink",
+    )
+    .await;
+    let first = match first {
+        Ok(installation) => installation,
+        Err(error) if error.to_string().to_lowercase().contains("symlink") => return,
+        Err(error) => panic!("unexpected initial symlink install error: {error}"),
+    };
+    let link_path = project_root.join(".claude/skills/reinstall-link");
+    let link_target_before = std::fs::read_link(&link_path).unwrap();
+    let row_before = serde_json::to_value(first).unwrap();
+    sqlx::query(
+        "CREATE TRIGGER fail_project_skill_reinstall
+         BEFORE UPDATE ON project_skill_installations
+         WHEN OLD.skill_id = 'reinstall-link'
+         BEGIN SELECT RAISE(ABORT, 'injected project skill reinstall failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let result = install_skill_to_project_impl(
+        &pool,
+        &project.id,
+        "reinstall-link",
+        "claude-code",
+        "symlink",
+    )
+    .await;
+
+    assert!(
+        result.is_err(),
+        "injected reinstall metadata write must fail"
+    );
+    let metadata = std::fs::symlink_metadata(&link_path).unwrap();
+    assert!(
+        metadata.file_type().is_symlink(),
+        "failed reinstall must restore the previous symlink"
+    );
+    assert_eq!(std::fs::read_link(&link_path).unwrap(), link_target_before);
+    let row_after =
+        db::get_project_skill_installation(&pool, &project.id, "reinstall-link", "claude-code")
+            .await
+            .unwrap()
+            .unwrap();
+    assert_eq!(serde_json::to_value(row_after).unwrap(), row_before);
 }
 
 #[tokio::test]
@@ -679,6 +797,161 @@ async fn uninstall_skill_removes_copy_and_psi() {
         .await
         .unwrap();
     assert!(row.is_none(), "psi row must be cleared after uninstall");
+}
+
+#[tokio::test]
+async fn uninstall_skill_db_failure_preserves_copy_and_psi_for_retry() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    let canonical = tmp.path().join(".agents/skills/uninstall-rollback");
+    seed_central_skill(&pool, &canonical, "uninstall-rollback").await;
+    let canonical_before = std::fs::read(canonical.join("SKILL.md")).unwrap();
+
+    let project_root = tmp.path().join("proj");
+    std::fs::create_dir_all(&project_root).unwrap();
+    let project = add_project_impl(&pool, project_root.to_str().unwrap())
+        .await
+        .unwrap();
+
+    install_skill_to_project_impl(
+        &pool,
+        &project.id,
+        "uninstall-rollback",
+        "claude-code",
+        "copy",
+    )
+    .await
+    .unwrap();
+    let installed_path = project_root.join(".claude/skills/uninstall-rollback");
+    let installed_before = std::fs::read(installed_path.join("SKILL.md")).unwrap();
+    let row_before =
+        db::get_project_skill_installation(&pool, &project.id, "uninstall-rollback", "claude-code")
+            .await
+            .unwrap()
+            .unwrap();
+    let row_before = serde_json::to_value(row_before).unwrap();
+
+    sqlx::query(
+        "CREATE TRIGGER fail_project_skill_uninstall
+         BEFORE DELETE ON project_skill_installations
+         WHEN OLD.skill_id = 'uninstall-rollback'
+         BEGIN SELECT RAISE(ABORT, 'injected project skill uninstall failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let result =
+        uninstall_skill_from_project_impl(&pool, &project.id, "uninstall-rollback", "claude-code")
+            .await;
+
+    assert!(result.is_err(), "injected installation delete must fail");
+    assert_eq!(
+        std::fs::read(installed_path.join("SKILL.md")).unwrap(),
+        installed_before,
+        "failed uninstall must preserve the installed copy"
+    );
+    let row_after =
+        db::get_project_skill_installation(&pool, &project.id, "uninstall-rollback", "claude-code")
+            .await
+            .unwrap()
+            .unwrap();
+    assert_eq!(
+        serde_json::to_value(row_after).unwrap(),
+        row_before,
+        "failed uninstall must preserve the complete PSI row"
+    );
+    assert_eq!(
+        std::fs::read(canonical.join("SKILL.md")).unwrap(),
+        canonical_before,
+        "failed uninstall must not alter the Central source"
+    );
+
+    sqlx::query("DROP TRIGGER fail_project_skill_uninstall")
+        .execute(&pool)
+        .await
+        .unwrap();
+    uninstall_skill_from_project_impl(&pool, &project.id, "uninstall-rollback", "claude-code")
+        .await
+        .unwrap();
+    assert!(
+        !installed_path.exists(),
+        "retry after removing the injected failure must remove the copy"
+    );
+    assert!(
+        db::get_project_skill_installation(
+            &pool,
+            &project.id,
+            "uninstall-rollback",
+            "claude-code",
+        )
+        .await
+        .unwrap()
+        .is_none(),
+        "retry after removing the injected failure must remove the PSI row"
+    );
+}
+
+#[tokio::test]
+async fn uninstall_skill_fs_failure_restores_complete_psi_row() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+
+    let canonical = tmp.path().join(".agents/skills/uninstall-fs-rollback");
+    seed_central_skill(&pool, &canonical, "uninstall-fs-rollback").await;
+    let project_root = tmp.path().join("proj");
+    std::fs::create_dir_all(&project_root).unwrap();
+    let project = add_project_impl(&pool, project_root.to_str().unwrap())
+        .await
+        .unwrap();
+    install_skill_to_project_impl(
+        &pool,
+        &project.id,
+        "uninstall-fs-rollback",
+        "claude-code",
+        "copy",
+    )
+    .await
+    .unwrap();
+    let installed_path = project_root.join(".claude/skills/uninstall-fs-rollback");
+    let row_before = db::get_project_skill_installation(
+        &pool,
+        &project.id,
+        "uninstall-fs-rollback",
+        "claude-code",
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let row_before = serde_json::to_value(row_before).unwrap();
+    std::fs::remove_dir_all(&installed_path).unwrap();
+    std::fs::write(&installed_path, "occupied by a file").unwrap();
+
+    let result = uninstall_skill_from_project_impl(
+        &pool,
+        &project.id,
+        "uninstall-fs-rollback",
+        "claude-code",
+    )
+    .await;
+
+    assert!(result.is_err(), "copy removal must reject a file target");
+    assert_eq!(
+        std::fs::read_to_string(&installed_path).unwrap(),
+        "occupied by a file",
+        "failed filesystem removal must preserve the pre-call target"
+    );
+    let row_after = db::get_project_skill_installation(
+        &pool,
+        &project.id,
+        "uninstall-fs-rollback",
+        "claude-code",
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(serde_json::to_value(row_after).unwrap(), row_before);
 }
 
 #[tokio::test]

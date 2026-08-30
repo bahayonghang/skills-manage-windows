@@ -22,6 +22,10 @@ replacement.
 - Collection child and parent deletes share one transaction. Project deletion
   is one parent delete and relies on the pool's per-connection, fail-closed
   foreign-key contract for cascade.
+- Project-skill copy/symlink installation compensates a metadata-write failure by
+  removing the newly materialized target; a replaced symlink is restored before
+  returning the database error. Uninstall deletes metadata before filesystem
+  removal and restores the complete installation row if removal fails.
 - Marketplace fetch and parse complete before opening the cache transaction. A
   successful fetch replaces, rather than upserts into, the registry snapshot:
   delete old rows, insert all fresh rows, and publish success metadata in one
@@ -50,6 +54,10 @@ replacement.
   successful retry after removing the trigger.
 - Project tests acquire multiple production pool connections, read
   `foreign_keys=1` from each, and prove cascade.
+- Project-skill tests inject install/update/delete failures and assert the
+  canonical source, project target, and complete installation row converge to
+  the pre-call state; symlink variants may skip only when the platform cannot
+  create them.
 - Marketplace tests cover A,B -> B,C, empty, second-insert failure,
   success-status failure, deferred commit failure, later-chunk failure, and
   remove rollback.
