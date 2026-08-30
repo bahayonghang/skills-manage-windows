@@ -146,6 +146,66 @@ pub(super) async fn load_target_config_snapshot(
     })
 }
 
+pub(super) async fn persist_target_deletion_settings(
+    local_db: &DbPool,
+    ssh_targets: &[RemoteTargetConfig],
+    wsl_targets: &[WslTargetConfig],
+    reset_active: bool,
+) -> Result<HashMap<String, Option<String>>, TargetsError> {
+    let snapshot = db::get_settings(
+        local_db,
+        &[
+            TARGETS_SETTING_KEY.to_string(),
+            WSL_TARGETS_SETTING_KEY.to_string(),
+            ACTIVE_TARGET_SETTING_KEY.to_string(),
+        ],
+    )
+    .await?;
+    let mut updates = HashMap::from([
+        (
+            TARGETS_SETTING_KEY.to_string(),
+            serde_json::to_string(ssh_targets)?,
+        ),
+        (
+            WSL_TARGETS_SETTING_KEY.to_string(),
+            serde_json::to_string(wsl_targets)?,
+        ),
+    ]);
+    if reset_active {
+        updates.insert(
+            ACTIVE_TARGET_SETTING_KEY.to_string(),
+            LOCAL_TARGET_ID.to_string(),
+        );
+    }
+    db::set_settings(local_db, &updates).await?;
+    Ok(snapshot)
+}
+
+pub(super) async fn restore_target_settings(
+    local_db: &DbPool,
+    snapshot: &HashMap<String, Option<String>>,
+) -> Result<(), sqlx::Error> {
+    let mut transaction = local_db.begin().await?;
+    for (key, value) in snapshot {
+        match value {
+            Some(value) => {
+                sqlx::query("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)")
+                    .bind(key)
+                    .bind(value)
+                    .execute(&mut *transaction)
+                    .await?;
+            }
+            None => {
+                sqlx::query("DELETE FROM settings WHERE key = ?")
+                    .bind(key)
+                    .execute(&mut *transaction)
+                    .await?;
+            }
+        }
+    }
+    transaction.commit().await
+}
+
 pub async fn get_target_config_quarantine_status_impl(
     local_db: &DbPool,
 ) -> Result<TargetConfigQuarantineStatus, TargetsError> {

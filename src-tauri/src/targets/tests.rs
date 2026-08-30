@@ -125,6 +125,276 @@ pub(super) mod suite {
         }
     }
 
+    async fn persisted_target_settings(pool: &DbPool) -> HashMap<String, Option<String>> {
+        db::get_settings(
+            pool,
+            &[
+                TARGETS_SETTING_KEY.to_string(),
+                WSL_TARGETS_SETTING_KEY.to_string(),
+                ACTIVE_TARGET_SETTING_KEY.to_string(),
+            ],
+        )
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn invalid_delete_and_active_target_ids_make_zero_settings_writes() {
+        let registry = TargetRegistry::default();
+        let pool = memory_db().await;
+        let ssh = password_target();
+        let wsl = wsl_target();
+        save_remote_targets(&pool, std::slice::from_ref(&ssh))
+            .await
+            .unwrap();
+        save_wsl_targets(&pool, std::slice::from_ref(&wsl))
+            .await
+            .unwrap();
+        let before = persisted_target_settings(&pool).await;
+        sqlx::query(
+            "CREATE TRIGGER reject_unexpected_target_write BEFORE INSERT ON settings \
+             BEGIN SELECT RAISE(FAIL, 'unexpected target settings write'); END",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        assert!(matches!(
+            delete_target_impl(&registry, &pool, LOCAL_TARGET_ID).await,
+            Err(TargetsError::LocalTargetUndeletable)
+        ));
+        for target_id in ["", "missing-target"] {
+            assert!(matches!(
+                delete_target_impl(&registry, &pool, target_id).await,
+                Err(TargetsError::TargetNotFound(id)) if id == target_id
+            ));
+            assert!(matches!(
+                set_active_target_impl(&registry, &pool, target_id).await,
+                Err(TargetsError::TargetNotFound(id)) if id == target_id
+            ));
+        }
+
+        assert_eq!(persisted_target_settings(&pool).await, before);
+    }
+
+    async fn assert_delete_rollback_for_setting(failing_key: &str, trigger_name: &str) {
+        let backend = Arc::new(MemoryCredentialBackend::default());
+        let registry = TargetRegistry::with_credential_backend(backend.clone());
+        let pool = memory_db().await;
+        let mut ssh = password_target();
+        registry.save_target_password(&mut ssh).unwrap();
+        ssh.password = None;
+        let wsl = wsl_target();
+        save_remote_targets(&pool, std::slice::from_ref(&ssh))
+            .await
+            .unwrap();
+        save_wsl_targets(&pool, std::slice::from_ref(&wsl))
+            .await
+            .unwrap();
+        db::set_setting(&pool, ACTIVE_TARGET_SETTING_KEY, &ssh.id)
+            .await
+            .unwrap();
+        let remote_pool = memory_db().await;
+        db::set_setting(&remote_pool, "pool_marker", "owned")
+            .await
+            .unwrap();
+        registry.insert_test_pool(&ssh.id, remote_pool);
+        let before = persisted_target_settings(&pool).await;
+        let trigger_sql = format!(
+            "CREATE TRIGGER {trigger_name} BEFORE INSERT ON settings \
+             WHEN NEW.key = '{failing_key}' \
+             BEGIN SELECT RAISE(FAIL, 'target mutation persistence failure'); END"
+        );
+        sqlx::query(&trigger_sql).execute(&pool).await.unwrap();
+
+        assert!(matches!(
+            delete_target_impl(&registry, &pool, &ssh.id).await,
+            Err(TargetsError::Db(_))
+        ));
+        assert_eq!(persisted_target_settings(&pool).await, before);
+        assert_eq!(
+            backend
+                .passwords
+                .lock()
+                .unwrap()
+                .get("ssh-demo:ssh-password")
+                .map(String::as_str),
+            Some("secret")
+        );
+        let retained_pool = registry.remote_db(&ssh).await.unwrap();
+        assert_eq!(
+            db::get_setting(&retained_pool, "pool_marker")
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("owned")
+        );
+
+        sqlx::query(&format!("DROP TRIGGER {trigger_name}"))
+            .execute(&pool)
+            .await
+            .unwrap();
+        delete_target_impl(&registry, &pool, &ssh.id).await.unwrap();
+        assert!(load_remote_targets(&pool).await.unwrap().is_empty());
+        let retained_wsl = load_wsl_targets(&pool).await.unwrap();
+        assert_eq!(retained_wsl.len(), 1);
+        assert_eq!(retained_wsl[0].id, wsl.id);
+        assert_eq!(retained_wsl[0].distribution, wsl.distribution);
+        assert_eq!(active_target_id(&pool).await.unwrap(), LOCAL_TARGET_ID);
+        assert!(!backend
+            .passwords
+            .lock()
+            .unwrap()
+            .contains_key("ssh-demo:ssh-password"));
+    }
+
+    #[tokio::test]
+    async fn delete_target_rolls_back_settings_credential_and_pool_on_persistence_failure() {
+        assert_delete_rollback_for_setting(WSL_TARGETS_SETTING_KEY, "reject_delete_wsl_targets")
+            .await;
+        assert_delete_rollback_for_setting(
+            ACTIVE_TARGET_SETTING_KEY,
+            "reject_delete_active_target",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn delete_target_credential_failure_restores_settings_and_retains_pool() {
+        let backend = Arc::new(MemoryCredentialBackend::default());
+        let registry = TargetRegistry::with_credential_backend(backend.clone());
+        let pool = memory_db().await;
+        let mut ssh = password_target();
+        registry.save_target_password(&mut ssh).unwrap();
+        ssh.password = None;
+        let wsl = wsl_target();
+        save_remote_targets(&pool, std::slice::from_ref(&ssh))
+            .await
+            .unwrap();
+        save_wsl_targets(&pool, std::slice::from_ref(&wsl))
+            .await
+            .unwrap();
+        db::set_setting(&pool, ACTIVE_TARGET_SETTING_KEY, &ssh.id)
+            .await
+            .unwrap();
+        let remote_pool = memory_db().await;
+        db::set_setting(&remote_pool, "pool_marker", "owned")
+            .await
+            .unwrap();
+        registry.insert_test_pool(&ssh.id, remote_pool);
+        let before = persisted_target_settings(&pool).await;
+        *backend.delete_error.lock().unwrap() = Some(CredentialStoreError::Other(
+            "credential vault unavailable".to_string(),
+        ));
+
+        assert!(matches!(
+            delete_target_impl(&registry, &pool, &ssh.id).await,
+            Err(TargetsError::CredentialStore(_))
+        ));
+
+        assert_eq!(persisted_target_settings(&pool).await, before);
+        assert_eq!(
+            backend
+                .passwords
+                .lock()
+                .unwrap()
+                .get("ssh-demo:ssh-password")
+                .map(String::as_str),
+            Some("secret")
+        );
+        let retained_pool = registry.remote_db(&ssh).await.unwrap();
+        assert_eq!(
+            db::get_setting(&retained_pool, "pool_marker")
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("owned")
+        );
+
+        *backend.delete_error.lock().unwrap() = None;
+        delete_target_impl(&registry, &pool, &ssh.id).await.unwrap();
+        assert!(load_remote_targets(&pool).await.unwrap().is_empty());
+        assert_eq!(active_target_id(&pool).await.unwrap(), LOCAL_TARGET_ID);
+        assert!(!backend
+            .passwords
+            .lock()
+            .unwrap()
+            .contains_key("ssh-demo:ssh-password"));
+    }
+
+    #[tokio::test]
+    async fn delete_target_credential_failure_restores_session_password() {
+        let backend = Arc::new(MemoryCredentialBackend::default());
+        let registry = TargetRegistry::with_credential_backend(backend.clone());
+        let pool = memory_db().await;
+        let mut ssh = password_target();
+        ssh.password = None;
+        save_remote_targets(&pool, std::slice::from_ref(&ssh))
+            .await
+            .unwrap();
+        let before = persisted_target_settings(&pool).await;
+        registry
+            .set_session_password("ssh-demo:ssh-password", "session-secret")
+            .unwrap();
+        *backend.delete_error.lock().unwrap() = Some(CredentialStoreError::Other(
+            "credential vault unavailable".to_string(),
+        ));
+
+        assert!(matches!(
+            delete_target_impl(&registry, &pool, &ssh.id).await,
+            Err(TargetsError::CredentialStore(_))
+        ));
+
+        assert_eq!(persisted_target_settings(&pool).await, before);
+        let retained = load_remote_targets(&pool).await.unwrap();
+        assert_eq!(retained.len(), 1);
+        assert_eq!(retained[0].id, ssh.id);
+        assert_eq!(
+            registry
+                .get_session_password("ssh-demo:ssh-password")
+                .as_deref(),
+            Some("session-secret")
+        );
+    }
+
+    #[tokio::test]
+    async fn set_active_target_persistence_failure_preserves_previous_state() {
+        let backend = Arc::new(MemoryCredentialBackend::default());
+        let registry = TargetRegistry::with_credential_backend(backend.clone());
+        let pool = memory_db().await;
+        let mut ssh = password_target();
+        registry.save_target_password(&mut ssh).unwrap();
+        ssh.password = None;
+        save_remote_targets(&pool, std::slice::from_ref(&ssh))
+            .await
+            .unwrap();
+        let before = persisted_target_settings(&pool).await;
+        sqlx::query(
+            "CREATE TRIGGER reject_active_target_write BEFORE INSERT ON settings \
+             WHEN NEW.key = 'active_target_id_v1' \
+             BEGIN SELECT RAISE(FAIL, 'active target persistence failure'); END",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        assert!(matches!(
+            set_active_target_impl(&registry, &pool, &ssh.id).await,
+            Err(TargetsError::Db(_))
+        ));
+        assert_eq!(persisted_target_settings(&pool).await, before);
+        assert_eq!(active_target_id(&pool).await.unwrap(), LOCAL_TARGET_ID);
+        assert_eq!(
+            backend
+                .passwords
+                .lock()
+                .unwrap()
+                .get("ssh-demo:ssh-password")
+                .map(String::as_str),
+            Some("secret")
+        );
+    }
+
     #[tokio::test]
     async fn active_target_defaults_to_local() {
         let pool = memory_db().await;

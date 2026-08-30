@@ -31,6 +31,7 @@ async fn get_target_config_quarantine_status(
 - A batch validates every key and value before making one transactional `db::set_settings` call.
 - Settings operation logs contain only category set, key count, status, and `valueStored`; they never contain caller keys or values.
 - The target snapshot reads `ssh_targets_v1`, `wsl_targets_v1`, `active_target_id_v1`, and `target_config_quarantine_v1` together. SSH and WSL validate independently and use all-or-nothing recovery per domain.
+- Target deletion persists the SSH list, WSL list, and Local fallback in one settings transaction before removing the credential or cached remote pool. A credential-store failure restores the exact prior settings snapshot, including absent keys, restores any session password, retains the remote pool, and returns the credential error.
 - `TargetConfigQuarantineStatus` is version 1 and contains only `domain`, RFC 3339 UTC `detectedAt`, stable `reasonCode`, `sourceBytes`, `sourceSha256`, and `activeTargetReset`.
 - The frontend command map types `get_target_config_quarantine_status`; `targetStore.loadTargets()` loads targets and status independently so status failure does not discard a valid target list. UI text must not render the backend status-read error.
 
@@ -45,6 +46,7 @@ async fn get_target_config_quarantine_status(
 | Empty, duplicate, or reserved `local` target ID | Quarantine the affected domain with a stable reason code |
 | Active target absent after validation | Persist `active_target_id_v1=local` in the same recovery transaction |
 | Recovery transaction fails | Preserve every original setting and return `TargetsError` |
+| Target deletion settings write or credential cleanup fails | Preserve target lists, active target, credential availability, and cached remote pool; retry may complete after the injected failure is removed |
 | Quarantine metadata is malformed or untrusted | Return the empty default status; never forward its free text |
 | Explicit `target_by_id` misses | Return `TargetNotFound`; only missing active selection falls back to Local |
 
@@ -59,6 +61,7 @@ async fn get_target_config_quarantine_status(
 - Policy unit tests enumerate every live renderer key family and reject target, secret, migration, feature, quarantine, and unknown keys.
 - Batch tests assert validation completes before persistence and verify zero writes after one invalid member.
 - Target tests cover symmetric SSH/WSL isolation, healthy-domain preservation, duplicate/reserved IDs, legacy `credentialKey` and `protectedPassword`, Local fallback, repeat digest stability, malicious metadata, and transaction rollback.
+- Target deletion tests inject each settings-write failure plus credential-store failure, compare the full persisted snapshot and credential/pool ownership, and prove successful retry.
 - Registry tests assert missing active selection falls back to Local while explicit missing IDs remain `TargetNotFound`.
 - Frontend tests assert target/status independent loading, persistent warning rendering, bilingual text, typed IPC coverage, and no raw error or target JSON in the DOM.
 - Minimum closeout gate is focused Rust/Vitest coverage, `pnpm typecheck`, `pnpm lint`, `just ci`, task validation, and `git diff --check`.

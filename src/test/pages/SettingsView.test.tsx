@@ -329,6 +329,7 @@ function setupMocks({
       updatingPasswordTargetId: null,
       switchingTargetId: null,
       deletingTargetId: null,
+      requiresTargetReload: false,
       error: null,
       wslDistributionError,
       loadTargets,
