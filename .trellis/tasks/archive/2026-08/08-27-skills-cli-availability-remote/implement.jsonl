@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "父任务的权威产品契约；三个子任务都会修订它，集成评审需核对最终状态自洽"}
+{"file": ".trellis/spec/backend/index.md", "reason": "后端层 Pre-Development Checklist 入口"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端层 Pre-Development Checklist 入口"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "本树跨 Rust 服务、IPC、store、组件四层，集成评审需按跨层视角检查"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "多选/批量框架已由 08-26-batch-actions 交付，子任务必须复用而非重造"}
+{"file": ".trellis/tasks/08-27-skills-cli-availability-remote/research/current-state-evidence.md", "reason": "父任务唯一权威证据源：告警链路、Unavailable 语义、批量现状、远端闸门的 file:line 证据"}

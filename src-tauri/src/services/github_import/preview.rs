@@ -50,7 +50,8 @@ pub(super) fn parse_remote_preview_repository_files(
         .strip_suffix('\0')
         .ok_or(GithubImportError::RemotePreviewInvalidFileManifest)?;
     let fields = payload.split('\0').collect::<Vec<_>>();
-    if fields.len() % 3 != 0 {
+    let (records, remainder) = fields.as_chunks::<3>();
+    if !remainder.is_empty() {
         return Err(GithubImportError::RemotePreviewInvalidFileManifest);
     }
 
@@ -58,7 +59,7 @@ pub(super) fn parse_remote_preview_repository_files(
     let mut total_bytes = 0_u64;
     let mut seen_paths = HashSet::new();
     let mut files = Vec::with_capacity(fields.len() / 3);
-    for record in fields.chunks_exact(3) {
+    for record in records {
         if files.len() >= budget.archive_files {
             return Err(GithubImportError::ArchiveFileBudgetExceeded(
                 budget.archive_files,
@@ -99,7 +100,11 @@ fn parse_remote_file_sha256(raw: &str) -> Result<[u8; 32], GithubImportError> {
         return Err(GithubImportError::RemotePreviewInvalidFileManifest);
     }
     let mut digest = [0_u8; 32];
-    for (index, chunk) in trimmed.as_bytes().chunks_exact(2).enumerate() {
+    let (chunks, remainder) = trimmed.as_bytes().as_chunks::<2>();
+    if !remainder.is_empty() {
+        return Err(GithubImportError::RemotePreviewInvalidFileManifest);
+    }
+    for (index, chunk) in chunks.iter().enumerate() {
         let text = std::str::from_utf8(chunk)
             .map_err(|_| GithubImportError::RemotePreviewInvalidFileManifest)?;
         digest[index] = u8::from_str_radix(text, 16)

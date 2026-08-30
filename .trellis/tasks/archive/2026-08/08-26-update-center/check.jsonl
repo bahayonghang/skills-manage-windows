@@ -1,0 +1,18 @@
+{"file":".trellis/tasks/08-26-skills-cli-redesign/research/design-contract.md","reason":"Verify nine update states, pending persistence, placement safety, Base UI Escape, responsive drawer, toast, and evidence boundaries."}
+{"file":".trellis/tasks/08-26-update-center/research/update-center-evidence.md","reason":"Re-check implementation claims against the verified auth/client, migration, job, lock, rate-limit, and UNVERIFIED evidence."}
+{"file":".trellis/tasks/archive/2026-08/08-26-backend-contract/research/skills-cli-capability-probe.md","reason":"Verify update argv uses only capabilities with preserved direct evidence and fails closed for unsupported or unverified behavior."}
+{"file":".trellis/spec/backend/skills-cli-global.md","reason":"Audit Local rejection order, lock ownership, supervised argv, cancellation, mutation guard, typed errors, and Skills CLI regressions."}
+{"file":".trellis/spec/backend/database-migrations.md","reason":"Audit v7 continuity/checksum, new and upgrade fixtures, backup/restore, future-version behavior, and rollback-compatible delivery."}
+{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"Audit lease-to-guard order, guard lifetime, scoped recovery, contention, and absence of unlocked/nested mutation paths."}
+{"file":".trellis/spec/backend/process-supervision.md","reason":"Verify BulkTransfer policy, cancellation/process-tree cleanup, bounded streams, Windows hidden child behavior, and fake-runner evidence."}
+{"file":".trellis/spec/backend/spawn-blocking-io.md","reason":"Verify recursive digest/backup/restore stays on blocking threads with typed join errors and no AppHandle/DB capture."}
+{"file":".trellis/spec/backend/exclusive-job-lifecycle.md","reason":"Verify check/apply/recovery share the Skills CLI family, exact job IDs, busy behavior, cancellation, and RAII release."}
+{"file":".trellis/spec/backend/fs-db-operation-journal.md","reason":"Audit phase transitions, idempotent recovery, collision fail-closed behavior, post-destructive cancellation, and journal privacy."}
+{"file":".trellis/spec/backend/transactional-mutations.md","reason":"Verify failed cache/state publication preserves complete prior installed, observed, and pending rows."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Verify one typed failure mode per variant, stable codes/retryability, safe public messages, and no dynamic diagnostic leakage."}
+{"file":".trellis/spec/frontend/job-correlation-cancellation.md","reason":"Verify listen-before-invoke, captured job ID guards, stale event/promise tests, duplicate start, and exact cancel payloads."}
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Verify store-only invokes, generated command typing, fail-loud browser fixtures, and deterministic IPC coverage."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Verify inline plus toast failures, localized codes, retry clearing, and separate post-apply refresh error handling."}
+{"file":".trellis/spec/frontend/async-ui-test-stability.md","reason":"Verify scoped drawer interactions, progress semantics, unsupported/failure visibility, and stable asynchronous tests."}
+{"file":".trellis/spec/frontend/skill-card-scenarios.md","reason":"Verify update indicator extends the skillsCli variant without a second card implementation or broken type exclusions."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Verify tests are discoverable in owned directories, focused filters execute non-zero tests, and just ci remains the final gate."}

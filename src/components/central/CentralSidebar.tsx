@@ -16,6 +16,7 @@ import {
 import type { TFunction } from "i18next";
 
 import { FacetItem } from "@/components/central/FacetItem";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { FacetSection } from "@/components/central/FacetSection";
 import { SidebarExpansionProvider } from "@/components/central/SidebarExpansionProvider";
 import type { SidebarExpansionSignal } from "@/components/central/sidebarExpansionContext";
@@ -37,6 +38,9 @@ import { RepositorySectionBlock } from "@/components/central/CentralSidebarBlock
  * - `pinned=true`：内部 panel 静态展开到 `width`，与原有 resizable 宽度行为一致。
  *
  * pin 状态通过 `localStorage["central.sidebarPinned"]` 持久化，默认未 pin。
+ *
+ * 响应式：窗口 <1400px 时 pin 偏好不生效（强制收纳轨，pin 按钮隐藏），
+ * 窗口拉宽后按持久化偏好自动恢复。
  */
 
 const SIDEBAR_PINNED_STORAGE_KEY = "central.sidebarPinned";
@@ -110,7 +114,7 @@ export function CentralSidebar({
   onSyncNewSource,
   savedViewsSlot,
 }: CommonSidebarProps) {
-  const [isPinned, setIsPinned] = useState<boolean>(() =>
+  const [isPinnedPreference, setIsPinnedPreference] = useState<boolean>(() =>
     readPinnedFromStorage(),
   );
   const [isHovered, setIsHovered] = useState(false);
@@ -119,6 +123,12 @@ export function CentralSidebar({
     useState<SidebarExpansionSignal | null>(null);
   const [bulkExpanded, setBulkExpanded] = useState(true);
   const [repositorySearchQuery, setRepositorySearchQuery] = useState("");
+
+  // 窗口过窄（<1400px）时 pin 不生效：侧栏退回收纳轨，把横向空间让给卡片网格；
+  // hover/focus 仍可 overlay 展开。偏好照常持久化，窗口拉宽后自动恢复 pin。
+  // 查询按"窄"表述：jsdom polyfill 的 matches:false 落在宽屏分支，既有测试语义不变。
+  const isNarrowViewport = useMediaQuery("(max-width: 1399px)");
+  const isPinned = isPinnedPreference && !isNarrowViewport;
 
   const repoSelectionSet = new Set(selectedRepos);
   const tagSelectionSet = new Set(selectedTags);
@@ -138,8 +148,8 @@ export function CentralSidebar({
   };
 
   const handleTogglePin = () => {
-    const next = !isPinned;
-    setIsPinned(next);
+    const next = !isPinnedPreference;
+    setIsPinnedPreference(next);
     writePinnedToStorage(next);
     if (next) {
       // 进入 pinned 状态时清掉 overlay 触发状态，避免 hover 残留。
@@ -201,6 +211,7 @@ export function CentralSidebar({
             t={t}
             isPinned={isPinned}
             isOverlay={isOverlayExpanded}
+            canPin={!isNarrowViewport}
             onTogglePin={handleTogglePin}
             bulkExpanded={bulkExpanded}
             BulkIcon={BulkIcon}
@@ -261,6 +272,7 @@ interface ExpandedSidebarContentProps {
   t: TFunction;
   isPinned: boolean;
   isOverlay: boolean;
+  canPin: boolean;
   onTogglePin: () => void;
   bulkExpanded: boolean;
   BulkIcon: typeof ChevronsDownUp;
@@ -292,6 +304,7 @@ function ExpandedSidebarContent({
   t,
   isPinned,
   isOverlay,
+  canPin,
   onTogglePin,
   bulkExpanded,
   BulkIcon,
@@ -327,34 +340,36 @@ function ExpandedSidebarContent({
       <div className="scrollbar-subtle min-h-0 flex-1 overflow-y-auto px-3 pb-6 pr-2">
         {/* Pin / bulk toggle row ─────────────────────────────────────────── */}
         <div className="flex items-center gap-2 pb-3 pt-3">
-          <button
-            type="button"
-            data-testid="sidebar-pin-toggle"
-            aria-pressed={isPinned}
-            aria-label={
-              isPinned
-                ? t("central.v2.sidebarUnpin")
-                : t("central.v2.sidebarPin")
-            }
-            title={
-              isPinned
-                ? t("central.v2.sidebarUnpin")
-                : t("central.v2.sidebarPin")
-            }
-            onClick={onTogglePin}
-            className={cn(
-              "focus-ring grid size-9 shrink-0 place-items-center rounded-xl border transition-[scale,background-color,border-color,color] active:scale-[0.96]",
-              isPinned
-                ? "border-primary/30 bg-primary/10 text-primary"
-                : "border-border/80 bg-background text-muted-foreground hover:border-primary/30 hover:text-primary",
-            )}
-          >
-            {isPinned ? (
-              <PanelLeftClose className="size-4" />
-            ) : (
-              <PanelLeftOpen className="size-4" />
-            )}
-          </button>
+          {canPin && (
+            <button
+              type="button"
+              data-testid="sidebar-pin-toggle"
+              aria-pressed={isPinned}
+              aria-label={
+                isPinned
+                  ? t("central.v2.sidebarUnpin")
+                  : t("central.v2.sidebarPin")
+              }
+              title={
+                isPinned
+                  ? t("central.v2.sidebarUnpin")
+                  : t("central.v2.sidebarPin")
+              }
+              onClick={onTogglePin}
+              className={cn(
+                "focus-ring grid size-9 shrink-0 place-items-center rounded-xl border transition-[scale,background-color,border-color,color] active:scale-[0.96]",
+                isPinned
+                  ? "border-primary/30 bg-primary/10 text-primary"
+                  : "border-border/80 bg-background text-muted-foreground hover:border-primary/30 hover:text-primary",
+              )}
+            >
+              {isPinned ? (
+                <PanelLeftClose className="size-4" />
+              ) : (
+                <PanelLeftOpen className="size-4" />
+              )}
+            </button>
+          )}
           <button
             type="button"
             data-testid="sidebar-bulk-expansion-toggle"

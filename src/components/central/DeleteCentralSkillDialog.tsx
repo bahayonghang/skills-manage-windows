@@ -14,19 +14,25 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { formatBackendError } from "@/lib/backendError";
 import { groupPlatformAgentIds } from "@/lib/platformCleanupGroups";
-import type { AgentWithStatus, SkillDetail, SkillInstallation, SkillWithLinks } from "@/types";
+import type {
+  AgentWithStatus,
+  DeleteCentralSkillPreview,
+  SkillInstallation,
+  SkillWithLinks,
+} from "@/types";
 
 interface DeleteCentralSkillDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   skill: SkillWithLinks | null;
-  detail: SkillDetail | null;
+  preview: DeleteCentralSkillPreview | null;
   agents: AgentWithStatus[];
   isPreviewLoading: boolean;
   isDeleting: boolean;
   error: string | null;
-  onConfirm: (skillId: string, removeAgentIds: string[]) => Promise<void>;
+  onConfirm: (skillId: string, removeAgentIds: string[], force: boolean) => Promise<void>;
 }
 
 function uniqueAgentIds(ids: string[]): string[] {
@@ -41,7 +47,7 @@ export function DeleteCentralSkillDialog({
   open,
   onOpenChange,
   skill,
-  detail,
+  preview,
   agents,
   isPreviewLoading,
   isDeleting,
@@ -50,23 +56,25 @@ export function DeleteCentralSkillDialog({
 }: DeleteCentralSkillDialogProps) {
   const { t } = useTranslation();
   const [selectedCopyAgentIds, setSelectedCopyAgentIds] = useState<Set<string>>(new Set());
+  const [forceArmed, setForceArmed] = useState(false);
 
   useEffect(() => {
     if (open) {
       setSelectedCopyAgentIds(new Set());
+      setForceArmed(false);
     }
   }, [open, skill?.id]);
 
   const copyInstallations = useMemo(
-    () => (detail?.installations ?? []).filter((item) => item.link_type === "copy"),
-    [detail?.installations]
+    () => preview?.copy_installations ?? [],
+    [preview?.copy_installations]
   );
-  const autoRemovedAgentIds = useMemo(() => {
-    const linkedAgentIds = (detail?.installations ?? [])
-      .filter((item) => item.link_type !== "copy")
-      .map((item) => item.agent_id);
-    return uniqueAgentIds([...linkedAgentIds, ...(skill?.shared_root_agents ?? [])]);
-  }, [detail?.installations, skill?.shared_root_agents]);
+  const autoRemovedAgentIds = useMemo(
+    () => preview?.auto_removed_agent_ids ?? [],
+    [preview?.auto_removed_agent_ids]
+  );
+  const pendingRecovery = preview?.pending_recovery ?? null;
+  const forceDeleteEligible = Boolean(pendingRecovery?.force_delete_eligible);
   const copyInstallationGroups = useMemo(
     () =>
       groupPlatformAgentIds(
@@ -103,12 +111,27 @@ export function DeleteCentralSkillDialog({
     });
   }
 
-  async function handleConfirm() {
+  async function handleConfirm(force: boolean) {
     if (!skill) return;
-    await onConfirm(skill.id, Array.from(selectedCopyAgentIds));
+    await onConfirm(skill.id, Array.from(selectedCopyAgentIds), force);
+  }
+
+  async function handleForceClick() {
+    if (!forceArmed) {
+      setForceArmed(true);
+      return;
+    }
+    await handleConfirm(true);
   }
 
   if (!skill) return null;
+
+  const recoveryMessage = pendingRecovery
+    ? formatBackendError(
+        `${pendingRecovery.error_code || "central_operation.delete_restore_collision"}:`,
+        t
+      )
+    : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -129,11 +152,24 @@ export function DeleteCentralSkillDialog({
               <div className="min-w-0">
                 <div className="font-medium text-foreground">{t("central.deleteCentralRequired")}</div>
                 <div className="mt-1 truncate text-xs text-muted-foreground">
-                  {skill.canonical_path ?? skill.file_path}
+                  {preview?.central_path ?? skill.canonical_path ?? skill.file_path}
                 </div>
               </div>
             </div>
           </div>
+
+          {pendingRecovery && recoveryMessage && (
+            <div className="rounded-xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning-foreground">
+              <div className="font-medium">{recoveryMessage}</div>
+              {forceDeleteEligible ? (
+                forceArmed && (
+                  <div className="mt-2 text-xs">{t("central.forceDeleteHint")}</div>
+                )
+              ) : (
+                <div className="mt-2 text-xs">{t("central.forceDeleteBlocked")}</div>
+              )}
+            </div>
+          )}
 
           {isPreviewLoading ? (
             <div className="flex items-center gap-2 rounded-xl border border-border p-3 text-sm text-muted-foreground">
@@ -216,7 +252,27 @@ export function DeleteCentralSkillDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isDeleting}>
             {t("common.cancel")}
           </Button>
-          <Button variant="destructive" onClick={handleConfirm} disabled={isPreviewLoading || isDeleting || !detail}>
+          {forceDeleteEligible && (
+            <Button
+              variant="destructive"
+              onClick={handleForceClick}
+              disabled={isPreviewLoading || isDeleting || !preview}
+              data-testid="force-delete-central-skill"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  {t("central.deletingSkill")}
+                </>
+              ) : (
+                <>
+                  <Trash2 className="size-3.5" />
+                  {t("central.forceDeleteSkill")}
+                </>
+              )}
+            </Button>
+          )}
+          <Button variant="destructive" onClick={() => handleConfirm(false)} disabled={isPreviewLoading || isDeleting || !preview}>
             {isDeleting ? (
               <>
                 <Loader2 className="size-3.5 animate-spin" />

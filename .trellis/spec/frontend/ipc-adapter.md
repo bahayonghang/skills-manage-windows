@@ -78,20 +78,30 @@ store 是唯一 invoke 层（`src/stores/` 与少数 lib/hook 基础设施）；
 ### 2. Signatures
 
 ```ts
-type IpcErrorPayload = { code: string; message: string; retryable: boolean };
-class IpcInvokeError extends Error { code: string; retryable: boolean }
+type IpcErrorPayload = { code: string; message: string; retryable: boolean; correlationId?: string };
+class IpcInvokeError extends Error { code: string; retryable: boolean; correlationId?: string }
 normalizeIpcRejection(error: unknown): Error
+failureRecorder(command, sanitizedArgs, normalizedError): void
 ```
 
-`IPC_COMMANDS` 合并 88 个 handwritten 条目与 Rust/Serde 生成的 42 个条目；
-`UNTYPED_IPC_COMMANDS` 固定为剩余 47 个。
+typed、generated、untyped 与 backend-only command 的当前数量由 `ipcCommandCoverage.test.ts` 从 registry 和
+command map 计算，不在本规范复制快照。
 
 ### 3. Contracts
 
-- 已有 `IpcInvokeError` 必须原实例透传；有效对象载荷包装为 `IpcInvokeError`。
+- 已有 `IpcInvokeError` 必须原实例透传；有效对象载荷包装为 `IpcInvokeError`，合法 UUID correlationId 原样保留。
 - strict legacy `code:message` 仅用于过渡；未知 rejection 使用固定
   `internal.unexpected`，不得暴露 raw transport 值。
 - `String(error)` 只返回 public message；行为分支读取 `code`，不得嗅探 message。
+- failure recorder 对每个 rejection 独立写入；一个 pending/失败的日志 IPC 不得吞掉并发或后续 rejection。
+- 有合法 backend `correlationId` 时原样复用并标记 `correlationOrigin=backend`；legacy、fixture 或 unknown failure
+  生成 frontend UUID 并标记 `correlationOrigin=frontend`，保证按 operation ID 可查。
+- failure args 只保留数组/对象层级与非字符串 scalar；字符串全部替换，对象 key 改写为固定序号。window error /
+  unhandled rejection 只保留 allowlisted Error name 与可选非负行列，不记录 raw message、filename、stack、reason
+  或动态 error code。
+- `record_frontend_runtime_log` 必须继续走 `invokeRaw`（绕过 recorder）并吞掉自身失败，禁止增加全局 busy 锁。
+- Runtime IPC code 只能由生成的 `GENERATED_REVIEWED_IPC_ERROR_CODES` 判定；格式合法但未审核的 code 在 renderer
+  payload 形成前降级为 `internal.unexpected`，新增稳定 code 必须先更新 Rust 清单并重新 codegen。
 - `generatedCommandMap.ts` 只含 phantom args/result 元数据，不 import Tauri、不生成可调用 client。
 - Serde serialize phase 是 result 权威，deserialize phase 是 args 权威；`Option` 的
   required-null/optional-null 差异必须在 Rust 或真实调用边界解决，禁止 cast to `unknown`。
@@ -101,9 +111,13 @@ normalizeIpcRejection(error: unknown): Error
 | Condition | Required result |
 | --- | --- |
 | existing `IpcInvokeError` | same object returned |
-| valid structured payload | wrapper exposes code/message/retryable |
+| valid structured payload | wrapper exposes code/message/retryable and optional correlationId |
+| malformed correlationId | reject structured shape and fail closed |
 | missing browser fixture | preserve `IpcFixtureMissingError` |
 | unknown/raw sensitive rejection | fixed safe unexpected error |
+| missing backend correlation | new frontend UUID + explicit frontend origin |
+| recorder pending/fails | every other rejection still attempts one independent write |
+| dynamic object key/message/stack/code | ordinal/fixed fields only; raw seed absent |
 | generated/handwritten overlap | contract test fails |
 | generated artifact contains runtime invoke or `unknown` | contract test fails |
 
@@ -116,8 +130,10 @@ normalizeIpcRejection(error: unknown): Error
 ### 6. Tests Required
 
 - Adapter tests cover object/coded/plain/unknown rejection, identity pass-through and `String(error)`.
+- Runtime recorder tests cover backend/legacy/unknown correlation, concurrent pending writes, write failure recovery,
+  key-and-value adversarial seeds, and global error allowlists.
 - Fixture tests use `ipcFixtureError(code, message)` for expected backend failures.
-- Coverage asserts 130 typed / 47 untyped / 177 frontend, 42 generated and seven explicit backend-only handlers.
+- Coverage derives typed/untyped/frontend/generated/backend-only membership from authoritative sources and asserts parity.
 - Run `pnpm ipc:codegen:check` twice after generation to prove determinism.
 
 ### 7. Wrong vs Correct

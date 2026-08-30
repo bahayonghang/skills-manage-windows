@@ -44,11 +44,15 @@ pub use repos::settings_repo::*;
 pub use repos::skill_relations_repo::{
     repair_orphan_skill_relations, OrphanRelationReport, OrphanRepairReport,
 };
+pub use repos::skills_cli_updates_repo::*;
 pub use repos::skills_repo::*;
 pub use repos::tag_groups_repo::*;
 pub use repos::tags_repo::*;
 pub use repos::update_inventory_repo::*;
 pub use repos::update_states_repo::*;
+pub use repos::usage_file_cache_repo::*;
 pub use repos::usage_repo::*;
+pub use repos::usage_stats_repo::*;
+pub use repos::usage_unused_repo::*;
 pub use seed::*;
 pub use types::*;

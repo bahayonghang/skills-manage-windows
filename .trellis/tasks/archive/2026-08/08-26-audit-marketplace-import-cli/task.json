@@ -1,0 +1,32 @@
+{
+  "id": "audit-marketplace-import-cli",
+  "name": "audit-marketplace-import-cli",
+  "title": "Marketplace、导入与 Skills CLI 操作日志覆盖",
+  "description": "补齐 Marketplace、GitHub/local imports、portable state 与 Skills CLI 写操作和外部副作用审计。",
+  "status": "completed",
+  "dev_type": "bugfix",
+  "scope": "backend,quality,observability",
+  "package": null,
+  "priority": "P1",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-08-26",
+  "completedAt": "2026-08-27",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "08-26-ssh-update-observability-dialog",
+  "relatedFiles": [
+    "src-tauri/src/commands/marketplace.rs",
+    "src-tauri/src/commands/github_import.rs",
+    "src-tauri/src/commands/local_archive_import.rs",
+    "src-tauri/src/commands/portable_state.rs",
+    "src-tauri/src/commands/skills_cli.rs"
+  ],
+  "notes": "Dependency: 08-26-observability-core-contracts completed and its interface frozen.",
+  "meta": {}
+}

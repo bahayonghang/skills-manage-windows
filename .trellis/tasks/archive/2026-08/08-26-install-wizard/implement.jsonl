@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "recent settings 与 install action 只能由 store/surface adapter 走 named typed IPC"}
+{"file": ".trellis/spec/frontend/async-ui-test-stability.md", "reason": "三步 dialog、late preview、Base UI surface 测试使用 scoped within 和局部等待预算"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "preview/install inline error+toast，以及 install success 后 refresh/recent 独立失败语义"}
+{"file": ".trellis/spec/frontend/job-correlation-cancellation.md", "reason": "复用 skillsCli add jobId，阻止旧 preview/install promise 覆盖当前 session"}
+{"file": ".trellis/spec/frontend/platform-grouping.md", "reason": "Platforms 步骤必须复用 PlatformMultiSelectGrid 和 registry，不复制平台 ID/多选实现"}
+{"file": ".trellis/spec/frontend/icon-control-hit-area.md", "reason": "dialog close/back 图标满足 40px 热区、中心距与 focus-visible"}
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "preview/add 的 Local gate、source、target mapping、argv 与 error 是前端流程权威"}
+{"file": ".trellis/tasks/08-26-skills-cli-redesign/research/design-contract.md", "reason": "安装三步、真实 preview、toast、Escape、token 与 native UNVERIFIED 的任务内设计契约"}
+{"file": ".trellis/spec/quality/test-suite-layout.md", "reason": "安装 view-model、surface、dialog 和 store 测试必须放入 src/test"}

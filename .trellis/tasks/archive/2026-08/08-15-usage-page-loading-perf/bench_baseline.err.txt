@@ -1,0 +1,2 @@
+BENCH cold full scan: 10.9462886s (calls_written=2109, providers_available=4)
+BENCH steady-state rescan: 10.9626428s (calls_written=2109)

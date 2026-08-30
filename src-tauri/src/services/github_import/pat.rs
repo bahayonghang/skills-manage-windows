@@ -8,6 +8,25 @@ pub(super) const GITHUB_PAT_MIGRATION_SETTING_KEY: &str = "github_pat_keyring_mi
 pub(super) const GITHUB_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 pub(super) const GITHUB_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
+#[derive(Clone, Copy)]
+enum GithubPatMigrationFailureReason {
+    SecretStoreSet,
+    UnavailableStorageState,
+    ReadbackMismatch,
+    ReadbackError,
+}
+
+impl GithubPatMigrationFailureReason {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::SecretStoreSet => "secret_store_set",
+            Self::UnavailableStorageState => "unavailable_storage_state",
+            Self::ReadbackMismatch => "readback_mismatch",
+            Self::ReadbackError => "readback_error",
+        }
+    }
+}
+
 pub(super) fn normalize_github_pat(value: impl AsRef<str>) -> Option<String> {
     let token = value.as_ref().trim().to_string();
     (!token.is_empty()).then_some(token)
@@ -17,7 +36,10 @@ pub(super) fn map_secret_error(action: &str, error: crate::secrets::SecretError)
     format!("Failed to {} GitHub token: {}", action, error)
 }
 
-pub(super) async fn record_github_pat_migration_failure(pool: &DbPool, error: &str, reason: &str) {
+async fn record_github_pat_migration_failure(
+    pool: &DbPool,
+    reason: GithubPatMigrationFailureReason,
+) {
     crate::operation_log::record_operation_log_best_effort(
         pool,
         crate::operation_log::local_target_context(),
@@ -28,10 +50,10 @@ pub(super) async fn record_github_pat_migration_failure(pool: &DbPool, error: &s
             "GitHub token migration to secure storage failed",
         )
         .subject("setting", LEGACY_GITHUB_PAT_SETTING_KEY, "GitHub token")
-        .error(error)
+        .error("GitHub token migration to secure storage failed.")
         .details(json!({
             "key": LEGACY_GITHUB_PAT_SETTING_KEY,
-            "reason": reason,
+            "reason": reason.as_str(),
             "legacySettingRetained": true,
         })),
     )
@@ -86,8 +108,11 @@ pub(super) async fn delete_legacy_github_pat_setting(
     Ok(db::delete_setting(pool, LEGACY_GITHUB_PAT_SETTING_KEY).await?)
 }
 
-pub(super) fn log_github_pat_migration_warning(message: impl AsRef<str>) {
-    tracing::warn!(message = %message.as_ref(), "GitHub PAT migration warning");
+fn log_github_pat_migration_warning(reason: GithubPatMigrationFailureReason) {
+    tracing::warn!(
+        reason = reason.as_str(),
+        "GitHub token migration to secure storage failed; legacy setting retained"
+    );
 }
 
 pub(super) async fn migrate_github_pat_to_secret_store(
@@ -106,11 +131,9 @@ pub(super) async fn migrate_github_pat_to_secret_store(
         Ok(storage_state) => storage_state,
         Err(error) => {
             let mapped_error = map_secret_error("migrate", error);
-            log_github_pat_migration_warning(format!(
-                "GitHub PAT migration failed; keeping legacy settings value: {}",
-                mapped_error
-            ));
-            record_github_pat_migration_failure(pool, &mapped_error, "secret_store_set").await;
+            let reason = GithubPatMigrationFailureReason::SecretStoreSet;
+            log_github_pat_migration_warning(reason);
+            record_github_pat_migration_failure(pool, reason).await;
             return Ok(Some(mapped_error));
         }
     };
@@ -119,11 +142,9 @@ pub(super) async fn migrate_github_pat_to_secret_store(
             "Failed to migrate GitHub token: unavailable storage state {:?}",
             storage_state
         );
-        log_github_pat_migration_warning(format!(
-            "GitHub PAT migration did not produce an available secret state: {:?}",
-            storage_state
-        ));
-        record_github_pat_migration_failure(pool, &mapped_error, "unavailable_storage_state").await;
+        let reason = GithubPatMigrationFailureReason::UnavailableStorageState;
+        log_github_pat_migration_warning(reason);
+        record_github_pat_migration_failure(pool, reason).await;
         return Ok(Some(mapped_error));
     }
 
@@ -136,19 +157,16 @@ pub(super) async fn migrate_github_pat_to_secret_store(
         Ok(_) => {
             let mapped_error =
                 "Failed to verify migrated GitHub token; keeping legacy settings value.";
-            log_github_pat_migration_warning(
-                "GitHub PAT migration readback did not match; keeping legacy settings value.",
-            );
-            record_github_pat_migration_failure(pool, mapped_error, "readback_mismatch").await;
+            let reason = GithubPatMigrationFailureReason::ReadbackMismatch;
+            log_github_pat_migration_warning(reason);
+            record_github_pat_migration_failure(pool, reason).await;
             Ok(Some(mapped_error.to_string()))
         }
         Err(error) => {
             let mapped_error = map_secret_error("verify migrated", error);
-            log_github_pat_migration_warning(format!(
-                "GitHub PAT migration readback failed; keeping legacy settings value: {}",
-                mapped_error
-            ));
-            record_github_pat_migration_failure(pool, &mapped_error, "readback_error").await;
+            let reason = GithubPatMigrationFailureReason::ReadbackError;
+            log_github_pat_migration_warning(reason);
+            record_github_pat_migration_failure(pool, reason).await;
             Ok(Some(mapped_error))
         }
     }

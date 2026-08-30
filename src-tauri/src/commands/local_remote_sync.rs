@@ -1,11 +1,11 @@
 //! Tauri command shell for syncing the current local repo and local Central
 //! skills to a selected SSH/WSL target.
 
-use serde_json::json;
 use tauri::State;
 
-use crate::operation_log::{
-    record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
+use crate::observability::{
+    CommandLogPolicy, OperationContext, OperationDefinition, OperationTarget, OperationTargetKind,
+    ReviewedDiagnostic, ReviewedFailure, SafeDetailKey, SafeOperationResult,
 };
 use crate::services::local_remote_sync::{
     apply_local_remote_sync_impl, preview_local_remote_sync_impl, LocalRemoteSyncApplyRequest,
@@ -16,13 +16,46 @@ use crate::services::scanner::scan_remote_skills_impl;
 use crate::targets::ActiveTarget;
 use crate::AppState;
 
+fn operation_definition() -> OperationDefinition {
+    match crate::ipc_registry::command_policy("apply_local_remote_sync")
+        .expect("sync command must be registered")
+        .policy
+    {
+        CommandLogPolicy::Operation(definition) => definition,
+        _ => unreachable!("sync command must have an operation policy"),
+    }
+}
+
+fn audit_target(target: &ActiveTarget) -> (OperationTargetKind, OperationTarget) {
+    match target {
+        ActiveTarget::Local => (OperationTargetKind::Local, OperationTarget::local()),
+        ActiveTarget::Ssh(target) => (
+            OperationTargetKind::Ssh,
+            OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+        ),
+        ActiveTarget::Wsl(target) => (
+            OperationTargetKind::Wsl,
+            OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        ),
+    }
+}
+
 #[tauri::command]
 #[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn preview_local_remote_sync(
     state: State<'_, AppState>,
     request: LocalRemoteSyncPreviewRequest,
 ) -> crate::ipc_error::IpcResult<LocalRemoteSyncPreview> {
+    let target_kind = if request.target_id.starts_with("ssh-") {
+        OperationTargetKind::Ssh
+    } else if request.target_id.starts_with("wsl-") {
+        OperationTargetKind::Wsl
+    } else {
+        OperationTargetKind::Local
+    };
     crate::ipc_boundary!(
+        "preview_local_remote_sync",
+        target_kind = target_kind,
         async move {
             let active_target = selected_remote_target(&state, &request.target_id).await?;
             preview_local_remote_sync_impl(active_target, request.repo_path)
@@ -39,69 +72,58 @@ pub async fn apply_local_remote_sync(
     state: State<'_, AppState>,
     request: LocalRemoteSyncApplyRequest,
 ) -> crate::ipc_error::IpcResult<LocalRemoteSyncApplyResult> {
-    crate::ipc_boundary!(async move {
-    let active_target = selected_remote_target(&state, &request.target_id).await?;
-    let target_context = target_context_from_active_target(&active_target);
-    let mut result = apply_local_remote_sync_impl(active_target.clone(), request.repo_path)
-        .await
-        .map_err(|e| e.to_string());
-    if let Ok(value) = &mut result {
-        refresh_synced_target_cache(&state, &active_target, value).await;
-    }
-
-    match &result {
-        Ok(value) => {
-            let status = if value.failed.is_empty() {
-                "succeeded"
-            } else if value.synced_repo.is_none() && value.synced_skills.is_empty() {
-                "failed"
-            } else {
-                "partial"
-            };
-            record_operation_log_best_effort(
-                &state.db,
-                target_context,
-                OperationLogEvent::new(
-                    "target",
-                    "local_remote_sync.apply",
-                    status,
-                    format!(
-                        "Synced local repo and {} skill(s) to {}",
-                        value.synced_skills.len(),
-                        value.target_label
-                    ),
-                )
-                .subject("target", &value.target_id, &value.target_label)
-                .details(json!({
-                    "syncedRepo": value.synced_repo.as_ref().map(|item| &item.remote_path),
-                    "syncedSkills": value.synced_skills.iter().map(|item| &item.id).collect::<Vec<_>>(),
-                    "skippedSkills": value.skipped_skills.iter().map(|item| &item.id).collect::<Vec<_>>(),
-                    "failed": value.failed,
-                })),
+    let target_kind = if request.target_id.starts_with("ssh-") {
+        OperationTargetKind::Ssh
+    } else if request.target_id.starts_with("wsl-") {
+        OperationTargetKind::Wsl
+    } else {
+        OperationTargetKind::Local
+    };
+    crate::ipc_boundary!(
+        "apply_local_remote_sync",
+        target_kind = target_kind,
+        async move {
+            let active_target = selected_remote_target(&state, &request.target_id).await?;
+            let (_, audit_target) = audit_target(&active_target);
+            let definition = operation_definition();
+            crate::observability::run_operation(
+                &state,
+                definition,
+                OperationContext::new(audit_target),
+                |value: &LocalRemoteSyncApplyResult| {
+                    let result = if value.failed.is_empty() {
+                        SafeOperationResult::succeeded("Local and remote skills synchronized.")
+                    } else {
+                        SafeOperationResult::partial(
+                            "Local and remote synchronization completed with failures.",
+                        )
+                    };
+                    result
+                        .count(
+                            SafeDetailKey::SucceededCount,
+                            value.synced_skills.len() as u64,
+                        )
+                        .count(
+                            SafeDetailKey::SkippedCount,
+                            value.skipped_skills.len() as u64,
+                        )
+                        .count(SafeDetailKey::FailedCount, value.failed.len() as u64)
+                },
+                || async {
+                    let mut value =
+                        apply_local_remote_sync_impl(active_target.clone(), request.repo_path)
+                            .await
+                            .map_err(|_| {
+                                ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition))
+                            })?;
+                    refresh_synced_target_cache(&state, &active_target, &mut value).await;
+                    Ok::<_, ReviewedFailure>(value)
+                },
             )
-            .await;
+            .await
         }
-        Err(error) => {
-            record_operation_log_best_effort(
-                &state.db,
-                target_context,
-                OperationLogEvent::new(
-                    "target",
-                    "local_remote_sync.apply",
-                    "failed",
-                    "Failed to sync local repo and skills to remote target",
-                )
-                .subject("target", active_target.id(), active_target.label())
-                .error(error),
-            )
-            .await;
-        }
-    }
-
-    result
-
-    }
-    .await)
+        .await,
+    )
 }
 
 async fn selected_remote_target(
@@ -153,12 +175,12 @@ async fn refresh_synced_target_cache(
 fn push_refresh_failure(
     active_target: &ActiveTarget,
     result: &mut LocalRemoteSyncApplyResult,
-    error: String,
+    _error: String,
 ) {
     result.failed.push(LocalRemoteSyncFailure {
         id: "target-cache-refresh".to_string(),
         label: "Target cache refresh".to_string(),
         target_path: active_target.remote_home().unwrap_or("").to_string(),
-        error,
+        error: "Target cache refresh failed.".to_string(),
     });
 }

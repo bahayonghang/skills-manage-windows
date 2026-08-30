@@ -9,7 +9,7 @@
 use super::*;
 
 /// Resolve a branch (or tag) tip to an immutable commit SHA.
-pub(super) async fn resolve_commit_sha(
+pub(crate) async fn resolve_commit_sha(
     client: &reqwest::Client,
     repo: &GitHubRepoRef,
     auth_token: Option<&str>,
@@ -65,7 +65,7 @@ pub(super) async fn resolve_commit_sha(
 
 /// Accept only a full 40-character lowercase-hex commit SHA. The value becomes
 /// an acquisition ref, so it must never carry path or query characters.
-pub(super) fn validate_commit_sha(value: &str) -> Result<(), GithubImportError> {
+pub(crate) fn validate_commit_sha(value: &str) -> Result<(), GithubImportError> {
     if value.len() == 40 && value.chars().all(|ch| ch.is_ascii_hexdigit()) {
         return Ok(());
     }
@@ -77,7 +77,7 @@ pub(super) fn validate_commit_sha(value: &str) -> Result<(), GithubImportError> 
 /// Used only to construct acquisition URLs (tree / tarball / raw). Display
 /// metadata, candidate download URLs, and persisted repository rows keep the
 /// user-facing branch from the display ref.
-pub(super) fn pinned_repo_ref(repo: &GitHubRepoRef, commit_sha: &str) -> GitHubRepoRef {
+pub(crate) fn pinned_repo_ref(repo: &GitHubRepoRef, commit_sha: &str) -> GitHubRepoRef {
     GitHubRepoRef {
         owner: repo.owner.clone(),
         repo: repo.repo.clone(),
@@ -116,6 +116,13 @@ pub(super) fn repository_snapshot_digest(files: &[PreviewSnapshotFile]) -> Strin
     )
 }
 
+/// Compute the immutable repository digest directly from a retained Local
+/// snapshot. Central Update uses the same framing as the GitHub preview
+/// registry so cache hits and pinned reacquisition have one identity format.
+pub(crate) fn repository_snapshot_digest_from_local(snapshot: &GitHubRepoSnapshot) -> String {
+    repository_snapshot_digest(&snapshot_files_from_local(snapshot))
+}
+
 /// Domain-separated digest of one candidate skill's complete file set, using
 /// paths relative to the final skill directory.
 pub(super) fn candidate_content_digest(
@@ -139,8 +146,18 @@ pub(crate) fn candidate_content_digest_from_snapshot(
     snapshot: &GitHubRepoSnapshot,
     source_path: &str,
 ) -> Result<String, GithubImportError> {
-    let mut files = snapshot_files_from_local(snapshot)
-        .into_iter()
+    candidate_content_digest_from_repository_files(
+        &snapshot_files_from_local(snapshot),
+        source_path,
+    )
+}
+
+pub(super) fn candidate_content_digest_from_repository_files(
+    repository_files: &[PreviewSnapshotFile],
+    source_path: &str,
+) -> Result<String, GithubImportError> {
+    let mut files = repository_files
+        .iter()
         .filter_map(|file| {
             repo_file_relative_to_source(&file.repo_path, source_path).map(|path| {
                 GitHubSkillPreviewFile {
@@ -172,7 +189,11 @@ fn decode_file_digest(value: &str) -> Result<[u8; 32], GithubImportError> {
         return Err(GithubImportError::PreviewSnapshotIntegrity);
     }
     let mut raw = [0_u8; 32];
-    for (index, chunk) in hex.as_bytes().chunks_exact(2).enumerate() {
+    let (chunks, remainder) = hex.as_bytes().as_chunks::<2>();
+    if !remainder.is_empty() {
+        return Err(GithubImportError::PreviewSnapshotIntegrity);
+    }
+    for (index, chunk) in chunks.iter().enumerate() {
         let text =
             std::str::from_utf8(chunk).map_err(|_| GithubImportError::PreviewSnapshotIntegrity)?;
         raw[index] = u8::from_str_radix(text, 16)

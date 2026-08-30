@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { formatBackendError } from "@/lib/backendError";
 import { groupPlatformAgentIds } from "@/lib/platformCleanupGroups";
 import type {
   AgentWithStatus,
@@ -79,11 +80,13 @@ export function BatchDeleteCentralSkillsDialog({
   const [selectedCopyAgentIds, setSelectedCopyAgentIds] = useState<Set<string>>(
     new Set(),
   );
+  const [forceArmed, setForceArmed] = useState(false);
   const skillIdsKey = useMemo(() => skillIds.join("\0"), [skillIds]);
 
   useEffect(() => {
     if (open) {
       setSelectedCopyAgentIds(new Set());
+      setForceArmed(false);
     }
   }, [open, skillIdsKey]);
 
@@ -140,19 +143,40 @@ export function BatchDeleteCentralSkillsDialog({
     });
   }
 
-  async function handleConfirm() {
-    if (!preview) return;
-    const requests = preview.previews.map((item) => {
+  const pendingRecoveries = preview?.previews.filter((item) => item.pending_recovery) ?? [];
+  const forceEligibleIds = new Set(
+    pendingRecoveries
+      .filter((item) => item.pending_recovery?.force_delete_eligible)
+      .map((item) => item.skill_id),
+  );
+  const forceBlocked = pendingRecoveries.filter(
+    (item) => !item.pending_recovery?.force_delete_eligible,
+  );
+
+  function buildRequests(forceEligible: boolean): BatchDeleteCentralSkillRequest[] {
+    if (!preview) return [];
+    return preview.previews.map((item) => {
       const removableAgentIds = item.copy_installations
         .map((installation) => installation.agent_id)
         .filter((agentId) => selectedCopyAgentIds.has(agentId));
       return {
         skill_id: item.skill_id,
         remove_agent_ids: uniqueIds(removableAgentIds),
+        force: forceEligible && forceEligibleIds.has(item.skill_id),
       };
     });
+  }
 
-    await onConfirm(requests);
+  async function handleConfirm() {
+    await onConfirm(buildRequests(false));
+  }
+
+  async function handleForceClick() {
+    if (!forceArmed) {
+      setForceArmed(true);
+      return;
+    }
+    await onConfirm(buildRequests(true));
   }
 
   const canConfirm = Boolean(preview && preview.previews.length > 0);
@@ -282,6 +306,29 @@ export function BatchDeleteCentralSkillsDialog({
                 </div>
               ) : null}
 
+              {pendingRecoveries.length > 0 && (
+                <div className="rounded-xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning-foreground">
+                  <div className="font-medium">
+                    {formatBackendError(
+                      "central_operation.delete_restore_collision:",
+                      t,
+                    )}
+                  </div>
+                  {forceEligibleIds.size > 0 && forceArmed && (
+                    <div className="mt-2 text-xs">{t("central.forceDeleteHint")}</div>
+                  )}
+                  {forceBlocked.length > 0 && (
+                    <div className="mt-2 space-y-1 text-xs">
+                      {forceBlocked.map((item) => (
+                        <div key={item.skill_id}>
+                          {item.skill_name}: {t("central.forceDeleteBlocked")}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {preview && preview.failed.length > 0 && (
                 <div className="rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs text-warning-foreground">
                   <div className="font-medium">
@@ -290,7 +337,13 @@ export function BatchDeleteCentralSkillsDialog({
                   <div className="mt-2 space-y-1">
                     {preview.failed.map((item) => (
                       <div key={item.skill_id}>
-                        {item.skill_id}: {item.error}
+                        {item.skill_id}:{" "}
+                        {formatBackendError(
+                          item.error_code
+                            ? `${item.error_code}:${item.error}`
+                            : item.error,
+                          t,
+                        )}
                       </div>
                     ))}
                   </div>
@@ -314,6 +367,26 @@ export function BatchDeleteCentralSkillsDialog({
           >
             {t("common.cancel")}
           </Button>
+          {forceEligibleIds.size > 0 && (
+            <Button
+              variant="destructive"
+              onClick={handleForceClick}
+              disabled={isPreviewLoading || isDeleting || !canConfirm}
+              data-testid="force-delete-batch-central-skills"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  {t("central.deletingSkill")}
+                </>
+              ) : (
+                <>
+                  <Trash2 className="size-3.5" />
+                  {t("central.forceDeleteSkill")}
+                </>
+              )}
+            </Button>
+          )}
           <Button
             variant="destructive"
             onClick={handleConfirm}

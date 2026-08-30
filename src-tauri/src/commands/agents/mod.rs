@@ -1,14 +1,13 @@
 use std::path::Path;
-use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use tauri::State;
 use uuid::Uuid;
 
 use crate::db::{self, Agent, DbPool};
-use crate::operation_log::{
-    record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
+use crate::observability::{
+    CommandLogPolicy, OperationContext, OperationSubjectKind, OperationTarget, OperationTargetKind,
+    ReviewedDiagnostic, ReviewedFailure, SafeDetailKey, SafeIdentifier, SafeOperationResult,
 };
 use crate::paths::{
     expand_home_path, expand_remote_home_path, path_to_string, platform_global_skills_dir,
@@ -180,7 +179,17 @@ pub async fn detect_agents_impl(pool: &DbPool) -> Result<Vec<AgentWithStatus>, S
 
     for agent in agents {
         let is_detected = is_agent_detected(&agent.global_skills_dir);
-        let _ = db::update_agent_detected(pool, &agent.id, is_detected).await;
+        if db::update_agent_detected(pool, &agent.id, is_detected)
+            .await
+            .is_err()
+        {
+            tracing::warn!(
+                target: "skillport::agent",
+                code = "agent.detection_persist_failed",
+                phase = "database",
+                "Agent detection state could not be persisted"
+            );
+        }
         result.push(agent_to_with_status_with_detected(agent, is_detected));
     }
 
@@ -215,7 +224,17 @@ pub async fn detect_remote_agents_impl(
         let is_detected = is_remote_agent_detected(&connection, &agent.global_skills_dir)
             .await
             .map_err(|e| e.to_string())?;
-        let _ = db::update_agent_detected(pool, &agent.id, is_detected).await;
+        if db::update_agent_detected(pool, &agent.id, is_detected)
+            .await
+            .is_err()
+        {
+            tracing::warn!(
+                target: "skillport::agent",
+                code = "agent.detection_persist_failed",
+                phase = "database",
+                "Agent detection state could not be persisted"
+            );
+        }
         result.push(agent_to_with_status_with_detected(agent, is_detected));
     }
 
@@ -354,6 +373,7 @@ pub async fn get_agents(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<Vec<AgentWithStatus>> {
     crate::ipc_boundary!(
+        "get_agents",
         async move {
             let request_context = state.resolve_target_context().await?;
             let active_target = request_context.target().clone();
@@ -372,6 +392,7 @@ pub async fn list_platform_paths(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<std::collections::HashMap<String, ResolvedPlatformPaths>> {
     crate::ipc_boundary!(
+        "list_platform_paths",
         async move {
             let request_context = state.resolve_target_context().await?;
             let active_target = request_context.target().clone();
@@ -387,20 +408,40 @@ pub async fn list_platform_paths(
 pub async fn detect_agents(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<Vec<AgentWithStatus>> {
-    crate::ipc_boundary!(
-        async move {
-            let request_context = state.resolve_target_context().await?;
-            let active_target = request_context.target().clone();
-            let pool = request_context.db().clone();
-            match active_target {
-                ActiveTarget::Local => detect_agents_impl(&pool).await,
-                ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
-                    detect_remote_agents_impl(&pool, &active_target).await
-                }
-            }
-        }
+    crate::ipc_boundary_async!("detect_agents", {
+        let request_context = state.resolve_target_context().await?;
+        let active_target = request_context.target().clone();
+        let audit_target = match &active_target {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let entry = crate::ipc_registry::command_policy("detect_agents")
+            .expect("detect_agents must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("detect_agents must be auditable")
+        };
+        crate::observability::run_operation(
+            &state,
+            definition,
+            OperationContext::new(audit_target),
+            |agents: &Vec<AgentWithStatus>| {
+                SafeOperationResult::succeeded("Agent detection completed.")
+                    .count(SafeDetailKey::AffectedCount, agents.len() as u64)
+            },
+            || async move {
+                let result = match active_target {
+                    ActiveTarget::Local => detect_agents_impl(&pool).await,
+                    ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
+                        detect_remote_agents_impl(&pool, &active_target).await
+                    }
+                };
+                result.map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
         .await
-    )
+    })
 }
 
 #[tauri::command]
@@ -408,44 +449,36 @@ pub async fn add_custom_agent(
     state: State<'_, AppState>,
     config: CustomAgentConfig,
 ) -> crate::ipc_error::IpcResult<AgentWithStatus> {
-    crate::ipc_boundary!(
-        async move {
-            let request_context = state.resolve_target_context().await?;
-            let active_target = request_context.target().clone();
-            let target_context = target_context_from_active_target(&active_target);
-            let pool = request_context.db().clone();
-            let remote_home = active_target.remote_home();
-            let display_name = config.display_name.clone();
-            let global_skills_dir = config.global_skills_dir.clone();
-            let started_at = Instant::now();
-            let result = add_custom_agent_impl_for_home(&pool, config, remote_home).await;
-
-            let status = if result.is_ok() {
-                "succeeded"
-            } else {
-                "failed"
-            };
-            let summary = match &result {
-                Ok(agent) => format!("Added custom platform {}", agent.display_name),
-                Err(_) => format!("Failed to add custom platform {}", display_name),
-            };
-            let mut event = OperationLogEvent::new("platform", "platform.add", status, summary)
-                .details(json!({
-                    "display_name": &display_name,
-                    "global_skills_dir": &global_skills_dir,
-                }))
-                .duration_ms(started_at.elapsed().as_millis() as i64);
-            if let Ok(agent) = &result {
-                event = event.subject("platform", &agent.id, &agent.display_name);
-            }
-            if let Err(error) = &result {
-                event = event.error(error);
-            }
-            record_operation_log_best_effort(&pool, target_context, event).await;
-            result
-        }
+    crate::ipc_boundary_async!("add_custom_agent", {
+        let request_context = state.resolve_target_context().await?;
+        let active_target = request_context.target().clone();
+        let audit_target = match &active_target {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let entry = crate::ipc_registry::command_policy("add_custom_agent")
+            .expect("add_custom_agent must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("add_custom_agent must be auditable")
+        };
+        crate::observability::run_operation(
+            &state,
+            definition,
+            OperationContext::new(audit_target),
+            |agent: &AgentWithStatus| {
+                SafeOperationResult::succeeded("Custom agent added.")
+                    .identifier(SafeDetailKey::Identifier, SafeIdentifier::new(&agent.id))
+            },
+            || async move {
+                add_custom_agent_impl_for_home(&pool, config, active_target.remote_home())
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
         .await
-    )
+    })
 }
 
 #[tauri::command]
@@ -454,43 +487,40 @@ pub async fn update_custom_agent(
     agent_id: String,
     config: UpdateCustomAgentConfig,
 ) -> crate::ipc_error::IpcResult<AgentWithStatus> {
-    crate::ipc_boundary!(
-        async move {
-            let request_context = state.resolve_target_context().await?;
-            let active_target = request_context.target().clone();
-            let target_context = target_context_from_active_target(&active_target);
-            let pool = request_context.db().clone();
-            let remote_home = active_target.remote_home();
-            let display_name = config.display_name.clone();
-            let global_skills_dir = config.global_skills_dir.clone();
-            let started_at = Instant::now();
-            let result =
-                update_custom_agent_impl_for_home(&pool, &agent_id, config, remote_home).await;
-
-            let status = if result.is_ok() {
-                "succeeded"
-            } else {
-                "failed"
-            };
-            let summary = match &result {
-                Ok(agent) => format!("Updated custom platform {}", agent.display_name),
-                Err(_) => format!("Failed to update custom platform {}", agent_id),
-            };
-            let mut event = OperationLogEvent::new("platform", "platform.update", status, summary)
-                .subject("platform", &agent_id, &display_name)
-                .details(json!({
-                    "display_name": &display_name,
-                    "global_skills_dir": &global_skills_dir,
-                }))
-                .duration_ms(started_at.elapsed().as_millis() as i64);
-            if let Err(error) = &result {
-                event = event.error(error);
-            }
-            record_operation_log_best_effort(&pool, target_context, event).await;
-            result
-        }
+    crate::ipc_boundary_async!("update_custom_agent", {
+        let request_context = state.resolve_target_context().await?;
+        let active_target = request_context.target().clone();
+        let audit_target = match &active_target {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let entry = crate::ipc_registry::command_policy("update_custom_agent")
+            .expect("update_custom_agent must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("update_custom_agent must be auditable")
+        };
+        let context = OperationContext::new(audit_target)
+            .subject(OperationSubjectKind::Agent, SafeIdentifier::new(&agent_id));
+        crate::observability::run_operation(
+            &state,
+            definition,
+            context,
+            |_| SafeOperationResult::succeeded("Custom agent updated."),
+            || async move {
+                update_custom_agent_impl_for_home(
+                    &pool,
+                    &agent_id,
+                    config,
+                    active_target.remote_home(),
+                )
+                .await
+                .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
         .await
-    )
+    })
 }
 
 #[tauri::command]
@@ -498,36 +528,34 @@ pub async fn remove_custom_agent(
     state: State<'_, AppState>,
     agent_id: String,
 ) -> crate::ipc_error::IpcResult<()> {
-    crate::ipc_boundary!(
-        async move {
-            let request_context = state.resolve_target_context().await?;
-            let active_target = request_context.target().clone();
-            let target_context = target_context_from_active_target(&active_target);
-            let pool = request_context.db().clone();
-            let started_at = Instant::now();
-            let result = remove_custom_agent_impl(&pool, &agent_id).await;
-
-            let status = if result.is_ok() {
-                "succeeded"
-            } else {
-                "failed"
-            };
-            let summary = if result.is_ok() {
-                format!("Removed custom platform {}", agent_id)
-            } else {
-                format!("Failed to remove custom platform {}", agent_id)
-            };
-            let mut event = OperationLogEvent::new("platform", "platform.remove", status, summary)
-                .subject("platform", &agent_id, &agent_id)
-                .duration_ms(started_at.elapsed().as_millis() as i64);
-            if let Err(error) = &result {
-                event = event.error(error);
-            }
-            record_operation_log_best_effort(&pool, target_context, event).await;
-            result
-        }
+    crate::ipc_boundary_async!("remove_custom_agent", {
+        let request_context = state.resolve_target_context().await?;
+        let audit_target = match request_context.target() {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let entry = crate::ipc_registry::command_policy("remove_custom_agent")
+            .expect("remove_custom_agent must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("remove_custom_agent must be auditable")
+        };
+        let context = OperationContext::new(audit_target)
+            .subject(OperationSubjectKind::Agent, SafeIdentifier::new(&agent_id));
+        crate::observability::run_operation(
+            &state,
+            definition,
+            context,
+            |_| SafeOperationResult::succeeded("Custom agent removed."),
+            || async move {
+                remove_custom_agent_impl(&pool, &agent_id)
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
         .await
-    )
+    })
 }
 
 #[tauri::command]
@@ -536,13 +564,38 @@ pub async fn set_agent_enabled(
     agent_id: String,
     is_enabled: bool,
 ) -> crate::ipc_error::IpcResult<AgentWithStatus> {
-    crate::ipc_boundary!(
-        async move {
-            let pool = state.active_db().await?;
-            set_agent_enabled_impl(&pool, &agent_id, is_enabled).await
-        }
+    crate::ipc_boundary_async!("set_agent_enabled", {
+        let request_context = state.resolve_target_context().await?;
+        let audit_target = match request_context.target() {
+            ActiveTarget::Local => OperationTarget::local(),
+            ActiveTarget::Ssh(target) => OperationTarget::new(OperationTargetKind::Ssh, &target.id),
+            ActiveTarget::Wsl(target) => OperationTarget::new(OperationTargetKind::Wsl, &target.id),
+        };
+        let pool = request_context.db().clone();
+        let entry = crate::ipc_registry::command_policy("set_agent_enabled")
+            .expect("set_agent_enabled must be registered");
+        let CommandLogPolicy::Operation(definition) = entry.policy else {
+            unreachable!("set_agent_enabled must be auditable")
+        };
+        let context = OperationContext::new(audit_target)
+            .subject(OperationSubjectKind::Agent, SafeIdentifier::new(&agent_id));
+        let mode = if is_enabled { "enabled" } else { "disabled" };
+        crate::observability::run_operation(
+            &state,
+            definition,
+            context,
+            move |_| {
+                SafeOperationResult::succeeded("Agent enabled state updated.")
+                    .stable(SafeDetailKey::Mode, mode)
+            },
+            || async move {
+                set_agent_enabled_impl(&pool, &agent_id, is_enabled)
+                    .await
+                    .map_err(|_| ReviewedFailure::new(ReviewedDiagnostic::unexpected(definition)))
+            },
+        )
         .await
-    )
+    })
 }
 
 #[cfg(test)]

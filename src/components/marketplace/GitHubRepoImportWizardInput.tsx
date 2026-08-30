@@ -76,7 +76,7 @@ export function GitHubRepoImportUrlInputBlock({
 
   return (
     <div className="mt-4 rounded-xl border border-border/70 bg-muted/10 p-4">
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(17rem,auto)_auto] sm:items-start">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,auto)_auto] sm:items-start">
         <div className="min-w-0">
           <label
             className="mb-2 block text-sm font-medium"
@@ -89,6 +89,7 @@ export function GitHubRepoImportUrlInputBlock({
             value={repoUrl}
             onChange={(event) => onRepoUrlChange(event.target.value)}
             placeholder="https://github.com/owner/repo"
+            className="font-mono"
           />
         </div>
         <div className="min-w-0">

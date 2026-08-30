@@ -49,4 +49,53 @@ describe("Update Center unsupported tab", () => {
     expect(screen.getByText("GitHub 来源缺少仓库内路径。")).toBeInTheDocument();
     expect(screen.queryByText(/Source is unknown/i)).not.toBeInTheDocument();
   });
+
+  it("shows the reset action for Local and SSH active targets", () => {
+    const handlers = {
+      updateUpdatable: vi.fn(),
+      toggleAllUpdatable: vi.fn(),
+      updateAdded: vi.fn(),
+      updateMissing: vi.fn(),
+      updateDuplicates: vi.fn(),
+      updateDeletedPlatformCopies: vi.fn(),
+      retryRepositories: vi.fn(),
+      resetUnknownSource: vi.fn(),
+    };
+
+    const { rerender } = render(
+      <UpdateCenterTabContent
+        tab="unsupported"
+        inventory={inventory}
+        decisions={emptyDecisionState()}
+        handlers={handlers}
+        existingSkillSources={new Map()}
+        repositorySources={new Map()}
+        retryingRepositoryIds={[]}
+        actionsDisabled={false}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("reset-unknown-source-skills"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "重置无远端来源的技能" }),
+    ).toBeEnabled();
+
+    rerender(
+      <UpdateCenterTabContent
+        tab="unsupported"
+        inventory={inventory}
+        decisions={emptyDecisionState()}
+        handlers={handlers}
+        existingSkillSources={new Map()}
+        repositorySources={new Map()}
+        retryingRepositoryIds={[]}
+        actionsDisabled={false}
+      />,
+    );
+    expect(
+      screen.getByTestId("reset-unknown-source-skills"),
+    ).toBeInTheDocument();
+  });
 });

@@ -35,11 +35,18 @@ Thumbs.db
 .omc/
 .factory/
 .kiro/
+.omp/
+.grok/
+.kimi-code/
+
 
 # planning with files
 task_plan.md
 findings.md
 progress.md
+
+# trellis review reports are local scratch, superseded as the code evolves
+.trellis/reviews/
 
 ref/
 
@@ -51,3 +58,4 @@ ref/
 
 # spark visual-companion brainstorm sessions
 .superpowers/
+.worktrees/

@@ -2,7 +2,7 @@
 
 ## 1. Scope / Trigger
 
-Apply this contract to renderer stores that start a long-running IPC job, merge backend progress events, expose cancellation, or can be reached from multiple UI entry points. It prevents an older event or promise from overwriting a newer Central update or portability job.
+Apply this contract to renderer stores that start a long-running IPC job, merge backend progress events, expose cancellation, or can be reached from multiple UI entry points. It prevents an older event or promise from overwriting a newer Central update, portability, or Skills CLI global add/remove job. `skillsCliStore` generates `jobId` before `skills_cli_add_global` / `skills_cli_remove_global` and cancels with `cancel_skills_cli_job`; it has no progress event channel.
 
 ## 2. Signatures
 

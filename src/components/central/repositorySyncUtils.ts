@@ -99,6 +99,7 @@ export function deleteRequestFromPreview(
         .map((installation) => installation.agent_id)
         .filter((agentId) => selectedCopyKeys.has(copyKey(item.skill_id, agentId)))
     ),
+    force: false,
   };
 }
 
@@ -110,5 +111,6 @@ export function mergeDeleteRequest(
   requests.set(next.skill_id, {
     skill_id: next.skill_id,
     remove_agent_ids: uniqueIds([...(existing?.remove_agent_ids ?? []), ...next.remove_agent_ids]),
+    force: Boolean(existing?.force || next.force),
   });
 }

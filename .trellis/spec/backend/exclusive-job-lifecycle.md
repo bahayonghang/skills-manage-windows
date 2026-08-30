@@ -2,7 +2,7 @@
 
 ## 1. Scope / Trigger
 
-Apply this contract when a renderer-owned long-running command has start, progress, and cancel paths. Central update and SkillPort portability are separate families: each family is exclusive within the process, while the two families may run concurrently.
+Apply this contract when a renderer-owned long-running command has start, progress, and cancel paths. Central update, SkillPort portability, and Skills CLI global add/remove are separate families: each family is exclusive within the process, while different families may run concurrently. Skills CLI filesystem mutual exclusion uses the Local target mutation guard, not this job family.
 
 ## 2. Signatures
 
@@ -20,6 +20,7 @@ Affected IPC commands require camelCase `jobId: string`:
 | --- | --- | --- |
 | Central update | `check_central_skill_updates`, `check_central_repository_sync`, `update_central_skills`, `apply_skill_update_decisions` | `cancel_central_skill_updates` |
 | Portability | `export_skillport_state`, `preview_skillport_state_import`, `preview_skillport_state_import_file`, `import_skillport_state` | `cancel_skillport_state_portability` |
+| Skills CLI global | `skills_cli_add_global`, `skills_cli_remove_global`, `skills_cli_link_platform`, `skills_cli_unlink_platform` | `cancel_skills_cli_job` |
 
 ## 3. Contracts
 
@@ -35,7 +36,7 @@ Affected IPC commands require camelCase `jobId: string`:
 
 | Condition | Result |
 | --- | --- |
-| Same-family active job exists | `job.central_update_busy:...` or `job.portability_busy:...`; active flag unchanged |
+| Same-family active job exists | `job.central_update_busy:...`, `job.portability_busy:...`, or `job.skills_cli_busy:...`; Skills CLI commands remap the last code to `skills_cli.busy`. Active flag unchanged |
 | Cancel ID matches active ID | Set only that lease's flag; `Ok(true)` |
 | Cancel arrives with no active job | Store one pending ID; idempotent `Ok(false)` |
 | Cancel ID differs from active ID | `job.id_mismatch:...`; active flag unchanged |
@@ -47,14 +48,14 @@ Commands keep the existing `Result<T, String>` IPC boundary and stringify these 
 ## 5. Good / Base / Bad Cases
 
 - Good: job A owns a lease, stale cancel A cannot cancel active successor B, and a stale A event is ignored by the renderer.
-- Base: Central update and portability each hold a lease and run concurrently because they use separate registries.
+- Base: Central update, portability, and Skills CLI each hold a lease and run concurrently because they use separate registries. Skills CLI add/remove still serialize filesystem writes through `acquire_target_mutation_guard`.
 - Bad: a command resets a shared `AtomicBool` at start, allowing a second invocation to erase the first job's cancellation.
 
 ## 6. Tests Required
 
 - Assert exact busy envelopes, same-family exclusion, cross-family independence, pending-cancel idempotence, stale pending discard, exact-ID cancellation, RAII release, stale-lease isolation, invalid IDs, and poison fail-closed behavior.
 - Structurally assert production code has no `central_update_cancel` or `portable_state_cancel` fallback.
-- Assert all eight start commands and both cancel commands serialize `jobId`, and all progress payloads contain the same ID.
+- Assert all twelve start commands and three cancel commands serialize `jobId`, and all progress payloads contain the same ID.
 - Run affected Rust/Vitest tests plus locked Clippy/tests and default-concurrency `just ci`.
 
 ## 7. Wrong vs Correct

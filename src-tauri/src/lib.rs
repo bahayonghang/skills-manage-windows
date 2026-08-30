@@ -3,11 +3,13 @@ pub mod cli_api;
 pub mod commands;
 pub mod db;
 pub mod fs_util;
+mod hashing;
 #[cfg(feature = "ipc-codegen")]
 pub mod ipc_codegen;
 pub mod ipc_error;
 pub mod ipc_registry;
 pub mod logging;
+pub mod observability;
 pub mod operation_log;
 pub mod paths;
 pub mod redaction;
@@ -59,7 +61,10 @@ pub struct AppState {
     /// that was just downloaded without copying credentials into target DBs.
     pub central_update_snapshots: CentralUpdateSnapshotCache,
     pub portable_state_jobs: services::exclusive_job::ExclusiveJobRegistry,
-    /// Application-level sensitive values such as GitHub PAT and AI API keys.
+    /// Skills CLI global add/remove family: exclusive within itself for
+    /// cancel/progress only; filesystem mutual exclusion comes from the
+    /// Local target mutation guard.
+    pub skills_cli_jobs: services::exclusive_job::ExclusiveJobRegistry,
     /// Commands receive this injectable store from AppState so unit tests do
     /// not need to touch the real OS credential vault.
     pub secrets: Arc<dyn secrets::SecretStore>,
@@ -100,8 +105,8 @@ impl AiTagJobRegistry {
             Ok(mut jobs) => {
                 jobs.insert(job_id.to_string(), Arc::clone(&cancel_flag));
             }
-            Err(error) => {
-                tracing::warn!(error = %error, "AI tag job registry lock is poisoned during register");
+            Err(_error) => {
+                tracing::warn!("AI tag job registry lock is poisoned during register");
             }
         }
         cancel_flag
@@ -124,8 +129,8 @@ impl AiTagJobRegistry {
             Ok(mut jobs) => {
                 jobs.remove(job_id);
             }
-            Err(error) => {
-                tracing::warn!(error = %error, "AI tag job registry lock is poisoned during finish");
+            Err(_error) => {
+                tracing::warn!("AI tag job registry lock is poisoned during finish");
             }
         }
     }
@@ -239,35 +244,47 @@ async fn install_ready_state(
             "job.portability_busy",
             "A portability job is already running.",
         ),
+        skills_cli_jobs: services::exclusive_job::ExclusiveJobRegistry::new(
+            "job.skills_cli_busy",
+            "A Skills CLI job is already running.",
+        ),
         secrets: Arc::clone(&secrets),
         targets: targets::TargetRegistry::default(),
     }) {
         return Err(services::startup::StartupError::StateAlreadyInstalled);
     }
 
+    // `AppHandle::manage` is the process-local once boundary: only the first
+    // successful state installation may sweep rows left by an older process.
+    // A retry after state installation therefore cannot relabel a current
+    // process operation as interrupted.
+    observability::mark_interrupted_operations_best_effort(&pool).await;
+
     let github_pat_migration_pool = pool.clone();
     let github_pat_migration_secrets = Arc::clone(&secrets);
     tauri::async_runtime::spawn(async move {
-        if let Err(error) = services::github_import::migrate_github_pat_on_startup(
+        if services::github_import::migrate_github_pat_on_startup(
             &github_pat_migration_pool,
             github_pat_migration_secrets.as_ref(),
         )
         .await
+        .is_err()
         {
-            tracing::warn!(error = %error, "Failed to run GitHub token secure-storage migration");
+            tracing::warn!("Failed to run GitHub token secure-storage migration");
         }
     });
 
     let ai_api_key_migration_pool = pool.clone();
     let ai_api_key_migration_secrets = Arc::clone(&secrets);
     tauri::async_runtime::spawn(async move {
-        if let Err(error) = services::ai_provider::migrate_ai_api_key_on_startup(
+        if services::ai_provider::migrate_ai_api_key_on_startup(
             &ai_api_key_migration_pool,
             ai_api_key_migration_secrets.as_ref(),
         )
         .await
+        .is_err()
         {
-            tracing::warn!(error = %error, "Failed to run AI API key secure-storage migration");
+            tracing::warn!("Failed to run AI API key secure-storage migration");
         }
     });
 
@@ -286,7 +303,7 @@ async fn install_ready_state(
                 );
             }
             Err(error) => {
-                tracing::error!(error = %error, "Failed to migrate legacy Central Skills store");
+                tracing::error!("Failed to migrate legacy Central Skills store");
                 let _ = migration_handle.emit(
                     MIGRATION_PROGRESS_EVENT,
                     MigrationProgress::Failed {
@@ -308,10 +325,9 @@ pub(crate) async fn run_startup_attempt(
     let status = match services::startup::attempt_startup(coordinator.db_path()).await {
         Ok(pool) => match install_ready_state(app, pool).await {
             Ok(()) => services::startup::StartupStatus::Ready,
-            Err(error) => {
+            Err(_error) => {
                 tracing::error!(
                     code = services::startup::StartupIssue::DatabaseRecoveryFailed.code(),
-                    error = %error,
                     "Startup application state installation failed"
                 );
                 services::startup::StartupStatus::Fatal {
@@ -323,7 +339,6 @@ pub(crate) async fn run_startup_attempt(
             tracing::error!(
                 code = failure.issue.code(),
                 diagnostic = ?failure.diagnostic,
-                error = %failure.error,
                 "Desktop startup prerequisites failed"
             );
             failure.status(backup_created)

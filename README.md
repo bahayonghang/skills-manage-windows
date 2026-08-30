@@ -19,6 +19,7 @@
 ## Highlights
 
 - Central skill library plus per-platform install and uninstall flows.
+- Skills CLI global (`npx skills -g`) install and uninstall on the Local target. SkillPort does not treat `~/.agents/skills/` as wholly owned by Skills CLI; ownership comes from the Skills CLI lock file.
 - Claude Code can surface native skills and read-only marketplace plugin skills in one platform view.
 - Full skill detail view with Markdown preview, raw source view, and AI explanation generation.
 - Collections for organizing skills and batch-installing them to platforms.
@@ -186,12 +187,12 @@ Custom platforms can be added through Settings.
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) 22 LTS (see `.node-version`)
-- [pnpm](https://pnpm.io/) 10.12.3
-- [Rust toolchain](https://rustup.rs/) 1.97.0 (see `rust-toolchain.toml`)
+- [Node.js](https://nodejs.org/) 26 (see `.node-version`)
+- [pnpm](https://pnpm.io/) 10.34.5
+- [Rust toolchain](https://rustup.rs/) 1.98.0 (see `rust-toolchain.toml`)
 - Tauri v2 system dependencies: <https://v2.tauri.app/start/prerequisites/>
 
-The repository toolchain is Node 22, pnpm 10.12.3, and Rust 1.97.0.
+The repository toolchain is Node 26, pnpm 10.34.5, and Rust 1.98.0.
 
 ### Install Dependencies
 

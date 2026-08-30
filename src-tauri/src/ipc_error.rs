@@ -1,6 +1,13 @@
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
+mod boundary;
+mod reviewed_codes;
+
+#[doc(hidden)]
+pub use boundary::{complete_named_boundary, complete_named_boundary_with_target};
+pub use reviewed_codes::{is_reviewed_ipc_code, REVIEWED_IPC_ERROR_CODES};
+
 const INTERNAL_CODE: &str = "internal.unexpected";
 const INTERNAL_MESSAGE: &str = "The operation failed. See runtime logs for details.";
 
@@ -12,6 +19,10 @@ pub struct IpcError {
     pub code: String,
     pub message: String,
     pub retryable: bool,
+    /// Operation Log row UUID used to correlate the rejection with audit and
+    /// Runtime evidence. Missing for legacy/backend-internal failures.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub correlation_id: Option<String>,
 }
 
 pub type IpcResult<T> = Result<T, IpcError>;
@@ -21,10 +32,35 @@ impl IpcError {
     /// runtime diagnostics from being passed through accidentally.
     pub fn new(code: &'static str, message: &'static str, retryable: bool) -> Self {
         debug_assert!(is_valid_code(code), "invalid IPC error code: {code}");
+        debug_assert!(
+            is_reviewed_ipc_code(code),
+            "unreviewed IPC error code: {code}"
+        );
         Self {
             code: code.to_string(),
             message: message.to_string(),
             retryable,
+            correlation_id: None,
+        }
+    }
+
+    /// Attach a pre-generated operation/correlation UUID. Invalid values are
+    /// rejected to avoid turning an untrusted string into diagnostic payload.
+    pub fn with_correlation_id(mut self, correlation_id: &str) -> Self {
+        if let Ok(value) = uuid::Uuid::parse_str(correlation_id) {
+            self.correlation_id = Some(value.to_string());
+        } else {
+            debug_assert!(false, "invalid IPC correlation id: {correlation_id}");
+        }
+        self
+    }
+
+    /// Locale-neutral code safe for allowlisted Runtime diagnostic fields.
+    pub fn safe_code(&self) -> &str {
+        if is_reviewed_ipc_code(&self.code) {
+            &self.code
+        } else {
+            INTERNAL_CODE
         }
     }
 
@@ -45,6 +81,7 @@ impl IpcError {
                     code: code.to_string(),
                     message: message.to_string(),
                     retryable: retryable_for_code(code),
+                    correlation_id: None,
                 })
                 .unwrap_or_else(unexpected);
         }
@@ -178,6 +215,11 @@ fn retryable_for_code(code: &str) -> bool {
         "github_import.rate_limited"
             | "github_import.transport_failed"
             | "github_import.archive_unavailable"
+            | "skills_cli.busy"
+            | "skills_cli.recovery_required"
+            | "skills_cli.update_stale"
+            | "skills_cli.update_rate_limited"
+            | "skills_cli.update_recovery_required"
     )
 }
 
@@ -242,7 +284,7 @@ fn legacy_plain_message(original: &str, lower: &str) -> Option<(&'static str, &'
 /// rows, Operation Log summaries) can show the same reviewed sentence instead
 /// of a domain error's Display text.
 pub fn public_message_for_code(code: &str) -> Option<&'static str> {
-    legacy_code_message(code)
+    reviewed_codes::direct_public_message(code).or_else(|| legacy_code_message(code))
 }
 
 fn legacy_code_message(code: &str) -> Option<&'static str> {
@@ -288,6 +330,25 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
         "github_import.branch_conflict" => {
             Some("GitHub branch in the repository URL does not match the selected branch.")
         }
+        "github_import.no_importable_skills" => {
+            Some("This GitHub repository does not contain an importable skill.")
+        }
+        "github_import.selection_unavailable" => {
+            Some("The selected skill is no longer available in the repository preview.")
+        }
+        "github_import.invalid_candidate" => {
+            Some("The repository contains a skill that cannot be imported.")
+        }
+        "github_import.source_path_missing" => {
+            Some("The selected path no longer contains an importable skill.")
+        }
+        "github_import.target_exists" => {
+            Some("The Central target directory already exists and cannot be overwritten.")
+        }
+        "github_import.duplicate_selection" => {
+            Some("The same skill path was selected more than once in this import.")
+        }
+        "github_import.rename_conflict" => Some("The renamed skill id is not available."),
         "github_import.archive_redirect_rejected" => {
             Some("GitHub repository archive redirect was rejected.")
         }
@@ -295,7 +356,12 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
             Some("Could not reach GitHub. Check the network and try again.")
         }
         "github_import.rate_limited" => Some("GitHub rate limited the request. Try again later."),
-        "github_import.access_denied" => Some("GitHub denied access to the repository."),
+        "github_import.access_denied" => Some(
+            "GitHub denied anonymous access to the repository. Configure a token if the repository requires authentication.",
+        ),
+        "github_import.configured_token_failed" => Some(
+            "GitHub denied the authenticated request. Check that the token owner can read the repository and that the token has the required permissions.",
+        ),
         "github_import.repo_not_found" => Some("The GitHub repository was not found."),
         "github_import.archive_unavailable" => {
             Some("The GitHub repository archive is unavailable.")
@@ -351,6 +417,28 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
         "central_updates.inventory_invariant" => {
             Some("The update inventory could not be finalized.")
         }
+        "central_updates.inventory_refresh_required" => {
+            Some("Refresh the update inventory before importing this repository.")
+        }
+        "central_updates.snapshot_changed" => Some(
+            "The repository content did not match the update inventory. Refresh and try again.",
+        ),
+        "central.reset_failed" => Some("Unknown-source Central skills could not be reset."),
+        "central_skills.mutation_lock_failed" => {
+            Some("Central is busy with another change. Try again shortly.")
+        }
+        "central_skills.delete_failed" | "central_skills.delete_preview_failed" => {
+            Some("This Central skill could not be deleted.")
+        }
+        "central_skills.database_failed" => Some("This Central skill could not be deleted."),
+        "central_skills.remote_failed" => Some("This Central skill could not be deleted."),
+        "central_skills.budget_exceeded" => Some("This Central skill could not be deleted."),
+        "central_skills.force_delete_blocked" => {
+            Some("Force delete is not available for this Central skill.")
+        }
+        "central_operation.delete_restore_collision" => Some(
+            "Central recovery evidence conflicts with the current files. Review and resolve the pending operation in Operation Logs.",
+        ),
         "installation.pending_central_recovery" => {
             Some("Central recovery is pending for this skill.")
         }
@@ -360,11 +448,77 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
         "recovery.reconcile_preflight_blocked" => {
             Some("The prepared delete operation no longer passes reconciliation checks.")
         }
-        "job.invalid_id" => Some("The job identifier is invalid."),
-        "job.id_mismatch" => Some("The cancellation request does not match the active job."),
-        "job.registry_unavailable" => Some("The job registry is unavailable."),
-        "job.central_update_busy" => Some("A Central update job is already running."),
         "job.portability_busy" => Some("A portability job is already running."),
+        "skills_cli.local_target_only" => {
+            Some("Skills CLI is available only on the Local target.")
+        }
+        "skills_cli.node_missing" => Some("Node.js 22.20 or later is required."),
+        "skills_cli.cli_unavailable" => {
+            Some("The Skills CLI package could not be executed.")
+        }
+        "skills_cli.cli_failed" => {
+            Some("The Skills CLI command did not complete successfully.")
+        }
+        "skills_cli.source_invalid" => Some("The skill source is not allowed."),
+        "skills_cli.preview_unparsed" => Some("The skill preview could not be parsed."),
+        "skills_cli.selection_empty" => {
+            Some("Select at least one skill and one platform.")
+        }
+        "skills_cli.agent_unmapped" => {
+            Some("That platform cannot be targeted by Skills CLI.")
+        }
+        "skills_cli.busy" => Some("Another skill operation is using this target."),
+        "skills_cli.timeout" => Some("The Skills CLI command timed out."),
+        "skills_cli.cancelled" => Some("The operation was cancelled."),
+        "skills_cli.skill_not_owned" => Some("That skill is not managed by Skills CLI."),
+        "skills_cli.canonical_missing" => Some("The skill folder is missing."),
+        "skills_cli.skill_doc_missing" => Some("The SKILL.md file is missing."),
+        "skills_cli.skill_doc_too_large" => Some("The SKILL.md file is too large to open."),
+        "skills_cli.skill_doc_invalid_utf8" => Some("The SKILL.md file is not valid text."),
+        "skills_cli.direct_copy_not_toggleable" => {
+            Some("A copied skill folder cannot be linked or unlinked.")
+        }
+        "skills_cli.placement_conflict" => Some("The platform folder is in conflict."),
+        "skills_cli.placement_unavailable" => Some("The platform folder is unavailable."),
+        "skills_cli.export_invalid" => Some("The inventory export is invalid."),
+        "skills_cli.export_failed" => Some("The inventory export could not be saved."),
+        "skills_cli.reveal_failed" => Some("The skill folder could not be revealed."),
+        "skills_cli.recovery_required" => {
+            Some("A previous Skills CLI remove needs recovery.")
+        }
+        "skills_cli.remote_unavailable" => {
+            Some("The remote Skills CLI host is unavailable.")
+        }
+        "skills_cli.update_stale" => {
+            Some("The update is out of date. Refresh, then try again.")
+        }
+        "skills_cli.update_baseline_required" => {
+            Some("This skill has no installed baseline, so it cannot be treated as current.")
+        }
+        "skills_cli.update_unsupported" => {
+            Some("This skill source cannot be updated.")
+        }
+        "skills_cli.update_rate_limited" => {
+            Some("GitHub rate limited the update check. Wait for the limit to reset, then retry.")
+        }
+        "skills_cli.update_check_failed" => {
+            Some("The update check failed for this repository.")
+        }
+        "skills_cli.update_local_modified" => {
+            Some("Local files differ from the installed baseline.")
+        }
+        "skills_cli.update_topology_conflict" => {
+            Some("This skill's platform placement cannot be updated.")
+        }
+        "skills_cli.update_recovery_required" => {
+            Some("A previous Skills CLI update needs recovery.")
+        }
+        "skills_cli.update_integrity" => {
+            Some("The updated files did not pass the integrity check.")
+        }
+        "skills_cli.update_migration" => {
+            Some("The Skills CLI update database is not available.")
+        }
         "startup.rebuild_unavailable" => Some("Database rebuild is not available."),
         _ => None,
     }
@@ -374,196 +528,9 @@ fn unexpected() -> IpcError {
     IpcError::new(INTERNAL_CODE, INTERNAL_MESSAGE, false)
 }
 
-/// Preserve existing command internals and convert only the final Tauri
-/// rejection boundary into [`IpcError`].
-#[macro_export]
-macro_rules! ipc_boundary {
-    ($expression:expr) => {{
-        let result: Result<_, String> = $expression;
-        result.map_err($crate::ipc_error::IpcError::from)
-    }};
-}
-
-#[macro_export]
-macro_rules! ipc_boundary_async {
-    ($body:block) => {{
-        let result: Result<_, String> = (async move $body).await;
-        result.map_err($crate::ipc_error::IpcError::from)
-    }};
-}
+#[cfg(test)]
+#[path = "ipc_error/redaction_contract_tests.rs"]
+mod redaction_contract_tests;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn serializes_exact_camel_case_contract() {
-        let value = serde_json::to_value(IpcError::new(
-            "operation.cancelled",
-            "Operation cancelled",
-            false,
-        ))
-        .expect("serialize IPC error");
-        assert_eq!(
-            value,
-            serde_json::json!({
-                "code": "operation.cancelled",
-                "message": "Operation cancelled",
-                "retryable": false
-            })
-        );
-    }
-
-    #[test]
-    fn known_coded_family_keeps_only_its_code_and_canonical_message() {
-        let error = IpcError::from("ai.rate_limit:attacker-controlled detail".to_string());
-        assert_eq!(error.code, "ai.rate_limit");
-        assert_eq!(error.message, "The AI provider rate limited the request.");
-        assert!(!error.message.contains("attacker"));
-    }
-
-    #[test]
-    fn github_branch_codes_keep_reviewed_public_messages() {
-        for (code, message) in [
-            (
-                "github_import.branch_invalid",
-                "GitHub branch must be a safe single-segment name.",
-            ),
-            (
-                "github_import.branch_conflict",
-                "GitHub branch in the repository URL does not match the selected branch.",
-            ),
-        ] {
-            let error = IpcError::from(format!("{code}:private branch detail"));
-            assert_eq!(error.code, code);
-            assert_eq!(error.message, message);
-            assert!(!error.message.contains("private"));
-        }
-    }
-
-    #[test]
-    fn archive_redirect_code_keeps_only_the_reviewed_public_message() {
-        let seeds = [
-            "ghp_super_secret",
-            "https://codeload.github.com/private/repo?token=secret",
-            r"C:\Users\alice\private\SKILL.md",
-            "private response body",
-        ];
-        for seed in seeds {
-            let error = IpcError::from(format!("github_import.archive_redirect_rejected:{seed}"));
-            assert_eq!(error.code, "github_import.archive_redirect_rejected");
-            assert_eq!(
-                error.message,
-                "GitHub repository archive redirect was rejected."
-            );
-            assert!(!error.retryable);
-            assert!(!serde_json::to_string(&error).unwrap().contains(seed));
-        }
-    }
-
-    #[test]
-    fn unknown_coded_family_fails_closed() {
-        let error = IpcError::from("attacker.injected:secret payload".to_string());
-        assert_eq!(error, unexpected());
-    }
-
-    #[test]
-    fn maps_only_narrow_behavior_compatibility_messages() {
-        let cases = [
-            (
-                "SkillPort state portability cancelled",
-                "operation.cancelled",
-            ),
-            (
-                "Invalid SkillPort state JSON: expected value",
-                "portable_state.invalid_manifest_json",
-            ),
-            (
-                "Unsupported SkillPort state export kind",
-                "portable_state.unsupported_export_kind",
-            ),
-            (
-                "Unsupported SkillPort state export version: 99",
-                "portable_state.unsupported_export_version",
-            ),
-            (
-                "GitHub denied access while reading the repository (HTTP 403).",
-                "github_import.access_denied",
-            ),
-            (
-                "SSH password for target 'remote' is not available. Open Settings, enter the password for this target, save it, and retry.",
-                "credential.ssh_password_unavailable",
-            ),
-        ];
-        for (message, expected) in cases {
-            assert_eq!(IpcError::from(message).code, expected);
-        }
-    }
-
-    #[test]
-    fn maps_reviewed_plain_errors_without_copying_dynamic_details() {
-        let cases = [
-            ("Saved view 'private-id' not found", "resource.not_found"),
-            ("Tag group 'private-id' not found", "resource.not_found"),
-            (
-                "Collection 'private-id' not found after update",
-                "resource.not_found",
-            ),
-            ("Agent 'private-id' not found", "resource.not_found"),
-            (
-                "Skill 'private-id' not found in central library",
-                "resource.not_found",
-            ),
-            ("Project 'private-id' not found", "resource.not_found"),
-            (
-                "UNIQUE constraint failed: skills.private_column",
-                "resource.conflict",
-            ),
-            (
-                "Permission denied for C:\\private\\skill",
-                "permission.denied",
-            ),
-            ("Saved view name cannot be empty", "input.invalid"),
-        ];
-
-        for (message, code) in cases {
-            let error = IpcError::from(message);
-            assert_eq!(error.code, code);
-            assert!(!error.message.contains("private"));
-        }
-    }
-
-    #[test]
-    fn arbitrary_diagnostics_always_use_the_fixed_fallback() {
-        let seeds = [
-            r"C:\Users\alice\private\skill.md",
-            r"C:/Users/alice/private/skill.md",
-            r"..\alice\private\skill.md",
-            "/home/alice/private/skill.md",
-            "../alice/private/skill.md",
-            "ssh -i private.pem host -- command",
-            "stdout: first line\nstderr: second line",
-            "ghp_super_secret",
-            "sk-live-secret",
-            "-----BEGIN PRIVATE KEY-----",
-            "file content: private thesis text",
-            "https://example.invalid/path?token=secret",
-            "quoted data: 'private value'",
-            "UNKNOWN_ENV=private-value",
-            "resource not found: relative/private.txt",
-            "request timed out after output=private-value",
-        ];
-        for seed in seeds {
-            let error = IpcError::from(seed);
-            let serialized = serde_json::to_string(&error).expect("serialize");
-            assert_eq!(error, unexpected(), "unexpected classification for {seed}");
-            assert!(!serialized.contains(seed), "leaked seed: {seed}");
-        }
-    }
-
-    #[test]
-    fn display_is_only_the_public_message() {
-        let error = unexpected();
-        assert_eq!(error.to_string(), INTERNAL_MESSAGE);
-    }
-}
+mod tests;

@@ -45,8 +45,10 @@ use super::types::{
     SnapshotCachePolicy,
 };
 
+mod additions;
 mod apply_steps;
 mod force;
+mod leftover_cleanup;
 mod persistence;
 mod relocation;
 mod repositories;
@@ -61,6 +63,7 @@ mod tests;
 
 pub(crate) use apply_steps::*;
 pub(crate) use force::*;
+pub(crate) use leftover_cleanup::*;
 use persistence::*;
 use relocation::*;
 pub(crate) use repositories::*;
@@ -84,6 +87,7 @@ pub(super) struct RepositoryOwnedUpdateState {
 /// 当 `snapshots_cache` 已用 `cache.insert(repo_cache_key(&repo), snapshot)` 预填时，
 /// 内部 `prepare_snapshots_for_repo_refs` 跳过网络下载直接复用缓存命中，所以测试
 /// 可以完全离线运行。
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn refresh_skill_update_inventory_impl(
     pool: &DbPool,
     fs: &CentralFs,
@@ -92,6 +96,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
     snapshots_cache: &CentralUpdateSnapshotCache,
     scope: SkillRefreshScope,
     progress: Option<SnapshotProgressReporter>,
+    cli_lock_protect: bool,
 ) -> Result<SkillUpdateInventory, CentralUpdatesError> {
     let mode = scope.mode.unwrap_or(SkillRefreshMode::Sync);
     let cache_policy = scope
@@ -105,6 +110,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
         snapshots_cache,
         &scope,
         progress,
+        cli_lock_protect,
     )
     .await?;
     persist_refresh_inventory(pool, &scope, mode, cache_policy, &inventory).await?;
@@ -113,6 +119,7 @@ pub(crate) async fn refresh_skill_update_inventory_impl(
 
 /// Build an inventory without persisting it. Retry merges several computed
 /// slices into one stored inventory, so the write stays with the caller.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn compute_skill_update_inventory(
     pool: &DbPool,
     fs: &CentralFs,
@@ -121,6 +128,7 @@ pub(crate) async fn compute_skill_update_inventory(
     snapshots_cache: &CentralUpdateSnapshotCache,
     scope: &SkillRefreshScope,
     progress: Option<SnapshotProgressReporter>,
+    cli_lock_protect: bool,
 ) -> Result<SkillUpdateInventory, CentralUpdatesError> {
     /*
      * ========================================================================
@@ -386,6 +394,9 @@ pub(crate) async fn compute_skill_update_inventory(
         let now = Utc::now().to_rfc3339();
         for item in &remote_added_items {
             let source_path = normalize_repo_path(&item.preview.source_path)?;
+            let snapshot = snapshots
+                .get(&repo_cache_key(&item.repo))
+                .ok_or(CentralUpdatesError::InventoryInvariant)?;
             let addition = SkillRepositoryPendingAddition {
                 repository_id: item.repository_id.clone(),
                 source_path: source_path.clone(),
@@ -396,6 +407,8 @@ pub(crate) async fn compute_skill_update_inventory(
                     .conflict
                     .as_ref()
                     .map(|c| c.existing_skill_id.clone()),
+                resolved_commit_sha: Some(snapshot.resolved_commit_sha.clone()),
+                snapshot_digest: Some(snapshot.snapshot_digest.clone()),
                 discovered_at: now.clone(),
             };
             db::upsert_pending_addition(pool, &addition).await?;
@@ -445,7 +458,8 @@ pub(crate) async fn compute_skill_update_inventory(
         Vec::new()
     };
     let deleted_platform_copies = if include_sync_buckets {
-        scan_deleted_platform_copies_with_pool(pool, platform_agent_ids.clone()).await?
+        scan_deleted_platform_copies_with_pool(pool, platform_agent_ids.clone(), cli_lock_protect)
+            .await?
     } else {
         Vec::new()
     };
@@ -513,10 +527,10 @@ pub(crate) async fn apply_skill_update_decisions_impl(
 
     /*
      * ========================================================================
-     * 步骤4：import additions —— 复用 import_github_repo_skills_*_with_auth
+     * 步骤4：import additions —— 只使用 Refresh 持久化的固定提交与摘要
      * ========================================================================
      */
-    for addition in decisions.import_additions {
+    for addition in additions::group_repository_import_additions(decisions.import_additions) {
         let repository_id = addition.repository_id.clone();
         let mut import_selections = Vec::new();
         for selection in addition.selections {
@@ -540,46 +554,61 @@ pub(crate) async fn apply_skill_update_decisions_impl(
             continue;
         }
 
-        let repository = match load_repository_for_import_addition(pool, &repository_id).await? {
-            Some(repository) => repository,
+        let repository =
+            match additions::load_repository_for_import_addition(pool, &repository_id).await? {
+                Some(repository) => repository,
+                None => {
+                    continue;
+                }
+            };
+        let repo = match repository_repo_ref(&repository) {
+            Some(repo) => repo,
             None => {
-                continue;
-            }
-        };
-        let repo_url = match repository_import_url(&repository) {
-            Some(url) => url,
-            None => {
-                result.failures.push(SkillUpdateApplyFailure::new(
-                    "import_addition",
-                    repository.id,
-                ));
+                result
+                    .failures
+                    .push(SkillUpdateApplyFailure::from_central_error(
+                        "import_addition",
+                        repository.id,
+                        CentralUpdateFailurePhase::DecisionApply,
+                        CentralUpdatesError::InventoryRefreshRequired,
+                    ));
                 continue;
             }
         };
 
-        let outcome = match active_target {
-            ActiveTarget::Local => {
-                github_import::import_github_repo_skills_with_auth(
-                    pool,
-                    &repo_url,
-                    import_selections,
-                    app,
-                    auth_token,
-                )
-                .await
-            }
-            ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
-                github_import::import_github_repo_skills_remote_with_auth(
-                    pool,
-                    active_target,
-                    &repo_url,
-                    import_selections,
-                    app,
-                    auth_token,
-                )
-                .await
+        let identity = match additions::load_pending_addition_snapshot_identity(
+            pool,
+            &repository_id,
+            &import_selections,
+        )
+        .await
+        {
+            Ok(identity) => identity,
+            Err(error) => {
+                result
+                    .failures
+                    .push(SkillUpdateApplyFailure::from_central_error(
+                        "import_addition",
+                        repository.id,
+                        CentralUpdateFailurePhase::DecisionApply,
+                        error,
+                    ));
+                continue;
             }
         };
+
+        let outcome = additions::apply_pinned_repository_additions(
+            app,
+            pool,
+            active_target,
+            auth_token,
+            client,
+            snapshots_cache,
+            &repo,
+            &identity,
+            import_selections,
+        )
+        .await;
 
         match outcome {
             Ok(import_result) => {
@@ -594,10 +623,22 @@ pub(crate) async fn apply_skill_update_decisions_impl(
                         .push(imported.imported_skill_id.clone());
                 }
             }
-            Err(_error) => result.failures.push(SkillUpdateApplyFailure::new(
-                "import_addition",
-                repository.id,
-            )),
+            Err(CentralUpdatesError::GithubImport(error)) => {
+                result
+                    .failures
+                    .push(SkillUpdateApplyFailure::from_github_import(
+                        repository.id,
+                        error,
+                    ))
+            }
+            Err(error) => result
+                .failures
+                .push(SkillUpdateApplyFailure::from_central_error(
+                    "import_addition",
+                    repository.id,
+                    CentralUpdateFailurePhase::DecisionApply,
+                    error,
+                )),
         }
     }
 
@@ -655,31 +696,13 @@ pub(crate) async fn apply_skill_update_decisions_impl(
         decisions.remove_deleted_platform_copies,
         &mut result,
         allowed_agent_ids.as_ref(),
+        Some(cancel),
     )
     .await;
 
     prune_applied_inventory_entries(pool, &result).await;
 
     Ok(result)
-}
-
-/*
- * ========================================================================
- * 内部 helpers
- * ========================================================================
- */
-
-async fn load_repository_for_import_addition(
-    pool: &DbPool,
-    repository_id: &str,
-) -> Result<Option<db::SkillRepository>, CentralUpdatesError> {
-    match db::get_skill_repository_by_id(pool, repository_id).await? {
-        Some(repository) => Ok(Some(repository)),
-        None => {
-            db::clear_pending_additions_for_repos(pool, &[repository_id.to_string()]).await?;
-            Ok(None)
-        }
-    }
 }
 
 fn snapshot_cache_policy(policy: SkillRefreshCachePolicy) -> SnapshotCachePolicy {

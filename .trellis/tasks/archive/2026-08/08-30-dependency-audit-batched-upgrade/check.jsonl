@@ -1,0 +1,6 @@
+{"file":".trellis/spec/quality/index.md","reason":"Check the complete repository quality surface after every dependency batch."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Verify full CI, dependency audit, Action pin, toolchain and final bundle requirements."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Verify test discovery/counts and focused regression ownership remain intact."}
+{"file":".trellis/spec/frontend/index.md","reason":"Review frontend behavior, fixtures and compatibility after UI/test dependency changes."}
+{"file":".trellis/spec/backend/index.md","reason":"Review database, credential, network, archive and Tauri boundaries after Rust changes."}
+{"file":".trellis/tasks/08-30-dependency-audit-batched-upgrade/research/dependency-audit.md","reason":"Compare the final graph and remaining risks with the dated baseline audit."}

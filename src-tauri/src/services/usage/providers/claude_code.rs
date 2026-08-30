@@ -15,8 +15,16 @@
 //! 实现严格对齐 skilled 项目的 `ref/skilled/index/src/providers/claude_code.rs`
 //! 与 TypeScript 同名 provider。`available()` 仅判定 `history.jsonl` 是否存在，
 //! 与 skilled 一致——projects/ 单独存在但 history 不存在的情况罕见。
+//!
+//! 性能形态（08-15-usage-page-loading-perf）：
+//! - Local scope：读盘 + 解析在单个 blocking 闭包内逐文件流式完成；
+//! - per-file 解析产出「原始 calls」（不做跨文件去重），合并阶段按与旧
+//!   实现相同的顺序（history 在前、projects 按 walk 顺序）重放同一个
+//!   `seen(skill:ts)` 去重——增量缓存命中与全量扫描结果完全一致；
+//! - 指纹未变的文件直接取 `ProviderFileCache` 缓存，零磁盘 IO。
 
 use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use async_trait::async_trait;
@@ -24,7 +32,7 @@ use chrono::DateTime;
 use regex::Regex;
 use serde_json::Value;
 
-use crate::services::usage::fs_backend::FsBackend;
+use crate::services::usage::file_cache::{fingerprint_from_metadata, ProviderFileCache};
 use crate::services::usage::{Scope, SkillCall, UsageError, UsageProvider};
 
 const SOURCE: &str = "Claude Code";
@@ -78,6 +86,26 @@ impl ClaudeCodeProvider {
         }
         scope.join_home(&[".claude"])
     }
+
+    async fn collect_with_cache(
+        &self,
+        scope: &Scope,
+        cache: ProviderFileCache,
+    ) -> Result<(ProviderFileCache, Vec<SkillCall>), UsageError> {
+        if scope.is_remote() {
+            // Remote 走既有 FsBackend 批读路径，不进增量缓存。
+            let calls = collect_remote(scope).await?;
+            return Ok((cache, calls));
+        }
+
+        let claude_home = Self::claude_home(scope);
+        crate::fs_util::run_blocking_fs_with(
+            "claude session scan",
+            move || scan_local(&claude_home, cache),
+            UsageError::task_join,
+        )
+        .await
+    }
 }
 
 #[async_trait]
@@ -98,45 +126,130 @@ impl UsageProvider for ClaudeCodeProvider {
     }
 
     async fn collect(&self, scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
-        let backend = scope.fs_backend();
-        let claude_home = Self::claude_home(scope);
-        let history_path = scope.join_path(&claude_home, &["history.jsonl"]);
-        let projects_dir = scope.join_path(&claude_home, &["projects"]);
-
-        if !backend.exists(&history_path).await {
-            return Ok(vec![]);
-        }
-
-        let builtins: HashSet<&str> = BUILTINS.iter().copied().collect();
-        let mut seen: HashSet<String> = HashSet::new();
-        let mut calls: Vec<SkillCall> = Vec::new();
-
-        // Source 1: history.jsonl
-        let content = backend.read_to_string(&history_path).await?;
-        collect_from_history(&content, &builtins, &mut seen, &mut calls);
-
-        // Source 2: projects/**/*.jsonl
-        if backend.exists(&projects_dir).await {
-            collect_from_projects(
-                backend.as_ref(),
-                &projects_dir,
-                &builtins,
-                &mut seen,
-                &mut calls,
-            )
+        let (_, calls) = self
+            .collect_with_cache(scope, ProviderFileCache::default())
             .await?;
-        }
-
         Ok(calls)
+    }
+
+    async fn collect_incremental(
+        &self,
+        scope: &Scope,
+        cache: ProviderFileCache,
+    ) -> Result<(ProviderFileCache, Vec<SkillCall>), UsageError> {
+        self.collect_with_cache(scope, cache).await
     }
 }
 
-fn collect_from_history(
-    content: &str,
-    builtins: &HashSet<&str>,
-    seen: &mut HashSet<String>,
-    calls: &mut Vec<SkillCall>,
-) {
+/// Local 扫描主体（blocking 闭包内）。history.jsonl 读取失败向上抛 Err
+/// （与旧 `read_to_string(...).await?` 行为一致）；单个 session 文件读取
+/// 失败跳过（与旧 `read_many_to_strings` 的容错一致）。
+fn scan_local(
+    claude_home: &str,
+    mut cache: ProviderFileCache,
+) -> Result<(ProviderFileCache, Vec<SkillCall>), UsageError> {
+    let builtins: HashSet<&str> = BUILTINS.iter().copied().collect();
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut calls: Vec<SkillCall> = Vec::new();
+
+    let home = PathBuf::from(claude_home);
+    let history_path = home.join("history.jsonl");
+    if !history_path.exists() {
+        return Ok((cache, calls));
+    }
+
+    // Source 1: history.jsonl
+    let history_string = history_path.to_string_lossy().into_owned();
+    let (mtime_ms, size) = fingerprint_from_metadata(std::fs::metadata(&history_path));
+    let history_raw = match cache.lookup(&history_string, mtime_ms, size) {
+        Some(cached) => cached,
+        None => {
+            let content = std::fs::read_to_string(&history_path)
+                .map_err(|e| UsageError::io("local read history.jsonl", e))?;
+            let parsed = parse_history_calls(&content, &builtins);
+            cache.record(history_string, mtime_ms, size, parsed.clone());
+            parsed
+        }
+    };
+    merge_calls(history_raw, &mut seen, &mut calls);
+
+    // Source 2: projects/**/*.jsonl（逐文件流式）
+    let projects_dir = home.join("projects");
+    if projects_dir.is_dir() {
+        for entry in walkdir::WalkDir::new(&projects_dir)
+            .into_iter()
+            .filter_map(Result::ok)
+        {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("jsonl") || !path.is_file() {
+                continue;
+            }
+            let path_string = path.to_string_lossy().into_owned();
+            let (mtime_ms, size) = fingerprint_from_metadata(entry.metadata());
+            let raw = match cache.lookup(&path_string, mtime_ms, size) {
+                Some(cached) => cached,
+                None => {
+                    let Ok(content) = std::fs::read_to_string(path) else {
+                        continue;
+                    };
+                    let parsed = parse_session_file_calls(&content, &path_string, &builtins);
+                    cache.record(path_string, mtime_ms, size, parsed.clone());
+                    parsed
+                }
+            };
+            merge_calls(raw, &mut seen, &mut calls);
+        }
+    }
+
+    Ok((cache, calls))
+}
+
+/// Remote（SSH/WSL）路径：既有 FsBackend 批量读取 + 与 Local 相同的
+/// 原始解析 + 合并去重。
+async fn collect_remote(scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
+    let backend = scope.fs_backend();
+    let claude_home = ClaudeCodeProvider::claude_home(scope);
+    let history_path = scope.join_path(&claude_home, &["history.jsonl"]);
+    let projects_dir = scope.join_path(&claude_home, &["projects"]);
+
+    if !backend.exists(&history_path).await {
+        return Ok(vec![]);
+    }
+
+    let builtins: HashSet<&str> = BUILTINS.iter().copied().collect();
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut calls: Vec<SkillCall> = Vec::new();
+
+    // Source 1: history.jsonl
+    let content = backend.read_to_string(&history_path).await?;
+    merge_calls(
+        parse_history_calls(&content, &builtins),
+        &mut seen,
+        &mut calls,
+    );
+
+    // Source 2: projects/**/*.jsonl
+    if backend.exists(&projects_dir).await {
+        let paths = backend.walk_jsonl(&projects_dir).await?;
+        let content_by_path = backend.read_many_to_strings(&paths).await?;
+        for path in paths {
+            if let Some(content) = content_by_path.get(&path) {
+                merge_calls(
+                    parse_session_file_calls(content, &path, &builtins),
+                    &mut seen,
+                    &mut calls,
+                );
+            }
+        }
+    }
+
+    Ok(calls)
+}
+
+/// history.jsonl 的原始 per-file 解析：builtin 过滤在解析时完成，
+/// 跨文件去重交给 [`merge_calls`]。
+fn parse_history_calls(content: &str, builtins: &HashSet<&str>) -> Vec<SkillCall> {
+    let mut calls = Vec::new();
     for line in content.lines() {
         if line.trim().is_empty() {
             continue;
@@ -158,10 +271,6 @@ fn collect_from_history(
 
         // history.jsonl 的 timestamp 是数字毫秒
         let ts = entry["timestamp"].as_i64().unwrap_or(0);
-        let key = format!("{skill}:{ts}");
-        if !seen.insert(key) {
-            continue;
-        }
 
         calls.push(SkillCall {
             skill,
@@ -171,35 +280,23 @@ fn collect_from_history(
             source: SOURCE.into(),
         });
     }
+    calls
 }
 
-async fn collect_from_projects(
-    backend: &dyn FsBackend,
-    projects_dir: &str,
-    builtins: &HashSet<&str>,
-    seen: &mut HashSet<String>,
-    calls: &mut Vec<SkillCall>,
-) -> Result<(), UsageError> {
-    // 顶层是按 cwd 编码的目录，一次扫一层进各项目，但内部 jsonl 可能嵌
-    // 在 subagents/ 子目录里——所以通过 FsBackend 递归列出 jsonl。
-    let paths = backend.walk_jsonl(projects_dir).await?;
-    let content_by_path = backend.read_many_to_strings(&paths).await?;
-    for path in paths {
-        if let Some(content) = content_by_path.get(&path) {
-            parse_session_file_content(content, &path, builtins, seen, calls);
+/// 跨文件去重合并：key = `skill:timestamp_ms`，与旧实现在解析期共享
+/// `seen` 集合的行为完全等价（同样的顺序、首个出现者胜出）。
+fn merge_calls(raw: Vec<SkillCall>, seen: &mut HashSet<String>, calls: &mut Vec<SkillCall>) {
+    for call in raw {
+        if seen.insert(format!("{}:{}", call.skill, call.timestamp_ms)) {
+            calls.push(call);
         }
     }
-    Ok(())
 }
 
-fn parse_session_file_content(
-    content: &str,
-    path: &str,
-    builtins: &HashSet<&str>,
-    seen: &mut HashSet<String>,
-    calls: &mut Vec<SkillCall>,
-) {
+/// 单个 projects/*.jsonl 会话文件的原始解析（不做跨文件去重）。
+fn parse_session_file_calls(content: &str, path: &str, builtins: &HashSet<&str>) -> Vec<SkillCall> {
     let session_id = file_stem_from_path(path);
+    let mut calls = Vec::new();
 
     // project (cwd) 从首个有 cwd 的行抽出来——比解码目录名靠谱。
     let mut project = String::new();
@@ -260,11 +357,6 @@ fn parse_session_file_content(
             // 兼容罕见的数字 timestamp_ms 形式。
             let ts = parse_timestamp(&entry["timestamp"]);
 
-            let key = format!("{skill}:{ts}");
-            if !seen.insert(key) {
-                continue;
-            }
-
             let call_project = if project.is_empty() {
                 entry["cwd"].as_str().unwrap_or("").to_string()
             } else {
@@ -280,6 +372,7 @@ fn parse_session_file_content(
             });
         }
     }
+    calls
 }
 
 fn file_stem_from_path(path: &str) -> String {
@@ -314,6 +407,7 @@ fn parse_timestamp(value: &Value) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::SkillCallFileCacheRow;
     use crate::services::usage::ENV_LOCK;
     use std::fs;
     use tempfile::TempDir;
@@ -481,5 +575,101 @@ mod tests {
         let iso = parse_timestamp(&Value::String("2023-11-14T22:13:20.000Z".into()));
         assert!(iso > 0);
         assert_eq!(parse_timestamp(&Value::Null), 0);
+    }
+
+    /// 跨文件重复（history 与 session 各有一条相同 skill:ts）时，胜者必须
+    /// 是先处理的 history 行——锁定 raw-parse + merge 与原共享 seen 解析
+    /// 的语义等价。
+    #[test]
+    fn cross_file_dedup_keeps_first_winner() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let dir = TempDir::new().unwrap();
+        let claude_home = dir.path();
+        fs::write(
+            claude_home.join("history.jsonl"),
+            r#"{"display":"/review","project":"/from-history","sessionId":"h1","timestamp":1700000000000}"#,
+        )
+        .unwrap();
+        let proj_dir = claude_home.join("projects").join("-tmp-x");
+        fs::create_dir_all(&proj_dir).unwrap();
+        // 同一 skill + 同一 epoch ms（ISO 串解析后与 history 数字相同）
+        fs::write(
+            proj_dir.join("sess.jsonl"),
+            r#"{"type":"assistant","cwd":"/from-session","timestamp":"2023-11-14T22:13:20.000Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"review"}}]}}"#,
+        )
+        .unwrap();
+        std::env::set_var("CLAUDE_CONFIG_DIR", claude_home);
+        let calls =
+            tokio_test_block_on(async { ClaudeCodeProvider.collect(&Scope::Local).await.unwrap() });
+        std::env::remove_var("CLAUDE_CONFIG_DIR");
+
+        let review: Vec<_> = calls.iter().filter(|c| c.skill == "review").collect();
+        assert_eq!(review.len(), 1, "same skill:ts must dedupe across files");
+        assert_eq!(review[0].project, "/from-history");
+        assert_eq!(review[0].session_id, "h1");
+    }
+
+    fn reload_cache(cache: &ProviderFileCache) -> ProviderFileCache {
+        let rows = cache
+            .snapshot_upserts()
+            .iter()
+            .map(|item| SkillCallFileCacheRow {
+                file_path: item.file_path.clone(),
+                mtime_ms: item.mtime_ms,
+                size: item.size,
+                calls_json: serde_json::to_string(&item.calls).unwrap(),
+                scanned_at_ms: 0,
+            })
+            .collect();
+        ProviderFileCache::from_rows(rows)
+    }
+
+    #[test]
+    fn incremental_scan_matches_full_scan_and_tracks_file_changes() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let dir = make_fixture();
+        std::env::set_var("CLAUDE_CONFIG_DIR", dir.path());
+
+        let full = run_collect(&dir);
+        // run_collect 用完即清环境变量；增量扫描需要它重新指向 fixture。
+        std::env::set_var("CLAUDE_CONFIG_DIR", dir.path());
+
+        // 第一轮增量（空缓存）== 全量；history + 1 个 session 文件都 record
+        let (cache, first) = tokio_test_block_on(
+            ClaudeCodeProvider.collect_incremental(&Scope::Local, ProviderFileCache::default()),
+        )
+        .unwrap();
+        assert_eq!(first, full);
+        assert_eq!(cache.upserts().len(), 2);
+
+        // 第二轮：全部指纹命中 → 零重新解析，结果不变
+        let (cache, second) = tokio_test_block_on(
+            ClaudeCodeProvider.collect_incremental(&Scope::Local, reload_cache(&cache)),
+        )
+        .unwrap();
+        assert_eq!(second, full);
+        assert!(
+            cache.upserts().is_empty(),
+            "steady state must re-parse nothing"
+        );
+        assert!(cache.vanished_paths().is_empty());
+
+        // 删除 session 文件 → 对应 calls 消失，缓存行标 vanished
+        fs::remove_file(
+            dir.path()
+                .join("projects")
+                .join("-tmp-myproj")
+                .join("sessabc.jsonl"),
+        )
+        .unwrap();
+        let (cache, third) = tokio_test_block_on(
+            ClaudeCodeProvider.collect_incremental(&Scope::Local, reload_cache(&cache)),
+        )
+        .unwrap();
+        assert_eq!(third.len(), 2, "only history calls remain");
+        assert!(third.iter().all(|c| c.skill != "git-commit"));
+        assert_eq!(cache.vanished_paths().len(), 1);
+
+        std::env::remove_var("CLAUDE_CONFIG_DIR");
     }
 }

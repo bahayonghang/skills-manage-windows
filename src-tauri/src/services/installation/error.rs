@@ -127,38 +127,38 @@ pub enum InstallationError {
     #[error("{0}")]
     Remote(String),
 
-    // ── Claude row-aware uninstall ───────────────────────────────────────────
-    #[error("Row-aware uninstall is only supported for Claude Code")]
-    RowUninstallUnsupported,
+    // ── Observation row-aware uninstall ──────────────────────────────────────
+    #[error("Observation row '{0}' not found")]
+    ObservationRowNotFound(String),
 
-    #[error("Claude row '{0}' not found")]
-    ClaudeRowNotFound(String),
-
-    #[error("Claude row '{row_id}' belongs to agent '{actual}', not '{expected}'")]
-    ClaudeRowAgentMismatch {
+    #[error("Observation row '{row_id}' belongs to agent '{actual}', not '{expected}'")]
+    ObservationRowAgentMismatch {
         row_id: String,
         actual: String,
         expected: String,
     },
 
-    #[error("Claude row '{row_id}' belongs to skill '{actual}', not '{expected}'")]
-    ClaudeRowSkillMismatch {
+    #[error("Observation row '{row_id}' belongs to skill '{actual}', not '{expected}'")]
+    ObservationRowSkillMismatch {
         row_id: String,
         actual: String,
         expected: String,
     },
 
-    #[error("Claude row '{0}' is read-only and cannot be uninstalled")]
-    ClaudeRowReadOnly(String),
+    #[error("Observation row '{0}' is read-only and cannot be uninstalled")]
+    ObservationRowReadOnly(String),
 
-    #[error("Refusing to delete the Claude user skills root '{0}'")]
-    ClaudeRootDeletion(String),
+    #[error("Observation row '{0}' has inconsistent path identity")]
+    ObservationRowPathMismatch(String),
+
+    #[error("Refusing to delete the agent skills root '{0}'")]
+    ObservationRootDeletion(String),
 
     #[error("Path '{0}' has no parent")]
     PathHasNoParent(String),
 
-    #[error("Refusing to delete '{child}' because it is outside Claude user skills root '{root}'")]
-    OutsideClaudeRoot { child: String, root: String },
+    #[error("Refusing to delete '{child}' because it is outside the agent skills root '{root}'")]
+    OutsideObservationRoot { child: String, root: String },
 
     /// A `spawn_blocking` worker failed to join.
     #[error("Failed to join {label} task: {message}")]
@@ -166,6 +166,21 @@ pub enum InstallationError {
         label: &'static str,
         message: String,
     },
+
+    #[error("Managed directory links are not supported on this platform")]
+    ManagedDirectoryLinkUnsupported,
+
+    #[error("Failed to create a managed directory link")]
+    ManagedDirectoryLinkCreate(#[source] std::io::Error),
+
+    #[error("Failed to inspect a managed directory link")]
+    ManagedDirectoryLinkInspect(#[source] std::io::Error),
+
+    #[error("Failed to remove a managed directory link")]
+    ManagedDirectoryLinkRemove(#[source] std::io::Error),
+
+    #[error("The directory link did not resolve to the expected target")]
+    ManagedDirectoryLinkTargetMismatch,
 }
 
 impl InstallationError {

@@ -10,29 +10,29 @@ The repository is Windows-first, but the merge gate covers the full frontend and
 
 ```text
 just ci
-  -> node scripts/run-ci.mjs --lane all
+  -> node scripts/check/run-ci.mjs --lane all
   -> common + rust-platform in parallel
 
 just version-check
-  -> node scripts/sync-version.mjs --check (read-only)
+  -> node scripts/check/sync-version.mjs --check (read-only)
 
 just sync-version
-  -> node scripts/sync-version.mjs (explicit write)
+  -> node scripts/check/sync-version.mjs (explicit write)
 
 just audit
-  -> node scripts/check-dependency-audit.mjs
+  -> node scripts/check/check-dependency-audit.mjs
   -> pnpm audit --prod --json + cargo audit --json
 
 Toolchain:
-  .node-version / package.json engines -> Node 22 LTS
-  package.json packageManager         -> pnpm 10.12.3
-  rust-toolchain.toml                 -> Rust 1.97.0 + rustfmt + clippy
+  .node-version / package.json engines -> Node 26
+  package.json packageManager         -> pnpm 10.34.5
+  rust-toolchain.toml                 -> Rust 1.98.0 + rustfmt + clippy
 
 just doctor
-  -> node scripts/doctor.mjs (read-only environment diagnostics)
+  -> node scripts/check/doctor.mjs (read-only environment diagnostics)
 
 just check
-  -> node scripts/run-ci.mjs --lane quick (development feedback only)
+  -> node scripts/check/run-ci.mjs --lane quick (development feedback only)
 
 GitHub Actions required job/check:
   workflow: .github/workflows/ci.yml
@@ -43,10 +43,10 @@ GitHub Actions required job/check:
   behavior: aggregate only, always(), fail closed
 
 Required lanes (no inter-lane needs):
-  common: ubuntu-22.04, node scripts/run-ci.mjs --lane common
-  windows-rust: windows-2022, node scripts/run-ci.mjs --lane rust-platform
-  linux-rust: ubuntu-22.04, node scripts/run-ci.mjs --lane rust-platform
-  macos-rust: macos-14, node scripts/run-ci.mjs --lane rust-platform
+  common: ubuntu-22.04, node scripts/check/run-ci.mjs --lane common
+  windows-rust: windows-2022, node scripts/check/run-ci.mjs --lane rust-platform
+  linux-rust: ubuntu-22.04, node scripts/check/run-ci.mjs --lane rust-platform
+  macos-rust: macos-14, node scripts/check/run-ci.mjs --lane rust-platform
   supply-chain: ubuntu-22.04, pnpm audit:dependencies
 
 Reusable CI:
@@ -85,7 +85,10 @@ step in an isolated process group and signal that group, so `pnpm`, Cargo, and
 their descendants do not continue after the aggregate command has failed.
 
 `pnpm sizecheck` enforces the 800-line limit uniformly across production source
-files. There are no frozen baseline exceptions or per-file allowlist bypasses.
+files. The generated IPC contract artifact `src/lib/ipc/generatedCommandMap.ts`
+is excluded because it is machine-written and must not be hand-split. There are
+no frozen baseline exceptions or per-file allowlist bypasses for hand-written
+production source.
 
 The local developer entrypoints are intentionally layered:
 
@@ -109,6 +112,17 @@ prints credentials. `just check` is not a substitute for `just ci` or `just audi
 - `.github/workflows/docs.yml` retains `release.published` and accepts manual dispatch only from canonical `main`. The build job uploads one official Pages artifact; deploy neither checks out nor installs nor rebuilds.
 - Only the deploy job receives `pages: write` and `id-token: write`, and it binds the `github-pages` environment. Production Pages concurrency does not cancel a deployment already in progress.
 - Smoke consumes `deploy-pages`' `page_url`, requires the exact repository HTTPS Pages URL, retries for bounded CDN propagation, and fails unless the response is HTTP 200 with the SkillPort page identity.
+
+### Repository scripts layout contract
+
+- `scripts/` root contains only `build/`, `check/`, `docs/`, `release/`, and `lib/`. Business entry files live in those four groups. `lib/` holds shared helpers only.
+- `build/` owns desktop bundle, Windows install, Vite dev server, and icon rebuild hints.
+- `check/` owns CI lanes, doctor, version sync, sequential Vitest, and `check-*` gates.
+- `docs/` owns IPC dictionary and schema table generators plus `generated-doc-file.mjs`.
+- `release/` owns updater metadata, release body, artifact inventory, context freeze, draft state, preflight, and signing state.
+- A script that needs the repository root calls `resolveRepoRoot(import.meta.url)` from `scripts/lib/repo-root.mjs`. That helper walks parents until `package.json.name === "skillport"`. Python helpers walk the same way. Do not use a fixed `dirname` count.
+- Do not leave re-export shims at old `scripts/<file>.mjs` paths. Move the file, then update `package.json`, `justfile`, GitHub Actions `run:` lines, `src/test/scripts/`, contract tests, Usage strings, and this spec in the same change.
+- `developerExperienceContract.test.ts` asserts the five root directories. A new script in the wrong folder, or a leftover file at `scripts/` root, fails that test.
 
 ### Event contract
 
@@ -171,16 +185,25 @@ binary build does not prove that required sidecars or package utilities exist.
 - Every external Action in `.github/workflows/*.yml` is referenced by a full
   40-character commit SHA. Version comments are informational; Dependabot's
   weekly `github-actions` updates keep the commits reviewable and current.
+- The pinned Node 24 Action runtimes require Actions Runner 2.327.1 or newer.
+  The repository uses GitHub-hosted runners only. Checkout v7's unsafe fork
+  opt-in remains disabled; the workflows do not use `pull_request_target` or
+  `workflow_run`. Release artifact names are unique and immutable, and download
+  digest mismatches fail closed. `actions/attest` v4 generates SLSA provenance
+  directly; `create-storage-record: false` preserves the publish job's existing
+  least-privilege permission set.
 - `pnpm audit --prod --json` blocks high/critical advisories. `cargo audit
   --json` blocks every vulnerability. Moderate/low npm advisories and Cargo
   informational warnings remain visible without expanding this gate's scope.
 - Exceptions are exact `(ecosystem, advisory)` entries with non-empty owner and
   reason plus an ISO expiry date. Malformed, duplicate, expired, cross-ecosystem,
   or unused entries fail closed.
-- Current exceptions expire on 2026-08-11: React Router's RSC-only advisory has
-  no stable fixed release, and `tauri-plugin-sql 2.4.0` internally enables the
-  SQLx/RSA closure even when the application uses only SQLite. Neither exception
-  permits a package-wide or severity-wide ignore.
+- Current exceptions expire on 2026-11-30. SQLx 0.8.6's optional MySQL lock
+  closure retains `rsa 0.9.10`, whose advisory has no patched release, and
+  `rust_decimal 1.41.0` retains optional `rkyv 0.7.46`, whose fix begins at the
+  incompatible 0.8.17 line. Both packages remain in `Cargo.lock` but are absent
+  from normal and `--target all` inverse dependency trees. The exceptions are
+  advisory-specific and do not permit a package-wide or severity-wide ignore.
 
 ### Branch protection contract
 
@@ -250,7 +273,8 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
 | Docs deploy checks out or rebuilds after artifact upload | Docs workflow contract fails |
 | Manual Docs dispatch uses a branch other than canonical `main` | Build fails before deployment |
 | Pages URL, HTTP status, or SkillPort identity is wrong | Bounded post-deploy smoke fails the workflow |
-| A production source file exceeds 800 lines | `pnpm sizecheck` fails; no per-file baseline exemption is permitted |
+| A hand-written production source file exceeds 800 lines | `pnpm sizecheck` fails; generated IPC artifacts are excluded, and no per-file baseline exemption is permitted for production source |
+| A business script sits at `scripts/` root, or a caller uses `dirname` twice to find the repo root | `developerExperienceContract.test.ts` fails, or the script reads `scripts/` as the repo root |
 | Rust/Serde IPC metadata drifts from the checked artifact | `pnpm ipc:codegen:check` fails before Rust fmt/Clippy/test |
 | Test/bin target has a Clippy warning | all-target Clippy fails |
 | Cargo lockfile would change | `--locked` command fails |
@@ -275,7 +299,8 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
 - Bad: creating or publishing a release before all required platform jobs and
   post-upload checks pass.
 - Bad: expanding the whole release packaging matrix to every PR, which adds tens of minutes without improving routine feedback proportionally.
-- Bad: adding a new local check without adding it to `scripts/run-ci.mjs`, or duplicating different commands directly in the workflow.
+- Bad: adding a new local check without adding it to `scripts/check/run-ci.mjs`, or duplicating different commands directly in the workflow.
+- Bad: placing a new helper at `scripts/<file>.mjs` and resolving the repo root with `dirname(dirname(import.meta.url))`. After one more nesting level that path becomes `scripts/`.
 - Bad: allowing `docs:build` to refresh tracked files, rebuilding in the Pages deploy job, or treating `deploy-pages` success as proof that the public SkillPort URL works.
 - Bad: adding non-required matrix jobs without propagating their result into the
   existing required `just-ci` context.
@@ -375,9 +400,17 @@ jobs:
 ```
 
 Repository checks such as capability drift belong in the ordered `common` lane in
-`scripts/run-ci.mjs`; local `just ci` and hosted jobs select lanes from that same
+`scripts/check/run-ci.mjs`; local `just ci` and hosted jobs select lanes from that same
 command plan. Formal release platform builds remain in
 `release-desktop.yml`; CI manual smoke jobs do not become release dependencies.
+
+```text
+Wrong: node scripts/run-ci.mjs
+       const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
+Correct: node scripts/check/run-ci.mjs
+         import { resolveRepoRoot } from "../lib/repo-root.mjs"
+         const repoRoot = resolveRepoRoot(import.meta.url)
+```
 
 ## Scenario: Typed IPC Codegen And Parity Gate
 
@@ -399,9 +432,8 @@ cargo metadata bins     -> skillport, skillport-cli, release-signature-verifier
 
 ### 3. Contracts
 
-- runtime registry 184；generated registry 42 且为 runtime 子集。
-- frontend 177 = typed 130 + allowlist 47；runtime - frontend 恰为冻结的 backend-only 7。
-- 180 个 fallible command 使用 `IpcResult`；4 个 infallible command 保持原签名。
+- runtime、generated、frontend、typed、allowlist、backend-only 与 fallible/infallible membership 由
+  `ipcCommandCoverage.test.ts` 从权威 registry/map 计算；generated 必须是 runtime 子集，集合必须无重叠或缺口。
 - generator 使用 structured Specta metadata 和 Serde phases；不得以 source regex 证明类型一致性。
 - 对 codegen checker 按字节比较的受控生成文本，必须在 `.gitattributes` 中按路径固定 `text eol=lf`；不得依赖开发者本机的 `core.autocrlf` 设置维持 artifact parity。
 - generated type 必须来自 Rust 字段的真实类型。持久化字段不得用 Specta-only override

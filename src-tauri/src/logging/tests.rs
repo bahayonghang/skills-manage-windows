@@ -29,6 +29,25 @@ fn daily_log_writer_writes_skillport_dated_log_file() {
 }
 
 #[test]
+fn daily_log_writer_flushes_partial_as_marker_and_discards_only_its_continuation() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut appender = DailyLogWriter::new(temp_dir.path().to_path_buf());
+
+    appender.write_all(b"tok").unwrap();
+    appender.flush().unwrap();
+    appender
+        .write_all(b"en=secret\nINFO source=runtime next complete line\n")
+        .unwrap();
+    appender.flush().unwrap();
+
+    let content = fs::read_to_string(daily_log_path(temp_dir.path())).unwrap();
+    assert!(content.starts_with("[REDACTED]\n"));
+    assert!(!content.contains("tok"));
+    assert!(!content.contains("secret"));
+    assert!(content.contains("INFO source=runtime next complete line\n"));
+}
+
+#[test]
 fn operation_log_failure_warning_enters_daily_log_file() {
     // M6 稳定化：直接测 tracing → DailyLogWriter 集成链路，不经过 sqlx / tokio runtime。
     //
@@ -101,6 +120,8 @@ fn reads_runtime_log_with_filters_pagination_and_redaction() {
             query: Some("bad".to_string()),
             level: Some("warn".to_string()),
             source: Some("window".to_string()),
+            operation_id: None,
+            event_source: None,
             limit: Some(10),
             offset: Some(0),
             tail: false,
@@ -132,6 +153,8 @@ fn runtime_tail_reads_last_matching_lines() {
             query: None,
             level: Some("info".to_string()),
             source: None,
+            operation_id: None,
+            event_source: None,
             limit: Some(2),
             offset: Some(0),
             tail: true,
@@ -162,6 +185,105 @@ fn export_runtime_log_file_redacts_sensitive_values() {
     assert!(exported.contains("passphrase=[REDACTED]"));
     assert!(!exported.contains("sk-test"));
     assert!(!exported.contains("pp-secret"));
+}
+
+#[test]
+fn runtime_disk_read_and_export_never_expose_private_diagnostic_seeds() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut appender = DailyLogWriter::new(temp_dir.path().to_path_buf());
+    let seeds = [
+        r"C:\Users\alice\AppData\Roaming\SkillPort\logs",
+        r"D:\private\skills\secret.md",
+        "https://private.example.invalid/repo?token=ghp_private",
+        "private.internal",
+        "ghp_super_secret_value",
+        "raw-error-seed-from-provider",
+        "10.23.45.67",
+        "2001:db8::7",
+        r"C:\Users\Alice Smith\secret\skill.md",
+        "/home/Alice Smith/private/skill.md",
+        "token=secret",
+    ];
+    let line = format!(
+        "2026-06-03T00:03:00Z ERROR skillport::startup: failed log_dir={} path={} url={} host={} secret={} error={}\n",
+        seeds[0], seeds[1], seeds[2], seeds[3], seeds[4], seeds[5]
+    );
+
+    let split = line.find("SkillPort").unwrap() + 4;
+    appender.write_all(&line.as_bytes()[..split]).unwrap();
+    appender.write_all(&line.as_bytes()[split..]).unwrap();
+    appender
+        .write_all(
+            format!(
+                "2026-06-03T00:03:01Z WARN skillport::startup: peers {} {} {} error_code=storage.unavailable\n",
+                seeds[3], seeds[6], seeds[7]
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    appender
+        .write_all(
+            format!(
+                "2026-06-03T00:03:02Z WARN skillport::startup: opened {} error_code=storage.unavailable\n",
+                seeds[8]
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    appender
+        .write_all(
+            format!(
+                "2026-06-03T00:03:03Z WARN skillport::startup: opened {} error_code=storage.unavailable\n",
+                seeds[9]
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    appender.write_all(b"tok").unwrap();
+    appender.flush().unwrap();
+    appender.write_all(b"en=secret\n").unwrap();
+    appender.flush().unwrap();
+
+    let file_name = fs::read_dir(temp_dir.path())
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .into_owned();
+    let disk = fs::read_to_string(temp_dir.path().join(&file_name)).unwrap();
+    let read = read_runtime_log_file_from_dir(
+        temp_dir.path(),
+        RuntimeLogReadRequest {
+            file_name: file_name.clone(),
+            query: None,
+            level: None,
+            source: None,
+            operation_id: None,
+            event_source: None,
+            limit: Some(20),
+            offset: Some(0),
+            tail: false,
+        },
+    )
+    .unwrap();
+    let read_projection = serde_json::to_string(&read.lines).unwrap();
+    let exported = export_runtime_log_file_from_dir(temp_dir.path(), &file_name).unwrap();
+
+    for seed in seeds {
+        assert!(!disk.contains(seed), "disk leaked private seed: {seed}");
+        assert!(
+            !read_projection.contains(seed),
+            "read projection leaked private seed: {seed}"
+        );
+        assert!(
+            !exported.contains(seed),
+            "export leaked private seed: {seed}"
+        );
+    }
+    assert!(disk.contains("[REDACTED]"));
+    assert!(disk.contains("error_code=storage.unavailable"));
 }
 
 #[test]
@@ -204,22 +326,165 @@ fn cleanup_expired_runtime_logs_keeps_recent_dates() {
 
 #[test]
 fn frontend_runtime_payload_is_truncated_and_redacted() {
+    let planted = r"C:\Users\alice\private.log https://example.invalid/?token=secret";
     let log = sanitize_frontend_runtime_log_payload(FrontendRuntimeLogPayload {
         level: Some("warning".to_string()),
         source: Some("x".repeat(120)),
-        message: Some(format!("token=abc {}", "m".repeat(2_100))),
+        message: Some(planted.to_string()),
         details: Some(json!({
-            "apiKey": "sk-test",
-            "nested": { "password": "secret", "visible": "ok" }
+            (planted): planted,
+            "nested": { (planted): "sk-test", "visible": "ok" }
         })),
+        operation_id: Some(planted.to_string()),
     });
 
     assert_eq!(log.level, "warn");
-    assert!(log.source.chars().count() <= MAX_FRONTEND_SOURCE_CHARS + 1);
-    assert!(log.message.chars().count() <= MAX_FRONTEND_MESSAGE_CHARS + 1);
-    assert!(log.message.contains("token=[REDACTED]"));
+    assert_eq!(log.source, "frontend.runtime");
+    assert_eq!(log.message, "Frontend runtime event");
     assert!(log.details.contains("[REDACTED]"));
-    assert!(log.details.contains("visible"));
+    assert!(log.details.contains("field_"));
+    assert!(!log.details.contains(planted));
     assert!(!log.details.contains("sk-test"));
-    assert!(!log.details.contains("secret"));
+    assert!(log.operation_id.is_none());
+}
+
+#[test]
+fn runtime_log_filters_exact_operation_and_event_source() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let operation_id = "123e4567-e89b-42d3-a456-426614174000";
+    let other_id = "123e4567-e89b-42d3-a456-426614174001";
+    fs::write(
+        temp_dir.path().join("skillport-2026-06-03.log"),
+        format!(
+            "ERROR skillport::ipc: one event_source=backend source=ipc.failure operation_id={operation_id}\nERROR skillport::frontend: two operation_id={other_id} event_source=frontend\n"
+        ),
+    )
+    .unwrap();
+
+    let result = read_runtime_log_file_from_dir(
+        temp_dir.path(),
+        RuntimeLogReadRequest {
+            file_name: "skillport-2026-06-03.log".to_string(),
+            query: None,
+            level: None,
+            source: None,
+            operation_id: Some(operation_id.to_string()),
+            event_source: Some("backend".to_string()),
+            limit: Some(10),
+            offset: Some(0),
+            tail: false,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(result.total, 1);
+    assert_eq!(result.lines[0].source, "ipc.failure");
+    assert_eq!(result.lines[0].operation_id.as_deref(), Some(operation_id));
+    assert_eq!(result.lines[0].event_source.as_deref(), Some("backend"));
+}
+
+#[test]
+fn invalid_operation_filter_matches_no_runtime_rows() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    fs::write(
+        temp_dir.path().join("skillport-2026-06-03.log"),
+        "ERROR skillport::ipc: one operation_id=123e4567-e89b-42d3-a456-426614174000 event_source=backend\n",
+    )
+    .unwrap();
+
+    let result = read_runtime_log_file_from_dir(
+        temp_dir.path(),
+        RuntimeLogReadRequest {
+            file_name: "skillport-2026-06-03.log".to_string(),
+            query: None,
+            level: None,
+            source: None,
+            operation_id: Some("not-a-uuid".to_string()),
+            event_source: None,
+            limit: Some(10),
+            offset: Some(0),
+            tail: false,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(result.total, 0);
+}
+
+#[test]
+fn frontend_runtime_events_write_only_allowlisted_diagnostics() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let log_dir = temp_dir.path().to_path_buf();
+    let make_writer = move || DailyLogWriter::new(log_dir.clone());
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(make_writer)
+        .with_ansi(false)
+        .compact()
+        .finish();
+    let dispatch = tracing::Dispatch::new(subscriber);
+    let planted = r"C:\Users\alice\private.log https://example.invalid/?token=ghp_secret";
+    let operation_id = "123e4567-e89b-42d3-a456-426614174000";
+
+    tracing::dispatcher::with_default(&dispatch, || {
+        record_frontend_runtime_log(FrontendRuntimeLogPayload {
+            level: Some("error".to_string()),
+            source: Some("ipc.failure".to_string()),
+            message: Some(planted.to_string()),
+            details: Some(json!({
+                "command": "get_central_skills",
+                "args": { (planted): planted, "nested": [planted, 7] },
+                "error": { "code": "secret.value", "retryable": false },
+                "correlationOrigin": "frontend",
+            })),
+            operation_id: Some(operation_id.to_string()),
+        });
+        record_frontend_runtime_log(FrontendRuntimeLogPayload {
+            level: Some("error".to_string()),
+            source: Some("ipc.failure".to_string()),
+            message: None,
+            details: Some(json!({
+                "command": "install_marketplace_skill",
+                "error": { "code": "marketplace.install_failed", "retryable": false },
+                "correlationOrigin": "backend",
+            })),
+            operation_id: Some(operation_id.to_string()),
+        });
+        record_frontend_runtime_log(FrontendRuntimeLogPayload {
+            level: Some("error".to_string()),
+            source: Some("window.error".to_string()),
+            message: Some(planted.to_string()),
+            details: Some(json!({
+                "errorName": "TypeError",
+                "errorCode": "internal.host",
+                "line": 12,
+                "column": 4,
+                (planted): planted,
+                "filename": planted,
+                "stack": planted,
+            })),
+            operation_id: None,
+        });
+    });
+
+    let entries = fs::read_dir(temp_dir.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect::<Vec<_>>();
+    let written = entries
+        .iter()
+        .map(|path| fs::read_to_string(path).unwrap())
+        .collect::<String>();
+    assert!(written.contains("IPC command failed"));
+    assert!(written.contains("A window error occurred"));
+    assert!(written.contains("internal.unexpected"));
+    assert!(written.contains("marketplace.install_failed"));
+    assert!(written.contains(operation_id));
+    assert!(
+        written.contains("event_source=\"frontend\"") || written.contains("event_source=frontend")
+    );
+    assert!(!written.contains(planted));
+    assert!(!written.contains("secret.value"));
+    assert!(!written.contains("internal.host"));
+    assert!(!written.contains("filename"));
+    assert!(!written.contains("stack"));
 }

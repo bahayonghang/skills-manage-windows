@@ -19,8 +19,9 @@ import {
   UnifiedSkillCardFooter,
 } from "@/components/skill/UnifiedSkillCardFooter";
 import { CardTagEditor } from "@/components/skill/CardTagEditor";
+import { SkillCardDenseRow } from "@/components/skill/SkillCardDenseRow";
 import { SkillCardMeta } from "@/components/skill/SkillCardMeta";
-import type { CentralSkillUpdateState, ClaudeSourceKind } from "@/types";
+import type { CentralSkillUpdateState, ClaudeSourceKind, SkillsCliPlacement } from "@/types";
 import { cn } from "@/lib/utils";
 import {
   getPlatformTargetInstallAgentIds,
@@ -61,6 +62,9 @@ interface SkillCardModel {
   publisher?: string;
   installLabel?: string;
   usageBadge?: number;
+  lifetimeUsage?: { rank: number | null; count: number };
+  originSurface?: "plugin" | "central" | "skillsCli";
+  installOrigin?: "central" | "standalone" | "skillsCli";
   onDetail?: MouseEventHandler<HTMLButtonElement>;
   onInstallTo?: () => void;
   onUninstallFromPlatforms?: () => void;
@@ -73,6 +77,8 @@ interface SkillCardModel {
   uninstallFromLabel?: string;
   onInstall?: () => void;
   onRemove?: () => void;
+  onUninstall?: () => void;
+  uninstallLabel?: string;
   isLoading?: boolean;
   detailButtonRef?: Ref<HTMLButtonElement>;
   density?: SkillCardTypes.SkillCardDensity;
@@ -80,6 +86,12 @@ interface SkillCardModel {
   statusChipLabel?: string;
   editableTags?: SkillCardTypes.SkillCardEditableTags;
   footer?: SkillCardTypes.SkillCardFooter;
+  layout?: "denseRow";
+  path?: string | null;
+  placements?: readonly SkillsCliPlacement[];
+  updateAvailable?: boolean;
+  onManageLinks?: () => void;
+  uninstallLockReason?: string;
 }
 
 /** 场景 → 渲染模型的唯一映射点：每分支只拷贝该场景合法字段。 */
@@ -121,6 +133,17 @@ function toModel(props: SkillCardTypes.UnifiedSkillCardProps): SkillCardModel {
         isReadOnly: props.isReadOnly,
         publisher: props.publisher,
         usageBadge: props.usageBadge,
+        lifetimeUsage: props.lifetimeUsage,
+        installOrigin: props.installOrigin,
+        originSurface:
+          props.originKind === "plugin"
+            ? "plugin"
+            : props.installOrigin === "skillsCli"
+              ? "skillsCli"
+              : props.installOrigin === "central" ||
+                  (props.installOrigin === undefined && props.sourceType === "symlink")
+                ? "central"
+                : undefined,
         checkbox: props.checkbox,
         isLoading: props.isLoading,
         onDetail: props.onDetail,
@@ -169,12 +192,52 @@ function toModel(props: SkillCardTypes.UnifiedSkillCardProps): SkillCardModel {
         onInstallTo: props.onInstallTo,
         onRemove: props.onRemove,
       };
+    case "skillsCli":
+      return {
+        ...core,
+        layout: props.layout,
+        path: props.path,
+        placements: props.placements,
+        checkbox: props.checkbox,
+        updateAvailable: props.updateAvailable,
+        onDetail: props.onDetail,
+        onManageLinks: props.onManageLinks,
+        onUninstall: props.onUninstall,
+        isLoading: props.isLoading,
+        uninstallLockReason: props.uninstallLockReason,
+      };
+    default: {
+      const _exhaustive: never = props;
+      return _exhaustive;
+    }
   }
 }
 
 // ─── UnifiedSkillCard ─────────────────────────────────────────────────────────
 
 function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) {
+  const model = toModel(props);
+  if (model.layout === "denseRow") {
+    return (
+      <SkillCardDenseRow
+        name={model.name}
+        className={model.className}
+        path={model.path}
+        placements={model.placements ?? []}
+        checkbox={model.checkbox}
+        updateAvailable={model.updateAvailable}
+        onDetail={model.onDetail}
+        onManageLinks={model.onManageLinks}
+        onUninstall={model.onUninstall}
+        isLoading={model.isLoading}
+        uninstallLockReason={model.uninstallLockReason}
+      />
+    );
+  }
+  return <SkillCardStandardCard model={model} />;
+}
+
+function SkillCardStandardCard({ model }: { model: SkillCardModel }) {
   const { t } = useTranslation();
   const {
     name,
@@ -195,6 +258,9 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
     publisher,
     installLabel,
     usageBadge,
+    lifetimeUsage,
+    originSurface,
+    installOrigin,
     onDetail,
     onInstallTo,
     onUninstallFromPlatforms,
@@ -214,7 +280,7 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
     statusChipLabel,
     editableTags,
     footer,
-  } = toModel(props);
+  } = model;
 
   // "default" 是旧别名，归一化为 "comfortable"
   const density: Exclude<SkillCardTypes.SkillCardDensity, "default"> =
@@ -276,17 +342,70 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
     [targetAgents, linkedAgentSet]
   );
   const compactMoreMenuItems = isCompact && onDeleteFromCentral ? { onDeleteFromCentral } : null;
+  const hasLifetimeRank =
+    lifetimeUsage != null &&
+    lifetimeUsage.rank != null &&
+    lifetimeUsage.rank >= 1;
 
   return (
     <div
       className={cn(
         cardShellClass(checkbox?.checked),
-        "group/skill-card relative overflow-hidden gap-2 p-3.5",
+        "@container group/skill-card relative overflow-hidden gap-2 p-3.5",
         isCompact ? "min-h-[168px]" : "min-h-[188px]",
+        originSurface === "plugin" && "bg-warning/5",
+        originSurface === "skillsCli" && "bg-primary/5",
         isLoading && "opacity-50",
         className
       )}
     >
+      {originSurface && (
+        <div
+          aria-hidden
+          className={cn(
+            "absolute inset-y-0 left-0 w-[3px]",
+            originSurface === "plugin" ? "bg-warning" : "bg-info",
+          )}
+        />
+      )}
+      {lifetimeUsage && (
+        <div
+          data-testid="usage-rank"
+          className="absolute bottom-3.5 right-3.5 text-xs tabular-nums"
+          title={
+            hasLifetimeRank
+              ? t("platform.usageRank.tooltip", {
+                  rank: lifetimeUsage.rank,
+                  count: lifetimeUsage.count,
+                })
+              : t("platform.usageRank.tooltipNoRecord")
+          }
+          aria-label={
+            hasLifetimeRank
+              ? t("platform.usageRank.aria", {
+                  rank: lifetimeUsage.rank,
+                  count: lifetimeUsage.count,
+                })
+              : t("platform.usageRank.ariaNoRecord")
+          }
+        >
+          {hasLifetimeRank ? (
+            <>
+              <span className="font-medium text-foreground">
+                #{lifetimeUsage.rank}
+              </span>
+              <span className="text-muted-foreground">
+                {" "}
+                · {lifetimeUsage.count}
+              </span>
+            </>
+          ) : (
+            <span className="text-muted-foreground">
+              {t("platform.usageRank.noRecord")}
+            </span>
+          )}
+        </div>
+      )}
       <div className="flex min-h-0 flex-1 items-start gap-2.5">
         {/* Optional checkbox (central / platform) */}
         {hasCheckbox && checkbox && (
@@ -302,7 +421,7 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
 
         {/* Main content */}
         <div className="flex h-full min-w-0 flex-1 flex-col gap-2">
-          {/* Row 1: Name + icon actions */}
+          {/* Row 1: Name + icon actions（卡片 <22rem 时图标降为 hover/focus-within 揭示，让位给技能名；hover 与 focus 成对保证键盘可达） */}
           <div className="flex items-center justify-between gap-2">
             {onDetail ? (
               <button
@@ -336,7 +455,7 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
             {hasActions && (
               <div
                 className={cn(
-                  "flex shrink-0 items-center gap-2",
+                  "flex shrink-0 items-center gap-2 @max-[22rem]:hidden @max-[22rem]:group-hover/skill-card:flex @max-[22rem]:group-focus-within/skill-card:flex",
                   isCompact &&
                     "opacity-0 transition-opacity duration-150 group-hover/skill-card:opacity-100 group-focus-within/skill-card:opacity-100",
                 )}
@@ -494,6 +613,7 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
             originKind={originKind ?? undefined}
             isReadOnly={isReadOnly}
             sourceType={sourceType}
+            installOrigin={installOrigin}
             originBadge={originBadge}
             usageBadge={footer ? undefined : usageBadge}
             isCentral={isCentral}

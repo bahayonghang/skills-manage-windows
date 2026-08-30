@@ -1,0 +1,8 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/fs-db-operation-journal.md", "reason": "Journal phases, restore fail-closed, prepared reconcile"}
+{"file": ".trellis/spec/backend/skill-deletion-integrity.md", "reason": "Owned relations and journaled Central delete"}
+{"file": ".trellis/tasks/08-17-central-delete-force-recovery/research/yao-meta-delete-restore-collision.md", "reason": "Live yao-meta collision evidence"}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "Delete IPC must keep typed domain errors"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "Delete dialog must use formatBackendError"}
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "force flag and preview fields go through typed invoke"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "Journal paths must not enter IPC or logs"}

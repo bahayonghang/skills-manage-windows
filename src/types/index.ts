@@ -107,10 +107,50 @@ export interface ScannedSkill {
   is_source_unknown?: boolean;
   source_kind?: ClaudeSourceKind | null;
   source_root?: string | null;
+  /** Backend install origin: central | standalone | skills_cli. */
+  install_origin?: "central" | "standalone" | "skills_cli";
   is_read_only?: boolean;
   conflict_group?: string | null;
   conflict_count?: number;
 }
+
+export type {
+  SkillsCliAddResult,
+  SkillsCliApplyRecoveryResult,
+  SkillsCliApplyResult,
+  SkillsCliApplySelection,
+  SkillsCliApplyUpdateRequest,
+  SkillsCliDoctorReport,
+  SkillsCliGlobalSkill,
+  SkillsCliGlobalSnapshot,
+  SkillsCliInstallKind,
+  SkillsCliInstallTarget,
+  SkillsCliManagedLinkKind,
+  SkillsCliPendingRecovery,
+  SkillsCliPlacement,
+  SkillsCliPlacementBatchItem,
+  SkillsCliPlacementConflict,
+  SkillsCliPlacementMutationFailure,
+  SkillsCliPlacementMutationItem,
+  SkillsCliPlacementMutationOutcome,
+  SkillsCliPlacementState,
+  SkillsCliRemovePlacementSummary,
+  SkillsCliRemovePlan,
+  SkillsCliRemoveResult,
+  SkillsCliSkillDoc,
+  SkillsCliSourcePreview,
+  SkillsCliSourceTypeBucket,
+  SkillsCliUpdateBlocker,
+  SkillsCliUpdateCapabilityPlan,
+  SkillsCliUpdateCapabilitySupport,
+  SkillsCliUpdateInventory,
+  SkillsCliUpdateJobPhase,
+  SkillsCliUpdateProgress,
+  SkillsCliUpdateRepositoryRow,
+  SkillsCliUpdateSkillRow,
+  SkillsCliUpdateStatus,
+} from "./skillsCli";
+export { EMPTY_SKILLS_CLI_UPDATE_INVENTORY } from "./skillsCli";
 
 // ─── Skill Types ──────────────────────────────────────────────────────────────
 
@@ -224,54 +264,17 @@ export type {
   CentralStoreLocationSymlinkFailure,
 } from "./centralStoreLocation";
 
-export interface DeleteCentralSkillPreview {
-  skill_id: string;
-  skill_name: string;
-  central_path: string;
-  copy_installations: SkillInstallation[];
-  auto_removed_agent_ids: string[];
-}
-
-export interface FailedCentralSkillDelete {
-  skill_id: string;
-  phase?: string | null;
-  error_code?: string | null;
-  error_category?: string | null;
-  error: string;
-}
-
-export interface BatchDeleteCentralSkillPreviewResult {
-  previews: DeleteCentralSkillPreview[];
-  failed: FailedCentralSkillDelete[];
-}
-
-export interface BatchDeleteCentralSkillRequest {
-  skill_id: string;
-  remove_agent_ids: string[];
-}
-
-export interface BatchDeleteCentralSkillSuccess {
-  skill_id: string;
-  removed_central_path: string;
-  removed_agent_ids: string[];
-  retained_agent_ids: string[];
-}
-
-export interface BatchDeleteCentralSkillResult {
-  succeeded: BatchDeleteCentralSkillSuccess[];
-  failed: FailedCentralSkillDelete[];
-}
-
-export interface DeleteSkillRepositoryPreview {
-  repository: SkillRepositoryWithStats;
-  delete_preview: BatchDeleteCentralSkillPreviewResult;
-}
-
-export interface DeleteSkillRepositoryResult {
-  repository: SkillRepository;
-  deleted_repository: boolean;
-  delete_result: BatchDeleteCentralSkillResult;
-}
+export type {
+  BatchDeleteCentralSkillPreviewResult,
+  BatchDeleteCentralSkillRequest,
+  BatchDeleteCentralSkillResult,
+  BatchDeleteCentralSkillSuccess,
+  DeleteCentralSkillPreview,
+  DeleteSkillRepositoryPreview,
+  DeleteSkillRepositoryResult,
+  FailedCentralSkillDelete,
+  PendingDeleteRecoveryPreview,
+} from "./centralDelete";
 
 // ─── Collection Types ─────────────────────────────────────────────────────────
 
@@ -651,111 +654,24 @@ export interface SkillsShFileEntry {
 }
 
 // ─── Portable State Types ───────────────────────────────────────────────────
-
-export type SkillportStateSourceStatus = "exists" | "will_add" | "duplicate";
-export type SkillportStateSkillStatus = "ready" | "conflict" | "missing" | "unrestorable" | "duplicate_skipped";
-export type SkillportStateImportResolutionType = "overwrite" | "skip" | "rename";
-export type { SkillportStateExportedTarget } from "./portableState";
-
-export type SkillportStatePortabilityJobStatus =
-  | "idle"
-  | "running"
-  | "completed"
-  | "failed"
-  | "cancelling"
-  | "cancelled";
-
-export type SkillportStatePortabilityPhase =
-  | "exporting"
-  | "previewing"
-  | "importing"
-  | "finalizing"
-  | null;
-
-export interface SkillportStatePortabilityJob {
-  jobId: string | null;
-  phase: SkillportStatePortabilityPhase;
-  status: SkillportStatePortabilityJobStatus;
-  total: number;
-  completed: number;
-  message?: string;
-  currentItem?: string;
-  error?: string;
-}
-
-export interface SkillportStatePortabilityProgressPayload {
-  jobId: string;
-  phase: Exclude<SkillportStatePortabilityPhase, null>;
-  status: Exclude<SkillportStatePortabilityJobStatus, "idle" | "cancelling">;
-  total: number;
-  completed: number;
-  message?: string | null;
-  currentItem?: string | null;
-  error?: string | null;
-}
-
-export interface SkillportStateImportPreviewSummary {
-  sourcesToAdd: number;
-  sourcesExisting: number;
-  sourcesDuplicate?: number;
-  ready: number;
-  conflicts: number;
-  missing: number;
-  unrestorable: number;
-  duplicateSkipped?: number;
-}
-
-export interface SkillportStateSourcePreview {
-  name: string;
-  url: string;
-  status: SkillportStateSourceStatus;
-}
-
-export interface SkillportStateSkillPreview {
-  id: string;
-  name: string;
-  sourcePath?: string | null;
-  status: SkillportStateSkillStatus;
-  existingSkillId?: string | null;
-  reason?: string | null;
-  detail?: string | null;
-}
-
-export interface SkillportStateImportPreview {
-  githubSources: SkillportStateSourcePreview[];
-  skills: SkillportStateSkillPreview[];
-  summary: SkillportStateImportPreviewSummary;
-  warnings: Array<{ reason: string; detail: string; sourcePath?: string | null; repoUrl?: string | null }>;
-}
-
-export interface SkillportStateImportResolution {
-  skillId: string;
-  sourcePath?: string | null;
-  resolution: SkillportStateImportResolutionType;
-  renamedSkillId?: string | null;
-}
-
-export interface SkillportStateImportedSkill {
-  sourcePath: string;
-  importedSkillId: string;
-  skillName: string;
-}
-
-export interface SkillportStateImportFailure {
-  skillId: string;
-  sourcePath?: string | null;
-  error: string;
-}
-
-export interface SkillportStateImportResult {
-  sourcesAdded: number;
-  sourcesSkipped: number;
-  importedSkills: SkillportStateImportedSkill[];
-  skippedSkills: string[];
-  failedSkills: SkillportStateImportFailure[];
-  tagsRestored: number;
-  cancelled?: boolean;
-}
+export type {
+  SkillportStateExportedTarget,
+  SkillportStateImportFailure,
+  SkillportStateImportPreview,
+  SkillportStateImportPreviewSummary,
+  SkillportStateImportResolution,
+  SkillportStateImportResolutionType,
+  SkillportStateImportResult,
+  SkillportStateImportedSkill,
+  SkillportStatePortabilityJob,
+  SkillportStatePortabilityJobStatus,
+  SkillportStatePortabilityPhase,
+  SkillportStatePortabilityProgressPayload,
+  SkillportStateSkillPreview,
+  SkillportStateSkillStatus,
+  SkillportStateSourcePreview,
+  SkillportStateSourceStatus,
+} from "./portableState";
 
 export type {
   DuplicateResolution,

@@ -8,6 +8,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
+use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -26,7 +27,43 @@ const SNAPSHOT_DOWNLOAD_CONCURRENCY: usize = 4;
 const DEFAULT_SNAPSHOT_CACHE_MAX_ENTRIES: usize = 8;
 const DEFAULT_SNAPSHOT_CACHE_MAX_BYTES: u64 = 256 * 1024 * 1024;
 
-pub(crate) type SharedGitHubSnapshots = HashMap<String, Arc<GitHubRepoSnapshot>>;
+pub(crate) type SharedGitHubSnapshots = HashMap<String, Arc<CentralUpdateRepositorySnapshot>>;
+
+/// Immutable repository identity plus the bounded bytes acquired for one
+/// Central Update refresh. The display branch remains in the cache key; this
+/// value proves which commit and repository digest produced the inventory.
+#[derive(Debug)]
+pub(crate) struct CentralUpdateRepositorySnapshot {
+    pub(crate) resolved_commit_sha: String,
+    pub(crate) snapshot_digest: String,
+    snapshot: Arc<GitHubRepoSnapshot>,
+}
+
+impl CentralUpdateRepositorySnapshot {
+    pub(crate) fn new(
+        resolved_commit_sha: String,
+        snapshot_digest: String,
+        snapshot: impl Into<Arc<GitHubRepoSnapshot>>,
+    ) -> Self {
+        Self {
+            resolved_commit_sha,
+            snapshot_digest,
+            snapshot: snapshot.into(),
+        }
+    }
+
+    pub(crate) fn matches_identity(&self, commit_sha: &str, snapshot_digest: &str) -> bool {
+        self.resolved_commit_sha == commit_sha && self.snapshot_digest == snapshot_digest
+    }
+}
+
+impl Deref for CentralUpdateRepositorySnapshot {
+    type Target = GitHubRepoSnapshot;
+
+    fn deref(&self) -> &Self::Target {
+        &self.snapshot
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 struct SnapshotCacheLimits {
@@ -91,7 +128,7 @@ struct SnapshotCacheState {
 }
 
 struct CachedGitHubSnapshot {
-    snapshot: Arc<GitHubRepoSnapshot>,
+    snapshot: Arc<CentralUpdateRepositorySnapshot>,
     retained_bytes: u64,
     cached_at: chrono::DateTime<chrono::Utc>,
     last_access_seq: u64,
@@ -113,7 +150,7 @@ impl Default for CentralUpdateSnapshotCache {
 }
 
 impl CentralUpdateSnapshotCache {
-    pub(crate) fn get_fresh(&self, key: &str) -> Option<Arc<GitHubRepoSnapshot>> {
+    pub(crate) fn get_fresh(&self, key: &str) -> Option<Arc<CentralUpdateRepositorySnapshot>> {
         self.get_fresh_at(key, chrono::Utc::now())
     }
 
@@ -121,7 +158,7 @@ impl CentralUpdateSnapshotCache {
         &self,
         key: &str,
         now: chrono::DateTime<chrono::Utc>,
-    ) -> Option<Arc<GitHubRepoSnapshot>> {
+    ) -> Option<Arc<CentralUpdateRepositorySnapshot>> {
         match self.state.lock() {
             Ok(mut state) => {
                 prune_expired_cache_entries(&mut state, self.limits.ttl, now);
@@ -131,8 +168,8 @@ impl CentralUpdateSnapshotCache {
                     Arc::clone(&cached.snapshot)
                 })
             }
-            Err(error) => {
-                tracing::warn!(error = %error, "Central update snapshot cache lock is poisoned during read");
+            Err(_error) => {
+                tracing::warn!("Central update snapshot cache lock is poisoned during read");
                 None
             }
         }
@@ -141,7 +178,7 @@ impl CentralUpdateSnapshotCache {
     pub(crate) fn insert(
         &self,
         key: String,
-        snapshot: impl Into<Arc<GitHubRepoSnapshot>>,
+        snapshot: impl Into<Arc<CentralUpdateRepositorySnapshot>>,
     ) -> Result<SnapshotCacheInsertOutcome, GithubImportError> {
         self.insert_at(key, snapshot.into(), chrono::Utc::now())
     }
@@ -149,7 +186,7 @@ impl CentralUpdateSnapshotCache {
     fn insert_at(
         &self,
         key: String,
-        snapshot: Arc<GitHubRepoSnapshot>,
+        snapshot: Arc<CentralUpdateRepositorySnapshot>,
         now: chrono::DateTime<chrono::Utc>,
     ) -> Result<SnapshotCacheInsertOutcome, GithubImportError> {
         let retained_bytes = snapshot.retained_bytes()?;
@@ -217,8 +254,8 @@ impl CentralUpdateSnapshotCache {
                 );
                 Ok(SnapshotCacheInsertOutcome::Cached)
             }
-            Err(error) => {
-                tracing::warn!(error = %error, "Central update snapshot cache lock is poisoned during insert");
+            Err(_error) => {
+                tracing::warn!("Central update snapshot cache lock is poisoned during insert");
                 Ok(SnapshotCacheInsertOutcome::CurrentUseOnly)
             }
         }
@@ -227,8 +264,8 @@ impl CentralUpdateSnapshotCache {
     pub fn clear(&self) {
         match self.state.lock() {
             Ok(mut state) => *state = SnapshotCacheState::default(),
-            Err(error) => {
-                tracing::warn!(error = %error, "Central update snapshot cache lock is poisoned during clear");
+            Err(_error) => {
+                tracing::warn!("Central update snapshot cache lock is poisoned during clear");
             }
         }
     }
@@ -404,7 +441,19 @@ pub(crate) async fn prepare_snapshots_for_repo_refs_collecting_failures(
             let client = client.clone();
             let auth = auth.clone();
             async move {
-                github_import::download_repo_snapshot(&client, &repo, auth.as_deref()).await
+                let resolved_commit_sha =
+                    github_import::resolve_commit_sha(&client, &repo, auth.as_deref()).await?;
+                let pinned_repo = github_import::pinned_repo_ref(&repo, &resolved_commit_sha);
+                let snapshot =
+                    github_import::download_repo_snapshot(&client, &pinned_repo, auth.as_deref())
+                        .await?;
+                let snapshot_digest =
+                    github_import::repository_snapshot_digest_from_local(&snapshot);
+                Ok(CentralUpdateRepositorySnapshot::new(
+                    resolved_commit_sha,
+                    snapshot_digest,
+                    snapshot,
+                ))
             }
         },
     )
@@ -421,7 +470,7 @@ async fn prepare_snapshots_for_repo_refs_collecting_failures_with_downloader<D, 
 ) -> Result<SnapshotAcquisition, CentralUpdatesError>
 where
     D: Fn(GitHubRepoRef) -> F + Clone,
-    F: Future<Output = Result<GitHubRepoSnapshot, GithubImportError>>,
+    F: Future<Output = Result<CentralUpdateRepositorySnapshot, GithubImportError>>,
 {
     let mut seen = HashSet::new();
     let mut ordered_repos = Vec::new();

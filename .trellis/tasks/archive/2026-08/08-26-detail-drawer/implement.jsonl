@@ -1,0 +1,7 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend layer routing for component, state, IPC and accessibility rules."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Doc, reveal and placement failures require visible inline feedback, safe formatting and retry clearing."}
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Doc and reveal calls must go through the typed store IPC adapter with command-routed fixtures."}
+{"file":".trellis/spec/frontend/skill-card-scenarios.md","reason":"Detail and manage-links entry callbacks extend only the explicit skillsCli card variant."}
+{"file":".trellis/spec/frontend/icon-control-hit-area.md","reason":"Drawer close and compact action controls require 40px hit areas and focus-visible behavior."}
+{"file":".trellis/spec/backend/skills-cli-global.md","reason":"Doc, placement and reveal behavior must preserve Local lock ownership and renderer authority boundaries."}
+{"file":".trellis/tasks/08-26-skills-cli-redesign/research/design-contract.md","reason":"Canonical drawer, placement, responsive, focus and Escape contract for this task tree."}

@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端层入口与 Pre-Development Checklist"}
+{"file": ".trellis/spec/frontend/skill-usage-state.md", "reason": "热力图 112 格、键盘漫游、unused unlink、筛选排序契约必须保持"}
+{"file": ".trellis/spec/frontend/icon-control-hit-area.md", "reason": "Unused 行操作热区不得被 contain 裁切"}
+{"file": ".trellis/tasks/08-16-usage-maximize-layout-jank/research/resize-jank-diagnosis.md", "reason": "最大化卡顿的根因链与排除项"}

@@ -3,11 +3,11 @@ import { useTranslation } from "react-i18next";
 
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import {
+  PluginSourceChip,
   ProjectSourceBadge,
   ReadOnlyBadge,
   SourceChip,
   SourceIndicator,
-  SourceOriginBadge,
 } from "@/components/skill/SkillCardBadges";
 import { cn } from "@/lib/utils";
 import type { CentralSkillUpdateState, ClaudeSourceKind } from "@/types";
@@ -16,6 +16,7 @@ export interface SkillCardMetaProps {
   originKind?: ClaudeSourceKind;
   isReadOnly?: boolean;
   sourceType?: "symlink" | "copy" | "native";
+  installOrigin?: "central" | "standalone" | "skillsCli";
   originBadge?: { kind: "central" | "project" | string; label: string };
   usageBadge?: number;
   isCentral?: boolean;
@@ -37,6 +38,7 @@ export function SkillCardMeta({
   originKind,
   isReadOnly,
   sourceType,
+  installOrigin,
   originBadge,
   usageBadge,
   isCentral,
@@ -51,9 +53,12 @@ export function SkillCardMeta({
   const { t } = useTranslation();
   return (
     <div className="flex flex-nowrap items-center gap-1.5 overflow-hidden empty:hidden">
-      {originKind && <SourceOriginBadge originKind={originKind} />}
-      {isReadOnly && <ReadOnlyBadge />}
-      {sourceType && <SourceIndicator sourceType={sourceType} />}
+      {originKind === "plugin" ? (
+        <PluginSourceChip />
+      ) : sourceType ? (
+        <SourceIndicator sourceType={sourceType} origin={installOrigin} />
+      ) : null}
+      {isReadOnly && originKind !== "plugin" && <ReadOnlyBadge />}
       {originBadge && <ProjectSourceBadge originBadge={originBadge} />}
 
       {typeof usageBadge === "number" && usageBadge > 0 && (
@@ -64,15 +69,15 @@ export function SkillCardMeta({
             days: 30,
             defaultValue: `${usageBadge} calls in last 30 days`,
           })}
-          className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
+          className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground"
         >
           <span className="tabular-nums">
             {t("skillUsage.badge.countShort", { count: usageBadge })}
           </span>
-          <span aria-hidden="true" className="text-primary/45">
+          <span aria-hidden="true" className="text-muted-foreground">
             ·
           </span>
-          <span className="tabular-nums text-primary-text">
+          <span className="tabular-nums">
             {t("skillUsage.badge.periodShort", { days: 30 })}
           </span>
         </span>

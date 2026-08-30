@@ -1,0 +1,7 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend layer index and routing for all UI implementation rules."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Required visible feedback, reviewed backend errors, retry and partial-success behavior."}
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Skills CLI store must remain the sole typed IPC owner and tests must mock by command name."}
+{"file":".trellis/spec/frontend/skill-card-scenarios.md","reason":"Selection and action props must extend the explicit skillsCli card variant without a second card."}
+{"file":".trellis/spec/frontend/icon-control-hit-area.md","reason":"Batch bar, menu and card icon controls require 40px hit areas and focus-visible behavior."}
+{"file":".trellis/spec/backend/skills-cli-global.md","reason":"Frontend mutations and export must match the Local-only ownership, job and placement backend contract."}
+{"file":".trellis/tasks/08-26-skills-cli-redesign/research/design-contract.md","reason":"Canonical task-tree contract for placement states, safe uninstall, Escape, toast and export surfaces."}

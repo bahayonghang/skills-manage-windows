@@ -1,0 +1,14 @@
+{"file": ".trellis/tasks/08-19-update-center-import-snapshot-auth/research/root-cause.md", "reason": "独立复核：固定现场时间线、调用链、token 当前状态和已排除原因。"}
+{"file": ".trellis/spec/backend/update-inventory-retry.md", "reason": "独立复核：保持 repository slice、snapshot 复用和 pending inventory 的重试语义。"}
+{"file": ".trellis/spec/backend/central-update-inventory-progress.md", "reason": "独立复核：保持按 repository 去重 acquisition、partial failure、进度和持久化契约。"}
+{"file": ".trellis/tasks/08-19-update-center-import-snapshot-auth/research/immutable-snapshot-contract.md", "reason": "独立复核：核对 immutable commit、snapshot digest、snapshot-only import 与受信 GitHub endpoint 契约；冲突时回读权威规范全文。"}
+{"file": ".trellis/spec/backend/central-update-batching.md", "reason": "独立复核：保持 Apply partial success、mutation guard 和 item failure 控制面。"}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "独立复核：用 typed variant 和稳定 IPC code 表达 auth/provenance 失败。"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "独立复核：约束 token、URL、路径、HTTP detail 和 workspace 信息不泄漏。"}
+{"file": ".trellis/spec/backend/database-migrations.md", "reason": "独立复核：追加 immutable nullable provenance migration 并保持 checksum/preflight/rollback。"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "独立复核：按 stable code 呈现可恢复的 Update Center 双语反馈。"}
+{"file": ".trellis/spec/frontend/async-ui-test-stability.md", "reason": "独立复核：约束异步 Apply toast 与 inventory 状态的稳定测试。"}
+{"file": ".trellis/spec/quality/test-suite-layout.md", "reason": "独立复核：把 backend、DB、remote runner、IPC 和 frontend 回归放入既有测试入口。"}
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "独立复核：执行定向验证、生成物检查和最终 just ci 门禁。"}
+{"file": "docs/agents/security-and-shared-state.md", "reason": "独立复核：保持 SecretStore、共享 Central service 和远端缓存安全边界。"}
+{"file": "docs/agents/build-and-test.md", "reason": "独立复核：使用仓库规定的 Rust、前端、docs 和 just ci 验证命令。"}

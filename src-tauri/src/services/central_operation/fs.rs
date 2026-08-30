@@ -15,6 +15,10 @@ use super::{CentralOperationError, DeleteManifest, ManagedPath, MANIFEST_VERSION
 #[path = "fs_dedupe_tests.rs"]
 mod dedupe_tests;
 
+#[cfg(test)]
+#[path = "fs_hash_tests.rs"]
+mod hash_tests;
+
 const REMOTE_STAGE_DELETE: &str = r#"
 set -eu
 operation_id=$1
@@ -567,7 +571,9 @@ fn fingerprint_path_blocking(path: &Path) -> Result<Option<String>, CentralOpera
             code: "unsupported_path_type",
         });
     }
-    Ok(Some(format!("{:x}", hasher.finalize())))
+    Ok(Some(crate::hashing::encode_lower_hex(
+        hasher.finalize().as_ref(),
+    )))
 }
 
 fn hash_file(path: &Path, hasher: &mut Sha256) -> Result<(), CentralOperationError> {
@@ -587,7 +593,7 @@ fn hash_file(path: &Path, hasher: &mut Sha256) -> Result<(), CentralOperationErr
 }
 
 fn path_token(path: &str) -> String {
-    let digest = format!("{:x}", Sha256::digest(path.as_bytes()));
+    let digest = crate::hashing::encode_lower_hex(Sha256::digest(path.as_bytes()).as_ref());
     digest[..16].to_string()
 }
 

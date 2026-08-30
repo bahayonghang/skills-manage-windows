@@ -5,7 +5,7 @@
 ## 字典如何构建
 
 ```text
-[scripts/build-ipc-dict.mjs] ── 读取 src-tauri/src/commands/**/*.rs
+[scripts/docs/build-ipc-dict.mjs] ── 读取 src-tauri/src/commands/**/*.rs
                                     │
                                     ▼
                          抽出 #[tauri::command]
@@ -23,7 +23,8 @@
 
 - **命名。** Rust 蛇形函数名与 JS `invoke()` 入参 1:1 对应：`invoke('scan_all_skills', {})`。
 - **入参。** Tauri 通过 serde 把 JS 驼峰键映射为蛇形参数；传普通对象即可。
-- **返回。** 所有命令返回 `Result<T, String>`。前端把字符串当作可见错误展示；详细诊断走 Runtime Log，而不是 `operation_logs`。
+- **返回。** 可失败命令返回结构化 `IpcResult<T>` envelope，包含已审查 code、固定公开 message、retryable
+  和可选 correlation UUID。详细诊断进入 Runtime Log；raw source error 不会成为用户提示或 Operation Log 字段。
 - **注入参数。** `State<AppState>`、`Window`、`AppHandle`、`Emitter` 由 Tauri 注入，JS 调用时不传。
 
 ## 真相源
@@ -35,7 +36,9 @@
 - 业务入参（已过滤 Tauri 注入参数）
 - 返回类型
 - 函数上方第一段 `///` 文档注释
+- registry 派生的日志策略、Operation category/default phase/lifecycle，或明确的 runtime/exclusion reason
+- Operation、Runtime-only 与 excluded 命令的审计证据契约
 
 <!--@include: ../../architecture/_generated/ipc-commands.md-->
 
-Last reviewed: 2026-05-04
+Last reviewed: 2026-08-27

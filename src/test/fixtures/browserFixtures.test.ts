@@ -125,6 +125,14 @@ describe("browser fixtures drive real store loaders", () => {
     const state = useOperationLogStore.getState();
     expect(state.entries.length).toBeGreaterThan(0);
     expect(state.error).toBeNull();
+
+    await useOperationLogStore
+      .getState()
+      .loadLogs({ operationId: "fixture-log-scan" });
+    expect(useOperationLogStore.getState().entries).toHaveLength(1);
+    expect(useOperationLogStore.getState().entries[0]?.id).toBe(
+      "fixture-log-scan",
+    );
   });
 
   it("runtimeLogStore.loadFiles lists fixture files", async () => {

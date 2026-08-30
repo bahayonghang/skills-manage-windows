@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "assert adversarial token/URL/path seeds never enter Operation Log details or error_summary"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "assert drawer and toast render reviewed errorCode via formatBackendError"}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "assert new github_import codes exist on ipc_error_code and public_message_for_code together"}

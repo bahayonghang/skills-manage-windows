@@ -1,4 +1,8 @@
-export const CENTRAL_SKILL_CARD_MIN_WIDTH = 220;
+// 最小列宽不是"放得下"而是"标题可读"：卡片标题行固定开销 ≈218px
+// （padding 28 + checkbox 30 + 4 个 shrink-0 动作图标 152 + gap 8），
+// 320px 给技能名留下 ≈100px（≈12 字符 @text-sm semibold）。
+// 更窄的卡片由 UnifiedSkillCard 的容器查询把动作图标降级为 hover/focus 揭示。
+export const CENTRAL_SKILL_CARD_MIN_WIDTH = 320;
 export const CENTRAL_SKILL_CARD_MAX_COLUMNS = 4;
 export const CENTRAL_SKILL_CARD_GRID_GAP = 16;
 

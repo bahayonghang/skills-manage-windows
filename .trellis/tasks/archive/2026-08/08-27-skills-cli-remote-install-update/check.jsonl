@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "AC1/AC2/AC5/AC8 核对远端 argv 表禁止项、来源白名单、fail-closed 语义与 install_origin 能力矩阵条目"}
+{"file": ".trellis/spec/backend/process-supervision.md", "reason": "AC3 核对远端超时与 stdout 上限可经 ProcessPolicy::for_tests 等价手段验证，超时返回 skills_cli.timeout"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "AC6/AC10 核对 GitHub token 不进远端 argv/环境变量/落盘，stderr 与 URL 哨兵不进日志"}
+{"file": ".trellis/spec/backend/fs-db-operation-journal.md", "reason": "AC7 三个 journal 阶段各注入一次故障，recovery 可重试并收敛"}
+{"file": ".trellis/spec/backend/operation-observability.md", "reason": "远端 apply 的操作日志字段与进度事件需符合既有观测约定"}
+{"file": ".trellis/spec/backend/test-support.md", "reason": "AC1-AC7 的远端 fake runner、无外网模拟与故障注入需复用既有测试支撑设施"}
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "AC11 命令签名变更后的 IPC 适配层与 docs:gen 生成物一致性"}
+{"file": ".trellis/spec/quality/observability-gates.md", "reason": "AC11 新增/改签名命令需登记 ipc_registry 日志策略并通过 docs:gen:check"}
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "AC12 just ci 通过；真实 SSH 主机行为标记 UNVERIFIED"}
+{"file": ".trellis/spec/quality/index.md", "reason": "质量层 Quality Check 入口"}

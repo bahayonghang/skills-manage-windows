@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/frontend/skill-card-scenarios.md", "reason": "Variant negatives must stay live"}
+{"file": ".trellis/spec/frontend/platform-origin-classification.md", "reason": "Origin nav stays axis A; plugin filter is axis B"}
+{"file": ".trellis/spec/backend/skill-usage-analytics.md", "reason": "Windows must stay labeled; days=0 is not all-history"}
+{"file": ".trellis/spec/frontend/typography-tokens.md", "reason": "Chip contrast and type ladder"}
+{"file": ".trellis/spec/quality/test-suite-layout.md", "reason": "Tests live under src/test"}
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "just ci after IPC change"}
+{"file": ".trellis/tasks/08-17-platform-usage-rank-origin/prd.md", "reason": "Acceptance criteria"}

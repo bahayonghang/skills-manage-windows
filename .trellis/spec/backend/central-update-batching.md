@@ -2,7 +2,7 @@
 
 ## 1. Scope / Trigger
 
-Apply this contract when changing Central skill update writes or copy-install refreshes across Local, SSH, and WSL. The goal is to preserve per-skill semantics while bounding remote process and round-trip counts.
+Apply this contract when changing Central skill update writes, copy-install refreshes, or Update Center Platform leftover apply across Local, SSH, and WSL. The goal is to preserve per-item semantics while bounding remote process and round-trip counts.
 
 ## 2. Signatures
 
@@ -26,6 +26,7 @@ Normal update, force update, and force mirror must route through `update_skills_
 
 - Remote Central writes group by target parent and use chunks of 16.
 - Remote copy refresh uses chunks of 32 and deduplicates installed targets before execution.
+- Remote Platform leftover apply validates every path first, groups by unique POSIX path, and deletes with `REMOTE_LEFTOVER_DELETE_SCRIPT` in chunks of 256. Ten Universal Agent leftover groups that share `~/.agents/skills/<skill>` are one remote path.
 - Batch archives contain `.skillport-manifest.tsv` plus one generated numeric directory per skill.
 - Remote execution remains behind `ConnectedRemoteTarget` and `CommandRunner`.
 - Each skill receives a durable operation ID and manifest before staging. Cancellation before staging returns cancelled; after staging starts the Saga settles or leaves a recoverable row.
@@ -71,6 +72,7 @@ Normal update, force update, and force mirror must route through `update_skills_
 - Assert duplicate selected IDs keep first-request ownership even when that skill's pending recovery fails.
 - Fake SSH/WSL delete assertions include target ID/kind, one shared connection, and exact command counts so filtering cannot add hidden recovery round trips.
 - Keep an ignored Windows WSL `/tmp` benchmark for a fixed 10-skill fixture; never benchmark against `~/.skillsmanage`.
+- FakeRunner leftover apply: 10 shared-root groups → 1 call; mixed OK/MISSING/ERR keeps partial success; guards start 0 calls.
 
 ## 7. Wrong vs Correct
 
@@ -82,4 +84,70 @@ for update in updates {
 
 // Correct: one orchestration and compound transport hooks.
 let outcomes = update_skills_batch(pool, fs, plans, cancel).await;
+```
+
+## Scenario: Remote Platform leftover apply
+
+### 1. Scope / Trigger
+
+Changing `apply_remove_deleted_platform_copies_step` or any SSH/WSL leftover delete path. Leftover inventory groups are `(agent_id, skill_id)`. Universal Agents share `~/.agents/skills/`, so one physical directory can appear many times.
+
+### 2. Signatures
+
+```rust
+apply_remove_deleted_platform_copies_step(
+    pool, active_target, removals, result, allowed_agent_ids, cancel,
+)
+
+delete_leftover_installations_and_observations_for_paths(
+    pool, path_aliases, payload_pairs,
+)
+```
+
+Implementation lives in `services/central_updates/inventory/leftover_cleanup.rs`. Do not grow leftover logic back into `apply_steps.rs`.
+
+### 3. Contracts
+
+- Local leftovers keep `uninstall_skill`. Remote leftovers do not use `InstallTransport`.
+- Open one `connect_remote_target` per leftover-only apply. Execute through `run_script_cancellable` + `ProcessPolicy::bulk_transfer()`.
+- A path enters the script only after: allowed agent, not `central`, Central still missing, `path == remote_join(agent.global_skills_dir, skill_id)`, and `ensure_remote_child_path`.
+- Script rows are `OK\t<index>`, `MISSING\t<index>`, `ERR\t<index>`. `MISSING` is success.
+- On OK/MISSING, one transaction deletes leftover `skill_installations` and writable non-plugin `agent_skill_observations` for that path, including shared-root sibling platforms that were not in the payload.
+- Cancel before a chunk starts no later chunk.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required outcome |
+| --- | --- |
+| Path fails a remote guard | Failure for that removal; runner call count 0 if no path remains |
+| Script `ERR` for one unique path | Fail only removals that use that path |
+| Protocol missing/duplicate/unknown row | Fail the chunk; do not parse stdout with `error.contains` |
+| Central skill reappears during plan | Skip remote delete for that skill |
+
+### 5. Good / Base / Bad Cases
+
+- Good: 10 Universal Agent groups, one POSIX path → 1 runner call; scan no longer returns that path.
+- Base: one leftover path still uses one script call and keeps per-removal outcomes.
+- Bad: `connect_remote_target` + `remove_tree` inside the per-path loop.
+
+### 6. Tests Required
+
+- FakeRunner: shared-root 10-agent payload → 1 call; script stdin is `REMOTE_LEFTOVER_DELETE_SCRIPT`; unique path appears once in argv.
+- Mixed OK/MISSING/ERR keeps partial success and leaves the ERR path in DB.
+- Guard / `..` / platform-root paths start 0 runner calls.
+- Cancel after chunk 1 starts no chunk 2.
+- After OK/MISSING, `scan_deleted_platform_copies_with_pool` does not return the path.
+
+### 7. Wrong vs Correct
+
+```rust
+// Wrong: one ssh.exe per leftover group, even when they share a directory.
+for removal in removals {
+    let conn = connect_remote_target(target).await?;
+    conn.remove_tree(&removal.paths[0]).await?;
+    db::delete_skill_installation(pool, &removal.skill_id, &removal.agent_id).await?;
+}
+
+// Correct: validate, unique-path script, then path-scoped DB cleanup.
+apply_remove_deleted_platform_copies_step(pool, target, removals, result, allowed, cancel).await;
 ```

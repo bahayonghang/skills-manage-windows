@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "核对四个子任务合入后能力矩阵逐条覆盖 doctor/list/link/unlink/remove/install/update/export/leftover"}
+{"file": ".trellis/spec/backend/target-context.md", "reason": "核对每个远端命令入口都先 resolve_target_context 再建传输"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "核对四个子任务的哨兵 token 断言合起来覆盖 stderr、路径与 URL"}
+{"file": ".trellis/spec/backend/central-mutation-lock.md", "reason": "核对远端 guard 为 target-scoped，持有远端 guard 不阻塞 Local 写"}
+{"file": ".trellis/spec/quality/observability-gates.md", "reason": "核对新增/改签名的 skills_cli_* 命令已登记 registry 与日志策略"}
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "每个子任务各自 just ci 通过；任务 PR 目标分支为 dev"}
+{"file": ".trellis/spec/quality/index.md", "reason": "质量层 Quality Check 入口"}
+{"file": ".trellis/tasks/08-27-skills-cli-availability-remote/research/current-state-evidence.md", "reason": "核对 Local 零回归结论仍成立，既有 Skills CLI 断言未被删除"}

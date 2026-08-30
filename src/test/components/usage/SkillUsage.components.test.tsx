@@ -23,6 +23,7 @@ const wrap = (ui: React.ReactNode) => <MemoryRouter>{ui}</MemoryRouter>;
 const initialUsageActions = {
   refresh: useUsageStore.getState().refresh,
   subscribeTargetChanged: useUsageStore.getState().subscribeTargetChanged,
+  subscribeScanCompleted: useUsageStore.getState().subscribeScanCompleted,
 };
 
 const skills: SkillUsageSummary[] = [
@@ -88,6 +89,9 @@ beforeEach(() => {
     recent: [],
     providers: [],
     detail: null,
+    unused: null,
+    unusedLoading: false,
+    unusedError: null,
     scope: null,
     selectedSource: null,
     selectedSkill: null,
@@ -98,6 +102,7 @@ beforeEach(() => {
     refreshError: null,
     usedCachedData: false,
     lastRefreshMs: null,
+    backgroundScanning: false,
     ...initialUsageActions,
   });
   useTargetStore.setState({
@@ -353,6 +358,30 @@ describe("ActivityHeatmap", () => {
     expect(document.body.textContent).toMatch(/多|More/);
     expect(cells[5]).toHaveAttribute("data-level", "5");
   });
+
+  it("uses fixed cell tracks instead of aspect-square plus 1fr columns", () => {
+    const days = buildDays([1, ...new Array(111).fill(0)]);
+    const { rerender } = render(<ActivityHeatmap days={days} />);
+
+    const grid = screen.getByTestId("heatmap-grid");
+    expect(grid.className).toContain("auto-cols-[0.75rem]");
+    expect(grid.className).not.toContain("auto-cols-fr");
+    expect(grid.className).not.toContain("flex-1");
+
+    const cell = screen.getAllByRole("gridcell")[0];
+    expect(cell.className).toContain("size-3");
+    expect(cell.className).not.toContain("aspect-square");
+    expect(cell.className).not.toMatch(/(?:^|\s)w-full(?:\s|$)/);
+
+    rerender(<ActivityHeatmap days={days} compact />);
+    expect(screen.getByTestId("heatmap-grid").className).toContain(
+      "auto-cols-[0.625rem]",
+    );
+    expect(screen.getAllByRole("gridcell")[0].className).toContain("size-2.5");
+    expect(screen.getAllByRole("gridcell")[0].className).not.toContain(
+      "aspect-square",
+    );
+  });
 });
 
 describe("detail and recent actions", () => {
@@ -495,5 +524,79 @@ describe("SkillUsageView", () => {
     expect(
       screen.getByText(/数据源状态|Provider health/).closest("details"),
     ).not.toHaveAttribute("open");
+  });
+
+  it("shows a background-scan hint in the header while a rescan runs", async () => {
+    useUsageStore.setState({
+      overview: {
+        kpis: {
+          totalCalls: 40,
+          uniqueSkills: 3,
+          uniqueProjects: 2,
+          uniqueSources: 2,
+          uniqueSessions: 12,
+        },
+        topSkills: skills,
+        heatmap: [],
+        lastScanMs: Date.now(),
+      },
+      recent: [],
+      providers: [],
+      scope: {
+        targetId: "local",
+        label: "Local",
+        isRemote: false,
+        remoteReachable: false,
+      },
+      lastRefreshMs: Date.now(),
+      backgroundScanning: true,
+      refresh: vi.fn(async () => null),
+      subscribeTargetChanged: vi.fn(async () => () => undefined),
+      subscribeScanCompleted: vi.fn(async () => () => undefined),
+    });
+    const { SkillUsageView } = await import("@/pages/SkillUsageView");
+    render(wrap(<SkillUsageView />));
+
+    expect(screen.getByTestId("background-scan-hint")).toHaveTextContent(
+      /正在后台重新扫描|Refreshing in the background/,
+    );
+    // 缓存页保持可见，无骨架屏回退
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("keeps top-skills height independent of the heatmap and isolates both cards", async () => {
+    useUsageStore.setState({
+      overview: {
+        kpis: {
+          totalCalls: 40,
+          uniqueSkills: 3,
+          uniqueProjects: 2,
+          uniqueSources: 2,
+          uniqueSessions: 12,
+        },
+        topSkills: skills,
+        heatmap: [],
+        lastScanMs: Date.now(),
+      },
+      recent,
+      providers: [],
+    });
+    const { SkillUsageView } = await import("@/pages/SkillUsageView");
+    render(wrap(<SkillUsageView />));
+
+    const topSkills = screen
+      .getByRole("heading", { name: /技能频次|Top skills/ })
+      .closest("section");
+    const heatmap = screen
+      .getByRole("heading", { name: /16 周|16-week/ })
+      .closest("section");
+    const unused = screen
+      .getByRole("heading", { name: /未使用|Unused/ })
+      .closest("section");
+
+    expect(topSkills?.className).toContain("contain-layout");
+    expect(topSkills?.className).not.toContain("row-span");
+    expect(heatmap?.className).toContain("contain-layout");
+    expect(unused?.className).not.toContain("contain-layout");
   });
 });

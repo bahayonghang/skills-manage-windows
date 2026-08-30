@@ -304,6 +304,28 @@ describe("GitHubRepoImportWizard", () => {
     expect(message).not.toHaveTextContent("private branch detail");
   });
 
+  it("localizes a coded no-importable-skills failure without the internal fallback", async () => {
+    renderWizard({
+      preview: null,
+      previewError: "github_import.no_importable_skills:private repo detail",
+    });
+
+    const message = await screen.findByText(
+      /该仓库没有可导入的技能|This repository has no importable skill/i,
+    );
+    expect(message).toBeInTheDocument();
+    expect(message).not.toHaveTextContent("private repo detail");
+    expect(
+      screen.queryByText(/See runtime logs for details/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("github-import-repreview-hint"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Personal Access Token|个人访问令牌/i),
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps uncoded preview failures on their historical message", async () => {
     renderWizard({
       preview: null,

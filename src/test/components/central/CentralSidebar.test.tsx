@@ -101,12 +101,30 @@ const facetCounts: FacetCounts = {
   },
 };
 
+// 侧栏 pin 依赖 useMediaQuery（按"窄屏"表述，<1400px 命中）；jsdom polyfill 默认
+// matches:false 即宽屏，只有窄窗口用例需要显式 stub 为命中。
+// 注意不能用 vi.spyOn：mockRestore 会连带清掉 setup polyfill（vi.fn）的实现；
+// stubGlobal/unstubAllGlobals 才能原样恢复。
+function stubNarrowViewport() {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: true,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+}
+
 function renderSidebar(
   overrides: Partial<{
     repositories: SkillRepositoryWithStats[];
     selectedRepos: string[];
     onToggleRepositoryPin: (repository: SkillRepositoryWithStats) => void;
     onSyncNewSource: () => void;
+    narrowViewport: boolean;
   }> = {}
 ) {
   const handlers = {
@@ -121,6 +139,7 @@ function renderSidebar(
 
   // M4：sidebar 默认折叠为 48px rail。本套测试断言展开后的 facet 内容，
   // 通过 localStorage 提前 pin，使首次渲染即处于 expanded 状态。
+  if (overrides.narrowViewport) stubNarrowViewport();
   window.localStorage.setItem("central.sidebarPinned", "true");
 
   render(
@@ -155,7 +174,21 @@ function renderSidebar(
 
 describe("CentralSidebar", () => {
   beforeEach(() => {
+    vi.unstubAllGlobals();
     window.localStorage.clear();
+  });
+
+  it("ignores the pinned preference below the pin breakpoint and hides the pin toggle", () => {
+    const { sidebar } = renderSidebar({ narrowViewport: true });
+
+    // localStorage 已写入 pin（renderSidebar 默认行为），但窗口 <1400px 时强制收纳轨
+    expect(sidebar).toHaveAttribute("data-pinned", "false");
+    expect(sidebar).toHaveStyle("width: 48px");
+
+    // hover 仍可 overlay 展开，但展开面板不再提供 pin 按钮
+    fireEvent.mouseEnter(sidebar);
+    expect(sidebar).toHaveAttribute("data-expanded", "true");
+    expect(within(sidebar).queryByTestId("sidebar-pin-toggle")).not.toBeInTheDocument();
   });
 
   it("renders a distinct global expand and collapse control", () => {

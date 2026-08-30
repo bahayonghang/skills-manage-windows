@@ -24,6 +24,7 @@ import { VirtualizedGrid } from "@/components/ui/virtualized-grid";
 import { usePlatformSkillSelection } from "@/hooks/usePlatformSkillSelection";
 import { useSkillExplanationSummaries } from "@/hooks/useSkillExplanationSummaries";
 import { useSkillCallCounts } from "@/hooks/useSkillCallCounts";
+import { useSkillUsageStats } from "@/hooks/useSkillUsageStats";
 import { createPlatformBatchUninstallRequest, getFailedBatchUninstallActionKeys, getPlatformSkillActionKey, getPlatformSkillRowKey, getPlatformSkillSummaryKeys } from "@/lib/platformBatchActions";
 import { formatPathForDisplay } from "@/lib/path";
 import { cn } from "@/lib/utils";
@@ -42,6 +43,7 @@ import {
 import {
   derivePlatformOriginNav,
   derivePlatformSkillRows,
+  getPlatformSkillOrigin,
   type PlatformGroupBy,
   type PlatformOriginFilter,
   type PlatformSortDirection,
@@ -96,8 +98,8 @@ export function PlatformView() {
   const [originFilter, setOriginFilter] = useState<PlatformOriginFilter>({
     kind: "all",
   });
-  const [sortField, setSortField] = useState<PlatformSortField>("name");
-  const [sortDirection, setSortDirection] = useState<PlatformSortDirection>("asc");
+  const [sortField, setSortField] = useState<PlatformSortField>("callCount");
+  const [sortDirection, setSortDirection] = useState<PlatformSortDirection>("desc");
   const [groupBy, setGroupBy] = useState<PlatformGroupBy>("none");
   const [installTargetSkill, setInstallTargetSkill] = useState<SkillWithLinks | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -266,29 +268,26 @@ export function PlatformView() {
     [skills]
   );
   const usageCounts = useSkillCallCounts(skillNamesForUsage, 30);
+  const { stats: usageStats, ready: usageReady } = useSkillUsageStats(skillNamesForUsage, {
+    days: null,
+  });
+  const showSourceFilter = isClaudePage || sourceCounts.plugin > 0;
   const platformRows = useMemo(
     () =>
       derivePlatformSkillRows({
         skills,
         searchQuery,
-        sourceFilter: isClaudePage ? sourceFilter : "all",
+        sourceFilter: showSourceFilter ? sourceFilter : "all",
         originFilter,
         sort: { field: sortField, direction: sortDirection },
         groupBy,
         labels: platformGroupLabels,
-        usageCounts,
+        usageStats,
+        usageReady,
       }),
     [
-      groupBy,
-      isClaudePage,
-      originFilter,
-      platformGroupLabels,
-      searchQuery,
-      skills,
-      sortDirection,
-      sortField,
-      sourceFilter,
-      usageCounts,
+      groupBy, originFilter, platformGroupLabels, searchQuery, showSourceFilter,
+      skills, sortDirection, sortField, sourceFilter, usageReady, usageStats,
     ]
   );
   const sourceFilteredSkills = platformRows.sourceFilteredSkills;
@@ -517,9 +516,11 @@ export function PlatformView() {
       aiSummary={getAiSummary(skill)}
       sourceType={skill.link_type as "symlink" | "copy" | "native"}
       originKind={skill.source_kind ?? null}
+      installOrigin={getPlatformSkillOrigin(skill)}
       isReadOnly={skill.is_read_only ?? false}
       publisher={skill.repository?.name}
       usageBadge={usageCounts?.[skill.name]}
+      lifetimeUsage={usageReady ? platformRows.lifetimeUsageByRowKey[getPlatformSkillRowKey(skill)] : undefined}
       checkbox={
         !skill.is_read_only
           ? {
@@ -574,12 +575,10 @@ export function PlatformView() {
         </p>
       </div>
 
-      {isClaudePage && (
+      {showSourceFilter && (
         <div
           role="tablist"
-          aria-label={t("platform.sourceFilterTabsLabel", {
-            defaultValue: i18n.language.startsWith("zh") ? "Claude 来源筛选" : "Claude source filters",
-          })}
+          aria-label={t("platform.sourceFilterTabsLabel")}
           className="flex items-center gap-1 px-6 py-3 border-b border-border"
         >
           {sourceTabs.map((tab) => (

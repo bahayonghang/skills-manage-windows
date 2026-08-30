@@ -17,17 +17,21 @@ mod pagination_performance_tests;
 #[cfg(test)]
 mod pagination_tests;
 #[cfg(test)]
+mod reset_tests;
+#[cfg(test)]
 mod tests;
 
 pub use error::CentralSkillsError;
 
+pub use crate::services::central_operation::PendingDeleteRecoveryPreview;
 pub use delete::{
     delete_central_skill_impl, delete_central_skill_remote_impl, delete_central_skill_ssh_impl,
     delete_central_skills_impl, delete_central_skills_remote_impl, delete_central_skills_ssh_impl,
     delete_skill_repository_impl, delete_skill_repository_remote_impl,
-    delete_skill_repository_ssh_impl, preview_delete_central_skills_impl,
-    preview_delete_central_skills_ssh_impl, preview_delete_skill_repository_impl,
-    preview_delete_skill_repository_ssh_impl,
+    delete_skill_repository_ssh_impl, list_unknown_source_central_skill_ids,
+    preview_delete_central_skills_impl, preview_delete_central_skills_ssh_impl,
+    preview_delete_skill_repository_impl, preview_delete_skill_repository_ssh_impl,
+    preview_reset_unknown_source_skills_impl, reset_unknown_source_skills_impl,
 };
 pub use files::{
     list_directory_tree_for_target_impl, open_in_file_manager_for_target_impl,
@@ -42,5 +46,6 @@ pub use types::{
     BatchDeleteCentralSkillResult, BatchDeleteCentralSkillSuccess, CentralSkillsPage,
     CentralSkillsPageRequest, DeleteCentralSkillPreview, DeleteCentralSkillResult,
     DeleteSkillRepositoryPreview, DeleteSkillRepositoryResult, DirectoryTreeEntry,
-    FailedCentralSkillDelete, SkillDetail, SkillInstallationDetail, SkillRef, SkillWithLinks,
+    FailedCentralSkillDelete, ResetUnknownSourceSkillsPreview, SkillDetail,
+    SkillInstallationDetail, SkillRef, SkillWithLinks,
 };

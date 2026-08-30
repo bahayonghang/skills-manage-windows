@@ -42,7 +42,7 @@ Repo 收口原始 `sqlx::query()`，上层只接受 `&DbPool` 调 repo 方法。
 
 ## 字段参考
 
-字段细节由 `scripts/build-schema-table.mjs` 从 `src-tauri/src/db/schema/*.rs` 扫描生成。
+字段细节由 `scripts/docs/build-schema-table.mjs` 从 `src-tauri/src/db/schema/*.rs` 扫描生成。
 
 <!--@include: ../../architecture/_generated/data-model.md-->
 

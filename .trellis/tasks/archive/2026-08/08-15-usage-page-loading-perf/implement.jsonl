@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/skill-usage-analytics.md", "reason": "skill_calls 事实纯度、provider 刷新、source 口径契约——增量扫描与预过滤的红线"}
+{"file": ".trellis/spec/backend/database-migrations.md", "reason": "migration 5 新表的 descriptor/checksum/fixture 规则"}
+{"file": ".trellis/spec/backend/spawn-blocking-io.md", "reason": "解析移入 blocking 池的约定"}
+{"file": ".trellis/spec/frontend/skill-usage-state.md", "reason": "缓存优先返回后前端 store/事件/骨架屏契约"}
+{"file": ".trellis/tasks/08-15-usage-page-loading-perf/design.md", "reason": "本任务技术设计"}

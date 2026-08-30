@@ -247,6 +247,72 @@ pub(crate) async fn import_github_repo_skills_remote_with_auth(
     result
 }
 
+/// Import Central Update selections through a remote workspace created from a
+/// persisted full commit SHA. The workspace manifest must reproduce the
+/// repository digest which generated the pending inventory; no branch is
+/// resolved in this path.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn import_github_repo_skills_remote_from_pinned_snapshot(
+    pool: &DbPool,
+    active_target: &ActiveTarget,
+    repo: &GitHubRepoRef,
+    resolved_commit_sha: &str,
+    expected_snapshot_digest: &str,
+    selections: Vec<GitHubSkillImportSelection>,
+    app: Option<&AppHandle>,
+    auth: Option<&str>,
+) -> Result<GitHubRepoImportResult, GithubImportError> {
+    validate_commit_sha(resolved_commit_sha)?;
+    let pinned_repo = pinned_repo_ref(repo, resolved_commit_sha);
+    let connection = connect_remote_target(active_target)
+        .await
+        .map_err(|error| GithubImportError::Remote(error.to_string()))?;
+    cleanup_expired_preview_snapshots_for_connection(&connection).await;
+    let workspace = create_remote_preview_workspace(&connection, &pinned_repo, auth).await?;
+
+    let outcome = async {
+        let repository_files =
+            remote_preview_repository_files(&connection, &workspace.remote_repo_dir).await?;
+        if repository_snapshot_digest(&repository_files) != expected_snapshot_digest {
+            return Err(GithubImportError::PreviewSnapshotIntegrity);
+        }
+        let content_digest_by_source_path = selections
+            .iter()
+            .filter(|selection| selection.resolution != DuplicateResolution::Skip)
+            .map(|selection| {
+                let source_path = normalize_repo_path(&selection.source_path)?;
+                Ok((
+                    source_path.clone(),
+                    candidate_content_digest_from_repository_files(
+                        &repository_files,
+                        &source_path,
+                    )?,
+                ))
+            })
+            .collect::<Result<HashMap<_, _>, GithubImportError>>()?;
+        let provenance = ImportProvenance {
+            resolved_commit_sha: resolved_commit_sha.to_string(),
+            content_digest_by_source_path,
+        };
+        import_github_repo_skills_remote_from_workspace(
+            pool,
+            active_target,
+            repo,
+            None,
+            &workspace,
+            selections,
+            Some(&provenance),
+            app,
+        )
+        .await
+    }
+    .await;
+    let _ = connection
+        .remove_tree(&workspace.remote_workspace_dir)
+        .await;
+    outcome
+}
+
 /// Import selected skills from an already-acquired remote workspace.
 ///
 /// The workspace holds the exact bytes the caller verified; this function never

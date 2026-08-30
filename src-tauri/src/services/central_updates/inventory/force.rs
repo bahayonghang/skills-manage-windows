@@ -458,6 +458,7 @@ async fn force_delete_remote_missing(
             } else {
                 Vec::new()
             },
+            force: false,
         })
         .collect::<Vec<_>>();
     Ok(match active_target {

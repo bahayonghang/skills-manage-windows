@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "核对清理路径未新建第二条删除通道，conflict 仍零写，direct copies 仍保留"}
+{"file": ".trellis/spec/frontend/renderer-authority-boundary.md", "reason": "核对无直接 invoke、无第二套选择状态（AC8）"}
+{"file": ".trellis/spec/frontend/skill-card-scenarios.md", "reason": "核对 skillsCli variant 的既有负向测试仍成立"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "核对 partial outcome 的 toast 语义与错误码而非 raw details"}
+{"file": ".trellis/spec/frontend/icon-control-hit-area.md", "reason": "核对新增图标按钮热区与 focus-visible（AC10）"}
+{"file": ".trellis/spec/quality/test-suite-layout.md", "reason": "新增单元测试的文件归属与命名约定"}
+{"file": ".trellis/spec/frontend/async-ui-test-stability.md", "reason": "批量进度与 partial failure 的异步断言需稳定，不得依赖固定延时"}
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "just ci 门禁；任务 PR 目标分支为 dev（AC12）"}
+{"file": ".trellis/spec/quality/index.md", "reason": "质量层 Quality Check 入口"}
+{"file": ".trellis/tasks/08-27-skills-cli-availability-remote/research/current-state-evidence.md", "reason": "核对清理判据仍以 reasonCode 为准，未退化为按 placement state 字面选取"}

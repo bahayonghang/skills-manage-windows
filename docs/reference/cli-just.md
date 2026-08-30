@@ -17,10 +17,10 @@ The repository ships a `justfile` for repeatable development and packaging tasks
 Most recipes are thin wrappers around Node scripts under `scripts/`; `just install` adds platform routing before invoking the build or install path:
 
 ```text
-just sync-version  →  node scripts/sync-version.mjs
-just ci            →  node scripts/run-ci.mjs
-just build         →  node scripts/build.mjs
-just install       →  macOS: just build; Windows: node scripts/install.mjs after just build
+just sync-version  →  node scripts/check/sync-version.mjs
+just ci            →  node scripts/check/run-ci.mjs
+just build         →  node scripts/build/build.mjs
+just install       →  macOS: just build; Windows: node scripts/build/install.mjs after just build
 ```
 
 Reading the `justfile` plus the referenced Node scripts is the fastest way to learn what each recipe will do on your OS.
@@ -28,7 +28,7 @@ Reading the `justfile` plus the referenced Node scripts is the fastest way to le
 ## Local Gate
 
 ```text
-[just ci] ──► sync-version ──► scripts/run-ci.mjs
+[just ci] ──► sync-version ──► scripts/check/run-ci.mjs
                                  │
                                  ├─ web:  pnpm typecheck
                                  │        pnpm lint

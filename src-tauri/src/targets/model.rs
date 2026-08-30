@@ -10,6 +10,10 @@ pub(super) const TARGET_CONFIG_QUARANTINE_SETTING_KEY: &str = "target_config_qua
 #[cfg(windows)]
 pub(super) const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+#[cfg(all(windows, test))]
+pub(super) static LAST_HIDDEN_CHILD_CREATION_FLAGS: std::sync::atomic::AtomicU32 =
+    std::sync::atomic::AtomicU32::new(0);
+
 #[cfg(windows)]
 pub(super) fn hidden_child_creation_flags() -> u32 {
     CREATE_NO_WINDOW
@@ -18,7 +22,10 @@ pub(super) fn hidden_child_creation_flags() -> u32 {
 #[cfg(windows)]
 pub(super) fn hide_child_window(command: &mut std::process::Command) {
     use std::os::windows::process::CommandExt;
-    command.creation_flags(hidden_child_creation_flags());
+    let flags = hidden_child_creation_flags();
+    command.creation_flags(flags);
+    #[cfg(test)]
+    LAST_HIDDEN_CHILD_CREATION_FLAGS.store(flags, std::sync::atomic::Ordering::SeqCst);
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

@@ -1,0 +1,9 @@
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Verify the final persistence/read/export/DOM privacy boundary and adversarial seeds."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Verify stable reviewed diagnostics and unknown-error fallback across domains."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Place registry, privacy, correlation and integration tests in canonical non-zero suites."}
+{"file":".trellis/tasks/08-26-ssh-update-observability-dialog/research/logging-coverage-audit.md","reason":"Recheck registry coverage evidence against the live authoritative source during integration."}
+{"file":"docs/architecture/runtime-observability.md","reason":"Maintain the stable two-layer architecture, correlation and troubleshooting entry points."}
+{"file":".trellis/tasks/08-26-ssh-update-observability-dialog/prd.md","reason":"Trace integrated evidence to the parent requirements and acceptance criteria."}
+{"file":".trellis/tasks/08-26-ssh-update-observability-dialog/design.md","reason":"Enforce the parent deep-module, lifecycle, privacy and compatibility decisions."}
+{"file":".trellis/tasks/08-26-ssh-update-observability-dialog/implement.md","reason":"Sequence the final integration after all implementation children."}
+{"file": ".trellis/spec/backend/operation-observability.md", "reason": "Consume the frozen command policy, operation lifecycle, correlation, privacy and named-boundary contract."}

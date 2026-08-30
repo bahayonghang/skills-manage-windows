@@ -6,15 +6,12 @@
 //! filesystem beyond reading the archive; the import command re-verifies
 //! the fingerprint before any Central/DB mutation.
 
-use std::time::Instant;
-
-use serde_json::json;
 use tauri::State;
 
-use crate::db::DbPool;
-use crate::operation_log::{
-    record_operation_log_best_effort, target_context_from_active_target, OperationLogEvent,
-    OperationLogTargetContext,
+use crate::ipc_error::{public_message_for_code, IpcError, REVIEWED_IPC_ERROR_CODES};
+use crate::observability::{
+    CommandLogPolicy, OperationContext, OperationDefinition, OperationTarget, ReviewedDiagnostic,
+    ReviewedFailure, SafeDetailKey, SafeIdentifier, SafeOperationResult,
 };
 use crate::services::local_archive_import;
 use crate::targets::ActiveTarget;
@@ -24,6 +21,33 @@ pub use crate::services::local_archive_import::{
     ArchiveFingerprint, LocalArchiveImportError, LocalArchiveImportResolution,
     LocalArchiveImportResult, LocalArchivePreview, LocalSkillConflict,
 };
+
+fn operation_definition() -> OperationDefinition {
+    match crate::ipc_registry::command_policy("import_local_skill_archive")
+        .expect("local archive import command must be registered")
+        .policy
+    {
+        CommandLogPolicy::Operation(definition) => definition,
+        _ => panic!("local archive import must use Operation policy"),
+    }
+}
+
+fn reviewed_failure(definition: OperationDefinition, error: IpcError) -> ReviewedFailure {
+    let code = REVIEWED_IPC_ERROR_CODES
+        .iter()
+        .copied()
+        .find(|code| *code == error.safe_code())
+        .unwrap_or("internal.unexpected");
+    let message = public_message_for_code(code)
+        .unwrap_or("The operation failed. See runtime logs for details.");
+    ReviewedFailure::new(ReviewedDiagnostic::new(
+        code,
+        definition.category().as_str(),
+        definition.default_phase(),
+        message,
+        error.retryable,
+    ))
+}
 
 /// Preview a local `.zip` skill archive without writing anything.
 ///
@@ -36,21 +60,25 @@ pub async fn preview_local_skill_archive(
     archive_path: String,
 ) -> crate::ipc_error::IpcResult<LocalArchivePreview> {
     crate::ipc_boundary!(
+        "preview_local_skill_archive",
         async move {
-            let request_context = state.resolve_target_context().await?;
+            let request_context = state
+                .resolve_target_context()
+                .await
+                .map_err(IpcError::from)?;
             let active_target = request_context.target().clone();
             // ZIP import is local-only for MVP. SSH/WSL targets must disable the
             // ZIP intent in the frontend; a stray call is rejected here.
             if !matches!(active_target, ActiveTarget::Local) {
-                return Err(
+                return Err(IpcError::from(
                     local_archive_import::LocalArchiveImportError::RemoteTargetUnsupported
                         .to_ipc_error(),
-                );
+                ));
             }
             let pool = request_context.db().clone();
             local_archive_import::preview_local_skill_archive_impl(&pool, &archive_path)
                 .await
-                .map_err(|e| e.to_ipc_error())
+                .map_err(|error| IpcError::from(error.to_ipc_error()))
         }
         .await
     )
@@ -71,36 +99,54 @@ pub async fn import_local_skill_archive(
     renamed_skill_id: Option<String>,
 ) -> crate::ipc_error::IpcResult<LocalArchiveImportResult> {
     crate::ipc_boundary!(
+        "import_local_skill_archive",
         async move {
-            let request_context = state.resolve_target_context().await?;
+            let request_context = state
+                .resolve_target_context()
+                .await
+                .map_err(IpcError::from)?;
             let active_target = request_context.target().clone();
             if !matches!(active_target, ActiveTarget::Local) {
-                return Err(
+                return Err(IpcError::from(
                     local_archive_import::LocalArchiveImportError::RemoteTargetUnsupported
                         .to_ipc_error(),
-                );
+                ));
             }
-            let target_context = target_context_from_active_target(&active_target);
             let pool = request_context.db().clone();
-            let started_at = Instant::now();
-            let requested_resolution = resolution.clone();
-            let result = local_archive_import::import_local_skill_archive_impl(
-                &pool,
-                &archive_path,
-                expected_fingerprint,
-                resolution,
-                renamed_skill_id,
+            let definition = operation_definition();
+            crate::observability::run_operation(
+                &state,
+                definition,
+                OperationContext::new(OperationTarget::local()),
+                |result: &LocalArchiveImportResult| {
+                    let base = if matches!(result.resolution, LocalArchiveImportResolution::Skip) {
+                        SafeOperationResult::partial("Skipped the local skill archive import.")
+                    } else {
+                        SafeOperationResult::succeeded("Imported a local skill archive.")
+                    };
+                    base.identifier(
+                        SafeDetailKey::Identifier,
+                        SafeIdentifier::new(&result.imported_skill_id),
+                    )
+                    .count(SafeDetailKey::AffectedCount, result.file_count as u64)
+                    .flag(SafeDetailKey::Changed, result.replaced_existing)
+                    .stable(SafeDetailKey::Mode, resolution_label(&result.resolution))
+                },
+                || async move {
+                    local_archive_import::import_local_skill_archive_impl(
+                        &pool,
+                        &archive_path,
+                        expected_fingerprint,
+                        resolution,
+                        renamed_skill_id,
+                    )
+                    .await
+                    .map_err(|error| {
+                        reviewed_failure(definition, IpcError::from(error.to_ipc_error()))
+                    })
+                },
             )
-            .await;
-            record_local_archive_import_operation(
-                &pool,
-                target_context,
-                &result,
-                &requested_resolution,
-                started_at.elapsed().as_millis() as i64,
-            )
-            .await;
-            result.map_err(|e| e.to_ipc_error())
+            .await
         }
         .await
     )
@@ -114,135 +160,9 @@ fn resolution_label(resolution: &LocalArchiveImportResolution) -> &'static str {
     }
 }
 
-async fn record_local_archive_import_operation(
-    pool: &DbPool,
-    target_context: OperationLogTargetContext,
-    result: &Result<LocalArchiveImportResult, LocalArchiveImportError>,
-    requested_resolution: &LocalArchiveImportResolution,
-    duration_ms: i64,
-) {
-    let event = match result {
-        Ok(imported) => OperationLogEvent::new(
-            "central",
-            "local_archive.import",
-            "succeeded",
-            if matches!(imported.resolution, LocalArchiveImportResolution::Skip) {
-                "Skipped a local skill archive import"
-            } else {
-                "Imported a local skill archive"
-            },
-        )
-        .subject("skill", &imported.imported_skill_id, &imported.skill_name)
-        .details(json!({
-            "sourceType": "local_archive",
-            "resolution": resolution_label(&imported.resolution),
-            "fileCount": imported.file_count,
-            "totalExpandedBytes": imported.total_expanded_bytes,
-            "replacedExisting": imported.replaced_existing,
-        }))
-        .duration_ms(duration_ms),
-        Err(error) => OperationLogEvent::new(
-            "central",
-            "local_archive.import",
-            "failed",
-            "Failed to import a local skill archive",
-        )
-        .error(error.code())
-        .details(json!({
-            "sourceType": "local_archive",
-            "resolution": resolution_label(requested_resolution),
-        }))
-        .duration_ms(duration_ms),
-    };
-
-    record_operation_log_best_effort(pool, target_context, event).await;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{self, OperationLogFilter};
-    use crate::operation_log::local_target_context;
-    use crate::test_support;
-
-    fn import_result() -> LocalArchiveImportResult {
-        LocalArchiveImportResult {
-            imported_skill_id: "demo-skill".to_string(),
-            skill_name: "Demo Skill".to_string(),
-            root_directory: String::new(),
-            resolution: LocalArchiveImportResolution::Overwrite,
-            file_count: 2,
-            total_expanded_bytes: 42,
-            replaced_existing: true,
-        }
-    }
-
-    #[tokio::test]
-    async fn operation_log_records_success_and_redacted_failure_without_payloads() {
-        let pool = test_support::mem_pool().await;
-        let success = Ok(import_result());
-        record_local_archive_import_operation(
-            &pool,
-            local_target_context(),
-            &success,
-            &LocalArchiveImportResolution::Overwrite,
-            12,
-        )
-        .await;
-
-        let failure = Err(LocalArchiveImportError::InvalidArchiveEntry {
-            path: "../../Users/alice/token-secret.txt".to_string(),
-            reason: "password=hunter2".to_string(),
-        });
-        record_local_archive_import_operation(
-            &pool,
-            local_target_context(),
-            &failure,
-            &LocalArchiveImportResolution::Overwrite,
-            8,
-        )
-        .await;
-
-        let page = db::list_operation_logs(
-            &pool,
-            OperationLogFilter {
-                action: Some("local_archive.import".to_string()),
-                ..Default::default()
-            },
-        )
-        .await
-        .expect("list local archive operation logs");
-        assert_eq!(page.total, 2);
-
-        let success = page
-            .entries
-            .iter()
-            .find(|entry| entry.status == "succeeded")
-            .expect("success log");
-        assert_eq!(success.category, "central");
-        assert_eq!(success.subject_id.as_deref(), Some("demo-skill"));
-        assert_eq!(success.error_summary, None);
-        let details = success.details_json.as_deref().expect("success details");
-        assert!(details.contains("local_archive"));
-        assert!(details.contains("overwrite"));
-
-        let failure = page
-            .entries
-            .iter()
-            .find(|entry| entry.status == "failed")
-            .expect("failure log");
-        assert_eq!(
-            failure.error_summary.as_deref(),
-            Some("invalid_archive_entry")
-        );
-        let failure_details = failure.details_json.as_deref().expect("failure details");
-        assert!(failure_details.contains("local_archive"));
-        assert!(failure_details.contains("overwrite"));
-        let serialized = serde_json::to_string(failure).expect("serialize failure log");
-        assert!(!serialized.contains("alice"));
-        assert!(!serialized.contains("token-secret"));
-        assert!(!serialized.contains("hunter2"));
-    }
 
     #[test]
     fn ipc_errors_use_stable_codes_without_sensitive_payloads() {

@@ -1,24 +1,46 @@
+import { GENERATED_REVIEWED_IPC_ERROR_CODES } from "./generatedCommandMap";
+
 const CODE_PATTERN = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/;
 const LEGACY_CODED_ERROR_PATTERN =
   /^([a-z][a-z0-9_]*(?:[._-][a-z0-9_]+)+):(.*)$/s;
 const INTERNAL_CODE = "internal.unexpected";
 const INTERNAL_MESSAGE = "The operation failed. See runtime logs for details.";
+const CORRELATION_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const REVIEWED_IPC_ERROR_CODES = new Set<string>(
+  GENERATED_REVIEWED_IPC_ERROR_CODES,
+);
+
+export function isSafeIpcCode(value: unknown): value is string {
+  return typeof value === "string" && CODE_PATTERN.test(value);
+}
+
+export function isReviewedIpcCode(value: unknown): value is string {
+  return typeof value === "string" && REVIEWED_IPC_ERROR_CODES.has(value);
+}
+
+export function isSafeCorrelationId(value: unknown): value is string {
+  return typeof value === "string" && CORRELATION_ID_PATTERN.test(value);
+}
 
 export interface IpcErrorPayload {
   code: string;
   message: string;
   retryable: boolean;
+  correlationId?: string;
 }
 
 export class IpcInvokeError extends Error implements IpcErrorPayload {
   readonly code: string;
   readonly retryable: boolean;
+  readonly correlationId?: string;
 
   constructor(payload: IpcErrorPayload) {
     super(payload.message);
     this.name = "IpcInvokeError";
     this.code = payload.code;
     this.retryable = payload.retryable;
+    this.correlationId = payload.correlationId;
   }
 
   override toString(): string {
@@ -30,10 +52,11 @@ export function isIpcErrorPayload(value: unknown): value is IpcErrorPayload {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<IpcErrorPayload>;
   return (
-    typeof candidate.code === "string" &&
-    CODE_PATTERN.test(candidate.code) &&
+    isSafeIpcCode(candidate.code) &&
     typeof candidate.message === "string" &&
-    typeof candidate.retryable === "boolean"
+    typeof candidate.retryable === "boolean" &&
+    (candidate.correlationId === undefined ||
+      isSafeCorrelationId(candidate.correlationId))
   );
 }
 
@@ -41,8 +64,9 @@ export function ipcFixtureError(
   code: string,
   message: string,
   retryable = false,
+  correlationId?: string,
 ): IpcErrorPayload {
-  const payload = { code, message, retryable };
+  const payload = { code, message, retryable, correlationId };
   if (!isIpcErrorPayload(payload)) {
     throw new Error(`Invalid fixture IPC error code: ${code}`);
   }
@@ -132,6 +156,8 @@ function canonicalMessage(code: string): string | null {
       return "The GitHub repository exceeds the import resource limits.";
     case "github_import.credential_unavailable":
       return "The stored GitHub token could not be read. Save it again in Settings.";
+    case "github_import.no_importable_skills":
+      return "This GitHub repository does not contain an importable skill.";
     case "credential.ssh_password_unavailable":
       return "The SSH password is unavailable. Open Settings, save it, and retry.";
     case "runtime.desktop_required":
@@ -152,6 +178,16 @@ function canonicalMessage(code: string): string | null {
       return "A portability job is already running.";
     case "startup.rebuild_unavailable":
       return "Database rebuild is not available.";
+    case "central_operation.delete_restore_collision":
+      return "Central recovery evidence conflicts with the current files. Review and resolve the pending operation in Operation Logs.";
+    case "central_skills.delete_failed":
+    case "central_skills.delete_preview_failed":
+    case "central_skills.database_failed":
+    case "central_skills.remote_failed":
+    case "central_skills.budget_exceeded":
+      return "This Central skill could not be deleted.";
+    case "central_skills.force_delete_blocked":
+      return "Force delete is not available for this Central skill.";
     default:
       if (code.startsWith("ai.")) return "The AI provider request failed.";
       if (code.startsWith("github_import.preview_")) {

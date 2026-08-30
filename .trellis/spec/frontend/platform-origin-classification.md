@@ -12,11 +12,20 @@
 export type PlatformOriginFilter =
   | { kind: "all" }
   | { kind: "standalone" }
-  | { kind: "central"; repoKey?: string }; // repoKey 缺省 = 整组；"unassigned" = 仓库未指派
+  | { kind: "central"; repoKey?: string } // repoKey 缺省 = 整组；"unassigned" = 仓库未指派
+  | { kind: "skillsCli" };
 
-/** 分类规则：link_type === "symlink" → "central"；否则 "standalone"。
- *  与卡片 SkillCardBadges.SourceIndicator（中央技能库/独立安装徽标）逐字同语义。 */
-export function getPlatformSkillOrigin(skill: ScannedSkill): "central" | "standalone";
+/** 分类规则（优先 `skill.install_origin`，由 Local 后端按 lock + 解析后的 symlink/junction 目标填写）：
+ *  - install_origin === "skills_cli" → "skillsCli"
+ *  - install_origin === "central" → "central"
+ *  - install_origin === "standalone" → "standalone"
+ *  - 缺省时才回退：link_type === "symlink" → "central"；否则 "standalone"。
+ *  symlink ≠ 一律 Central。Skills CLI 创建的 junction/symlink 指向 lock 所有的
+ *  `~/.agents/skills/<name>` 时是 Skills CLI origin，不是 SkillPort Central。
+ *  渲染器不得自己读 lock 文件。 */
+export function getPlatformSkillOrigin(
+  skill: ScannedSkill,
+): "central" | "standalone" | "skillsCli";
 
 export const PLATFORM_ORIGIN_UNASSIGNED_REPO_KEY = "unassigned";
 /** repository 存在且 !is_unknown → `repo:${repository.id}`；否则 "unassigned" */
@@ -26,20 +35,23 @@ export interface PlatformOriginNavModel {
   total: number;
   centralCount: number;
   standaloneCount: number;
+  skillsCliCount: number;
   repos: Array<{ key: string; label: string; count: number }>; // 仅 central 行；label 按 repository.name || owner/repo || id 回退
   unassignedCentralCount: number;
 }
 export function derivePlatformOriginNav(skills: readonly ScannedSkill[]): PlatformOriginNavModel;
 
-// derivePlatformSkillRows 管线固定顺序：claude tab 过滤 → originFilter → 搜索 → 排序 → 分组；
+// derivePlatformSkillRows 管线固定顺序：source tab 过滤 → originFilter → 搜索 → 排序 → 分组；
 // sourceFilteredSkills = tab 后 origin 前（导航计数口径），originFilteredSkills = origin 后搜索前（空态判断）。
 ```
+
+轴 B（`source_kind === "plugin"`）与轴 A 正交。来源 Tab（全部 / 用户 / 插件）显示条件是 `isClaudePage || pluginCount > 0`。Claude 页始终显示。无插件的非 Claude 页不显示。`PlatformOriginNav` 只表达轴 A；默认 origin 仍是 `{ kind: "all" }`。禁止把插件筛并进 origin 导航或用 `installed_at` 补分类。
 
 **Wrong vs Correct**：
 
 ```tsx
 // ❌ Wrong：组件里自行判定来源
-const isSkillPort = skill.link_type === "symlink"; // 组件层重复分类逻辑
+const isSkillPort = skill.link_type === "symlink"; // 组件层重复分类逻辑；CLI junction 会被误标 Central
 const isSkillPort = skill.installed_at != null;    // 错误信号（见约定 2）
 const isSkillPort = !!skill.repository;            // 错误信号：手放技能匹配中央同名 id 也带 repo 指派
 
@@ -48,7 +60,7 @@ import { getPlatformSkillOrigin } from "@/lib/platformSkillViewModel";
 const origin = getPlatformSkillOrigin(skill);
 ```
 
-**测试锁**：`src/test/lib/platformSkillViewModel.test.ts` 锁分类规则、聚合守恒（central + standalone = total；repo 桶之和 + unassigned = centralCount）、standalone 带 repo 指派不计入 repo 桶、管线顺序（origin 在 tab 后搜索前）。
+**测试锁**：`src/test/lib/platformSkillViewModel.test.ts` 锁分类规则、聚合守恒（central + standalone + skillsCli = total；repo 桶之和 + unassigned = centralCount）、standalone 带 repo 指派不计入 repo 桶、symlink + `install_origin: "skills_cli"` 不计 Central、管线顺序（origin 在 tab 后搜索前）。
 
 ## 约定 2（Gotcha）：`installed_at` 不是「SkillPort 装的」信号
 
@@ -57,5 +69,6 @@ const origin = getPlatformSkillOrigin(skill);
 **推论**：
 
 - SkillPort 以 copy 方式安装的技能，落盘后与用户手工拷贝目录**不可区分**（同为普通目录，`link_type = "copy"`）。UI 一律按「独立安装」展示——与卡片徽标语义一致，用户可在界面自洽验证。
-- 唯一可靠的「SkillPort 安装」信号是 `link_type === "symlink"`（symlink 到中央目录只由 SkillPort 安装流程创建）。
+- **不要**把 `link_type === "symlink"` 一律当成 SkillPort Central。Skills CLI global 也会在平台目录写下 junction/symlink，其解析目标若落在 lock 所有的 `~/.agents/skills/<name>` 下，后端会把 `install_origin` 标为 `skills_cli`。
+- 缺省（旧行没有 `install_origin`）时仍回退 symlink → Central，以兼容既有夹具。
 - 若未来需要精确区分 copy 安装来源，必须由后端在安装链路落持久化 origin 标记（新任务、动 schema），**禁止**前端用 `installed_at` / `repository` 存在性等启发式补救。

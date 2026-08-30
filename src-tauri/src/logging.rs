@@ -9,6 +9,10 @@ use std::sync::OnceLock;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
 
+mod frontend;
+
+use frontend::sanitize_frontend_runtime_log_payload;
+
 static LOG_GUARD: OnceLock<WorkerGuard> = OnceLock::new();
 
 const RUNTIME_LOG_RETENTION_DAYS: i64 = 14;
@@ -16,27 +20,33 @@ const RUNTIME_LOG_PREFIX: &str = "skillport-";
 const RUNTIME_LOG_SUFFIX: &str = ".log";
 const DEFAULT_RUNTIME_LOG_LIMIT: usize = 200;
 const MAX_RUNTIME_LOG_LIMIT: usize = 1_000;
-const MAX_FRONTEND_SOURCE_CHARS: usize = 80;
-const MAX_FRONTEND_MESSAGE_CHARS: usize = 2_000;
-const MAX_FRONTEND_DETAILS_CHARS: usize = 4_000;
 
 #[derive(Debug)]
 struct DailyLogWriter {
     log_dir: PathBuf,
+    pending: Vec<u8>,
+    discard_until_newline: bool,
 }
 
 impl DailyLogWriter {
     fn new(log_dir: PathBuf) -> Self {
-        Self { log_dir }
+        Self {
+            log_dir,
+            pending: Vec::new(),
+            discard_until_newline: false,
+        }
     }
 
     fn current_log_path(&self) -> PathBuf {
         daily_log_path(&self.log_dir)
     }
-}
 
-impl Write for DailyLogWriter {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+    fn append_redacted(&self, bytes: &[u8]) -> io::Result<()> {
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        let raw = String::from_utf8_lossy(bytes);
+        let redacted = crate::redaction::redact_runtime_line(&raw);
         let path = self.current_log_path();
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
@@ -45,11 +55,49 @@ impl Write for DailyLogWriter {
             .create(true)
             .append(true)
             .open(path)?;
-        file.write(buf)
+        file.write_all(redacted.as_bytes())
+    }
+
+    fn persist_completed_lines(&mut self) -> io::Result<()> {
+        while let Some(line_end) = self.pending.iter().position(|byte| *byte == b'\n') {
+            let line = self.pending.drain(..=line_end).collect::<Vec<_>>();
+            self.append_redacted(&line)?;
+        }
+        Ok(())
+    }
+}
+
+impl Write for DailyLogWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let mut remaining = buf;
+        if self.discard_until_newline {
+            let Some(line_end) = remaining.iter().position(|byte| *byte == b'\n') else {
+                return Ok(buf.len());
+            };
+            self.discard_until_newline = false;
+            remaining = &remaining[line_end + 1..];
+        }
+
+        self.pending.extend_from_slice(remaining);
+        self.persist_completed_lines()?;
+        Ok(buf.len())
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        Ok(())
+        // A flush is an observable persistence boundary. An unterminated tail
+        // cannot be safely classified because later writes could turn it into
+        // a sensitive key (`tok` + `en=...`). Persist one marker line, then
+        // discard the rest of that logical input line through its newline.
+        if !self.pending.is_empty() {
+            self.pending.clear();
+            self.discard_until_newline = true;
+            self.append_redacted(crate::redaction::redacted_runtime_fragment_line().as_bytes())?;
+        }
+        let path = self.current_log_path();
+        if !path.exists() {
+            return Ok(());
+        }
+        fs::OpenOptions::new().append(true).open(path)?.flush()
     }
 }
 
@@ -69,6 +117,8 @@ pub struct RuntimeLogReadRequest {
     pub query: Option<String>,
     pub level: Option<String>,
     pub source: Option<String>,
+    pub operation_id: Option<String>,
+    pub event_source: Option<String>,
     pub limit: Option<usize>,
     pub offset: Option<usize>,
     #[serde(default)]
@@ -82,6 +132,8 @@ pub struct RuntimeLogLine {
     pub timestamp: Option<String>,
     pub level: Option<String>,
     pub source: String,
+    pub operation_id: Option<String>,
+    pub event_source: Option<String>,
     pub message: String,
     pub raw: String,
 }
@@ -111,14 +163,8 @@ pub struct FrontendRuntimeLogPayload {
     pub source: Option<String>,
     pub message: Option<String>,
     pub details: Option<Value>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct SanitizedFrontendRuntimeLog {
-    level: String,
-    source: String,
-    message: String,
-    details: String,
+    #[serde(default)]
+    pub operation_id: Option<String>,
 }
 
 /// Failure categories for runtime log initialization and file management.
@@ -175,16 +221,14 @@ pub fn init_file_logging() -> Result<(), LoggingError> {
         Ok(()) => {
             tracing::info!(
                 target: "skillport::startup",
-                log_dir = %paths::path_to_string(&logs_dir()),
                 "SkillPort file logging initialized"
             );
             Ok(())
         }
-        Err(error) => {
+        Err(_error) => {
             init_stderr_logging()?;
             tracing::warn!(
                 target: "skillport::startup",
-                error = %error,
                 "SkillPort file logging unavailable; using stderr logging"
             );
             Ok(())
@@ -197,15 +241,11 @@ pub fn init_file_logging_with_dir(log_dir: &Path) -> Result<(), LoggingError> {
         return Ok(());
     }
 
-    fs::create_dir_all(log_dir).map_err(|error| {
-        LoggingError::io(
-            format!("Failed to create log directory '{}'", log_dir.display()),
-            error,
-        )
-    })?;
+    fs::create_dir_all(log_dir)
+        .map_err(|error| LoggingError::io("Failed to create runtime log directory", error))?;
 
-    if let Err(error) = cleanup_expired_runtime_logs_in_dir(log_dir, RUNTIME_LOG_RETENTION_DAYS) {
-        eprintln!("Failed to clean expired SkillPort runtime logs: {error}");
+    if cleanup_expired_runtime_logs_in_dir(log_dir, RUNTIME_LOG_RETENTION_DAYS).is_err() {
+        eprintln!("Failed to clean expired SkillPort runtime logs");
     }
 
     let appender = DailyLogWriter::new(log_dir.to_path_buf());
@@ -255,15 +295,9 @@ fn list_runtime_log_files_in_dir(log_dir: &Path) -> Result<Vec<RuntimeLogFile>, 
     }
 
     let mut files = Vec::new();
-    for entry in fs::read_dir(log_dir).map_err(|error| {
-        LoggingError::io(
-            format!(
-                "Failed to read runtime log directory '{}'",
-                log_dir.display()
-            ),
-            error,
-        )
-    })? {
+    for entry in fs::read_dir(log_dir)
+        .map_err(|error| LoggingError::io("Failed to read runtime log directory", error))?
+    {
         let entry = entry?;
         let file_name = entry.file_name().to_string_lossy().into_owned();
         let Some(date) = runtime_log_file_date(&file_name) else {
@@ -310,13 +344,29 @@ fn read_runtime_log_file_from_dir(
     let level = normalize_filter_value(request.level.as_deref()).map(|value| value.to_lowercase());
     let source =
         normalize_filter_value(request.source.as_deref()).map(|value| value.to_lowercase());
+    let requested_operation_id = normalize_filter_value(request.operation_id.as_deref());
+    let operation_id = requested_operation_id
+        .as_deref()
+        .and_then(|value| uuid::Uuid::parse_str(value).ok())
+        .map(|value| value.to_string());
+    let invalid_operation_id = requested_operation_id.is_some() && operation_id.is_none();
+    let event_source =
+        normalize_filter_value(request.event_source.as_deref()).map(|value| value.to_lowercase());
 
     let filtered = content
         .lines()
         .enumerate()
         .map(|(index, raw)| parse_runtime_log_line(index + 1, raw))
         .filter(|line| {
-            runtime_line_matches(line, query.as_deref(), level.as_deref(), source.as_deref())
+            !invalid_operation_id
+                && runtime_line_matches(
+                    line,
+                    query.as_deref(),
+                    level.as_deref(),
+                    source.as_deref(),
+                    operation_id.as_deref(),
+                    event_source.as_deref(),
+                )
         })
         .collect::<Vec<_>>();
 
@@ -441,6 +491,8 @@ pub fn record_frontend_runtime_log(payload: FrontendRuntimeLogPayload) {
         "error" => tracing::error!(
             target: "skillport::frontend",
             source = %log.source,
+            event_source = "frontend",
+            operation_id = log.operation_id.as_deref().unwrap_or(""),
             details = %log.details,
             "{}",
             log.message
@@ -448,6 +500,8 @@ pub fn record_frontend_runtime_log(payload: FrontendRuntimeLogPayload) {
         "warn" => tracing::warn!(
             target: "skillport::frontend",
             source = %log.source,
+            event_source = "frontend",
+            operation_id = log.operation_id.as_deref().unwrap_or(""),
             details = %log.details,
             "{}",
             log.message
@@ -455,6 +509,8 @@ pub fn record_frontend_runtime_log(payload: FrontendRuntimeLogPayload) {
         "debug" => tracing::debug!(
             target: "skillport::frontend",
             source = %log.source,
+            event_source = "frontend",
+            operation_id = log.operation_id.as_deref().unwrap_or(""),
             details = %log.details,
             "{}",
             log.message
@@ -462,6 +518,8 @@ pub fn record_frontend_runtime_log(payload: FrontendRuntimeLogPayload) {
         _ => tracing::info!(
             target: "skillport::frontend",
             source = %log.source,
+            event_source = "frontend",
+            operation_id = log.operation_id.as_deref().unwrap_or(""),
             details = %log.details,
             "{}",
             log.message
@@ -487,6 +545,8 @@ fn runtime_line_matches(
     query: Option<&str>,
     level: Option<&str>,
     source: Option<&str>,
+    operation_id: Option<&str>,
+    event_source: Option<&str>,
 ) -> bool {
     if let Some(level) = level {
         if line.level.as_deref().map(str::to_lowercase).as_deref() != Some(level) {
@@ -498,6 +558,24 @@ fn runtime_line_matches(
         let line_source = line.source.to_lowercase();
         let raw = line.raw.to_lowercase();
         if !line_source.contains(source) && !raw.contains(source) {
+            return false;
+        }
+    }
+
+    if let Some(operation_id) = operation_id {
+        if line.operation_id.as_deref() != Some(operation_id) {
+            return false;
+        }
+    }
+
+    if let Some(event_source) = event_source {
+        if line
+            .event_source
+            .as_deref()
+            .map(str::to_lowercase)
+            .as_deref()
+            != Some(event_source)
+        {
             return false;
         }
     }
@@ -520,6 +598,13 @@ fn parse_runtime_log_line(line_number: usize, raw: &str) -> RuntimeLogLine {
     let source = extract_log_field(&raw, "source")
         .or(target_source)
         .unwrap_or_else(|| "runtime".to_string());
+    let operation_id = extract_log_field(&raw, "operation_id")
+        .or_else(|| extract_log_field(&raw, "operationId"))
+        .and_then(|value| uuid::Uuid::parse_str(&value).ok())
+        .map(|value| value.to_string());
+    let event_source = extract_log_field(&raw, "event_source")
+        .or_else(|| extract_log_field(&raw, "eventSource"))
+        .filter(|value| matches!(value.as_str(), "backend" | "frontend"));
     let message = detect_runtime_message(&raw);
 
     RuntimeLogLine {
@@ -527,6 +612,8 @@ fn parse_runtime_log_line(line_number: usize, raw: &str) -> RuntimeLogLine {
         timestamp,
         level,
         source,
+        operation_id,
+        event_source,
         message,
         raw,
     }
@@ -580,7 +667,14 @@ fn detect_runtime_message(raw: &str) -> String {
 
 fn extract_log_field(raw: &str, key: &str) -> Option<String> {
     let needle = format!("{key}=");
-    let start = raw.find(&needle)? + needle.len();
+    let start = raw.match_indices(&needle).find_map(|(index, _)| {
+        let is_field_boundary = index == 0
+            || raw[..index]
+                .chars()
+                .next_back()
+                .is_some_and(|value| value.is_whitespace() || matches!(value, ',' | ';'));
+        is_field_boundary.then_some(index + needle.len())
+    })?;
     let rest = &raw[start..];
     let trimmed = rest.trim_start_matches(['\"', '\'']);
     let end = trimmed
@@ -618,68 +712,6 @@ fn runtime_log_file_date(file_name: &str) -> Option<NaiveDate> {
         return None;
     }
     NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()
-}
-
-fn sanitize_frontend_runtime_log_payload(
-    payload: FrontendRuntimeLogPayload,
-) -> SanitizedFrontendRuntimeLog {
-    let level = match payload
-        .level
-        .as_deref()
-        .map(str::trim)
-        .map(str::to_lowercase)
-        .as_deref()
-    {
-        Some("error") => "error",
-        Some("warn") | Some("warning") => "warn",
-        Some("debug") => "debug",
-        _ => "info",
-    }
-    .to_string();
-
-    let source = truncate_chars(
-        payload
-            .source
-            .as_deref()
-            .map(str::trim)
-            .filter(|source| !source.is_empty())
-            .unwrap_or("frontend.runtime"),
-        MAX_FRONTEND_SOURCE_CHARS,
-    );
-    let message = truncate_chars(
-        &crate::redaction::redact_runtime_line(
-            payload
-                .message
-                .as_deref()
-                .map(str::trim)
-                .filter(|message| !message.is_empty())
-                .unwrap_or("Frontend runtime event"),
-        ),
-        MAX_FRONTEND_MESSAGE_CHARS,
-    );
-    let details = payload
-        .details
-        .map(crate::redaction::redact_runtime_json)
-        .and_then(|value| serde_json::to_string(&value).ok())
-        .map(|value| truncate_chars(&value, MAX_FRONTEND_DETAILS_CHARS))
-        .unwrap_or_else(|| "{}".to_string());
-
-    SanitizedFrontendRuntimeLog {
-        level,
-        source,
-        message,
-        details: crate::redaction::redact_runtime_line(&details),
-    }
-}
-
-fn truncate_chars(value: &str, max_chars: usize) -> String {
-    let mut iter = value.chars();
-    let truncated = iter.by_ref().take(max_chars).collect::<String>();
-    if iter.next().is_some() {
-        format!("{truncated}…")
-    } else {
-        truncated
-    }
 }
 
 #[cfg(test)]

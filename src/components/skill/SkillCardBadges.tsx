@@ -1,8 +1,12 @@
 import { Folder, FolderOpen, Globe, Link2, Lock } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { statusChipClass } from "@/lib/statusTone";
 import { cn } from "@/lib/utils";
 import type { ClaudeSourceKind } from "@/types";
+
+const skillCardChipClassName =
+  "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium";
 
 export function SourceChip({ label }: { label: string }) {
   return (
@@ -12,43 +16,69 @@ export function SourceChip({ label }: { label: string }) {
   );
 }
 
-export function SourceIndicator({ sourceType }: { sourceType: string }) {
+export function SourceIndicator({
+  sourceType,
+  origin,
+}: {
+  sourceType: string;
+  origin?: "central" | "standalone" | "skillsCli";
+}) {
   const { t, i18n } = useTranslation();
-  const isSymlink = sourceType === "symlink";
+  const resolved =
+    origin ?? (sourceType === "symlink" ? "central" : "standalone");
+  const isCli = resolved === "skillsCli";
+  const isCentral = resolved === "central";
   const isNative = sourceType === "native";
-  const primaryLabel = isSymlink
-    ? t("platform.sourceCentral")
-    : t("platform.sourceStandalone");
-  const secondaryLabel = isSymlink
+  const primaryLabel = isCli
+    ? t("platform.sourceSkillsCli")
+    : isCentral
+      ? t("platform.sourceCentral")
+      : t("platform.sourceStandalone");
+  const secondaryLabel = isCli
     ? t("platform.sourceSymlinkLabel")
-    : isNative
-      ? t("platform.sourceNativeLabel", {
-          defaultValue: i18n.language.startsWith("zh") ? "原生" : "native",
-        })
-      : t("platform.sourceCopyLabel");
+    : isCentral
+      ? t("platform.sourceSymlinkLabel")
+      : isNative
+        ? t("platform.sourceNativeLabel", {
+            defaultValue: i18n.language.startsWith("zh") ? "原生" : "native",
+          })
+        : t("platform.sourceCopyLabel");
 
   return (
-    <div
+    <span
+      title={`${primaryLabel} — ${secondaryLabel}`}
       className={cn(
-        "inline-flex items-center gap-1 text-xs font-medium",
-        isSymlink ? "text-primary-text" : "text-muted-foreground",
+        skillCardChipClassName,
+        "border",
+        isCli || isCentral
+          ? statusChipClass.info
+          : "border-border bg-muted/40 text-muted-foreground",
       )}
     >
-      {isSymlink ? (
+      {isCli || isCentral ? (
         <Link2 className="size-3 shrink-0" />
       ) : (
         <FolderOpen className="size-3 shrink-0" />
       )}
-      <div className="inline-flex items-center gap-1">
-        <span>{primaryLabel}</span>
-        <span
-          aria-hidden="true"
-          className="h-px w-3 shrink-0 rounded-full bg-current opacity-40"
-        />
-        <span className="sr-only"> - </span>
-        <span>{secondaryLabel}</span>
-      </div>
-    </div>
+      {primaryLabel}
+    </span>
+  );
+}
+
+export function PluginSourceChip() {
+  const { t, i18n } = useTranslation();
+
+  return (
+    <span
+      className={cn(skillCardChipClassName, "border", statusChipClass.warning)}
+    >
+      <Lock className="size-3 shrink-0" />
+      {t("platform.originPlugin", {
+        defaultValue: i18n.language.startsWith("zh")
+          ? "插件来源"
+          : "Plugin source",
+      })}
+    </span>
   );
 }
 
@@ -88,7 +118,12 @@ export function ReadOnlyBadge() {
   const { t, i18n } = useTranslation();
 
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground ring-1 ring-border/70">
+    <span
+      className={cn(
+        skillCardChipClassName,
+        "border border-border bg-muted/40 text-muted-foreground",
+      )}
+    >
       <Lock className="size-3 shrink-0" />
       {t("platform.readOnly", {
         defaultValue: i18n.language.startsWith("zh") ? "只读" : "Read-only",

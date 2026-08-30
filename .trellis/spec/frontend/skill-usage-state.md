@@ -11,6 +11,17 @@
 type UsageSkillMatchStatus = "matched" | "ambiguous" | "unmatched";
 type UsageMatchFilter = "all" | "installed" | "unlinked";
 
+type UnusedPlatformInstall = {
+  agentId: string;
+  rowId: string | null;
+  skillId: string;
+  linkType: string;
+  sourceKind: string | null;
+  isReadOnly: boolean;
+  installedPath: string;
+  hasPendingRecovery: boolean;
+};
+
 type SkillUsageSummary = {
   skill: string;
   count: number;
@@ -24,6 +35,11 @@ type SkillUsageSummary = {
 };
 
 invoke("usage_get_skill_detail", { skill, source });
+invoke("uninstall_skill_from_agent", { skillId, agentId, rowId? });
+
+// usageStore.unlinkUnusedSkillFromAgents — sequential batch over the same command
+type UnusedUnlinkRequest = { skillId: string; agentId: string; rowId?: string | null };
+type UnusedUnlinkResult = { skillId: string; agentId: string; rowId: string | null; ok: boolean; error: string | null };
 ```
 
 `usageStore` owns `selectedSource`, `selectedSkill`, `usedCachedData`,
@@ -32,17 +48,30 @@ invoke("usage_get_skill_detail", { skill, source });
 ## 3. Contracts
 
 - Components never call `invoke`; use typed `@/lib/ipc` only inside the store.
+- Platform list sort/rank uses `useSkillUsageStats` (`usage_get_skill_usage_stats`,
+  `days: null`). Do not subscribe `PlatformView` to `usageStore` source/skeleton
+  state. The 30-day card badge stays on `useSkillCallCounts(..., 30)`.
 - Source selection requests overview + recent with `Promise.all` and commits both
   in one `set`. Keep the previous source/data visible until the new pair succeeds.
 - Page, refresh, and detail requests each have a sequence. A response commits only
   when sequence, active target id, source, and selected skill still match.
+- The unused-skills slice (`unused`, `refreshUnused`) has its own sequence and
+  fetches once per refresh at the strictest threshold (30d); the 30/60/90 chips,
+  status filter, and sort are view-local reclassification on `callCount` +
+  `lastUsedMs` and must not enter the store or change backend requests.
+- A local-target refresh may return a stale cached page with `scanning: true`
+  (exposed as `backgroundScanning`). When `usage://scan-completed` arrives with
+  the active target id, the store silently refetches overview + recent + unused
+  through the existing sequence guards: no skeleton, no `loading`/`refreshing`
+  flip, no toast, and failures are swallowed until the next explicit refresh.
 - `overview === null` is the first-load authority even before the bootstrap effect
   sets `refreshing`. Render the final-layout scanning skeleton and withhold numeric
   KPI output until an overview exists or a page-level error is available.
-- Target changes invalidate all three request sequences and immediately reset
-  `overview`, `recent`, `providers`, `loading`, detail state, and source selection
-  before starting a forced refresh. Never leave an old source request loading or
-  render panels from the previous target during the rescan.
+- Target changes invalidate all request sequences and immediately reset
+  `overview`, `recent`, `providers`, `loading`, detail state, the unused slice,
+  and source selection before starting a forced refresh. Never leave an old
+  source request loading or render panels from the previous target during the
+  rescan.
 - A filtered refresh must not briefly publish the unfiltered refresh payload.
   Update provider/scope/freshness first, retain the filtered page, then refetch it.
 - Ranking install-state filtering is view-local: `installed` keeps only `matched`,
@@ -58,8 +87,32 @@ invoke("usage_get_skill_detail", { skill, source });
   tool arguments, credentials, and full paths are not rendered.
 - Fixed ranges are visible in UI: all history, last 16 weeks, and latest 20.
   Provider health stays in a secondary disclosure.
+- Heatmap cells use a fixed track size (`size-*` + `auto-cols-[…rem]`). Do not
+  pair `aspect-square` with `1fr` / `auto-cols-fr`: cell height must not follow
+  container width. The `xl` two-column page must not use `row-span` to bind the
+  Top skills card height to the heatmap. Top skills and heatmap cards use
+  `contain-layout`; Unused does not (unlink dialog + hit-area).
 - Browser fixtures run the real store and include matched, ambiguous, unmatched,
   missing static metrics, filtered sources, and non-empty heatmap data.
+- `usageStore.unlinkUnusedSkillFromAgents` owns typed IPC for the whole batch: sequential
+  invokes (backend mutation lock serializes anyway; N is agent-count small), per-target pending
+  keys via `unlinkActionKey` cleared in `finally`, exactly one `refreshUnused()` after the batch,
+  a success/partial-failure summary toast, and per-target results returned to the caller.
+  Components receive the action as a prop and never invoke directly.
+- Unlink entry is one far-right icon trigger per row opening `UnusedSkillUnlinkDialog`; no inline
+  or second-row confirm buttons. `unusedUnlinkTargets.ts` normalizes both origins into
+  `UnlinkTarget[]`: central entries map `entry.agents` (rowId always null), platform entries map
+  the full cross-agent `entry.installs` (not just the section agent).
+- Disabled reasons are per option: pending recovery, `central`/native shared-root (central
+  origin), read-only / `sourceKind !== "user"` / null row id (platform origin). Listing every
+  observation replaces the old "prefer one actionable install" pick — a same-agent user+plugin
+  pair renders as two options where the plugin one is disabled, so reachability never depends on
+  insertion order.
+- Dialog selection: nothing preselected; select-all touches only enabled targets; the destructive
+  confirm shows the selected count and stays disabled below one or while busy. On partial failure
+  the dialog stays open, failed rows show their formatted reason and become the reselected set.
+  Central-origin descriptions state that only Agent copies are removed and Central remains. The
+  row trigger keeps the 40px pseudo hit area and a keyboard-visible focus path.
 
 ## 4. Validation & Error Matrix
 
@@ -75,6 +128,10 @@ invoke("usage_get_skill_detail", { skill, source });
 | ambiguous/unmatched row | inline detail works; no open-skill button |
 | installed/unlinked ranking filter | filter only ranking rows; show filtered/total count and a distinct empty state |
 | static estimate `null` | explicit unavailable state, never numeric zero |
+| unlink target rejects | inline row reason in dialog + summary toast; that target's pending key clears |
+| batch partially fails | dialog stays open, failed rows show reason and are reselected; one refresh after the batch |
+| same agent has user + plugin observations | two dialog options; user one actionable, plugin one disabled with reason |
+| only read-only/plugin observation remains | disabled dialog option with translated reason |
 
 ## 5. Good / Base / Bad Cases
 
@@ -85,6 +142,10 @@ invoke("usage_get_skill_detail", { skill, source });
 - Base: an unmatched historical call still opens its project/activity detail.
 - Base: selecting `unlinked` shows ambiguous and unmatched ranking rows while
   recent calls remain unchanged.
+- Good: Codex has user and plugin copies of one skill; the dialog lists both — the user
+  observation is selectable with its exact `rowId`, the plugin one is disabled with a reason.
+- Bad: feed the dialog only the section agent's installs, or preselect all targets so a single
+  misclick unlinks every agent at once.
 - Bad: publish `selectedSource = Codex` while the visible overview is still
   Claude, or resolve a Central id lazily when the row is clicked.
 
@@ -100,6 +161,10 @@ invoke("usage_get_skill_detail", { skill, source });
   month labels, legend, and empty state.
 - Browser: 1440x900 and 1280x720 dark, 1024x768 light, narrow desktop, Chinese
   and English, with page `scrollWidth === clientWidth` and no console errors.
+- Unused unlink: dialog open/target normalization (central full agents, platform cross-agent),
+  disabled reasons, select-all excluding disabled, confirm args/count gating, per-target pending
+  lifecycle, single post-batch refresh, partial-failure reselect, formatted failure toast, and
+  the 40px hit-area trigger.
 
 ## 7. Wrong vs Correct
 

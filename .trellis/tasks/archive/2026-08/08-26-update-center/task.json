@@ -1,0 +1,46 @@
+{
+  "id": "update-center",
+  "name": "update-center",
+  "title": "Skills CLI 上游更新检测与更新抽屉",
+  "description": "为 Local Skills CLI 提供按唯一 GitHub 仓库检测、独立 installed/observed/pending 基线、九态更新 UI，以及带 journal/recovery 的安全更新应用。",
+  "status": "completed",
+  "dev_type": "feature",
+  "scope": "full",
+  "package": "app",
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-08-26",
+  "completedAt": "2026-08-26",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "08-26-skills-cli-redesign",
+  "relatedFiles": [
+    "src-tauri/src/commands/skills_cli.rs",
+    "src-tauri/src/services/skills_cli/",
+    "src-tauri/src/db/migrations/versions/",
+    "src-tauri/src/db/repos/",
+    "src/stores/skillsCliStore.ts",
+    "src/components/skillsCli/",
+    "src/pages/SkillsCliView.tsx"
+  ],
+  "notes": "Planning only. Core prerequisites: 08-26-backend-contract and 08-26-page-shell. Detail Update wiring waits for 08-26-detail-drawer; cross-surface Escape verification waits for 08-26-batch-actions. Do not start before capability evidence, manifest precheck, user re-review, and explicit approval.",
+  "meta": {
+    "dependencies": {
+      "required": [
+        "08-26-backend-contract",
+        "08-26-page-shell"
+      ],
+      "integration": {
+        "08-26-detail-drawer": "detail-only Update entry",
+        "08-26-batch-actions": "shared topmost Escape verification"
+      }
+    },
+    "planningRevision": "2026-08-26-audit-repair"
+  }
+}

@@ -11,13 +11,13 @@ import {
   CentralSkillUpdateJob,
   CentralSkillUpdateResult,
   CentralSkillUpdateState,
+  DeleteCentralSkillPreview,
   DeleteSkillRepositoryPreview,
   DeleteSkillRepositoryResult,
   SkillportStateImportPreview,
   SkillportStateImportResolution,
   SkillportStateImportResult,
   SkillportStatePortabilityJob,
-  SkillDetail,
   SkillAiTagReview,
   SkillRepository,
   SkillRepositoryWithStats,
@@ -25,6 +25,7 @@ import {
   SkillTagSuggestionResult,
   SkillWithLinks,
 } from "@/types";
+import type { ResetUnknownSourceSkillsPreview } from "@/types/resetUnknownSource";
 import type {
   CentralRepositorySyncApplyResult,
   CentralRepositorySyncDecisions,
@@ -75,19 +76,25 @@ export interface CentralSkillsState {
     method: string,
     projectPath?: string | null,
   ) => Promise<CentralBatchInstallResult>;
-  loadDeletePreview: (skillId: string) => Promise<SkillDetail>;
+  loadDeletePreview: (skillId: string) => Promise<DeleteCentralSkillPreview>;
   loadBatchDeletePreview: (
     skillIds: string[],
   ) => Promise<BatchDeleteCentralSkillPreviewResult>;
+  loadUnknownSourceResetPreview: () => Promise<ResetUnknownSourceSkillsPreview>;
   loadRepositoryDeletePreview: (
     repositoryId: string,
   ) => Promise<DeleteSkillRepositoryPreview>;
   deleteCentralSkill: (
     skillId: string,
     removeAgentIds: string[],
+    force?: boolean,
   ) => Promise<void>;
   deleteCentralSkills: (
     requests: BatchDeleteCentralSkillRequest[],
+  ) => Promise<BatchDeleteCentralSkillResult>;
+  resetUnknownSourceSkills: (
+    skillIds: string[],
+    removeCopyAgentIds: string[],
   ) => Promise<BatchDeleteCentralSkillResult>;
   deleteSkillRepository: (
     repositoryId: string,

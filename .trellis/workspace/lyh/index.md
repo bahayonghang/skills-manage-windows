@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 91
-- **Last Active**: 2026-08-09
+- **Total Sessions**: 113
+- **Last Active**: 2026-08-30
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1115 | Active |
+| `journal-2.md` | ~1694 | Active |
 | `journal-1.md` | ~1994 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,28 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 113 | 2026-08-30 | 风险导向测试覆盖补强 | `3678384a8ad23a2f06f49af4a068b5ce07220fc6`, `11fdac905a65602095716a93c1116b4b6b5c3e37`, `7a5a657b2f8fa76340f53f3b2146a9acb0a6aadb`, `817be67f5b347b64dbea6791c4d3fda9e042a3e0`, `18586b1977aa7dd054435f45e45da3e20025352c` | `dev` |
+| 112 | 2026-08-30 | 全项目依赖审计与分批升级 | `5e63eb02e0cf5e2a31e92048d3eea244afe1339f` | `dev` |
+| 111 | 2026-08-28 | Skills CLI 官方相对链接与强制卸载 | `6613f2c6`, `198f9410`, `d7e5d81b`, `01845e03`, `46e53f4e` | `dev` |
+| 110 | 2026-08-26 | 完成可观测性核心契约与日志系统任务规划 | `1f4d7b80`, `779a5611` | `dev` |
+| 109 | 2026-08-26 | Skills CLI 库存优先页面前端落地与 doctor 非阻塞 | `83f5a391`, `d1f0380b`, `e01ac92f`, `943b8ef2` | `dev` |
+| 108 | 2026-08-25 | Skills CLI 库存读路径与无窗口 spawn | `d73958a066945813cc708d4e860586f93af83c13`, `2de1a2808bc4fa2b53f9b0116150bbc7321b44c8`, `2a28ce5b86d067fbfd847f04d16e127e12d5e52e`, `bffffc0957546537e9c58ff3448eda90656c97a2`, `c1be555cbd2d8403ca5106d75e4f07d46477a217` | `dev` |
+| 107 | 2026-08-24 | Skills CLI global Local 管理 | `436e6c9b` | `feat/npx-skills-global-manage` |
+| 106 | 2026-08-23 | 归档 Basic Memory 八客户端接入任务 | `a1dab5bb` | `dev` |
+| 105 | 2026-08-18 | Scripts subfolder reorg | `65adfef4` | `dev` |
+| 104 | 2026-08-17 | Optimize SSH leftover cleanup speed | `156e54f9` | `dev` |
+| 103 | 2026-08-17 | 平台技能用量排序与来源区分 | `b5f4fc2cbdca636d0a5c3d04c9ce1a84661827ff` | `dev` |
+| 102 | 2026-08-17 | 更新中心 apply 日志公开错误与本地时间 | `702bda6389de2bf44aadcc35db76b16942057598` | `dev` |
+| 101 | 2026-08-17 | 替换 SkillPort 应用图标为 B2 三仓枢纽 | `9daad5db` | `dev` |
+| 100 | 2026-08-17 | Central 删除强制放弃陈旧 prepared journal | `2a2abca0` | `dev` |
+| 99 | 2026-08-16 | Skill Usage 最大化布局优化 | `58be73df84ea6fe8b88ad906769921cb3b17065a` | `dev` |
+| 98 | 2026-08-16 | 未使用技能 unlink 弹窗化:行右统一入口支持全选/单选 | `fc648790` | `dev` |
+| 97 | 2026-08-16 | 未使用技能面板 unlink 操作与徽章优化 | `779aa340` | `dev` |
+| 96 | 2026-08-15 | Usage 页加载性能优化 | `276ad607` | `dev` |
+| 95 | 2026-08-15 | Skill Usage 未使用技能视图 | `bb7f42587b4b053e968b5a2958ab4d2a6aa64046` | `dev` |
+| 94 | 2026-08-15 | GitHub import preview readable failure | `289aa6a9` | `dev` |
+| 93 | 2026-08-14 | Unknown-source Central reset | `caeca7bf` | `dev` |
+| 92 | 2026-08-10 | 修复 Release Desktop macOS 输出超限测试竞态 | `9b149888e6ed4b87d012e695708d208e48d266e7` | `task/release-desktop-macos-validation` |
 | 91 | 2026-08-09 | 完成 Central 更新失败修复与任务归档 | `c8b4d0a` | `dev` |
 | 90 | 2026-08-07 | 修复 Update Center 失败观测与恢复隔离 | `53e3db69` | `dev` |
 | 89 | 2026-08-05 | Dashboard 与 Central Skills 界面打磨 | `685099c5`, `00134d83` | `dev` |

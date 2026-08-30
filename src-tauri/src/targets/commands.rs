@@ -1,4 +1,6 @@
-use super::config::load_target_config_snapshot;
+use super::config::{
+    load_target_config_snapshot, persist_target_deletion_settings, restore_target_settings,
+};
 use super::*;
 pub async fn create_ssh_target_impl(
     registry: &TargetRegistry,
@@ -356,14 +358,35 @@ pub async fn delete_target_impl(
     if removed_ssh.is_none() && removed_wsl.is_none() {
         return Err(TargetsError::TargetNotFound(target_id.to_string()));
     }
-    if let Some(mut removed) = removed_ssh {
-        registry.delete_target_password(&mut removed)?;
-    }
+    let session_credential = removed_ssh
+        .as_ref()
+        .and_then(credential_key_for_password_target)
+        .and_then(|credential_key| {
+            registry
+                .get_session_password(&credential_key)
+                .map(|password| (credential_key, password))
+        });
 
-    save_remote_targets(local_db, &ssh_targets).await?;
-    save_wsl_targets(local_db, &wsl_targets).await?;
-    if active_target_id(local_db).await? == target_id {
-        db::set_setting(local_db, ACTIVE_TARGET_SETTING_KEY, LOCAL_TARGET_ID).await?;
+    let reset_active = active_target_id(local_db).await? == target_id;
+    let original_settings =
+        persist_target_deletion_settings(local_db, &ssh_targets, &wsl_targets, reset_active)
+            .await?;
+
+    if let Some(mut removed) = removed_ssh {
+        if let Err(credential_error) = registry.delete_target_password(&mut removed) {
+            if let Err(rollback_error) = restore_target_settings(local_db, &original_settings).await
+            {
+                tracing::error!(
+                    target_id,
+                    "Failed to restore target settings after credential deletion failure"
+                );
+                return Err(rollback_error.into());
+            }
+            if let Some((credential_key, password)) = session_credential {
+                registry.set_session_password(&credential_key, &password)?;
+            }
+            return Err(credential_error);
+        }
     }
     registry.drop_remote_pool(target_id);
     Ok(())

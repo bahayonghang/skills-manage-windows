@@ -1,0 +1,30 @@
+{
+  "id": "skills-cli-availability-remote",
+  "name": "skills-cli-availability-remote",
+  "title": "Skills CLI 全局页可用性与远端支持",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-08-27",
+  "completedAt": "2026-08-28",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-27-skills-cli-doctor-gate",
+    "08-27-skills-cli-bulk-cleanup",
+    "08-27-skills-cli-remote-target"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

@@ -5,6 +5,7 @@ import { registerPlatformFixtures } from "./platform";
 import { registerRuntimeLogFixtures } from "./runtimeLogs";
 import { registerSavedViewFixtures } from "./savedViews";
 import { registerSkillsFixtures } from "./skills";
+import { registerSkillsCliFixtures } from "./skillsCli";
 import { registerTagGroupFixtures } from "./tagGroups";
 import { registerTargetFixtures } from "./targets";
 import { registerUsageFixtures } from "./usage";
@@ -22,6 +23,7 @@ export function installBrowserIpcFixtures(): void {
   registerMiscFixtures();
   registerPlatformFixtures();
   registerSkillsFixtures();
+  registerSkillsCliFixtures();
   registerObsidianFixtures();
   registerUsageFixtures();
   registerTargetFixtures();

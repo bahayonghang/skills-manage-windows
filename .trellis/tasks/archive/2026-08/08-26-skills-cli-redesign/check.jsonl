@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/index.md","reason":"独立检查所有受影响后端规范的 Quality Check。"}
+{"file":".trellis/spec/frontend/index.md","reason":"独立检查前端交互、卡片、错误和 Dashboard 契约。"}
+{"file":".trellis/spec/quality/index.md","reason":"执行完整 CI、测试发现与证据分类 gate。"}
+{"file":".trellis/spec/backend/skills-cli-global.md","reason":"确认 ownership 与 placement 语义没有跨层漂移。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"审计 AC 到后端、store、组件和测试的完整链路。"}
+{"file":".trellis/tasks/08-26-skills-cli-redesign/research/design-contract.md","reason":"核对实现与任务内可视/交互/状态契约。"}

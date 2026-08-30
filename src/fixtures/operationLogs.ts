@@ -92,6 +92,7 @@ function matchesFixture(
   const query = filter.query?.toLowerCase();
   if (query) {
     const haystack = [
+      entry.id,
       entry.summary,
       entry.errorSummary,
       entry.subjectId,
@@ -103,6 +104,7 @@ function matchesFixture(
       .toLowerCase();
     if (!haystack.includes(query)) return false;
   }
+  if (filter.operationId && entry.id !== filter.operationId) return false;
   if (filter.targetKind && entry.targetKind !== filter.targetKind) return false;
   if (filter.targetId && entry.targetId !== filter.targetId) return false;
   if (filter.level && entry.level !== filter.level) return false;

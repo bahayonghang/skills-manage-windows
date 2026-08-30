@@ -3444,10 +3444,16 @@ metadata:
     async fn startup_github_pat_migration_records_sanitized_failure_log() {
         let pool = setup_test_db().await;
         let secrets = MockSecretStore::default();
-        secrets.set_set_error(SecretError::Other("vault unavailable".to_string()));
-        db::set_setting(&pool, LEGACY_GITHUB_PAT_SETTING_KEY, " legacy-token ")
-            .await
-            .expect("set legacy token");
+        let private_error =
+            "vault unavailable at C:\\Users\\operator\\private.internal for sk_live_secret123";
+        secrets.set_set_error(SecretError::Other(private_error.to_string()));
+        db::set_setting(
+            &pool,
+            LEGACY_GITHUB_PAT_SETTING_KEY,
+            " sk_live_legacy_secret456 ",
+        )
+        .await
+        .expect("set legacy token");
 
         migrate_github_pat_on_startup(&pool, &secrets)
             .await
@@ -3467,18 +3473,23 @@ metadata:
         assert_eq!(entry.status, "failed");
         assert_eq!(
             entry.error_summary.as_deref(),
-            Some("Failed to migrate GitHub token: vault unavailable")
+            Some("GitHub token migration to secure storage failed.")
         );
         let details: Value =
             serde_json::from_str(entry.details_json.as_deref().expect("details json present"))
                 .expect("details json");
         assert_eq!(details["legacySettingRetained"], true);
         assert_eq!(details["key"], LEGACY_GITHUB_PAT_SETTING_KEY);
-        assert!(!entry
-            .details_json
-            .as_deref()
-            .unwrap_or_default()
-            .contains("legacy-token"));
+        let persisted_log = serde_json::to_string(entry).expect("serialize persisted log");
+        for secret in [
+            private_error,
+            "C:\\Users\\operator",
+            "private.internal",
+            "sk_live_secret123",
+            "sk_live_legacy_secret456",
+        ] {
+            assert!(!persisted_log.contains(secret), "leaked {secret}");
+        }
     }
 
     #[tokio::test]
@@ -4707,8 +4718,10 @@ metadata:
             let backward = aggregate_digest(REPOSITORY_SNAPSHOT_DIGEST_DOMAIN, &reversed);
 
             assert_eq!(forward, backward);
-            assert!(forward.starts_with("sha256-v1:"));
-            assert_eq!(forward.len(), "sha256-v1:".len() + 64);
+            assert_eq!(
+                forward,
+                "sha256-v1:813331ee2c7f524059c838b430c906e199b5fb88e64c6e6607d660e0fa07021f"
+            );
         }
 
         #[test]
@@ -5407,6 +5420,12 @@ metadata:
                 repository_snapshot_digest(&remote_files),
                 repository_snapshot_digest(&local_files)
             );
+            assert_eq!(
+                candidate_content_digest_from_repository_files(&remote_files, ".")
+                    .expect("remote candidate digest"),
+                candidate_content_digest_from_snapshot(&snapshot, ".")
+                    .expect("local candidate digest")
+            );
         }
 
         /// Structural guard for the core invariant: the confirmed import must not
@@ -5473,11 +5492,30 @@ metadata:
                 }
             }
 
-            // Uncoded errors keep their historical Display text so existing
-            // toasts do not change.
             let other = GithubImportError::NoSelections;
             assert_eq!(other.preview_snapshot_code(), None);
-            assert_eq!(other.to_ipc_error(), other.to_string());
+            assert_eq!(
+                other.ipc_error_code(),
+                Some("github_import.no_importable_skills")
+            );
+            assert!(other
+                .to_ipc_error()
+                .starts_with("github_import.no_importable_skills:"));
+        }
+
+        #[test]
+        fn no_importable_skills_uses_stable_ipc_code_without_dynamic_details() {
+            let error = GithubImportError::NoImportableSkills;
+            let envelope = error.to_ipc_error();
+            assert_eq!(error.preview_snapshot_code(), None);
+            assert_eq!(error.ipc_code(), Some("no_importable_skills"));
+            assert!(envelope.starts_with("github_import.no_importable_skills:"));
+            for leaked in ["github-preview-", "/tmp/", "sha256-v1:", "ghp_"] {
+                assert!(
+                    !envelope.contains(leaked),
+                    "envelope leaked {leaked}: {envelope}"
+                );
+            }
         }
 
         #[test]

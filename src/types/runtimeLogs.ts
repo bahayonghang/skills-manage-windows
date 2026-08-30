@@ -14,6 +14,8 @@ export interface RuntimeLogReadRequest {
   query?: string;
   level?: RuntimeLogLevel | "";
   source?: string;
+  operationId?: string;
+  eventSource?: "backend" | "frontend" | "";
   limit?: number;
   offset?: number;
   tail?: boolean;
@@ -24,6 +26,8 @@ export interface RuntimeLogLine {
   timestamp?: string | null;
   level?: RuntimeLogLevel | string | null;
   source: string;
+  operationId?: string | null;
+  eventSource?: "backend" | "frontend" | null;
   message: string;
   raw: string;
 }
@@ -44,7 +48,12 @@ export interface RuntimeLogClearRequest {
 
 export interface FrontendRuntimeLogPayload {
   level?: "error" | "warn" | "info" | "debug";
-  source?: string;
+  source?:
+    | "ipc.failure"
+    | "window.error"
+    | "window.unhandledrejection"
+    | "frontend.runtime";
   message?: string;
   details?: unknown;
+  operationId?: string;
 }

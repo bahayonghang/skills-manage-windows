@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend quality-check entry"}
+{"file": ".trellis/spec/backend/transport-seam.md", "reason": "Reject per-path connect_remote_target and a second leftover transport"}
+{"file": ".trellis/spec/backend/central-update-batching.md", "reason": "Assert bounded runner calls and per-path partial success"}
+{"file": ".trellis/spec/backend/path-policy.md", "reason": "Guards must reject root/traversal before any remote process"}
+{"file": ".trellis/spec/backend/process-supervision.md", "reason": "No direct Command::spawn; cancel and policy must be real"}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "No error.contains sniffing on the new batch path"}
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "just ci is the completion gate"}
+{"file": ".trellis/tasks/08-17-ssh-leftover-cleanup-speed/research/leftover-cleanup-bottleneck.md", "reason": "Check that the 309-count and observation-ghost issues are actually addressed"}

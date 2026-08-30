@@ -1,4 +1,4 @@
-import "@testing-library/jest-dom";
+import "@testing-library/jest-dom/vitest";
 import zh from "@/i18n/locales/zh.json";
 import { __dispatchMockIpc, resetIpcMock } from "./ipcMock";
 
@@ -50,8 +50,8 @@ vi.mock("react-i18next", () => ({
   Trans: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-// Polyfill PointerEvent for base-ui components in jsdom
-// base-ui's Checkbox/Radio use PointerEvent internally which jsdom doesn't support
+// Keep a PointerEvent fallback for DOM environments that do not provide it.
+// jsdom 30 provides the native implementation used by base-ui Checkbox/Radio.
 if (!globalThis.PointerEvent) {
   class TestPointerEvent extends MouseEvent {
     pointerId: number;

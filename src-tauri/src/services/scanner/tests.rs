@@ -1028,16 +1028,29 @@ async fn test_scan_all_skills_impl_codex_scans_local_plugin_cache_as_read_only_o
     let observations = db::get_agent_skill_observations(&pool, "codex")
         .await
         .unwrap();
-    assert_eq!(observations.len(), 1);
-    assert_eq!(observations[0].skill_id, "shared-skill");
-    assert_eq!(observations[0].source_kind, "plugin");
-    assert!(observations[0].is_read_only);
+    assert_eq!(observations.len(), 2);
+    let user_observation = observations
+        .iter()
+        .find(|observation| observation.source_kind == "user")
+        .expect("Codex primary root should persist a writable user observation");
+    assert_eq!(user_observation.skill_id, "shared-skill");
+    assert!(!user_observation.is_read_only);
     assert!(crate::paths::paths_equivalent(
-        Path::new(&observations[0].dir_path),
+        Path::new(&user_observation.dir_path),
+        &user_root.join("shared-skill")
+    ));
+    let plugin_observation = observations
+        .iter()
+        .find(|observation| observation.source_kind == "plugin")
+        .expect("Codex plugin root should remain a read-only observation");
+    assert_eq!(plugin_observation.skill_id, "shared-skill");
+    assert!(plugin_observation.is_read_only);
+    assert!(crate::paths::paths_equivalent(
+        Path::new(&plugin_observation.dir_path),
         &plugin_skill_root.join("shared-skill")
     ));
     assert!(crate::paths::paths_equivalent(
-        Path::new(&observations[0].source_root),
+        Path::new(&plugin_observation.source_root),
         &plugin_root
     ));
 

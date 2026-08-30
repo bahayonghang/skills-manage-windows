@@ -13,8 +13,8 @@ import type {
   AgentWithStatus,
   BatchDeleteCentralSkillPreviewResult,
   CentralSkillUpdateState,
+  DeleteCentralSkillPreview,
   DeleteSkillRepositoryPreview,
-  SkillDetail,
   SkillRepositoryWithStats,
   SkillWithLinks,
 } from "@/types";
@@ -51,7 +51,7 @@ export function useCentralSkillsActionState() {
     useState<SkillWithLinks | null>(null);
   const [deleteTargetSkill, setDeleteTargetSkill] =
     useState<SkillWithLinks | null>(null);
-  const [deletePreview, setDeletePreview] = useState<SkillDetail | null>(null);
+  const [deletePreview, setDeletePreview] = useState<DeleteCentralSkillPreview | null>(null);
   const [batchDeletePreview, setBatchDeletePreview] =
     useState<BatchDeleteCentralSkillPreviewResult | null>(null);
   const [pendingUpdateStates, setPendingUpdateStates] = useState<

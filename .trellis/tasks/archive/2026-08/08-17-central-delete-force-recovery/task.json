@@ -1,0 +1,28 @@
+{
+  "id": "central-delete-force-recovery",
+  "name": "central-delete-force-recovery",
+  "title": "Central 删除恢复碰撞支持强制删除",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-08-17",
+  "completedAt": "2026-08-17",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "description": "Delete dialog force-delete for stale prepared Central recovery collisions"
+  }
+}

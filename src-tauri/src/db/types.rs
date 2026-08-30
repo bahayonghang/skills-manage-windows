@@ -306,6 +306,8 @@ pub struct SkillRepositoryPendingAddition {
     pub skill_id: String,
     pub skill_name: String,
     pub conflict_existing_skill_id: Option<String>,
+    pub resolved_commit_sha: Option<String>,
+    pub snapshot_digest: Option<String>,
     pub discovered_at: String,
 }
 
@@ -463,6 +465,9 @@ pub struct OperationLogEntry {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OperationLogFilter {
+    /// Exact operation/correlation identifier. This is the existing row UUID,
+    /// not `batch_id`, which continues to represent multi-item grouping.
+    pub operation_id: Option<String>,
     pub query: Option<String>,
     pub target_kind: Option<String>,
     pub target_id: Option<String>,

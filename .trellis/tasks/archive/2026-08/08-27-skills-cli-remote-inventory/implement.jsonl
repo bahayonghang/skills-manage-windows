@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "R1/R3/R5 的权威契约：lock v3 成员资格、placements 五态与四个 reason_code、缺失/空 lock 非错误、IO 失败映射 internal.unexpected"}
+{"file": ".trellis/spec/backend/transport-seam.md", "reason": "R1 远端列举必须走 seam 提供的传输，不得绕过接缝直接执行远端命令"}
+{"file": ".trellis/spec/backend/target-context.md", "reason": "列举入口先冻结 target + DbPool，避免切换 target 期间读到混合来源"}
+{"file": ".trellis/spec/backend/process-supervision.md", "reason": "R2 常数级往返的关键约束：每次远端命令一次 SSH 握手、连接超时 10s"}
+{"file": ".trellis/spec/backend/path-policy.md", "reason": "R4 远端平台探测与 canonical/lock 路径必须在远端求值，不复用本机结果"}
+{"file": ".trellis/spec/frontend/platform-origin-classification.md", "reason": "R3 前端对 placement 与来源的既有分类语义，远端结果不得引入并行字段"}
+{"file": ".trellis/spec/frontend/renderer-authority-boundary.md", "reason": "R6 解闸只改渲染与加载条件，写动作仍归 store，组件不直接 invoke"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "R7 远端连接/认证/超时错误的展示与 stale-while-revalidate 的 inventoryError 分轨"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端层 Pre-Development Checklist 入口"}
+{"file": ".trellis/tasks/08-27-skills-cli-availability-remote/research/current-state-evidence.md", "reason": "三处前端闸门与 AppShell 切 target 重扫机制的 file:line 证据"}

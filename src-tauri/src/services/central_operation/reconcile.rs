@@ -14,15 +14,15 @@ use super::{
     PreparedDeleteReconciliationPreview,
 };
 
-const BLOCK_TARGET_MISMATCH: &str = "recovery.reconcile_target_mismatch";
-const BLOCK_UNSUPPORTED_KIND: &str = "recovery.reconcile_unsupported_kind";
-const BLOCK_UNSUPPORTED_PHASE: &str = "recovery.reconcile_unsupported_phase";
-const BLOCK_INVALID_MANIFEST: &str = "recovery.reconcile_invalid_manifest";
-const BLOCK_INCONSISTENT_DUPLICATE: &str = "recovery.reconcile_inconsistent_duplicate";
+pub(super) const BLOCK_TARGET_MISMATCH: &str = "recovery.reconcile_target_mismatch";
+pub(super) const BLOCK_UNSUPPORTED_KIND: &str = "recovery.reconcile_unsupported_kind";
+pub(super) const BLOCK_UNSUPPORTED_PHASE: &str = "recovery.reconcile_unsupported_phase";
+pub(super) const BLOCK_INVALID_MANIFEST: &str = "recovery.reconcile_invalid_manifest";
+pub(super) const BLOCK_INCONSISTENT_DUPLICATE: &str = "recovery.reconcile_inconsistent_duplicate";
 const BLOCK_SKILL_MISSING: &str = "recovery.reconcile_skill_missing";
 const BLOCK_OWNED_PATH_MISSING: &str = "recovery.reconcile_owned_path_missing";
 const BLOCK_FINGERPRINT_DRIFT: &str = "recovery.reconcile_fingerprint_drift";
-const BLOCK_ARTIFACT_REMAINING: &str = "recovery.reconcile_artifact_remaining";
+pub(super) const BLOCK_ARTIFACT_REMAINING: &str = "recovery.reconcile_artifact_remaining";
 const BLOCK_REMOTE_INSPECTION: &str = "recovery.reconcile_remote_inspection_failed";
 
 pub async fn preview_prepared_delete_reconciliation(
@@ -109,7 +109,12 @@ async fn preview_under_guard(
         push_blocker(&mut preview, BLOCK_INVALID_MANIFEST);
         return Ok(preview);
     }
-    let unique_paths = collapse_paths(target, manifest.paths, &mut preview);
+    let collapsed = collapse_managed_paths(target, manifest.paths);
+    preview.duplicate_path_count = collapsed.duplicate_path_count;
+    if collapsed.inconsistent {
+        push_blocker(&mut preview, BLOCK_INCONSISTENT_DUPLICATE);
+    }
+    let unique_paths = collapsed.unique;
 
     let Some(skill) = db::get_skill_by_id(pool, &row.skill_id).await? else {
         push_blocker(&mut preview, BLOCK_SKILL_MISSING);
@@ -213,33 +218,44 @@ async fn inspect_path(
     Ok(())
 }
 
-fn collapse_paths(
+pub(super) struct CollapsedManagedPaths {
+    pub unique: Vec<ManagedPath>,
+    pub duplicate_path_count: usize,
+    pub inconsistent: bool,
+}
+
+pub(super) fn collapse_managed_paths(
     target: &ActiveTarget,
     paths: Vec<ManagedPath>,
-    preview: &mut PreparedDeleteReconciliationPreview,
-) -> Vec<ManagedPath> {
+) -> CollapsedManagedPaths {
     let mut unique: Vec<ManagedPath> = Vec::new();
+    let mut duplicate_path_count = 0;
+    let mut inconsistent = false;
     for path in paths {
         if let Some(existing) = unique
             .iter()
             .find(|existing| paths_match(target, &existing.original, &path.original))
         {
-            preview.duplicate_path_count += 1;
+            duplicate_path_count += 1;
             if existing.expected_present != path.expected_present
                 || existing.fingerprint != path.fingerprint
                 || !paths_match(target, &existing.backup, &path.backup)
                 || !paths_match(target, &existing.marker, &path.marker)
             {
-                push_blocker(preview, BLOCK_INCONSISTENT_DUPLICATE);
+                inconsistent = true;
             }
         } else {
             unique.push(path);
         }
     }
-    unique
+    CollapsedManagedPaths {
+        unique,
+        duplicate_path_count,
+        inconsistent,
+    }
 }
 
-fn decode_delete_manifest(row: &FsDbOperationRow) -> Result<DeleteManifest, ()> {
+pub(super) fn decode_delete_manifest(row: &FsDbOperationRow) -> Result<DeleteManifest, ()> {
     if row.manifest_version != super::MANIFEST_VERSION {
         return Err(());
     }
@@ -251,7 +267,7 @@ fn decode_delete_manifest(row: &FsDbOperationRow) -> Result<DeleteManifest, ()> 
     }
 }
 
-fn paths_match(target: &ActiveTarget, left: &str, right: &str) -> bool {
+pub(super) fn paths_match(target: &ActiveTarget, left: &str, right: &str) -> bool {
     match target {
         ActiveTarget::Local => crate::paths::paths_equivalent(Path::new(left), Path::new(right)),
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => {
@@ -266,7 +282,7 @@ fn paths_match(target: &ActiveTarget, left: &str, right: &str) -> bool {
     }
 }
 
-fn reconciliation_path_is_valid(target: &ActiveTarget, path: &ManagedPath) -> bool {
+pub(super) fn reconciliation_path_is_valid(target: &ActiveTarget, path: &ManagedPath) -> bool {
     match target {
         ActiveTarget::Local => true,
         ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_) => [&path.original, &path.backup, &path.marker]
@@ -275,7 +291,7 @@ fn reconciliation_path_is_valid(target: &ActiveTarget, path: &ManagedPath) -> bo
     }
 }
 
-fn target_kind(target: &ActiveTarget) -> &'static str {
+pub(super) fn target_kind(target: &ActiveTarget) -> &'static str {
     match target {
         ActiveTarget::Local => "local",
         ActiveTarget::Ssh(_) => "ssh",
@@ -283,14 +299,14 @@ fn target_kind(target: &ActiveTarget) -> &'static str {
     }
 }
 
-fn push_blocker(preview: &mut PreparedDeleteReconciliationPreview, code: &str) {
-    if !preview
-        .blocker_codes
-        .iter()
-        .any(|existing| existing == code)
-    {
-        preview.blocker_codes.push(code.to_string());
+pub(super) fn push_unique_code(codes: &mut Vec<String>, code: &str) {
+    if !codes.iter().any(|existing| existing == code) {
+        codes.push(code.to_string());
     }
+}
+
+fn push_blocker(preview: &mut PreparedDeleteReconciliationPreview, code: &str) {
+    push_unique_code(&mut preview.blocker_codes, code);
 }
 
 #[cfg(test)]

@@ -39,12 +39,12 @@ pub(super) fn hex_encode(bytes: &[u8]) -> String {
 
 #[cfg(windows)]
 pub(super) fn hex_decode(value: &str) -> Result<Vec<u8>, TargetsError> {
-    if !value.len().is_multiple_of(2) {
+    let (chunks, remainder) = value.as_bytes().as_chunks::<2>();
+    if !remainder.is_empty() {
         return Err(TargetsError::ProtectedPayloadNotHex);
     }
-    value
-        .as_bytes()
-        .chunks_exact(2)
+    chunks
+        .iter()
         .map(|chunk| {
             let high = (chunk[0] as char)
                 .to_digit(16)

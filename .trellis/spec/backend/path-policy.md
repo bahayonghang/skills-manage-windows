@@ -14,6 +14,16 @@ README 路径语义（Central Skills `~/.skillsmanage/skills/`、Universal Agent
 | `TARGETS_CACHE_DIR_NAME`       | `targets`              |
 | `UNIVERSAL_AGENTS_DIR_NAME`    | `.agents`              |
 | `UNIVERSAL_SKILLS_REL`         | `.agents/skills`       |
+| `SKILLS_CLI_DIR_NAME`          | `skills-cli`           |
+| `SKILLS_CLI_REMOVE_RECOVERY_DIR_NAME` | `remove-recovery` |
+
+Skills CLI lock fallback is `home / UNIVERSAL_AGENTS_DIR_NAME / .skill-lock.json`
+(or `$XDG_STATE_HOME/skills/.skill-lock.json`). Do not hard-code `.agents` in
+`services/skills_cli`. Ownership still requires a version-3 lock entry — the
+Universal skills root is not wholly CLI-owned. Skills CLI remove recovery
+manifests live under `app_data / SKILLS_CLI_DIR_NAME / SKILLS_CLI_REMOVE_RECOVERY_DIR_NAME`
+and are SkillPort-owned, not the official CLI lock and not the Central
+`fs_db_operations` journal. See `skills-cli-global.md`.
 
 ### remote 路径构造（唯一来源 `paths.rs`）
 

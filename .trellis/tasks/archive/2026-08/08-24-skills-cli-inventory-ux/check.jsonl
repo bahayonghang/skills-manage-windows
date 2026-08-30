@@ -1,0 +1,20 @@
+{"file": ".trellis/tasks/08-24-skills-cli-inventory-ux/prd.md", "reason": "AC1-AC17 cover copy-mode, inventoryError, DOM order, hidden prepare, leftover copies"}
+{"file": ".trellis/tasks/08-24-skills-cli-inventory-ux/design.md", "reason": "Snapshot IPC, ProcessTreeGuard hide, store dual-track loadAll"}
+{"file": ".trellis/tasks/08-24-skills-cli-inventory-ux/research/inventory-page-root-cause.md", "reason": "Regression tests must cover Promise.all coupling and CREATE_NO_WINDOW gap"}
+{"file": ".trellis/tasks/08-24-skills-cli-inventory-ux/research/copy-mode-ownership.md", "reason": "Copy-mode fixtures: lock-only name, agent copy dir, missing files"}
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "Snapshot IPC must be regenerated via pnpm ipc:codegen"}
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "List must not spawn; leftover also excludes lock-named mapped agent copies"}
+{"file": ".trellis/spec/backend/process-supervision.md", "reason": "Windows hidden-window on ProcessRunner production path"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "Probe/list failures must not leak stderr into UI"}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "cli_unavailable is write-path only"}
+{"file": ".trellis/spec/frontend/dashboard-data-contract.md", "reason": "SVG charts + census not fake windows; ChartStateRow loading/error"}
+{"file": ".trellis/spec/frontend/skill-card-scenarios.md", "reason": "skillsCli variant and negative tests remain"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "Doctor failure is inline+toast capable without wiping the page"}
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "Typed snapshot command; browser fixtures"}
+{"file": ".trellis/spec/frontend/async-ui-test-stability.md", "reason": "Refresh stale-while-revalidate tests must not use arbitrary sleep"}
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "just ci before complete"}
+{"file": ".trellis/spec/frontend/job-correlation-cancellation.md", "reason": "Uninstall failure keeps dialog; jobId not reused for refresh"}
+{"file": ".trellis/spec/backend/central-mutation-lock.md", "reason": "Inventory refresh must not hold the mutation guard"}
+{"file": ".trellis/spec/frontend/platform-origin-classification.md", "reason": "Chart agent buckets follow skills_cli origin"}
+{"file": ".trellis/spec/frontend/typography-tokens.md", "reason": "No arbitrary text-[Npx] on new KPI/path UI"}
+{"file": ".trellis/spec/quality/test-suite-layout.md", "reason": "Vitest/Rust tests live in existing suites, not a new runner"}

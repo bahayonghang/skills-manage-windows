@@ -8,6 +8,13 @@ use crate::services::resource_budget::ResourceBudget;
 
 use super::error::InstallationError;
 
+pub(crate) use super::directory_link::{
+    create_skills_cli_directory_link, inspect_managed_directory_link, is_reparse_or_symlink,
+    observe_directory_slot, remove_directory_link_slot, remove_verified_directory_link,
+    slot_is_directory_link, DirectorySlotObservation, ManagedDirectoryLinkKind, REASON_BROKEN_LINK,
+    REASON_NOT_A_DIRECTORY, REASON_WRONG_LINK_TARGET,
+};
+
 /// Run a synchronous filesystem task on the blocking-thread pool with
 /// installation-domain errors. Thin typed wrapper over
 /// [`crate::fs_util::run_blocking_fs_with`].

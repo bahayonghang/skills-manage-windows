@@ -67,10 +67,14 @@ pub use error::GithubImportError;
 pub(crate) use archive::download_repo_snapshot;
 #[cfg(test)]
 pub(crate) use archive::download_repo_snapshot_with_test_endpoint;
+pub(crate) use digest::{
+    skill_content_digest_from_file_bytes, skill_content_digest_from_hashed_files,
+};
 #[cfg(test)]
 pub(crate) use import::import_github_repo_skills_impl;
 pub(crate) use import::{
-    build_preview_skills, central_skills_root, import_github_repo_skills_from_snapshot_partially,
+    build_preview_skills, central_skills_root, import_github_repo_skills_from_pinned_snapshot,
+    import_github_repo_skills_from_snapshot_partially,
     import_github_repo_skills_partially_with_auth, import_github_repo_skills_with_auth,
 };
 pub(crate) use pat::{
@@ -86,9 +90,14 @@ pub(crate) use preview::{
 };
 pub(crate) use raw_http::fetch_raw_text;
 pub(crate) use remote::discard_preview_snapshot_for_target;
-pub(crate) use remote::import_github_repo_skills_remote_with_auth;
+pub(crate) use remote::{
+    import_github_repo_skills_remote_from_pinned_snapshot,
+    import_github_repo_skills_remote_with_auth,
+};
 pub(crate) use snapshot::{
     candidate_content_digest_from_snapshot, fetch_github_skill_markdown_from_snapshot,
+    pinned_repo_ref, repository_snapshot_digest_from_local, resolve_commit_sha,
+    validate_commit_sha,
 };
 #[cfg(test)]
 use snapshot_import::import_github_repo_skills_from_preview;

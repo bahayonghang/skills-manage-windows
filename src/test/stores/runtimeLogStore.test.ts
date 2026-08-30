@@ -29,6 +29,8 @@ const mockReadResult: RuntimeLogReadResult = {
       timestamp: "2026-06-03T10:00:00Z",
       level: "error",
       source: "window.error",
+      operationId: "123e4567-e89b-42d3-a456-426614174000",
+      eventSource: "frontend",
       message: "Boom",
       raw: "ERROR Boom token=[REDACTED]",
     },
@@ -62,7 +64,7 @@ describe("runtimeLogStore", () => {
 
     expect(files).toEqual(mockFiles);
     expect(useRuntimeLogStore.getState().selectedFileName).toBe(
-      "skillport-2026-06-03.log"
+      "skillport-2026-06-03.log",
     );
     expect(invoke).toHaveBeenCalledWith("list_runtime_log_files");
   });
@@ -70,7 +72,13 @@ describe("runtimeLogStore", () => {
   it("reads a selected runtime log with normalized filters", async () => {
     useRuntimeLogStore.setState({
       selectedFileName: "skillport-2026-06-03.log",
-      filter: { query: " boom ", level: "error", source: " window " },
+      filter: {
+        query: " boom ",
+        level: "error",
+        source: " window ",
+        operationId: " 123e4567-e89b-42d3-a456-426614174000 ",
+        eventSource: "frontend",
+      },
     });
     vi.mocked(invoke).mockResolvedValueOnce(mockReadResult);
 
@@ -82,6 +90,8 @@ describe("runtimeLogStore", () => {
         query: "boom",
         level: "error",
         source: "window",
+        operationId: "123e4567-e89b-42d3-a456-426614174000",
+        eventSource: "frontend",
         limit: 200,
         offset: 0,
         tail: true,
@@ -91,7 +101,9 @@ describe("runtimeLogStore", () => {
   });
 
   it("exports the selected runtime log", async () => {
-    useRuntimeLogStore.setState({ selectedFileName: "skillport-2026-06-03.log" });
+    useRuntimeLogStore.setState({
+      selectedFileName: "skillport-2026-06-03.log",
+    });
     vi.mocked(invoke).mockResolvedValueOnce("redacted runtime log");
 
     const payload = await useRuntimeLogStore.getState().exportLog();
@@ -103,10 +115,10 @@ describe("runtimeLogStore", () => {
   });
 
   it("clears the selected runtime log and reloads files", async () => {
-    useRuntimeLogStore.setState({ selectedFileName: "skillport-2026-06-03.log" });
-    vi.mocked(invoke)
-      .mockResolvedValueOnce(1)
-      .mockResolvedValueOnce([]);
+    useRuntimeLogStore.setState({
+      selectedFileName: "skillport-2026-06-03.log",
+    });
+    vi.mocked(invoke).mockResolvedValueOnce(1).mockResolvedValueOnce([]);
 
     const deleted = await useRuntimeLogStore.getState().clearLogs();
 

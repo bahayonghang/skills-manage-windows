@@ -35,6 +35,10 @@ vi.mock("@/hooks/useSkillCallCounts", () => ({
   useSkillCallCounts: vi.fn(() => ({})),
 }));
 
+vi.mock("@/hooks/useSkillUsageStats", () => ({
+  useSkillUsageStats: vi.fn(() => ({ stats: {}, ready: false })),
+}));
+
 vi.mock("sonner", () => ({
   toast: {
     success: vi.fn(),
@@ -89,6 +93,7 @@ import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useSkillDetailStore } from "@/stores/skillDetailStore";
 import { useUpdateCenterStore } from "@/stores/updateCenterStore";
 import { useSkillCallCounts } from "@/hooks/useSkillCallCounts";
+import { useSkillUsageStats } from "@/hooks/useSkillUsageStats";
 import * as tauriBridge from "@/lib/ipc";
 
 const userSourceText = /用户来源|User source/i;
@@ -487,6 +492,7 @@ const mockUseCentralSkillsStore = vi.mocked(useCentralSkillsStore);
 const mockUseSkillDetailStore = vi.mocked(useSkillDetailStore);
 const mockUseUpdateCenterStore = vi.mocked(useUpdateCenterStore);
 const mockUseSkillCallCounts = vi.mocked(useSkillCallCounts);
+const mockUseSkillUsageStats = vi.mocked(useSkillUsageStats);
 const centralStoreHarness = mockUseCentralSkillsStore as typeof mockUseCentralSkillsStore & {
   setState: (nextState: Record<string, unknown>) => void;
 };
@@ -660,6 +666,8 @@ describe("PlatformView", () => {
     mockOpenUpdateCenter.mockReset();
     mockUseSkillCallCounts.mockReset();
     mockUseSkillCallCounts.mockReturnValue({});
+    mockUseSkillUsageStats.mockReset();
+    mockUseSkillUsageStats.mockReturnValue({ stats: {}, ready: false });
     vi.mocked(toast.success).mockReset();
     vi.mocked(toast.error).mockReset();
     vi.mocked(toast.info).mockReset();
@@ -688,14 +696,8 @@ describe("PlatformView", () => {
 
   it("shows source indicator on skill cards", () => {
     renderPlatformView();
-    expect(
-      screen.getAllByText((_, element) => element?.textContent?.replace(/\s+/g, " ").trim() === "中央技能库 - 符号链接")
-        .length
-    ).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText((_, element) => element?.textContent?.replace(/\s+/g, " ").trim() === "独立安装 - 复制安装")
-        .length
-    ).toBeGreaterThan(0);
+    expect(getCardBadgeMatches(/中央技能库|Central Skills/)).toHaveLength(1);
+    expect(getCardBadgeMatches(/独立安装|Standalone/)).toHaveLength(1);
   });
 
   it("renders browser fixture installed card on the localhost validation surface without Tauri", async () => {
@@ -731,10 +733,7 @@ describe("PlatformView", () => {
     );
 
     expect(await screen.findByRole("button", { name: /查看 fixture-central-skill 的详情/i })).toBeInTheDocument();
-    expect(
-      screen.getAllByText((_, element) => element?.textContent?.replace(/\s+/g, " ").trim() === "中央技能库 - 符号链接")
-        .length
-    ).toBeGreaterThan(0);
+    expect(getCardBadgeMatches(/中央技能库|Central Skills/)).toHaveLength(1);
 
     isTauriSpy.mockRestore();
   });
@@ -856,6 +855,31 @@ describe("PlatformView", () => {
     expect(screen.queryByRole("tab", { name: claudeTabName("全部") })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: claudeTabName("用户来源") })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: claudeTabName("插件来源") })).not.toBeInTheDocument();
+  });
+
+  it("shows source filter tabs on Universal when plugin skills exist", () => {
+    mockUsePlatformStore.mockImplementation((selector?: unknown) => {
+      const state = buildPlatformStoreState({
+        agents: [mockAgent, mockCodexAgent, mockCursorAgent],
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+    mockUseSkillStore.mockImplementation((selector?: unknown) => {
+      const state = buildSkillStoreState({
+        skillsByAgent: { codex: mockDuplicateUniversalSkills },
+        loadingByAgent: { codex: false },
+      });
+      if (typeof selector === "function") return selector(state);
+      return state;
+    });
+
+    renderPlatformView("universal-agents");
+
+    expect(screen.getByRole("tablist")).toHaveAttribute("aria-label", "来源筛选");
+    expect(screen.getByRole("tab", { name: claudeTabName("全部", 2) })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: claudeTabName("用户来源", 0) })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: claudeTabName("插件来源", 1) })).toBeInTheDocument();
   });
 
   it("opens Universal skill detail through the representative agent", async () => {
@@ -1258,6 +1282,10 @@ describe("PlatformView", () => {
     expect(visibleSkillNames()).toEqual(["Alpha Skill", "Beta Skill", "Gamma Skill"]);
 
     fireEvent.click(screen.getByTestId("platform-toolbar-sort"));
+    fireEvent.click(screen.getByTestId("platform-toolbar-sort-name-asc"));
+    expect(visibleSkillNames()).toEqual(["Alpha Skill", "Beta Skill", "Gamma Skill"]);
+
+    fireEvent.click(screen.getByTestId("platform-toolbar-sort"));
     fireEvent.click(screen.getByTestId("platform-toolbar-sort-name-desc"));
 
     await waitFor(() => {
@@ -1265,10 +1293,17 @@ describe("PlatformView", () => {
     });
   });
 
-  it("sorts platform skills by 30-day call count using all platform skill names", async () => {
+  it("defaults to all-history usage descending and keeps the 30-day badge hook", async () => {
     mockUseSkillCallCounts.mockReturnValue({
-      "Alpha Skill": 10,
-      "Beta Skill": 2,
+      "Alpha Skill": 1,
+    });
+    mockUseSkillUsageStats.mockReturnValue({
+      stats: {
+        "Alpha Skill": { count: 2, lastUsedMs: 10 },
+        "Beta Skill": { count: 10, lastUsedMs: 20 },
+        "Gamma Skill": { count: 0, lastUsedMs: null },
+      },
+      ready: true,
     });
     mockUseSkillStore.mockImplementation((selector?: unknown) => {
       const state = buildSkillStoreState({
@@ -1284,25 +1319,26 @@ describe("PlatformView", () => {
       ["Beta Skill", "Alpha Skill", "Gamma Skill"],
       30
     );
+    expect(mockUseSkillUsageStats).toHaveBeenCalledWith(
+      ["Beta Skill", "Alpha Skill", "Gamma Skill"],
+      { days: null }
+    );
+    expect(visibleSkillNames()).toEqual(["Beta Skill", "Alpha Skill", "Gamma Skill"]);
+    expect(screen.getAllByTestId("usage-rank").map((node) => node.textContent)).toEqual([
+      "#1 · 10",
+      "#2 · 2",
+      "无记录",
+    ]);
+    expect(screen.getByTestId("platform-toolbar-sort")).toHaveTextContent("调用次数 · 全部记录");
 
     fireEvent.click(screen.getByTestId("platform-toolbar-sort"));
-    expect(screen.getByTestId("platform-toolbar-sort-callCount-asc")).toHaveTextContent(
-      "调用次数"
-    );
     expect(screen.getByTestId("platform-toolbar-sort-callCount-desc")).toHaveTextContent(
-      "调用次数"
+      "调用次数 · 全部记录"
     );
     fireEvent.click(screen.getByTestId("platform-toolbar-sort-callCount-asc"));
 
     await waitFor(() => {
-      expect(visibleSkillNames()).toEqual(["Gamma Skill", "Beta Skill", "Alpha Skill"]);
-    });
-
-    fireEvent.click(screen.getByTestId("platform-toolbar-sort"));
-    fireEvent.click(screen.getByTestId("platform-toolbar-sort-callCount-desc"));
-
-    await waitFor(() => {
-      expect(visibleSkillNames()).toEqual(["Alpha Skill", "Beta Skill", "Gamma Skill"]);
+      expect(visibleSkillNames()).toEqual(["Gamma Skill", "Alpha Skill", "Beta Skill"]);
     });
   });
 
@@ -1327,7 +1363,7 @@ describe("PlatformView", () => {
     await waitFor(() => {
       expect(visibleSkillNames()).toEqual(["Gamma Skill"]);
     });
-    expect(getCardBadgeMatches(userSourceText)).toHaveLength(1);
+    expect(getCardBadgeMatches(/独立安装|Standalone/)).toHaveLength(1);
     expect(getCardBadgeMatches(pluginSourceText)).toHaveLength(0);
   });
 
@@ -1517,19 +1553,24 @@ describe("PlatformView", () => {
 
     expect(screen.getAllByRole("button", { name: /查看 shared-skill 的详情/i })).toHaveLength(2);
 
-    const [userBadge] = getCardBadgeMatches(userSourceText);
     const [pluginBadge] = getCardBadgeMatches(pluginSourceText);
-    const [readOnlyBadge] = getCardBadgeMatches(readOnlyText);
+    const [standaloneBadge] = getCardBadgeMatches(/独立安装|Standalone/);
 
-    expect(userBadge).toBeDefined();
     expect(pluginBadge).toBeDefined();
-    expect(readOnlyBadge).toBeDefined();
-    const userCard = userBadge.closest(".rounded-xl");
+    expect(standaloneBadge).toBeDefined();
+    expect(getCardBadgeMatches(userSourceText)).toHaveLength(0);
+    expect(getCardBadgeMatches(readOnlyText)).toHaveLength(0);
+    const userCard = standaloneBadge.closest(".rounded-xl");
     const pluginCard = pluginBadge.closest(".rounded-xl");
 
     expect(userCard).not.toBeNull();
     expect(pluginCard).not.toBeNull();
-    expect(readOnlyBadge.closest(".rounded-xl")).toBe(pluginCard);
+    expect(
+      within(pluginCard as HTMLElement).queryByText(/独立安装|Standalone/)
+    ).not.toBeInTheDocument();
+    expect(
+      within(pluginCard as HTMLElement).queryByText(readOnlyText)
+    ).not.toBeInTheDocument();
 
     if (!userCard || !pluginCard) {
       return;
@@ -1598,7 +1639,7 @@ describe("PlatformView", () => {
 
     renderPlatformView();
 
-    const userBadge = getCardBadgeMatches(userSourceText)[0];
+    const userBadge = getCardBadgeMatches(/独立安装|Standalone/)[0];
     const userCard = userBadge.closest(".rounded-xl");
     expect(userCard).not.toBeNull();
 
@@ -1833,7 +1874,7 @@ describe("PlatformView", () => {
 
     renderPlatformView();
 
-    const userBadge = getCardBadgeMatches(userSourceText)[0];
+    const userBadge = getCardBadgeMatches(/独立安装|Standalone/)[0];
     const pluginBadge = getCardBadgeMatches(pluginSourceText)[0];
     const userCard = userBadge.closest(".rounded-xl");
     const pluginCard = pluginBadge.closest(".rounded-xl");
@@ -1902,7 +1943,8 @@ describe("PlatformView", () => {
 
     expect(getCardBadgeMatches(userSourceText)).toHaveLength(0);
     expect(getCardBadgeMatches(pluginSourceText)).toHaveLength(2);
-    expect(getCardBadgeMatches(readOnlyText)).toHaveLength(2);
+    expect(getCardBadgeMatches(readOnlyText)).toHaveLength(0);
+    expect(getCardBadgeMatches(/独立安装|Standalone/)).toHaveLength(0);
 
     fireEvent.click(screen.getByRole("tab", { name: claudeTabName("用户来源", 1) }));
 
@@ -1910,8 +1952,9 @@ describe("PlatformView", () => {
       expect(screen.getAllByRole("button", { name: /查看 shared-skill 的详情/i })).toHaveLength(1);
     });
 
-    expect(getCardBadgeMatches(userSourceText)).toHaveLength(1);
+    expect(getCardBadgeMatches(userSourceText)).toHaveLength(0);
     expect(getCardBadgeMatches(pluginSourceText)).toHaveLength(0);
+    expect(getCardBadgeMatches(/独立安装|Standalone/)).toHaveLength(1);
     expect(getCardBadgeMatches(readOnlyText)).toHaveLength(0);
   });
 
@@ -1935,8 +1978,9 @@ describe("PlatformView", () => {
       expect(screen.getAllByRole("button", { name: /查看 shared-skill 的详情/i })).toHaveLength(1);
     });
 
-    expect(getCardBadgeMatches(userSourceText)).toHaveLength(1);
+    expect(getCardBadgeMatches(userSourceText)).toHaveLength(0);
     expect(getCardBadgeMatches(pluginSourceText)).toHaveLength(0);
+    expect(getCardBadgeMatches(/独立安装|Standalone/)).toHaveLength(1);
     expect(getCardBadgeMatches(readOnlyText)).toHaveLength(0);
   });
 
@@ -1961,9 +2005,10 @@ describe("PlatformView", () => {
       ).toHaveLength(2);
     });
 
-    expect(getCardBadgeMatches(userSourceText)).toHaveLength(1);
+    expect(getCardBadgeMatches(userSourceText)).toHaveLength(0);
     expect(getCardBadgeMatches(pluginSourceText)).toHaveLength(1);
-    expect(getCardBadgeMatches(readOnlyText)).toHaveLength(1);
+    expect(getCardBadgeMatches(/独立安装|Standalone/)).toHaveLength(1);
+    expect(getCardBadgeMatches(readOnlyText)).toHaveLength(0);
   });
 
   it("does not render Claude source tabs on non-Claude platform pages", () => {
@@ -2131,7 +2176,7 @@ describe("PlatformView", () => {
     ).toHaveLength(1);
     expect(getCardBadgeMatches(userSourceText)).toHaveLength(0);
     expect(getCardBadgeMatches(pluginSourceText)).toHaveLength(1);
-    expect(getCardBadgeMatches(readOnlyText)).toHaveLength(1);
+    expect(getCardBadgeMatches(readOnlyText)).toHaveLength(0);
     expect(screen.queryByText("Other skill")).not.toBeInTheDocument();
   });
 

@@ -1113,3 +1113,582 @@ Made metadata and Marketplace cache mutations atomic with bounded batching, roll
 ### Status
 
 [OK] **Completed**
+
+
+## Session 92: 修复 Release Desktop macOS 输出超限测试竞态
+
+**Date**: 2026-08-10
+**Task**: 修复 Release Desktop macOS 输出超限测试竞态
+**Branch**: `task/release-desktop-macos-validation`
+
+### Summary
+
+让 stdout/stderr overflow fixture 保持存活直至 supervisor 主动终止，保留真实 TerminationFailed 的 fail-closed 语义；补充 process supervision 防复发规范，并通过压力测试、完整 Rust gate 与 just ci。macOS exact-head hosted 验证因未授权远端操作而保留未执行。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9b149888e6ed4b87d012e695708d208e48d266e7` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 93: Unknown-source Central reset
+
+**Date**: 2026-08-14
+**Task**: Unknown-source Central reset
+**Branch**: `dev`
+
+### Summary
+
+在 Update Center Unsupported 为当前 target 增加无 membership 中央技能重置：预览确认后走 journaled batch delete，Apply 在 mutation lock 内与预览 skillIds 求交，成功后清空该 pool inventory。just ci 已通过。未改开发者本机已修复的 Local 库。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `caeca7bf` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 94: GitHub import preview readable failure
+
+**Date**: 2026-08-15
+**Task**: GitHub import preview readable failure
+**Branch**: `dev`
+
+### Summary
+
+给 NoImportableSkills 补稳定 IPC code，向导直接展示无可导入技能，Runtime Log 保留该 code。
+
+### Main Changes
+
+- NoImportableSkills 映射为 github_import.no_importable_skills
+- 向导与 Runtime Log 展示 reviewed 失败而不是内部兜底句
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `289aa6a9` | (see git log) |
+
+### Testing
+
+- [OK] just ci
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 无。未做桌面实网预览 HERO-Anti-OverDefense
+
+
+## Session 95: Skill Usage 未使用技能视图
+
+**Date**: 2026-08-15
+**Task**: Skill Usage 未使用技能视图
+**Branch**: `dev`
+
+### Summary
+
+Skill Usage 页新增未使用/长期未用技能视图：新命令 usage_get_unused_skills 覆盖 Central 库与各平台安装双维度（never_used/stale，默认 90 天阈值）；前端 UnusedSkillsPanel 视图本地切换 30/60/90 天与排序筛选；usageStore 第四序列号防陈旧。体积预算拆分 usage_unused_repo.rs。just ci 全绿。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bb7f42587b4b053e968b5a2958ab4d2a6aa64046` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 96: Usage 页加载性能优化
+
+**Date**: 2026-08-15
+**Task**: Usage 页加载性能优化
+**Branch**: `dev`
+
+### Summary
+
+Usage 扫描性能：子串预过滤+流式解析+spawn_blocking+批量写入；migration 5 skill_call_file_cache 增量扫描（稳态 10.96s→153ms，冷扫 10.95s→4.91s，峰值内存 5.25→0.26GiB）；usage_refresh 缓存优先返回+usage://scan-completed 事件，前端静默重取。just ci 全绿。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `276ad607` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 97: 未使用技能面板 unlink 操作与徽章优化
+
+**Date**: 2026-08-16
+**Task**: 未使用技能面板 unlink 操作与徽章优化
+**Branch**: `dev`
+
+### Summary
+
+完成未使用技能按 Agent unlink、删除守卫、同 Agent 多来源处理与徽章交互优化；just ci 通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `779aa340` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 98: 未使用技能 unlink 弹窗化:行右统一入口支持全选/单选
+
+**Date**: 2026-08-16
+**Task**: 未使用技能 unlink 弹窗化:行右统一入口支持全选/单选
+**Branch**: `dev`
+
+### Summary
+
+按用户反馈重新设计 Unused skills 面板 unlink 交互:撤销行内散点入口,改为每行最右统一 Unlink 触发按钮 + UnusedSkillUnlinkDialog 弹窗(全选不含禁用项/单选 Agent/五种禁用原因/部分失败重试);store 新增 unlinkUnusedSkillFromAgents 顺序批量执行、批后单次刷新,删除旧 unlinkUnusedSkill;后端零改动。同步更新 skill-usage-state.md unlink 契约。just ci 全绿(frontend 1687 passed, Rust 1235 passed)。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fc648790` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 99: Skill Usage 最大化布局优化
+
+**Date**: 2026-08-16
+**Task**: Skill Usage 最大化布局优化
+**Branch**: `dev`
+
+### Summary
+
+切断 /usage 最大化卡顿的主因链：热力图改为固定格子边长，去掉 xl:row-span-3 高度耦合，Top skills/Heatmap 加 contain-layout。just ci 通过。用户确认最大化仍有轻微卡顿，本期不虚拟化表格。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `58be73df84ea6fe8b88ad906769921cb3b17065a` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 100: Central 删除强制放弃陈旧 prepared journal
+
+**Date**: 2026-08-17
+**Task**: Central 删除强制放弃陈旧 prepared journal
+**Branch**: `dev`
+
+### Summary
+
+分析 yao-meta delete_restore_collision：2026-08-05 的 prepared journal 因平台路径 already gone 挡住删除。实现删除对话框强制删除：无 backup/marker 时先 rolled_back 再 journaled 删除当前 Central 副本，忽略指纹漂移。just ci 通过。未改本机 ~/.skillsmanage。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2a2abca0` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 101: 替换 SkillPort 应用图标为 B2 三仓枢纽
+
+**Date**: 2026-08-17
+**Task**: 替换 SkillPort 应用图标为 B2 三仓枢纽
+**Branch**: `dev`
+
+### Summary
+
+锁定 B2 三仓枢纽稿并写入 src-tauri/icons 全套平台图标；generate_icon.py 改为只核验主图、不再重绘 L 形色块。just ci 通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9daad5db` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 102: 更新中心 apply 日志公开错误与本地时间
+
+**Date**: 2026-08-17
+**Task**: 更新中心 apply 日志公开错误与本地时间
+**Branch**: `dev`
+
+### Summary
+
+将 import_addition 失败映射到 github_import 稳定公开码，操作日志详情按本机时区显示 Created at 并渲染本地化失败原因。just ci 已通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `702bda6389de2bf44aadcc35db76b16942057598` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 103: 平台技能用量排序与来源区分
+
+**Date**: 2026-08-17
+**Task**: 平台技能用量排序与来源区分
+**Branch**: `dev`
+
+### Summary
+
+平台页按 Skill Usage 全历史用量默认降序，卡片右下角显示当前列表名次；插件与中央安装用短徽章和左侧竖条区分，有插件的 Universal 可筛来源。
+
+### Main Changes
+
+- 新增 usage_get_skill_usage_stats，days=None 为全历史
+- PlatformView 默认 callCount desc，右下角竞赛名次
+- 插件行合并为一枚 warning 徽章；中央 symlink 用短 chip 与 info 竖条
+- 有插件的非 Claude 页显示来源 Tab；默认 origin 仍是 All
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b5f4fc2cbdca636d0a5c3d04c9ce1a84661827ff` | (see git log) |
+
+### Testing
+
+- [OK] 定向 Vitest 101 通过
+- [OK] cargo test usage 64 通过
+- [OK] typecheck/lint/docs:gen:check 通过；实现阶段 just ci 通过
+- [OK] 桌面 Universal 实机未验证
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 在 Universal 实机确认默认排序、右下角名次和插件 Tab
+
+
+## Session 104: Optimize SSH leftover cleanup speed
+
+**Date**: 2026-08-17
+**Task**: Optimize SSH leftover cleanup speed
+**Branch**: `dev`
+
+### Summary
+
+SSH/WSL Platform leftover apply now validates paths, deletes unique POSIX paths in one remote script, and clears shared-root installation plus observation rows so leftover lists do not immediately reappear.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `156e54f9` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 105: Scripts subfolder reorg
+
+**Date**: 2026-08-18
+**Task**: Scripts subfolder reorg
+**Branch**: `dev`
+
+### Summary
+
+把仓库根 scripts/ 按职责分成 build/check/docs/release，新增 repo-root helper，并改完 just、npm、Actions、测试与现行文档路径。just ci 通过。just doctor 因本机 Node 25 与期望 22 不一致而退出 1。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `65adfef4` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 106: 归档 Basic Memory 八客户端接入任务
+
+**Date**: 2026-08-23
+**Task**: 归档 Basic Memory 八客户端接入任务
+**Branch**: `dev`
+
+### Summary
+
+把 08-23-basic-memory-agents 的规划、调研与实施记录提交进仓库，并归档该任务。SkillPort 产品代码未改。本机 Basic Memory CLI、用户级 MCP、Claude/Codex plugin 已落地。Codex /hooks 信任仍待用户在客户端内完成。
+
+### Main Changes
+
+- 提交 Trellis 任务文件：prd、design、implement、research/host-setup、notes
+- 归档任务到 .trellis/tasks/archive/2026-08/08-23-basic-memory-agents
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a1dab5bb` | (see git log) |
+
+### Testing
+
+- [OK] python ./.trellis/scripts/task.py validate 08-23-basic-memory-agents
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 用户在 Codex 打开 /hooks 并信任 Basic Memory hook
+
+
+## Session 107: Skills CLI global Local 管理
+
+**Date**: 2026-08-24
+**Task**: Skills CLI global Local 管理
+**Branch**: `feat/npx-skills-global-manage`
+
+### Summary
+
+实现并验收 Local 上的冻结版 npx skills -g 管理页：leftover 扫描按 lock 排除、本地清理与 CLI add/remove 共用 target mutation lock，just ci 通过后提交并归档。
+
+### Main Changes
+
+- 新增 skills_cli IPC/服务：node+npx-cli.js 启动 PIN skills@1.5.23，Local 门闩，exclusive job 只负责取消
+- leftover 本地 apply 持有 mutation lock；平台 origin 增加 skills_cli，symlink 不再一律 Central
+- 前端 /skills-cli + skillsCliStore + UnifiedSkillCard skillsCli variant，并写入 skills-cli-global spec
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `436e6c9b` | (see git log) |
+
+### Testing
+
+- [OK] just ci 通过（前端 1737、Rust lib 1295）；cargo test skills_cli / central_updates::inventory / services::installation
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 未做实机 Tauri 走查、Windows Job Object 与 live junction 证据；需要时从 feat/npx-skills-global-manage 向 dev 开 PR
+
+
+## Session 108: Skills CLI 库存读路径与无窗口 spawn
+
+**Date**: 2026-08-25
+**Task**: Skills CLI 库存读路径与无窗口 spawn
+**Branch**: `dev`
+
+### Summary
+
+后端改为 lock+文件系统投影全局库存，Windows spawn 隐藏控制台并抑制 npm 交互，leftover 保护 lock 名下 mapped copy。前端库存页、ipc:codegen 与 just ci 未纳入本轮。
+
+### Main Changes
+
+- 规范：list 改为 lock+FS 快照，prepare 必须 CREATE_NO_WINDOW
+- ProcessTreeGuard::prepare 调用 hide_child_window，并记录实际 applied flags
+- NodeProcessRunner 设置 CI/npm 非交互环境变量
+- skills_cli_list_global 返回 snapshot；copy/missing 投影；补齐 npx-cli.js 候选
+- Local leftover 排除 lock 名下 mapped agent copy
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d73958a066945813cc708d4e860586f93af83c13` | (see git log) |
+| `2de1a2808bc4fa2b53f9b0116150bbc7321b44c8` | (see git log) |
+| `2a28ce5b86d067fbfd847f04d16e127e12d5e52e` | (see git log) |
+| `bffffc0957546537e9c58ff3448eda90656c97a2` | (see git log) |
+| `c1be555cbd2d8403ca5106d75e4f07d46477a217` | (see git log) |
+
+### Testing
+
+- [OK] process_tree::prepare_tests 初跑失败后改为 flags 记录断言；库存与 leftover 单测未复跑；未跑 ipc:codegen 与 just ci
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 补前端库存页、ipc:codegen、docs:gen，再跑 just ci
+
+
+## Session 109: Skills CLI 库存优先页面前端落地与 doctor 非阻塞
+
+**Date**: 2026-08-26
+**Task**: Skills CLI 库存优先页面前端落地与 doctor 非阻塞
+**Branch**: `dev`
+
+### Summary
+
+落地库存清点优先页面布局、KPI 与平台分布统计图，store 拆分 runtimeError 与 inventoryError 错误分轨；doctor 探测失败降级为写路径禁用并记录运行时日志，避免整页报错或清空库存；Node 26 工具链与依赖适配。
+
+### Main Changes
+
+- store 拆分 runtimeError / inventoryError 分轨与 isRefreshing 状态
+- 前端新增 InventoryCensus KPI 与 SVG 平台分布图，SkillsCliView 调整为库存清点优先布局与折叠区
+- doctor 探测非零退出时记录 tracing::warn 日志，禁用安装卸载等写操作但不阻断已有库存渲染
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `83f5a391` | (see git log) |
+| `d1f0380b` | (see git log) |
+| `e01ac92f` | (see git log) |
+| `943b8ef2` | (see git log) |
+
+### Testing
+
+- [OK] vitest 覆盖 skillsCliStore、SkillsCliView 与 InventoryCensus 组件测试
+- [OK] cargo test 覆盖 skills_cli doctor 探测日志与错误处理
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 110: 完成可观测性核心契约与日志系统任务规划
+
+**Date**: 2026-08-26
+**Task**: 完成可观测性核心契约与日志系统任务规划
+**Branch**: `dev`
+
+### Summary
+
+建立命令日志策略单一来源、Operation 关联生命周期、启动中断收口、错误脱敏与前后端 correlationId 契约；创建父任务和七个后续子任务，并完成核心子任务独立检查与归档。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1f4d7b80` | (see git log) |
+| `779a5611` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 111: Skills CLI 官方相对链接与强制卸载
+
+**Date**: 2026-08-28
+**Task**: Skills CLI 官方相对链接与强制卸载
+**Branch**: `dev`
+
+### Summary
+
+识别官方相对 Claude 链接为 managed_link；解钉 npx skills 并补 Linuxbrew PATH；强制卸载只拆链接、不删 DirectCopy、不跟随 Central。just ci 已通过。未 push。现场 SSH/Linuxbrew 与真实 npx skills add 仍为 UNVERIFIED。
+
+### Main Changes
+
+- 相对 readlink 经词法折叠后与规范路径比较，官方 ../../.agents/skills/<name> 判为 managed_link
+- SKILLS_CLI_NPM_SPEC 改为 skills；SSH doctor/npx 增加 Linuxbrew PATH 与 ../lib/node_modules/npm/bin/npx-cli.js
+- force 卸载/取消链接只删除 symlink/junction；预览冲突仍零写入；DirectCopy 与 Central 目标保留
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6613f2c6` | (see git log) |
+| `198f9410` | (see git log) |
+| `d7e5d81b` | (see git log) |
+| `01845e03` | (see git log) |
+| `46e53f4e` | (see git log) |
+
+### Testing
+
+- [OK] just ci 退出码 0（含 sizecheck 拆分 force_mutate_tests.rs）
+- [OK] cargo test --locked force_mutate：5 passed
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 未 push；需要时再开 PR 到 dev
+- 现场核对 SSH Linuxbrew node、npx skills add -g -y 相对链接、远程 Windows mklink /J
+
+
+## Session 112: 全项目依赖审计与分批升级
+
+**Date**: 2026-08-30
+**Task**: 全项目依赖审计与分批升级
+**Branch**: `dev`
+
+### Summary
+
+完成 npm、Cargo、pnpm、Rust 与 GitHub Actions 分批升级；逐批通过 CI/audit，生成 Windows x64 NSIS；对 TypeScript、reqwest、keyring、SQLx 的高风险迁移精确回退并记录延期边界。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5e63eb02e0cf5e2a31e92048d3eea244afe1339f` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 113: 风险导向测试覆盖补强
+
+**Date**: 2026-08-30
+**Task**: 风险导向测试覆盖补强
+**Branch**: `dev`
+
+### Summary
+
+按业务风险补齐目标删除、项目技能补偿、仓库同步事务、AI 凭据清理与便携导入失败终态测试，并完成最小生产修复、规范沉淀及完整 CI 验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3678384a8ad23a2f06f49af4a068b5ce07220fc6` | (see git log) |
+| `11fdac905a65602095716a93c1116b4b6b5c3e37` | (see git log) |
+| `7a5a657b2f8fa76340f53f3b2146a9acb0a6aadb` | (see git log) |
+| `817be67f5b347b64dbea6791c4d3fda9e042a3e0` | (see git log) |
+| `18586b1977aa7dd054435f45e45da3e20025352c` | (see git log) |
+
+### Status
+
+[OK] **Completed**

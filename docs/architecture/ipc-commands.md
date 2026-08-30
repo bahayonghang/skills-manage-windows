@@ -5,7 +5,7 @@ Every Rust function annotated with `#[tauri::command]` is a callable from the fr
 ## How the dictionary is built
 
 ```text
-[scripts/build-ipc-dict.mjs] ── reads src-tauri/src/commands/**/*.rs
+[scripts/docs/build-ipc-dict.mjs] ── reads src-tauri/src/commands/**/*.rs
                                     │
                                     ▼
                             extract #[tauri::command]
@@ -23,7 +23,9 @@ Run `pnpm docs:gen` to refresh and commit the generated file with its Rust sourc
 
 - **Naming.** Snake-case Rust function names map 1:1 to the JS `invoke()` argument: `invoke('scan_all_skills', {})`.
 - **Inputs.** Tauri serializes camelCase JS keys to snake-case parameters via serde. Pass a plain object.
-- **Returns.** All commands return `Result<T, String>`. The frontend treats the string as a user-visible error message; rich diagnostics go through Runtime Log instead of `operation_logs`.
+- **Returns.** Fallible commands return the structured `IpcResult<T>` envelope with a reviewed code, fixed public message,
+  retryable flag and optional correlation UUID. Rich diagnostic evidence goes through Runtime Log; raw source errors do
+  not become user-visible messages or Operation Log fields.
 - **Injected parameters.** `State<AppState>`, `Window`, `AppHandle`, and `Emitter` are injected by Tauri and do not appear in the JS payload.
 
 ## Source of truth
@@ -35,7 +37,9 @@ The generated dictionary lives at `docs/architecture/_generated/ipc-commands.md`
 - Business inputs (Tauri-injected parameters filtered out)
 - Return type
 - The first paragraph of `///` docs above the function
+- The registry-derived log policy, Operation category/default phase/lifecycle, or explicit runtime/exclusion reason
+- The audit-evidence contract for Operation, Runtime-only and excluded commands
 
 <!--@include: ./_generated/ipc-commands.md-->
 
-Last reviewed: 2026-05-04
+Last reviewed: 2026-08-27

@@ -145,6 +145,7 @@ pub struct RecordedCommand {
     pub program: String,
     pub args: Vec<String>,
     pub stdin: Option<Vec<u8>>,
+    pub env: Vec<(String, Option<String>)>,
     pub(crate) policy: crate::targets::ProcessPolicy,
 }
 
@@ -187,6 +188,16 @@ impl FakeRunner {
     /// Queue a response with an explicit exit code, stdout and stderr.
     pub fn push_output(&self, code: i32, stdout: &str, stderr: &str) {
         self.push_output_bytes(code, stdout.as_bytes(), stderr.as_bytes());
+    }
+
+    pub(crate) fn push_timeout(&self) {
+        self.responses
+            .lock()
+            .unwrap()
+            .push_back(FakeResponse::Error(crate::targets::RunnerError::TimedOut {
+                class: crate::targets::ProcessClass::Standard,
+                deadline: std::time::Duration::from_secs(10),
+            }));
     }
 
     /// Queue raw output for protocol tests that need non-UTF-8 bytes.
@@ -237,6 +248,15 @@ impl crate::targets::CommandRunner for FakeRunner {
                 .map(|arg| arg.to_string_lossy().into_owned())
                 .collect(),
             stdin,
+            env: command
+                .get_envs()
+                .map(|(key, value)| {
+                    (
+                        key.to_string_lossy().into_owned(),
+                        value.map(|item| item.to_string_lossy().into_owned()),
+                    )
+                })
+                .collect(),
             policy,
         });
         match self

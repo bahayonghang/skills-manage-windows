@@ -1,0 +1,29 @@
+{
+  "id": "release-desktop-macos-validation",
+  "name": "release-desktop-macos-validation",
+  "title": "修复 Release Desktop macOS 校验失败",
+  "description": "消除 Rust 输出超限 fixture 的 macOS 进程组终止竞态，恢复 Release Desktop 质量门稳定性。",
+  "status": "completed",
+  "dev_type": "bugfix",
+  "scope": "ProcessRunner stdout/stderr overflow fixtures and their supervision contract",
+  "package": null,
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-08-10",
+  "completedAt": "2026-08-10",
+  "branch": "task/release-desktop-macos-validation",
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": "9b149888e6ed4b87d012e695708d208e48d266e7",
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "src-tauri/src/targets/runner.rs",
+    ".trellis/spec/backend/process-supervision.md"
+  ],
+  "notes": "",
+  "meta": {}
+}

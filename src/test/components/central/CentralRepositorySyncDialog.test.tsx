@@ -233,10 +233,12 @@ describe("CentralRepositorySyncDialog", () => {
           {
             skill_id: "frontend-design",
             remove_agent_ids: ["cursor"],
+            force: false,
           },
           {
             skill_id: "code-reviewer",
             remove_agent_ids: [],
+            force: false,
           },
         ],
         [],
@@ -391,7 +393,7 @@ describe("CentralRepositorySyncDialog", () => {
     await waitFor(() => {
       expect(onConfirm).toHaveBeenCalledWith(
         [],
-        [{ skill_id: "conflicting-skill", remove_agent_ids: [] }],
+        [{ skill_id: "conflicting-skill", remove_agent_ids: [], force: false }],
         [],
         [],
         []
@@ -444,7 +446,7 @@ describe("CentralRepositorySyncDialog", () => {
     await waitFor(() => {
       expect(onConfirm).toHaveBeenCalledWith(
         [],
-        [{ skill_id: "conflicting-skill", remove_agent_ids: [] }],
+        [{ skill_id: "conflicting-skill", remove_agent_ids: [], force: false }],
         [],
         [],
         []

@@ -26,10 +26,10 @@ type Workflow = {
 
 const source = readFileSync(".github/workflows/release-desktop.yml", "utf8");
 const assetScriptSources = [
-  readFileSync("scripts/generate-latest-json.mjs", "utf8"),
-  readFileSync("scripts/release-preflight.mjs", "utf8"),
+  readFileSync("scripts/release/generate-latest-json.mjs", "utf8"),
+  readFileSync("scripts/release/release-preflight.mjs", "utf8"),
 ].join("\n");
-const releaseContextSource = readFileSync("scripts/release-context.mjs", "utf8");
+const releaseContextSource = readFileSync("scripts/release/release-context.mjs", "utf8");
 const workflow = parse(source) as Workflow;
 const needs = (job: Job) => (Array.isArray(job.needs) ? job.needs : job.needs ? [job.needs] : []);
 
@@ -106,11 +106,11 @@ describe("release workflow contract", () => {
     expect(source).not.toContain(".target_commitish == $sha");
     expect(upload).toBeGreaterThan(-1);
     expect(attest).toBeGreaterThan(-1);
-    expect(steps[attest].with?.["predicate-type"]).toBe("${{ steps.provenance-predicate.outputs.predicate-type }}");
-    expect(steps[attest].with?.predicate).toBe("${{ steps.provenance-predicate.outputs.predicate }}");
-    expect(steps.find((step) => step.name === "Generate build provenance predicate")?.uses).toBe(
-      "actions/attest-build-provenance/predicate@1176ef556905f349f669722abf30bce1a6e16e01",
-    );
+    expect(steps.filter((step) => step.uses?.startsWith("actions/attest@"))).toHaveLength(1);
+    expect(steps[attest].with?.["predicate-type"]).toBeUndefined();
+    expect(steps[attest].with?.predicate).toBeUndefined();
+    expect(steps[attest].with?.["create-storage-record"]).toBe(false);
+    expect(steps.find((step) => step.name === "Generate build provenance predicate")).toBeUndefined();
     expect(fresh).toBeGreaterThan(upload);
     expect(publish).toBeGreaterThan(fresh);
     expect(steps[publish].run).toContain('git rev-parse "${RELEASE_TAG}^{commit}"');

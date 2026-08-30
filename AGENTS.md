@@ -1,98 +1,50 @@
 # AGENTS.md
 
-## 项目定位
+SkillPort is a React + TypeScript + Tauri desktop application fork whose primary local delivery
+target is a stable Windows installer. Use `pnpm` and `just` from the repository root.
 
-- 本仓库是 `iamzhihuix/skills-manage` 的 fork。
-- 上游 `README.md` 当前只写明提供 Apple Silicon macOS 预编译包，其他平台先从源码运行。
-- 这个 fork 的明确目标，是在本地稳定构建 **Windows 安装包**。后续涉及 Tauri 打包、资源文件、发布说明、构建脚本、依赖升级时，默认先保证 Windows 构建链路可用，不把 Windows 当次要平台。
+The pinned local toolchain is Node 26, pnpm 10.34.5, and Rust 1.98.0. The standard local entry
+points are `just doctor`, `just check`, `just ci`, and `just audit`.
 
-## 技术栈与目录
+## Start Here
 
-- `src/`：React + TypeScript + Tailwind CSS 4 前端。
-- `src/stores/`：Zustand 状态层。组件里不要直接调 Tauri `invoke()`。
-- `src/components/skill/UnifiedSkillCard.tsx`：技能卡片唯一实现，新增场景优先复用。
-- `src-tauri/src/`：Rust 后端，含 commands、数据库、linker、marketplace。
-- 私有 Central 技能目录：`~/.skillsmanage/skills/`；Universal Agents 共享目标：`~/.agents/skills/`
-- 本地数据库：`~/.skillsmanage/db.sqlite`
+- Use [`code_map.md`](code_map.md) for repository navigation and search anchors.
+- Read the relevant `.trellis/spec/<layer>/index.md` before editing backend, frontend, or quality
+  code; follow the project Trellis workflow for multi-step work.
+- Read [`docs/agents/build-and-test.md`](docs/agents/build-and-test.md) for commands and gates.
+- Read [`docs/agents/git-and-release.md`](docs/agents/git-and-release.md) for branch, PR, and
+  release operations.
+- Read [`docs/agents/security-and-shared-state.md`](docs/agents/security-and-shared-state.md)
+  before changing Central, persistence, credentials, or updater behavior.
 
-## 常用命令
+## Durable Project Rules
 
-```powershell
-pnpm install
-just doctor
-just check
-just ci
-just audit
-just version-check
-just dev
-just build
-just install
-pnpm tauri dev
-pnpm build
-pnpm test
-pnpm typecheck
-pnpm lint
-pnpm docs:gen
-pnpm docs:gen:check
-pnpm docs:build
-cd src-tauri; cargo test
-cd src-tauri; cargo clippy -- -D warnings
-pnpm tauri build
-```
+- Treat the Windows x64 Tauri bundle as a first-class acceptance surface. A frontend-only build
+  does not establish a packaging or release result.
+- Route all user-visible text through `src/i18n/` and keep `README.md` / `README_CN.md` aligned
+  when public wording changes.
+- Keep component state in the domain Zustand stores; components do not call Tauri `invoke()`
+  directly. Reuse `UnifiedSkillCard` for skill-card scenarios.
+- Put shared Central behavior in the Rust service/repository boundary. Preserve persisted `uid`
+  semantics, use the existing Central mutation lock and `ensure_centralized` path, and retain
+  target-only skills during Central migration.
+- Keep credentials behind `SecretStore`; do not place PATs, API keys, passwords, or private keys
+  in SQLite, logs, errors, telemetry, or portable exports.
+- Treat generated architecture documents as build outputs: after changing Tauri commands or
+  `src-tauri/src/db/schema/`, run `pnpm docs:gen` and include the generated files; keep
+  `docs:gen:check` and `docs:build` read-only.
+- For Windows updater delivery, preserve the Authenticode -> updater signature -> metadata order
+  and keep NSIS, `.sig`, `latest.json`, MSI, and ZIP artifacts consistent. See the release guide.
 
-## justfile 约定
+## Completion Gate
 
-- 工具链固定为 Node 22 LTS（`.node-version`/`package.json`）、pnpm 10.12.3（`package.json`）和 Rust 1.97.0（`rust-toolchain.toml`）。
-- `just doctor` 是跨平台只读诊断，会报告缺失或漂移，不安装依赖、不切换 Rust、不修改 PATH，也不输出 token 或 secret。
-- `just check` 只运行 `run-ci` 的 quick lane，适合开发中反馈；不能替代提交前完整的 `just ci` 和 `just audit`。`just check`/`just ci`/`just build` 都会先自动同步版本元数据（等价于 `just sync-version`），避免本地因版本漂移中断。
-- `just ci`：并行跑平台无关的 common lane（生成物检查、前端验证与构建、文档、Rust entrypoint/格式/IPC 合同）和当前平台的全 targets Clippy、锁文件 Rust 测试；本地入口先自动同步版本元数据。GitHub Actions 直接调用 `run-ci.mjs` 与 `sync-version.mjs --check`，不经过 just，因此 CI 侧版本与生成物检查保持只读，漂移时失败但不修改 tracked 文件。
-- `just version-check`：只读检查 `package.json`、Tauri 与 Cargo 版本元数据；显式更新仍使用 `just sync-version`。
-- `just dev`：直接启动 Tauri 开发模式。
-- `just build`：跑 `pnpm tauri build`，然后把 `src-tauri/target/release/bundle/nsis/` 里最新的 Windows 安装包复制到根目录 `outputs/`。
-- `just install`：跑 `just build`，然后以 passive 模式运行根目录 `outputs/` 里的最新 NSIS 安装包。
-- 改 CI 或发布流程时，优先保持 `just ci` 和 GitHub Actions 的检查项一致，避免本地和远端两套标准。
-- GitHub Actions 对指向 `dev` 或 `main` 的 PR 并行运行 common、Windows/Linux/macOS Rust 和供应链 lane；`just-ci` 只做 fail-closed 汇总。CI 跨平台 smoke package 只在直接手动触发时运行，正式发布打包由桌面发布 workflow 独立负责。
-- CI 只由目标为 `dev` 或 `main` 的 PR 触发，普通 push 不触发 CI；`just-ci` 仍是唯一稳定的 required check。
+Run the smallest relevant checks while iterating and run `just ci` before declaring repository
+work complete. Report skipped checks and unverified external, provider, hardware, or production
+evidence explicitly.
 
-## 分支与 PR 合并模型
-
-- `dev` 是长期保留的日常开发分支，不删除或退役。
-- 短生命周期 task 分支以 `dev` 为目标并使用 squash merge，合并后自动删除 task 分支。
-- `dev -> main` promotion PR 使用 merge commit 保留祖先关系；合并后先刷新并确认精确 promotion merge SHA，再把 `dev` fast-forward 到该 SHA，之后才能写 Trellis bookkeeping 或开始下一个 task。
-- `main` 的 required `just-ci`、PR、resolved conversations、管理员约束和禁止 force/delete 保持不变；远端 ruleset/merge settings 变更必须先展示目标和回读实际值。
-
-## 修改约束
-
-- 所有用户可见文本都走 i18n。改文案时同步检查 `README.md` / `README_CN.md` 和前端中英文资源。
-- 涉及技能安装、卸载、中央化链路时，优先复用现有 `linker.rs` 逻辑，尤其是 `ensure_centralized` 约束。
-- Windows 相关命令默认按 PowerShell 场景写，避免只适用于 bash 的写法。
-- 改打包链路时，不要只验证前端构建。要把 Tauri Windows bundle 一起看成验收范围。
-- 修改 Tauri command 或 `src-tauri/src/db/schema/` 后运行 `pnpm docs:gen`，并共同提交 `docs/architecture/_generated/` 下两份生成文档；`docs:gen:check` 与 `docs:build` 必须保持只读。
-- Docs workflow 只在 release published 或 canonical `main` 手动触发时部署，同一 Pages artifact 依次经过 deploy 与线上 smoke；不要恢复 deploy job 二次构建或 legacy `gh-pages` 分支，重新创建该分支需要单独审批。
-
-## Code Review Rules
-
-### 共享状态与 Central 变更
-
-- 把数据库 schema、技能 `uid` / 引用解析、导入安装服务和 Central 文件变更视为桌面端与 `skillport-cli` 的共享兼容性契约。只在 Tauri command 或只在 CLI 路径生效的修复、重新生成已持久化的 `uid`、绕过跨进程 Central mutation lock，都会造成另一入口状态错乱或用户技能丢失。安全路径：将共享行为放在 Rust service / repository 层，使用向后兼容的迁移并保留现有 `uid` 语义；Central 写操作复用现有中央化、安装和变更锁链路，中央库迁移时保留目标仅有技能且不删除旧目录。
-
-### 凭据与可移植数据边界
-
-- GitHub PAT、AI API key、SSH 密码及私钥内容不得进入 SQLite 明文、日志、错误文本、遥测或状态导出文件。安全路径：复用 `SecretStore` 边界，优先写入操作系统凭据库，Windows 仅回退到 DPAPI 保护的本地文件，持久化不可用时只留在当前会话；旧明文设置只能在受保护存储写入并回读成功后删除，所有导出和 operation log 保持脱敏。
-
-### Windows 发布与更新契约
-
-- 审查 Tauri 配置、发布 workflow、版本/依赖和产物命名变更时，保护 Windows x64 发布面：已签名 NSIS、对应 `.sig`、指向该产物的 `latest.json`，以及 MSI / ZIP 产物必须保持一致。本地 bundle 成功但签名或更新元数据缺失，仍然是发布回归。安全路径：同步更新唯一桌面发布 workflow、`latest.json` 生成器和 release preflight；本地配置继续使用占位公钥并关闭 updater artifacts，只在发布 workflow 中注入真实公钥并启用签名产物。
-- Tauri updater `.sig` 只证明最终 NSIS 与 updater key 匹配，不能替代 Authenticode。Windows 交付顺序固定为 EXE/NSIS/MSI Authenticode、验证 timestamp、对最终 NSIS 生成 updater `.sig`、再生成 metadata/checksum；rehearsal 可显式报告 `not-configured`，publish 必须因 Authenticode 缺失或无效而失败。
-
-## 验证要求
-
-- 任何任务收尾前，至少跑一遍 `just ci` 并确认通过；如果失败，先修到通过再宣布完成。
-- 前端改动：默认跑 `pnpm typecheck && pnpm lint`
-- 交互或状态相关改动：按改动范围补跑对应的 Vitest 用例
-- Rust 改动：默认跑 `cargo fmt --all -- --check`、`cargo clippy --all-targets --locked -- -D warnings` 和 `cargo test --locked`
-- 涉及平台文件系统差异的 Rust 变更：按需要补跑对应平台的定向测试
-- 打包或发布改动：至少在 Windows 上跑通 `pnpm tauri build`，并确认安装产物实际生成
+Task PRs target `dev` and use squash merge. Promotion to `main` uses a merge commit, after which
+`dev` is fast-forwarded to the promotion merge SHA; see the Git and release guide for the full
+remote-write and read-back rules.
 
 <!-- TRELLIS:START -->
 # Trellis Instructions

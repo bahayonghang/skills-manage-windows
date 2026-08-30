@@ -13,6 +13,7 @@
 
 pub mod batch;
 pub mod centralize;
+pub(crate) mod directory_link;
 pub mod error;
 pub mod fs_util;
 pub mod install;

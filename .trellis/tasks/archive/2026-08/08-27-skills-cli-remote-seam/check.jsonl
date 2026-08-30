@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "AC6 核对 spec 中不再出现 Local-only 断言，能力矩阵逐条覆盖九项能力"}
+{"file": ".trellis/spec/backend/transport-seam.md", "reason": "AC1 核对业务逻辑中不存在对 ActiveTarget 变体的直接 match（接缝构造点除外）"}
+{"file": ".trellis/spec/backend/path-policy.md", "reason": "AC2/AC3 核对远端 lock 路径覆盖有无 XDG_STATE_HOME 两分支且无 .agents 硬编码"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "AC8 哨兵 token 不出现在 IpcError.message 与操作日志"}
+{"file": ".trellis/spec/backend/test-support.md", "reason": "AC4 的 fake runner 需按既有测试支撑设施构建，不另起一套"}
+{"file": ".trellis/spec/quality/observability-gates.md", "reason": "AC9 若命令签名变更需同步 ipc_registry 日志策略并通过 docs:gen:check"}
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "AC10 just ci 通过"}
+{"file": ".trellis/spec/quality/index.md", "reason": "质量层 Quality Check 入口"}
+{"file": ".trellis/tasks/08-27-skills-cli-availability-remote/research/current-state-evidence.md", "reason": "AC7 核对 Local 零回归，diff 中无被删除的既有断言"}

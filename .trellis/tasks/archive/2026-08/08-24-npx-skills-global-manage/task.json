@@ -1,0 +1,28 @@
+{
+  "id": "npx-skills-global-manage",
+  "name": "npx-skills-global-manage",
+  "title": "Manage npx skills global installs",
+  "description": "Local Skills CLI global page: spawn pinned npx skills for -g list/add/remove, leftover lock ownership, target mutation guard.",
+  "status": "completed",
+  "dev_type": null,
+  "scope": "feat",
+  "package": null,
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-08-24",
+  "completedAt": "2026-08-24",
+  "branch": "feat/npx-skills-global-manage",
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "description": "Local Skills CLI global page: spawn pinned npx skills for -g list/add/remove, leftover lock ownership, target mutation guard."
+  }
+}

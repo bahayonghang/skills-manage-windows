@@ -29,9 +29,12 @@ pub(crate) async fn retry_failed_repositories_impl(
     repository_ids: Vec<String>,
     mode_override: Option<SkillRefreshMode>,
     progress: Option<SnapshotProgressReporter>,
+    cli_lock_protect: bool,
 ) -> Result<SkillUpdateInventory, CentralUpdatesError> {
     let repository_ids = normalize_ids(repository_ids);
-    let base = get_skill_update_inventory_impl_scoped(pool, Some(base_scope.clone())).await?;
+    let base =
+        get_skill_update_inventory_impl_scoped(pool, Some(base_scope.clone()), cli_lock_protect)
+            .await?;
     if repository_ids.is_empty() {
         return Ok(base);
     }
@@ -69,6 +72,7 @@ pub(crate) async fn retry_failed_repositories_impl(
         snapshots_cache,
         &slice_scope,
         progress,
+        cli_lock_protect,
     )
     .await?;
 

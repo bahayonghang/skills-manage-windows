@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "Check that just, Actions, and the quality-gate signatures use the new script paths."}
+{"file": ".trellis/spec/quality/test-suite-layout.md", "reason": "Check that script tests stay in src/test/scripts/ and import the moved files."}
+{"file": ".trellis/tasks/08-17-scripts-subfolder-reorg/research/scripts-inventory.md", "reason": "Check that every inventoried caller was updated and old entry paths are gone."}

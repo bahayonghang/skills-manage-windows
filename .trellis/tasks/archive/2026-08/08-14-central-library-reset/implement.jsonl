@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/unknown-source-reset.md", "reason": "Reset IPC, candidate SQL, lock-then-relist, and confirmed skillIds intersection."}
+{"file": ".trellis/spec/backend/skill-deletion-integrity.md", "reason": "Reset must delete skills via parent-row + FK cascade and must not invent a raw wipe of owned relation tables."}
+{"file": ".trellis/spec/backend/fs-db-operation-journal.md", "reason": "Central file+DB delete must keep prepared/fs_staged/db_committed journal, backup rename, and target lease."}
+{"file": ".trellis/spec/backend/target-context.md", "reason": "Reset must freeze one TargetContext so Local and SSH cannot mix pool and filesystem."}
+{"file": ".trellis/spec/backend/startup-recovery.md", "reason": "Healthy databases must not use rebuild_startup_database; reset is journaled Central delete."}
+{"file": ".trellis/spec/backend/central-mutation-lock.md", "reason": "Batch Central delete/reset must acquire the existing target mutation guard and must not add a nested lock."}
+{"file": ".trellis/spec/backend/test-support.md", "reason": "Tests must use mem_pool/file_pool/FakeRunner and must not open the developer Local store."}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "Destructive reset confirmation UI must toast + inline formatBackendError, never String(err) or raw paths."}
+{"file": ".trellis/tasks/archive/2026-08/08-03-diagnose-update-check-failure/research/all-skills-inventory-gap.md", "reason": "Historical evidence that missing membership is classified as unknown_source."}

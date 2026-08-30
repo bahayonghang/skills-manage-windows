@@ -66,3 +66,17 @@ try {
   setIsSubmitting(false);
 }
 ```
+
+## Scenario: Unknown-source Central reset
+
+Reset confirm is a destructive store action on the current target. Follow this
+file plus `.trellis/spec/backend/unknown-source-reset.md`.
+
+- Pass `preview.previews` skill ids into `reset_unknown_source_skills`; do not
+  send Unsupported inventory ids or preview-failed ids.
+- Outer rejection: toast + inline `formatBackendError`; keep the dialog open.
+- Partial `failed[]`: keep the dialog open; render `skill_id` +
+  `formatBackendError(error_code)` for each item. Count-only toast is not
+  enough.
+- Follow-up `refreshCounts` / inventory reload failures must use their own
+  toast key, not `resetUnknownSourceError`.

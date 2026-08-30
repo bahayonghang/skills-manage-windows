@@ -601,7 +601,7 @@ where
 }
 
 fn hex_digest(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+    crate::hashing::encode_lower_hex(bytes)
 }
 
 pub fn build_archive(snapshot: &LocalSnapshot) -> Result<Vec<u8>, LocalRemoteSyncError> {

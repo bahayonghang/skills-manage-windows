@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 3
-- **Last Active**: 2026-08-08
+- **Total Sessions**: 4
+- **Last Active**: 2026-08-20
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~114 | Active |
+| `journal-1.md` | ~150 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 4 | 2026-08-20 | 永久固定 Update Center 新增项导入快照 | `76921945`, `92ce4c19`, `19511d74` | `dev` |
 | 3 | 2026-08-08 | 修复 just audit 依赖审计阻塞 | `68d9320f` | `fix/update-retry-scope-ownership` |
 | 2 | 2026-08-08 | 修复 Update Center 范围重试仓库归属冲突 | `75b5ae6b`, `06ab922e`, `73a0db9c` | `fix/update-retry-scope-ownership` |
 | 1 | 2026-08-08 | 诊断 Update Center Skills 范围重试冲突 | - | `dev` |

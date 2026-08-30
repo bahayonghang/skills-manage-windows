@@ -233,40 +233,53 @@ pub(crate) async fn do_explain_skill_stream(
         })?;
 
     // Try primary endpoint; on connect-layer failure, try fallback once
-    let resp = match send_stream_request(&client, &api_url, &api_key, &body, is_anthropic, false)
-        .await
-    {
-        Ok(r) => r,
-        Err(err_info) => {
-            // Only retry on connect-layer errors that are retryable
-            if err_info.retryable {
-                if let Some(fallback_url) = get_fallback_endpoint(&provider, &api_url) {
-                    tracing::warn!(error_kind = ?err_info.kind, fallback_url = %fallback_url, "AI explanation primary endpoint failed; trying fallback");
-                    let fallback_anthropic =
-                        super::prompt::detect_explanation_api_protocol(&fallback_url)
-                            .is_anthropic_compatible();
-                    match send_stream_request(
-                        &client,
-                        &fallback_url,
-                        &api_key,
-                        &body,
-                        fallback_anthropic,
-                        true,
-                    )
-                    .await
-                    {
-                        Ok(r) => r,
-                        Err(fallback_err) => {
-                            let _ = app.emit(
-                                "skill:explanation:error",
-                                serde_json::json!({
-                                    "skill_id": skill_id,
-                                    "error": &fallback_err.message,
-                                    "error_info": fallback_err,
-                                }),
-                            );
-                            return Err(AiProviderError::Http(fallback_err.message));
+    let resp =
+        match send_stream_request(&client, &api_url, &api_key, &body, is_anthropic, false).await {
+            Ok(r) => r,
+            Err(err_info) => {
+                // Only retry on connect-layer errors that are retryable
+                if err_info.retryable {
+                    if let Some(fallback_url) = get_fallback_endpoint(&provider, &api_url) {
+                        tracing::warn!(
+                            error_kind = ?err_info.kind,
+                            "AI explanation primary endpoint failed; trying fallback"
+                        );
+                        let fallback_anthropic =
+                            super::prompt::detect_explanation_api_protocol(&fallback_url)
+                                .is_anthropic_compatible();
+                        match send_stream_request(
+                            &client,
+                            &fallback_url,
+                            &api_key,
+                            &body,
+                            fallback_anthropic,
+                            true,
+                        )
+                        .await
+                        {
+                            Ok(r) => r,
+                            Err(fallback_err) => {
+                                let _ = app.emit(
+                                    "skill:explanation:error",
+                                    serde_json::json!({
+                                        "skill_id": skill_id,
+                                        "error": &fallback_err.message,
+                                        "error_info": fallback_err,
+                                    }),
+                                );
+                                return Err(AiProviderError::Http(fallback_err.message));
+                            }
                         }
+                    } else {
+                        let _ = app.emit(
+                            "skill:explanation:error",
+                            serde_json::json!({
+                                "skill_id": skill_id,
+                                "error": &err_info.message,
+                                "error_info": err_info,
+                            }),
+                        );
+                        return Err(AiProviderError::Http(err_info.message));
                     }
                 } else {
                     let _ = app.emit(
@@ -279,19 +292,8 @@ pub(crate) async fn do_explain_skill_stream(
                     );
                     return Err(AiProviderError::Http(err_info.message));
                 }
-            } else {
-                let _ = app.emit(
-                    "skill:explanation:error",
-                    serde_json::json!({
-                        "skill_id": skill_id,
-                        "error": &err_info.message,
-                        "error_info": err_info,
-                    }),
-                );
-                return Err(AiProviderError::Http(err_info.message));
             }
-        }
-    };
+        };
 
     if !resp.status().is_success() {
         let status = resp.status();

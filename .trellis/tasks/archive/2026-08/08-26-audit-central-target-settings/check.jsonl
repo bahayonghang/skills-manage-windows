@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Audit all sensitive seed absence and reviewed error preservation."}
+{"file":".trellis/spec/backend/central-update-batching.md","reason":"Check batch/partial/cancel semantics and bounded failure details."}
+{"file":".trellis/spec/backend/fs-db-operation-journal.md","reason":"Check audit rows do not leak or mutate recovery manifests."}
+{"file":".trellis/spec/backend/settings-domain-boundary.md","reason":"Check generic settings and secrets expose only safe counts/categories."}
+{"file":".trellis/tasks/08-26-audit-central-target-settings/prd.md","reason":"Verify every owned command family and admin action acceptance criterion."}
+{"file": ".trellis/spec/backend/operation-observability.md", "reason": "Verify the frozen observability contract remains exhaustive, correlated, non-duplicative and fail-safe."}

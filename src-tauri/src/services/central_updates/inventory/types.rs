@@ -380,6 +380,25 @@ impl SkillUpdateApplyFailure {
             error_category: Some(error.diagnostic_category().to_string()),
         }
     }
+
+    pub(crate) fn from_github_import(
+        repository_id: impl Into<String>,
+        error: crate::services::github_import::GithubImportError,
+    ) -> Self {
+        let error_code = error
+            .ipc_error_code()
+            .unwrap_or("central_updates.import_addition_failed");
+        let public_error = crate::ipc_error::public_message_for_code(error_code)
+            .unwrap_or("This update item could not be applied.");
+        Self {
+            step: "import_addition".to_string(),
+            identifier: safe_logical_identifier(repository_id.into()),
+            phase: Some("decision_apply".to_string()),
+            error: public_error.to_string(),
+            error_code: Some(error_code.to_string()),
+            error_category: Some(error.diagnostic_category().to_string()),
+        }
+    }
 }
 
 fn controlled_apply_step(step: String) -> (&'static str, &'static str) {
@@ -501,6 +520,42 @@ mod apply_failure_tests {
                 assert!(!serialized.contains(secret));
             }
         }
+    }
+
+    #[test]
+    fn import_addition_failure_maps_github_import_code_and_redacts_serialized_error() {
+        let seeds = "token=secret https://example.invalid C:/Users/private";
+        let failure = SkillUpdateApplyFailure::from_github_import(
+            "github:emilkowalski-skill-main",
+            crate::services::github_import::GithubImportError::AccessDenied(seeds.to_string()),
+        );
+
+        assert_eq!(failure.step, "import_addition");
+        assert_eq!(failure.identifier, "github:emilkowalski-skill-main");
+        assert_eq!(failure.phase.as_deref(), Some("decision_apply"));
+        assert_eq!(
+            failure.error_code.as_deref(),
+            Some("github_import.access_denied")
+        );
+        assert_eq!(
+            failure.error_category.as_deref(),
+            Some("github_import.access_denied")
+        );
+
+        let unsafe_identifier = SkillUpdateApplyFailure::from_github_import(
+            seeds,
+            crate::services::github_import::GithubImportError::AccessDenied(seeds.to_string()),
+        );
+        assert_eq!(unsafe_identifier.identifier, "batch");
+
+        let serialized = serde_json::to_string(&failure).unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&serialized).unwrap()["error"],
+            "This update item could not be applied."
+        );
+        assert!(!serialized.contains("token=secret"));
+        assert!(!serialized.contains("example.invalid"));
+        assert!(!serialized.contains("Users/private"));
     }
 }
 

@@ -1,0 +1,7 @@
+{"file":".trellis/spec/quality/index.md","reason":"Load repository quality surfaces before dependency changes."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Preserve full CI, audit, toolchain, immutable Action SHA and Windows bundle contracts."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Keep focused and full frontend/Rust test discovery valid while upgrading test runtimes."}
+{"file":".trellis/spec/frontend/index.md","reason":"Route UI, test seam and renderer compatibility checks for frontend dependency upgrades."}
+{"file":".trellis/spec/backend/index.md","reason":"Route database, credential, network, archive and Tauri compatibility checks for Rust majors."}
+{"file":".trellis/spec/guides/index.md","reason":"Apply shared pre-modification and cross-layer thinking rules."}
+{"file":".trellis/tasks/08-30-dependency-audit-batched-upgrade/research/dependency-audit.md","reason":"Use the dated inventory, advisory paths, version candidates and evidence boundaries."}

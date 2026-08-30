@@ -10,7 +10,7 @@ type SequentialTestHelpers = {
 };
 
 // @ts-expect-error The sequential runner is an ESM Node script outside the TS source tree.
-const { collectTestFiles } = (await import("../../../scripts/run-vitest-sequential.mjs")) as SequentialTestHelpers;
+const { collectTestFiles } = (await import("../../../scripts/check/run-vitest-sequential.mjs")) as SequentialTestHelpers;
 
 const tempDirs: string[] = [];
 

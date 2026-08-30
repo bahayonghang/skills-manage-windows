@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/08-17-scripts-subfolder-reorg/research/scripts-inventory.md", "reason": "Complete caller map, repo-root traps, and the selected four-folder layout."}
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "Pins just/ci/doctor/docs script signatures that must move with the new paths."}
+{"file": ".trellis/spec/quality/test-suite-layout.md", "reason": "Keeps script tests under src/test/scripts/ and forbids a second test-tree split."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Repo-root walk is a new shared helper; do not add a second resolution style."}

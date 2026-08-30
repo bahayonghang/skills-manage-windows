@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
   BarChart3,
+  Terminal,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
@@ -227,6 +228,14 @@ export function Sidebar() {
           icon={<Blocks className="size-4" />}
           expanded={expanded}
           count={skillsByAgent["central"]}
+        />
+
+        <NavItem
+          label={t("sidebar.skillsCli")}
+          isActive={pathname === "/skills-cli"}
+          onClick={() => navigate("/skills-cli")}
+          icon={<Terminal className="size-4" />}
+          expanded={expanded}
         />
 
         {/* Projects (project-level skill management) */}

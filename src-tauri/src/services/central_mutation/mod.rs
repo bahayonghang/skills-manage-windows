@@ -39,8 +39,11 @@ impl CentralMutationGuard {
 
 impl Drop for CentralMutationGuard {
     fn drop(&mut self) {
-        if let Err(error) = FileExt::unlock(&self.file) {
-            tracing::warn!(operation = self.operation, error = %error, "failed to unlock Central mutation file");
+        if FileExt::unlock(&self.file).is_err() {
+            tracing::warn!(
+                operation = self.operation,
+                "failed to unlock Central mutation file"
+            );
         }
     }
 }
@@ -90,7 +93,21 @@ async fn acquire_default_mutation_guard_at(
     operation: &'static str,
     timeout: Duration,
 ) -> Result<CentralMutationGuard, CentralMutationError> {
-    let test_guard = DEFAULT_LOCK_TEST_MUTEX.lock().await;
+    let test_guard = if timeout.is_zero() {
+        DEFAULT_LOCK_TEST_MUTEX
+            .try_lock()
+            .map_err(|_| CentralMutationError::Busy { operation })?
+    } else {
+        match tokio::time::timeout(timeout, DEFAULT_LOCK_TEST_MUTEX.lock()).await {
+            Ok(guard) => guard,
+            Err(_) => {
+                return Err(CentralMutationError::Timeout {
+                    operation,
+                    timeout_ms: timeout.as_millis(),
+                });
+            }
+        }
+    };
     let mut guard = acquire_central_mutation_guard_at(path, operation, timeout).await?;
     guard._test_guard = Some(test_guard);
     Ok(guard)
@@ -106,11 +123,26 @@ fn target_mutation_lock_path(target_id: &str, target_kind: TargetKind) -> PathBu
         TargetKind::Ssh => "ssh",
         TargetKind::Wsl => "wsl",
     };
-    let digest = format!("{:x}", Sha256::digest(target_id.as_bytes()));
+    let digest = crate::hashing::encode_lower_hex(Sha256::digest(target_id.as_bytes()).as_ref());
+    remote_target_lock_dir().join(format!("central-mutation-{kind}-{digest}.lock"))
+}
+
+#[cfg(not(test))]
+fn remote_target_lock_dir() -> PathBuf {
     crate::paths::central_mutation_lock_path()
         .parent()
         .expect("Central mutation lock path always has a locks directory")
-        .join(format!("central-mutation-{kind}-{digest}.lock"))
+        .to_path_buf()
+}
+
+#[cfg(test)]
+fn remote_target_lock_dir() -> PathBuf {
+    std::env::temp_dir()
+        .join(format!(
+            "skillport-central-mutation-tests-{}",
+            std::process::id()
+        ))
+        .join("locks")
 }
 
 pub(crate) async fn acquire_central_mutation_guard_at(
@@ -286,6 +318,11 @@ mod tests {
         let filename = ssh_a.file_name().unwrap().to_string_lossy();
         assert!(!filename.contains("ssh-a"));
         assert!(filename.starts_with("central-mutation-ssh-"));
+        assert_ne!(
+            ssh_a.parent(),
+            crate::paths::central_mutation_lock_path().parent(),
+            "remote target tests must not write into the user's app-data locks directory"
+        );
     }
 
     #[tokio::test]

@@ -47,7 +47,8 @@ pub enum XxxError {
 ```rust
 #[error("{0}")] Http(String),         // 传输/协议/非 2xx/镜像回退汇总
 #[error("{0}")] RateLimited(String),  // 429 / x-ratelimit 分类命中
-#[error("{0}")] AccessDenied(String), // 401/403 非限流
+#[error("{0}")] AccessDenied(String), // 401/403 非限流，未使用认证
+#[error("{0}")] ConfiguredTokenAccessDenied(String), // 401/403 且请求已使用认证
 #[error("{0}")] Parse(String),        // JSON/UTF-8 解析失败，不复用 Http
 ```
 
@@ -66,6 +67,7 @@ pub enum XxxError {
 | 直接 sqlx 调用       | `#[from] sqlx::Error` 透传（`?`）                                                                   |
 | repos 内业务校验失败 | `sqlx::Error::InvalidArgument(原消息)`（Display "{0}"，文案逐字保留）                               |
 | reqwest 失败         | 按类别 map 到 `Http`/`RateLimited`/`AccessDenied`/`Parse`，禁止 `#[from]`                           |
+| GitHub 401/403       | 保留 typed `used_auth`；匿名与 configured-token failure 使用不同稳定 code，禁止解析 Display       |
 | resource_budget 违规 | `.map_err(XxxError::Budget)`（`#[error("{0}")] Budget(BudgetExceeded)`，typed struct 文案逐字保留） |
 | spawn_blocking join  | `run_blocking_fs_with(label, task, XxxError::task_join)`                                            |
 | 调用方需区分错误类别 | 加语义化变体 + `matches!`，禁止 `error.contains("...")` 字符串判断                                  |
@@ -122,16 +124,22 @@ do_thing_impl(&state.db)
 ### 2. Signatures
 
 ```rust
-pub struct IpcError { pub code: String, pub message: String, pub retryable: bool }
+pub struct IpcError {
+    pub code: String,
+    pub message: String,
+    pub retryable: bool,
+    pub correlation_id: Option<String>,
+}
 pub type IpcResult<T> = Result<T, IpcError>;
 ```
 
-184 个 runtime command 由 `ipc_registry.rs` 单点登记；180 个 fallible command 返回
-`IpcResult<T>`，4 个 infallible command 保持原签名。
+runtime command、fallible boundary 和例外项的当前数量由
+`src/test/contracts/ipcCommandCoverage.test.ts` 从 registry 权威源计算，不在本规范复制快照。
 
 ### 3. Contracts
 
 - `code` 是 locale-neutral 的小写点分标识；`retryable` 默认 `false`。
+- `correlation_id` 是可选 UUID；命名 IPC boundary 在 Runtime/Operation evidence 已建立时返回同一 ID。
 - 仅当 mapper 能证明 mutation 前失败且重试安全时设 `retryable=true`。
 - 已审查的域错误映射为固定 code/message；未知 Display 只得到
   `internal.unexpected` 固定摘要，不能把原文复制进 payload。
@@ -166,11 +174,12 @@ pub type IpcResult<T> = Result<T, IpcError>;
 
 ### 6. Tests Required
 
-- `ipc_error` serialization asserts exactly `code/message/retryable`.
+- `ipc_error` serialization asserts `code/message/retryable` and optional camel-case `correlationId`; absent remains
+  backward-compatible and invalid dynamic values are rejected.
 - Seed PAT, AI key, SSH password, absolute/relative paths, command/output and file content; none may survive serialization.
 - Archive redirect tests seed PAT, URL, repository/file path, and response text;
   the serialized payload retains only its fixed code/message/retryable fields.
-- IPC coverage asserts 184 runtime, 180 fallible, 4 infallible and zero raw string command boundaries.
+- IPC coverage derives and asserts runtime/fallible/infallible membership and zero raw string command boundaries.
 
 ### 7. Wrong vs Correct
 

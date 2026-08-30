@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端层入口:Pre-Development Checklist 与规范索引,写码前必读"}
+{"file": ".trellis/spec/frontend/skill-usage-state.md", "reason": "usage store 契约:组件不直接 invoke、pending key 与刷新语义,本任务要改 unlink 入口形态并新增批量方法"}
+{"file": ".trellis/spec/frontend/renderer-authority-boundary.md", "reason": "渲染层权责边界:弹窗与行操作只能走 store/bindings,不得直连 Tauri"}
+{"file": ".trellis/spec/frontend/icon-control-hit-area.md", "reason": "行右 Unlink 图标按钮沿用 40px 热区基准(HIT_AREA_CLASS 的规范出处)"}
+{"file": ".trellis/spec/frontend/platform-grouping.md", "reason": "平台按 Agent 分组的展示约定:Central 第二排改文本行需与既有 agent 副标题形态一致"}

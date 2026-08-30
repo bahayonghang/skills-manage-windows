@@ -2,7 +2,9 @@
 
 ## 1. Scope / Trigger
 
-Apply this contract to operations that finalize writes under a Central skill root, relocate that root, recover a pending Central operation, or copy the legacy Universal Central store into the private Local store. GUI and CLI must share the same Local lock; Local/SSH/WSL delete and update also use a target-derived lease so mutations and recovery for one target serialize across processes.
+Apply this contract to operations that finalize writes under a Central skill root, relocate that root, recover a pending Central operation, copy the legacy Universal Central store into the private Local store, or write platform skill directories that share those roots. Holders of the Local target guard include Central install/uninstall, Skills CLI global add/remove/link/unlink, and leftover **local** apply (the delete loop). Remote leftover apply takes that remote target's guard. GUI and CLI must share the same Local lock; Local/SSH/WSL delete and update also use a target-derived lease so mutations and recovery for one target serialize across processes.
+
+Skills CLI exclusive job family `skills_cli` is **not** this lock. Acquire order when both exist: exclusive job lease → `acquire_target_mutation_guard` → spawn/delete. See `skills-cli-global.md` and `exclusive-job-lifecycle.md`.
 
 ## 2. Signatures
 
@@ -60,7 +62,8 @@ Local keeps `paths::central_mutation_lock_path()` as `app_data_dir()/locks/centr
 - Run affected mutation-domain tests and `just ci` after moving a lock boundary.
 - Search all production `acquire_central_mutation_guard` call sites and verify they are Local top-level final-apply paths.
 - Assert same-target Local/SSH/WSL delete, update, and recovery contend; different target digests do not contend.
-- Unit tests using the real default lock path serialize through the `cfg(test)` in-process guard so unrelated parallel tests cannot consume the production timeout. Contention/crash tests bypass that guard through `acquire_central_mutation_guard_at` and use isolated paths/processes.
+- Unit tests using the real default lock path serialize through the `cfg(test)` in-process guard so unrelated parallel tests cannot consume the production timeout. A contention test's **holder setup** must bypass that mutex through `acquire_central_mutation_guard_at`; only the operation under test uses `acquire_target_mutation_guard`. Otherwise the holder can time out while queued behind unrelated tests before the asserted file-lock contention starts. Prefer an isolated lock path/process; when the contract specifically covers the production default path, keep the raw holder lifetime minimal and run the exact test repeatedly plus the full mutation-domain suite.
+- Remote-target unit tests must derive SSH/WSL lock files under a process-scoped temporary root, not the user's real `app_data_dir()/locks`. Keep Local default-path tests on the production resolver only when they explicitly verify Local compatibility or file-lock contention. This prevents parallel tests or a live application from creating/removing the same remote lock directory between `create_dir_all` and `OpenOptions::open`.
 - Hold an isolated Local guard, assert legacy migration returns typed timeout and writes no marker, release it, then assert the same migration succeeds and preserves the source.
 
 ## 7. Wrong vs Correct
@@ -86,4 +89,18 @@ let _guard = acquire_central_mutation_guard("legacy Central store migration", ti
 if let Some(summary) = completed_summary(pool).await? { return Ok(summary); }
 let summary = copy_legacy_blocking().await?;
 write_marker(pool, &summary).await?;
+```
+
+```rust
+// Wrong: the contention-test holder also owns DEFAULT_LOCK_TEST_MUTEX, so test
+// setup can time out behind unrelated default-lock tests before contention starts.
+let _holder = acquire_target_mutation_guard(&ActiveTarget::Local, "hold test lock", timeout).await?;
+
+// Correct: setup holds the real file lock without the cfg(test) mutex; the
+// operation under test still enters acquire_target_mutation_guard normally.
+let _holder = acquire_central_mutation_guard_at(
+    paths::central_mutation_lock_path(),
+    "hold test lock",
+    timeout,
+).await?;
 ```

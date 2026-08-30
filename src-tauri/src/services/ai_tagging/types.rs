@@ -159,8 +159,8 @@ where
     fn counters_snapshot(&self) -> AiTagCounters {
         match self.counters.lock() {
             Ok(guard) => guard.clone(),
-            Err(error) => {
-                tracing::warn!(error = %error, "AI tag counter mutex poisoned during progress emit");
+            Err(_error) => {
+                tracing::warn!("AI tag counter mutex poisoned during progress emit");
                 AiTagCounters::default()
             }
         }

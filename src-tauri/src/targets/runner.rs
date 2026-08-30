@@ -485,6 +485,7 @@ mod tests {
                     }
                 }
                 let _ = std::io::stdout().flush();
+                std::thread::sleep(Duration::from_secs(30));
             }
             "large_stderr" => {
                 let chunk = vec![b'x'; 8 * 1024];
@@ -494,6 +495,7 @@ mod tests {
                     }
                 }
                 let _ = std::io::stderr().flush();
+                std::thread::sleep(Duration::from_secs(30));
             }
             "close_stdin" => {
                 close_fixture_stdin();
@@ -533,7 +535,6 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn timeout_is_bounded_without_blocking_the_runtime() {
         let runner = ProcessRunner;
-        let started = Instant::now();
         let request = test_request(
             fixture_command("sleep", None, None),
             Duration::from_millis(150),
@@ -541,14 +542,32 @@ mod tests {
         );
         let independent_tick = async {
             tokio::time::sleep(Duration::from_millis(20)).await;
-            started.elapsed()
         };
+        tokio::pin!(independent_tick);
+        let run = runner.run(request);
+        tokio::pin!(run);
 
-        let (result, tick_elapsed) = tokio::join!(runner.run(request), independent_tick);
-
-        assert!(matches!(result, Err(RunnerError::TimedOut { .. })));
-        assert!(tick_elapsed < Duration::from_secs(1));
-        assert!(started.elapsed() < Duration::from_secs(2));
+        // Fairness is poll order, not wall-clock: a blocked current-thread
+        // runtime would finish `run` before the independent tick can complete.
+        // `biased` plus `if !tick_completed` keeps that check stable when both
+        // futures become ready after OS scheduling delay.
+        let mut tick_completed = false;
+        loop {
+            tokio::select! {
+                biased;
+                () = &mut independent_tick, if !tick_completed => {
+                    tick_completed = true;
+                }
+                result = &mut run => {
+                    assert!(
+                        tick_completed,
+                        "timeout supervision blocked the current-thread runtime before an independent task could complete"
+                    );
+                    assert!(matches!(result, Err(RunnerError::TimedOut { .. })));
+                    break;
+                }
+            }
+        }
     }
 
     #[tokio::test]

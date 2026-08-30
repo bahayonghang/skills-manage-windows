@@ -58,6 +58,28 @@ export function aggregateLogsKpi(entries: OperationLogEntry[]): LogsKpi {
   };
 }
 
+export function formatLogAbsoluteTime(
+  iso: string,
+  options?: { withSeconds?: boolean },
+): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    ...(options?.withSeconds ? { second: "2-digit" } : {}),
+  }).format(date);
+}
+
+export function formatLogIsoTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return iso;
+}
+
 export function formatDurationMs(ms: number | null | undefined): string {
   if (ms === null || ms === undefined || !Number.isFinite(ms)) return "—";
   if (ms < 1000) return `${Math.round(ms)} ms`;

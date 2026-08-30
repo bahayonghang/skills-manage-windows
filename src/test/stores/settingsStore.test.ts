@@ -474,6 +474,103 @@ describe("settingsStore", () => {
     });
   });
 
+  it("clears the renderer secret when secure save succeeds but ordinary settings fail", async () => {
+    const secret = "secret-sentinel-ai-key";
+    const settingsError = new Error("settings.persist_failed");
+    vi.mocked(invoke)
+      .mockResolvedValueOnce({
+        configured: true,
+        storageState: "stored",
+        fingerprint: "sha256:partial1",
+        provider: "claude",
+        error: null,
+      })
+      .mockRejectedValueOnce(settingsError);
+    useSettingsStore.setState({
+      aiSettingsLoaded: true,
+      aiSettings: {
+        provider: "claude",
+        region: "intl",
+        apiKey: secret,
+        model: "claude-sonnet-4-20250514",
+        customUrl: "",
+        protocol: "",
+        tagConcurrency: "1",
+        tagIntervalMs: "4000",
+        tagStopOnRateLimit: true,
+      },
+    });
+
+    await expect(useSettingsStore.getState().flushAiSettings()).rejects.toBe(settingsError);
+
+    expect(invoke).toHaveBeenNthCalledWith(1, "set_ai_api_key", {
+      provider: "claude",
+      value: secret,
+    });
+    const ordinarySettingsPayload = vi.mocked(invoke).mock.calls[1]?.[1];
+    expect(JSON.stringify(ordinarySettingsPayload)).not.toContain(secret);
+    expect(ordinarySettingsPayload).toEqual({
+      values: expect.not.objectContaining({ ai_api_key: expect.any(String) }),
+    });
+
+    const state = useSettingsStore.getState();
+    expect(state.aiSettings.apiKey).toBe("");
+    expect(state.aiApiKeyState).toMatchObject({
+      configured: true,
+      fingerprint: "sha256:partial1",
+    });
+    expect(state.aiSaveStatus).toBe("error");
+    expect(state.aiSaveError).toBe("Error: settings.persist_failed");
+    expect(JSON.stringify({
+      aiSettings: state.aiSettings,
+      aiRawSettings: state.aiRawSettings,
+      aiApiKeyState: state.aiApiKeyState,
+      aiSaveError: state.aiSaveError,
+      error: state.error,
+    })).not.toContain(secret);
+  });
+
+  it("stops provider switching when the pre-switch flush fails", async () => {
+    vi.useFakeTimers();
+    const flushError = new Error("settings.flush_failed");
+    vi.mocked(invoke).mockRejectedValueOnce(flushError);
+    useSettingsStore.setState({
+      aiSettingsLoaded: true,
+      aiSettings: {
+        provider: "claude",
+        region: "intl",
+        apiKey: "",
+        model: "claude-sonnet-4-20250514",
+        customUrl: "",
+        protocol: "",
+        tagConcurrency: "1",
+        tagIntervalMs: "4000",
+        tagStopOnRateLimit: true,
+      },
+    });
+    useSettingsStore.getState().updateAiSettings({ model: "claude-sonnet-4-6" });
+
+    await expect(
+      useSettingsStore.getState().switchAiProvider("deepseek")
+    ).rejects.toBe(flushError);
+
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith("set_settings", {
+      values: expect.objectContaining({
+        ai_provider: "claude",
+        ai_model__claude: "claude-sonnet-4-6",
+      }),
+    });
+    expect(invoke).not.toHaveBeenCalledWith("get_ai_api_key_state", {
+      provider: "deepseek",
+    });
+    const state = useSettingsStore.getState();
+    expect(state.aiSettings.provider).toBe("claude");
+    expect(state.isLoadingAiSettings).toBe(false);
+    expect(state.aiSaveStatus).toBe("error");
+    expect(state.aiSaveError).toBe("Error: settings.flush_failed");
+  });
+
   it("flushes AI settings before testing the connection", async () => {
     vi.mocked(invoke)
       .mockResolvedValueOnce({

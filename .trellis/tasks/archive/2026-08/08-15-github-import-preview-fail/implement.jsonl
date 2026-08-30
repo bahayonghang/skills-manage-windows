@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/github-import-preview-contract.md", "reason": "GitHub preview error and IPC envelope contract; new NoImportableSkills coding must match this file."}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "Domain error Display must stay verbatim; IPC mapping happens at the command boundary."}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "Wizard must render reviewed backend codes through formatBackendError, never raw IPC fallback text."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "The defect is an IPC-boundary remap; keep service, IpcError, and renderer messages aligned."}

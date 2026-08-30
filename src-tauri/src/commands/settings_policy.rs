@@ -1,8 +1,15 @@
 use serde::Deserialize;
+use std::collections::BTreeSet;
+
+use crate::services::skills_cli::{parse_skill_source, SkillSource};
 
 const SETTING_KEY_FORBIDDEN: &str =
     "setting_key_forbidden: This setting cannot be changed through the generic settings API.";
 const SETTING_VALUE_INVALID: &str = "setting_value_invalid: The setting value is invalid.";
+const SKILLS_CLI_RECENT_SOURCES_KEY: &str = "skills_cli.recent_sources";
+const RECENT_SOURCES_MAX_ITEMS: usize = 8;
+const RECENT_SOURCES_MAX_SERIALIZED: usize = 16 * 1024;
+const RECENT_SOURCES_MAX_ITEM: usize = 2048;
 
 const AI_PROVIDERS: &[&str] = &[
     "claude",
@@ -20,6 +27,7 @@ pub(super) enum SettingCategory {
     Font,
     Platform,
     Update,
+    SkillsCli,
 }
 
 impl SettingCategory {
@@ -29,6 +37,7 @@ impl SettingCategory {
             Self::Font => "font",
             Self::Platform => "platform",
             Self::Update => "update",
+            Self::SkillsCli => "skills_cli",
         }
     }
 }
@@ -45,6 +54,7 @@ pub(super) fn category_for_key(key: &str) -> Option<SettingCategory> {
         "platform_category_visibility" => Some(SettingCategory::Platform),
         "central_update_check_mode_v1" => Some(SettingCategory::Update),
         "font_scale_v1" => Some(SettingCategory::Font),
+        SKILLS_CLI_RECENT_SOURCES_KEY => Some(SettingCategory::SkillsCli),
         "ai_provider"
         | "ai_tag_concurrency"
         | "ai_tag_interval_ms"
@@ -66,6 +76,7 @@ pub(super) fn validate_setting(key: &str, value: &str) -> Result<SettingCategory
         "ai_tag_concurrency" => parse_integer_in_range(value, 1, 8),
         "ai_tag_interval_ms" => parse_integer_in_range(value, 0, 60_000),
         "ai_tag_stop_on_rate_limit" => matches!(value, "true" | "false"),
+        SKILLS_CLI_RECENT_SOURCES_KEY => validate_recent_sources(value),
         _ => validate_family_value(key, value),
     };
 
@@ -123,6 +134,52 @@ fn validate_family_value(key: &str, value: &str) -> bool {
         "ai_model" => validate_bounded_text(value, 512, true),
         "ai_api_url" | "ai_custom_base_url" => validate_http_url(value),
         _ => false,
+    }
+}
+
+fn validate_recent_sources(value: &str) -> bool {
+    if value.len() > RECENT_SOURCES_MAX_SERIALIZED {
+        return false;
+    }
+    let Ok(items) = serde_json::from_str::<Vec<String>>(value) else {
+        return false;
+    };
+    if items.len() > RECENT_SOURCES_MAX_ITEMS {
+        return false;
+    }
+    let mut seen = BTreeSet::new();
+    for item in &items {
+        if item.is_empty() || item.len() > RECENT_SOURCES_MAX_ITEM {
+            return false;
+        }
+        if item.trim() != item.as_str() {
+            return false;
+        }
+        if item.chars().any(char::is_control) {
+            return false;
+        }
+        if !seen.insert(item.as_str()) {
+            return false;
+        }
+        if !is_allowed_recent_source(item) {
+            return false;
+        }
+    }
+    true
+}
+
+fn is_allowed_recent_source(item: &str) -> bool {
+    let Ok(source) = parse_skill_source(item) else {
+        return false;
+    };
+    match source {
+        SkillSource::WebUrl { url } => reqwest::Url::parse(&url).is_ok_and(|parsed| {
+            parsed.username().is_empty()
+                && parsed.password().is_none()
+                && parsed.query().is_none()
+                && parsed.fragment().is_none()
+        }),
+        SkillSource::Shorthand { .. } | SkillSource::SshUrl { .. } => true,
     }
 }
 
@@ -217,6 +274,10 @@ mod tests {
             ("ai_api_url__custom", "https://example.com/v1/messages"),
             ("ai_custom_base_url__custom", ""),
             ("ai_protocol__custom", "openai"),
+            (
+                "skills_cli.recent_sources",
+                r#"["owner/repo","https://github.com/owner/other"]"#,
+            ),
         ];
 
         for (key, value) in cases {
@@ -289,6 +350,16 @@ mod tests {
             ("ai_protocol__custom", "raw"),
             ("ai_api_url__custom", "file:///secret"),
             ("ai_model__unknown", "model"),
+            ("skills_cli.recent_sources", r#"[" owner/repo"]"#),
+            (
+                "skills_cli.recent_sources",
+                r#"["https://user:token@github.com/owner/repo"]"#,
+            ),
+            (
+                "skills_cli.recent_sources",
+                r#"["owner/repo","owner/repo"]"#,
+            ),
+            ("skills_cli.recent_sources", r#"{"source":"owner/repo"}"#),
         ] {
             let error = validate_setting(key, value).unwrap_err();
             assert!(matches!(
@@ -297,5 +368,32 @@ mod tests {
             ));
             assert!(!error.contains(value));
         }
+    }
+
+    #[test]
+    fn skills_cli_recent_sources_audit_redacts_key_and_value() {
+        let details = setting_audit_details(std::iter::once("skills_cli.recent_sources"), true);
+        let serialized = serde_json::to_string(&details).unwrap();
+        assert_eq!(details["categories"], serde_json::json!(["skills_cli"]));
+        assert_eq!(details["keyCount"], 1);
+        assert_eq!(details["valueStored"], true);
+        assert!(!serialized.contains("skills_cli.recent_sources"));
+        assert!(!serialized.contains("owner/repo"));
+    }
+
+    #[test]
+    fn skills_cli_recent_sources_empty_array_and_bounds() {
+        assert!(validate_setting("skills_cli.recent_sources", "[]").is_ok());
+        let nine = (0..9)
+            .map(|index| format!("owner/repo-{index}"))
+            .collect::<Vec<_>>();
+        let too_many = serde_json::to_string(&nine).unwrap();
+        assert!(validate_setting("skills_cli.recent_sources", &too_many).is_err());
+        let oversized_item = format!("[\"{}\"]", "a".repeat(2049));
+        assert!(validate_setting("skills_cli.recent_sources", &oversized_item).is_err());
+        let control = "[\"owner/repo\\nextra\"]";
+        let error = validate_setting("skills_cli.recent_sources", control).unwrap_err();
+        assert_eq!(error, SETTING_VALUE_INVALID);
+        assert!(!error.contains("owner/repo"));
     }
 }

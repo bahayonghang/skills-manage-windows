@@ -9,7 +9,7 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: mockTauriListen,
 }));
 
-import { useUsageStore } from "@/stores/usageStore";
+import { UNUSED_REQUEST_THRESHOLD_DAYS, useUsageStore } from "@/stores/usageStore";
 import { useTargetStore } from "@/stores/targetStore";
 import { ipcFixtureError } from "@/lib/ipc/errors";
 import { useUsageBootstrap } from "@/pages/skillUsageBindings";
@@ -31,9 +31,11 @@ vi.mock("sonner", () => ({
 import { toast } from "sonner";
 
 const toastInfoMock = vi.mocked(toast.info);
+const toastErrorMock = vi.mocked(toast.error);
 const initialActions = {
   refresh: useUsageStore.getState().refresh,
   subscribeTargetChanged: useUsageStore.getState().subscribeTargetChanged,
+  subscribeScanCompleted: useUsageStore.getState().subscribeScanCompleted,
 };
 
 function overviewFixture() {
@@ -69,6 +71,7 @@ function refreshPayload(overrides: Record<string, unknown> = {}) {
       remoteReachable: false,
     },
     usedCachedData: false,
+    scanning: false,
     refreshError: null,
     ...overrides,
   };
@@ -76,14 +79,17 @@ function refreshPayload(overrides: Record<string, unknown> = {}) {
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 beforeEach(() => {
   toastInfoMock.mockReset();
+  toastErrorMock.mockReset();
   mockTauriListen.mockReset();
   mockTauriListen.mockResolvedValue(() => undefined);
   useUsageStore.setState({
@@ -91,6 +97,10 @@ beforeEach(() => {
     recent: [],
     providers: [],
     detail: null,
+    unused: null,
+    unusedLoading: false,
+    unusedError: null,
+    pendingUnlinkKeys: {},
     scope: null,
     selectedSkill: null,
     loading: false,
@@ -101,6 +111,7 @@ beforeEach(() => {
     usedCachedData: false,
     selectedSource: null,
     lastRefreshMs: null,
+    backgroundScanning: false,
     ...initialActions,
   });
   useTargetStore.setState({
@@ -115,19 +126,168 @@ beforeEach(() => {
 });
 
 describe("usageStore", () => {
+  it("unlinks selected agents sequentially, tracks pending state, then refetches once", async () => {
+    const uninstall = deferred<void>();
+    mockIpcCommands({
+      uninstall_skill_from_agent: () => uninstall.promise,
+      usage_get_unused_skills: { central: [], platforms: [] },
+    });
+
+    const unlink = useUsageStore.getState().unlinkUnusedSkillFromAgents([
+      { skillId: "loose-skill", agentId: "codex", rowId: "codex::/loose" },
+      { skillId: "loose-skill", agentId: "claude-code" },
+    ]);
+
+    // 第一项执行期间：pending key 存在，invoke 参数携带 rowId
+    expect(
+      useUsageStore.getState().pendingUnlinkKeys["codex::/loose"],
+    ).toBe(true);
+    expect(ipcInvokeCalls("uninstall_skill_from_agent")[0].args).toEqual({
+      skillId: "loose-skill",
+      agentId: "codex",
+      rowId: "codex::/loose",
+    });
+
+    uninstall.resolve();
+    const results = await unlink;
+
+    expect(ipcInvokeCalls("uninstall_skill_from_agent").map((c) => c.args)).toEqual([
+      { skillId: "loose-skill", agentId: "codex", rowId: "codex::/loose" },
+      // Central 条目不传 rowId
+      { skillId: "loose-skill", agentId: "claude-code" },
+    ]);
+    // 整批结束后恰好一次报告重取
+    expect(ipcInvokeCalls("usage_get_unused_skills")).toHaveLength(1);
+    expect(ipcInvokeCalls("usage_get_unused_skills")[0].args).toEqual({
+      source: null,
+      thresholdDays: UNUSED_REQUEST_THRESHOLD_DAYS,
+    });
+    expect(useUsageStore.getState().unused).toEqual({
+      central: [],
+      platforms: [],
+    });
+    expect(useUsageStore.getState().pendingUnlinkKeys).toEqual({});
+    expect(results).toEqual([
+      {
+        skillId: "loose-skill",
+        agentId: "codex",
+        rowId: "codex::/loose",
+        ok: true,
+        error: null,
+      },
+      {
+        skillId: "loose-skill",
+        agentId: "claude-code",
+        rowId: null,
+        ok: true,
+        error: null,
+      },
+    ]);
+    expect(toastErrorMock).not.toHaveBeenCalled();
+    expect(toastInfoMock).not.toHaveBeenCalled();
+  });
+
+  it("collects per-target failures, still refreshes once, and shows the partial toast", async () => {
+    mockIpcCommands({
+      uninstall_skill_from_agent: ({ agentId }: { agentId: string }) =>
+        agentId === "blocked"
+          ? Promise.reject(
+              ipcFixtureError(
+                "installation.pending_central_recovery",
+                "unsafe C:/private/path should not be rendered",
+              ),
+            )
+          : Promise.resolve(undefined),
+      usage_get_unused_skills: { central: [], platforms: [] },
+    });
+
+    const results = await useUsageStore
+      .getState()
+      .unlinkUnusedSkillFromAgents([
+        { skillId: "blocked-skill", agentId: "blocked", rowId: "obs-1" },
+        { skillId: "ok-skill", agentId: "fine", rowId: "obs-2" },
+      ]);
+
+    expect(ipcInvokedCommands()).toEqual([
+      "uninstall_skill_from_agent",
+      "uninstall_skill_from_agent",
+      "usage_get_unused_skills",
+    ]);
+    expect(useUsageStore.getState().pendingUnlinkKeys).toEqual({});
+    // 逐项失败不弹逐项 toast；整批结束后只有一次部分失败 toast
+    expect(toastErrorMock).toHaveBeenCalledTimes(1);
+    const message = String(toastErrorMock.mock.calls[0][0]);
+    expect(message).toMatch(/Removed 1 of 1|1 个失败/);
+    expect(message).not.toContain("C:/private/path");
+    // 失败原因以逐项结果返回给弹窗呈现
+    expect(results).toEqual([
+      {
+        skillId: "blocked-skill",
+        agentId: "blocked",
+        rowId: "obs-1",
+        ok: false,
+        error: expect.stringMatching(/待恢复|pending Central recovery/i),
+      },
+      {
+        skillId: "ok-skill",
+        agentId: "fine",
+        rowId: "obs-2",
+        ok: true,
+        error: null,
+      },
+    ]);
+  });
+
+  it("clears pending keys via finally when an agent rejects mid-batch", async () => {
+    const first = deferred<void>();
+    mockIpcCommand("uninstall_skill_from_agent", ({ agentId }: { agentId: string }) =>
+      agentId === "first" ? first.promise : Promise.resolve(undefined),
+    );
+    mockIpcCommand("usage_get_unused_skills", { central: [], platforms: [] });
+
+    const unlink = useUsageStore
+      .getState()
+      .unlinkUnusedSkillFromAgents([
+        { skillId: "s", agentId: "first", rowId: "r1" },
+        { skillId: "s", agentId: "second", rowId: "r2" },
+      ]);
+
+    expect(useUsageStore.getState().pendingUnlinkKeys).toEqual({ r1: true });
+    first.reject(new Error("boom"));
+    await unlink;
+
+    expect(useUsageStore.getState().pendingUnlinkKeys).toEqual({});
+    expect(ipcInvokeCalls("usage_get_unused_skills")).toHaveLength(1);
+  });
+
   it("refresh uses the single usage_refresh payload and stores all returned panels", async () => {
-    mockIpcCommand("usage_refresh", refreshPayload());
+    mockIpcCommands({
+      usage_refresh: refreshPayload(),
+      usage_get_unused_skills: { central: [], platforms: [] },
+    });
 
     const result = await useUsageStore.getState().refresh(true);
 
     expect(result?.summary.callsWritten).toBe(4);
     expect(ipcInvokeCalls("usage_refresh")[0].args).toEqual({ force: true });
-    expect(ipcInvokeCalls()).toHaveLength(1);
 
     const state = useUsageStore.getState();
     expect(state.overview?.kpis.totalCalls).toBe(4);
     expect(state.refreshing).toBe(false);
     expect(state.lastRefreshMs).toBe(1700000000000);
+
+    // 成功扫描后自动刷新未使用清单，且只请求最严阈值（视图本地重分类 30/60/90）
+    await waitFor(() =>
+      expect(ipcInvokeCalls("usage_get_unused_skills")).toHaveLength(1),
+    );
+    expect(ipcInvokeCalls("usage_get_unused_skills")[0].args).toEqual({
+      source: null,
+      thresholdDays: UNUSED_REQUEST_THRESHOLD_DAYS,
+    });
+    expect(useUsageStore.getState().unused).toEqual({
+      central: [],
+      platforms: [],
+    });
   });
 
   it("deduplicates concurrent refresh calls for the same active target", async () => {
@@ -222,6 +382,7 @@ describe("usageStore", () => {
         },
       },
       usage_get_recent: [],
+      usage_get_unused_skills: { central: [], platforms: [] },
     });
 
     await useUsageStore.getState().selectSource("Claude Code");
@@ -230,6 +391,7 @@ describe("usageStore", () => {
     expect(ipcInvokedCommands()).toEqual([
       "usage_get_overview",
       "usage_get_recent",
+      "usage_get_unused_skills",
     ]);
     expect(ipcInvokeCalls("usage_get_overview")[0].args).toEqual({
       topSkillsLimit: 0,
@@ -238,6 +400,11 @@ describe("usageStore", () => {
     expect(ipcInvokeCalls("usage_get_recent")[0].args).toEqual({
       limit: 20,
       source: "Claude Code",
+    });
+    // source 切换同样作用于未使用报告
+    expect(ipcInvokeCalls("usage_get_unused_skills")[0].args).toEqual({
+      source: "Claude Code",
+      thresholdDays: UNUSED_REQUEST_THRESHOLD_DAYS,
     });
   });
 
@@ -264,10 +431,11 @@ describe("usageStore", () => {
         },
       },
       usage_get_recent: [],
+      usage_get_unused_skills: { central: [], platforms: [] },
     });
 
     await useUsageStore.getState().refresh(true);
-    await waitFor(() => expect(ipcInvokeCalls()).toHaveLength(3));
+    await waitFor(() => expect(ipcInvokeCalls()).toHaveLength(4));
 
     expect(useUsageStore.getState().selectedSource).toBe("Claude Code");
     expect(ipcInvokeCalls("usage_get_overview")[0].args).toEqual({
@@ -278,13 +446,17 @@ describe("usageStore", () => {
       limit: 20,
       source: "Claude Code",
     });
+    // 未使用报告沿用同一 source 口径
+    expect(ipcInvokeCalls("usage_get_unused_skills")[0].args).toEqual({
+      source: "Claude Code",
+      thresholdDays: UNUSED_REQUEST_THRESHOLD_DAYS,
+    });
   });
 
   it("refresh falls back to all platforms when selected provider has no calls", async () => {
     useUsageStore.setState({ selectedSource: "Claude Code" });
-    mockIpcCommand(
-      "usage_refresh",
-      refreshPayload({
+    mockIpcCommands({
+      usage_refresh: refreshPayload({
         summary: {
           cached: false,
           callsWritten: 0,
@@ -301,17 +473,19 @@ describe("usageStore", () => {
           },
         ],
       }),
-    );
+      usage_get_unused_skills: { central: [], platforms: [] },
+    });
 
     await useUsageStore.getState().refresh(true);
 
     expect(useUsageStore.getState().selectedSource).toBeNull();
-    expect(ipcInvokeCalls()).toHaveLength(1);
+    expect(ipcInvokeCalls("usage_refresh")).toHaveLength(1);
   });
 
   it("bootstrap refreshes when active target differs from cached usage scope inside TTL", async () => {
     const refresh = vi.fn(async () => null);
     const subscribeTargetChanged = vi.fn(async () => () => undefined);
+    const subscribeScanCompleted = vi.fn(async () => () => undefined);
     useUsageStore.setState({
       overview: overviewFixture(),
       recent: [],
@@ -325,6 +499,7 @@ describe("usageStore", () => {
       lastRefreshMs: Date.now(),
       refresh,
       subscribeTargetChanged,
+      subscribeScanCompleted,
     });
     useTargetStore.setState({
       targets: [
@@ -343,6 +518,7 @@ describe("usageStore", () => {
 
     await waitFor(() => expect(refresh).toHaveBeenCalledWith(false));
     expect(subscribeTargetChanged).toHaveBeenCalledTimes(1);
+    expect(subscribeScanCompleted).toHaveBeenCalledTimes(1);
   });
 
   it("bootstrap cleans up late listener registration after unmount", async () => {
@@ -536,6 +712,34 @@ describe("usageStore", () => {
       ],
       selectedSource: "Claude Code",
       loading: true,
+      unused: {
+        central: [
+          {
+            skillId: "legacy-cleanup",
+            name: "legacy-cleanup",
+            matchStatus: "matched" as const,
+            origin: "central" as const,
+            agents: [
+              {
+                agentId: "claude-code",
+                linkType: "symlink",
+                installedPath: "C:/agents/claude/legacy-cleanup",
+                hasPendingRecovery: false,
+              },
+            ],
+            installs: [],
+            installedPath: null,
+            callCount: 0,
+            lastUsedMs: null,
+            staticTokenEstimate: 960,
+            staticByteCount: 3_840,
+            status: "never_used" as const,
+          },
+        ],
+        platforms: [],
+      },
+      unusedLoading: true,
+      backgroundScanning: true,
       refresh,
     });
 
@@ -549,6 +753,251 @@ describe("usageStore", () => {
     expect(state.providers).toEqual([]);
     expect(state.loading).toBe(false);
     expect(state.selectedSource).toBeNull();
+    expect(state.unused).toBeNull();
+    expect(state.unusedLoading).toBe(false);
+    expect(state.unusedError).toBeNull();
+    expect(state.backgroundScanning).toBe(false);
     expect(refresh).toHaveBeenCalledWith(true);
+  });
+
+  it("refreshUnused requests the strictest threshold once and commits the report", async () => {
+    const report = {
+      central: [
+        {
+          skillId: "legacy-cleanup",
+          name: "legacy-cleanup",
+          matchStatus: "matched",
+          origin: "central",
+          agents: [
+            {
+              agentId: "claude-code",
+              linkType: "symlink",
+              installedPath: "C:/agents/claude/legacy-cleanup",
+              hasPendingRecovery: false,
+            },
+          ],
+          installs: [],
+          installedPath: null,
+          callCount: 0,
+          lastUsedMs: null,
+          staticTokenEstimate: 960,
+          staticByteCount: 3840,
+          status: "never_used",
+        },
+      ],
+      platforms: [],
+    };
+    mockIpcCommand("usage_get_unused_skills", report);
+
+    await useUsageStore.getState().refreshUnused();
+
+    expect(ipcInvokeCalls("usage_get_unused_skills")[0].args).toEqual({
+      source: null,
+      thresholdDays: UNUSED_REQUEST_THRESHOLD_DAYS,
+    });
+    const state = useUsageStore.getState();
+    expect(state.unused).toEqual(report);
+    expect(state.unusedLoading).toBe(false);
+    expect(state.unusedError).toBeNull();
+  });
+
+  it("discards an out-of-order unused response", async () => {
+    const first = deferred<{ central: never[]; platforms: never[] }>();
+    const second = deferred<{
+      central: { name: string }[];
+      platforms: never[];
+    }>();
+    let call = 0;
+    mockIpcCommand("usage_get_unused_skills", () =>
+      call++ === 0 ? first.promise : second.promise,
+    );
+
+    const staleRequest = useUsageStore.getState().refreshUnused();
+    const latestRequest = useUsageStore.getState().refreshUnused();
+
+    second.resolve({ central: [{ name: "new" }], platforms: [] });
+    await latestRequest;
+    expect(useUsageStore.getState().unused?.central[0]?.name).toBe("new");
+
+    first.resolve({ central: [], platforms: [] });
+    await staleRequest;
+    expect(useUsageStore.getState().unused?.central[0]?.name).toBe("new");
+    expect(useUsageStore.getState().unusedLoading).toBe(false);
+  });
+
+  it("discards unused results when the target changes mid-flight", async () => {
+    const pending = deferred<{ central: never[]; platforms: never[] }>();
+    mockIpcCommand("usage_get_unused_skills", () => pending.promise);
+
+    const request = useUsageStore.getState().refreshUnused();
+    useTargetStore.setState({
+      targets: [
+        { id: "ssh-prod", kind: "ssh", label: "alice@prod", isActive: true },
+      ],
+      activeTarget: {
+        id: "ssh-prod",
+        kind: "ssh",
+        label: "alice@prod",
+        isActive: true,
+      },
+    });
+    pending.resolve({ central: [], platforms: [] });
+    await request;
+
+    expect(useUsageStore.getState().unused).toBeNull();
+  });
+
+  it("records an unused-specific error without touching the page error", async () => {
+    mockIpcCommand("usage_get_unused_skills", () =>
+      Promise.reject(ipcFixtureError("storage.unavailable", "unused failed")),
+    );
+
+    await useUsageStore.getState().refreshUnused();
+
+    const state = useUsageStore.getState();
+    expect(state.unused).toBeNull();
+    expect(state.unusedLoading).toBe(false);
+    expect(state.unusedError).toContain("unused failed");
+    expect(state.error).toBeNull();
+  });
+
+  it("marks backgroundScanning when refresh returns a cached page mid-scan", async () => {
+    mockIpcCommands({
+      usage_refresh: refreshPayload({ scanning: true }),
+      usage_get_unused_skills: { central: [], platforms: [] },
+    });
+
+    await useUsageStore.getState().refresh(true);
+
+    const state = useUsageStore.getState();
+    expect(state.backgroundScanning).toBe(true);
+    expect(state.overview?.kpis.totalCalls).toBe(4);
+    expect(state.refreshing).toBe(false);
+  });
+
+  it("silently refetches page data when the background scan completes", async () => {
+    type ScanCompletedHandler = (event: { payload: string }) => void;
+    let scanCompletedHandler: ScanCompletedHandler | undefined;
+    mockTauriListen.mockImplementation(
+      async (event: string, handler: unknown) => {
+        if (event === "usage://scan-completed") {
+          scanCompletedHandler = handler as ScanCompletedHandler;
+        }
+        return () => undefined;
+      },
+    );
+    const freshOverview = {
+      ...overviewFixture(),
+      kpis: { ...overviewFixture().kpis, totalCalls: 42 },
+    };
+    mockIpcCommands({
+      usage_get_overview: freshOverview,
+      usage_get_recent: [],
+      usage_get_unused_skills: { central: [], platforms: [] },
+    });
+    useUsageStore.setState({
+      overview: overviewFixture(),
+      backgroundScanning: true,
+      refreshing: false,
+      loading: false,
+    });
+
+    await useUsageStore.getState().subscribeScanCompleted();
+    expect(scanCompletedHandler).toBeDefined();
+    scanCompletedHandler!({ payload: "local" });
+
+    await waitFor(() =>
+      expect(useUsageStore.getState().overview?.kpis.totalCalls).toBe(42),
+    );
+    expect(ipcInvokeCalls("usage_get_overview")[0].args).toEqual({
+      topSkillsLimit: 0,
+      source: null,
+    });
+    expect(ipcInvokeCalls("usage_get_recent")[0].args).toEqual({
+      limit: 20,
+      source: null,
+    });
+    expect(ipcInvokeCalls("usage_get_unused_skills")).toHaveLength(1);
+    // 静默更新：无 loading/refreshing 抖动，无 toast，无 error
+    const state = useUsageStore.getState();
+    expect(state.backgroundScanning).toBe(false);
+    expect(state.refreshing).toBe(false);
+    expect(state.loading).toBe(false);
+    expect(state.error).toBeNull();
+    expect(toastInfoMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores scan-completed events for other targets", async () => {
+    type ScanCompletedHandler = (event: { payload: string }) => void;
+    let scanCompletedHandler: ScanCompletedHandler | undefined;
+    mockTauriListen.mockImplementation(
+      async (event: string, handler: unknown) => {
+        if (event === "usage://scan-completed") {
+          scanCompletedHandler = handler as ScanCompletedHandler;
+        }
+        return () => undefined;
+      },
+    );
+    mockIpcCommand("usage_get_overview", overviewFixture());
+    useUsageStore.setState({
+      overview: overviewFixture(),
+      backgroundScanning: true,
+    });
+
+    await useUsageStore.getState().subscribeScanCompleted();
+    scanCompletedHandler!({ payload: "ssh-prod" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(ipcInvokeCalls()).toHaveLength(0);
+    expect(useUsageStore.getState().backgroundScanning).toBe(true);
+    expect(useUsageStore.getState().overview?.kpis.totalCalls).toBe(4);
+  });
+
+  it("discards a silent scan refetch when the source changes mid-flight", async () => {
+    type ScanCompletedHandler = (event: { payload: string }) => void;
+    let scanCompletedHandler: ScanCompletedHandler | undefined;
+    mockTauriListen.mockImplementation(
+      async (event: string, handler: unknown) => {
+        if (event === "usage://scan-completed") {
+          scanCompletedHandler = handler as ScanCompletedHandler;
+        }
+        return () => undefined;
+      },
+    );
+    const staleOverview = deferred<ReturnType<typeof overviewFixture>>();
+    mockIpcCommands({
+      usage_get_overview: ({ source }: { source: string | null }) =>
+        source === null
+          ? staleOverview.promise
+          : {
+              ...overviewFixture(),
+              kpis: { ...overviewFixture().kpis, totalCalls: 7 },
+            },
+      usage_get_recent: [],
+      usage_get_unused_skills: { central: [], platforms: [] },
+    });
+    useUsageStore.setState({ overview: overviewFixture() });
+
+    await useUsageStore.getState().subscribeScanCompleted();
+    scanCompletedHandler!({ payload: "local" });
+    await waitFor(() =>
+      expect(ipcInvokeCalls("usage_get_overview")).toHaveLength(1),
+    );
+
+    // 静默重取尚未返回时用户切换 source：旧响应必须被序列号守卫丢弃
+    await useUsageStore.getState().selectSource("Codex CLI");
+    expect(useUsageStore.getState().overview?.kpis.totalCalls).toBe(7);
+
+    staleOverview.resolve({
+      ...overviewFixture(),
+      kpis: { ...overviewFixture().kpis, totalCalls: 99 },
+    });
+    await waitFor(() =>
+      expect(ipcInvokeCalls("usage_get_overview")).toHaveLength(2),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(useUsageStore.getState().selectedSource).toBe("Codex CLI");
+    expect(useUsageStore.getState().overview?.kpis.totalCalls).toBe(7);
   });
 });

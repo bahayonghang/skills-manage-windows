@@ -12,6 +12,7 @@ use super::types::{
 };
 mod batch;
 mod repository;
+mod reset;
 
 use batch::delete_central_skills_for_target;
 #[cfg(test)]
@@ -24,6 +25,12 @@ pub use repository::{
     delete_skill_repository_impl, delete_skill_repository_remote_impl,
     delete_skill_repository_ssh_impl, preview_delete_skill_repository_impl,
     preview_delete_skill_repository_ssh_impl,
+};
+#[cfg(test)]
+pub(crate) use reset::reset_unknown_source_skills_for_target_with_connection_for_tests;
+pub use reset::{
+    list_unknown_source_central_skill_ids, preview_reset_unknown_source_skills_impl,
+    reset_unknown_source_skills_impl,
 };
 
 fn skill_delete_dir(skill: &db::Skill) -> Result<PathBuf, CentralSkillsError> {
@@ -225,6 +232,40 @@ fn remote_shared_root_agent_ids(agents: &[db::Agent], central_root: &str) -> Vec
         .collect()
 }
 
+async fn attach_pending_recovery(
+    pool: &DbPool,
+    target: &ActiveTarget,
+    previews: &mut [DeleteCentralSkillPreview],
+) -> Result<(), CentralSkillsError> {
+    if previews.is_empty() {
+        return Ok(());
+    }
+    let selected = previews
+        .iter()
+        .map(|preview| preview.skill_id.as_str())
+        .collect::<HashSet<_>>();
+    let pending = db::list_pending_fs_db_operations(pool, target.id()).await?;
+    let needs_inspect = pending
+        .iter()
+        .any(|row| selected.contains(row.skill_id.as_str()));
+    let remote = if needs_inspect && target.is_remote_like() {
+        crate::targets::connect_remote_target(target).await.ok()
+    } else {
+        None
+    };
+    for preview in previews.iter_mut() {
+        preview.pending_recovery =
+            crate::services::central_operation::preview_pending_delete_recovery(
+                pool,
+                target,
+                &preview.skill_id,
+                remote.as_ref(),
+            )
+            .await?;
+    }
+    Ok(())
+}
+
 async fn preview_delete_central_skill_ssh_impl(
     pool: &DbPool,
     skill_id: &str,
@@ -268,11 +309,13 @@ async fn preview_delete_central_skill_ssh_impl(
         central_path,
         copy_installations,
         auto_removed_agent_ids,
+        pending_recovery: None,
     })
 }
 
 pub async fn preview_delete_central_skills_ssh_impl(
     pool: &DbPool,
+    target: &ActiveTarget,
     skill_ids: &[String],
 ) -> Result<BatchDeleteCentralSkillPreviewResult, CentralSkillsError> {
     let mut previews = Vec::new();
@@ -292,6 +335,7 @@ pub async fn preview_delete_central_skills_ssh_impl(
         }
     }
 
+    attach_pending_recovery(pool, target, &mut previews).await?;
     Ok(BatchDeleteCentralSkillPreviewResult { previews, failed })
 }
 
@@ -300,10 +344,12 @@ pub async fn delete_central_skill_remote_impl(
     active_target: &ActiveTarget,
     skill_id: &str,
     remove_agent_ids: &[String],
+    force: bool,
 ) -> Result<DeleteCentralSkillResult, CentralSkillsError> {
     let requests = [BatchDeleteCentralSkillRequest {
         skill_id: skill_id.to_string(),
         remove_agent_ids: remove_agent_ids.to_vec(),
+        force,
     }];
     let mut outcomes =
         delete_central_skills_for_target(pool, active_target, &requests, None).await?;
@@ -439,9 +485,10 @@ pub async fn delete_central_skill_ssh_impl(
     target: &RemoteTargetConfig,
     skill_id: &str,
     remove_agent_ids: &[String],
+    force: bool,
 ) -> Result<DeleteCentralSkillResult, CentralSkillsError> {
     let active_target = ActiveTarget::Ssh(Box::new(target.clone()));
-    delete_central_skill_remote_impl(pool, &active_target, skill_id, remove_agent_ids).await
+    delete_central_skill_remote_impl(pool, &active_target, skill_id, remove_agent_ids, force).await
 }
 
 pub async fn preview_delete_central_skill_impl(
@@ -487,6 +534,7 @@ pub async fn preview_delete_central_skill_impl(
         central_path: central_skill_dir.to_string_lossy().into_owned(),
         copy_installations,
         auto_removed_agent_ids,
+        pending_recovery: None,
     })
 }
 
@@ -511,6 +559,7 @@ pub async fn preview_delete_central_skills_impl(
         }
     }
 
+    attach_pending_recovery(pool, &ActiveTarget::Local, &mut previews).await?;
     Ok(BatchDeleteCentralSkillPreviewResult { previews, failed })
 }
 
@@ -518,10 +567,12 @@ pub async fn delete_central_skill_impl(
     pool: &DbPool,
     skill_id: &str,
     remove_agent_ids: &[String],
+    force: bool,
 ) -> Result<DeleteCentralSkillResult, CentralSkillsError> {
     let requests = [BatchDeleteCentralSkillRequest {
         skill_id: skill_id.to_string(),
         remove_agent_ids: remove_agent_ids.to_vec(),
+        force,
     }];
     let mut outcomes =
         delete_central_skills_for_target(pool, &ActiveTarget::Local, &requests, None).await?;

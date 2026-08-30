@@ -72,6 +72,7 @@ export interface UpdateCenterTabHandlers {
     patch: Partial<DeletedPlatformCopyRowState>,
   ) => void;
   retryRepositories: (repositoryIds: string[], mode?: SkillRefreshMode) => void;
+  resetUnknownSource?: () => void;
 }
 
 interface UpdateCenterTabContentProps {
@@ -161,7 +162,13 @@ export function UpdateCenterTabContent({
         />
       );
     case "unsupported":
-      return <UnsupportedTabPanel items={inventory.unsupported ?? []} />;
+      return (
+        <UnsupportedTabPanel
+          items={inventory.unsupported ?? []}
+          onResetUnknownSource={handlers.resetUnknownSource}
+          resetDisabled={actionsDisabled}
+        />
+      );
     case "duplicates":
       return (
         <PlatformDuplicatesTabPanel

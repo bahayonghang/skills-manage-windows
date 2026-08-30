@@ -4,6 +4,8 @@ import {
   aggregateLogsKpi,
   dayBoundsIso,
   formatDurationMs,
+  formatLogAbsoluteTime,
+  formatLogIsoTime,
   formatPercent,
   formatRelativeTime,
   groupLogsByDay,
@@ -62,6 +64,34 @@ describe("aggregateLogsKpi", () => {
     ];
     const kpi = aggregateLogsKpi(entries);
     expect(kpi.avgDurationMs).toBe(100);
+  });
+});
+
+describe("formatLogAbsoluteTime", () => {
+  const fixture = "2026-08-17T11:49:15.213736600+00:00";
+
+  it("formats a UTC ISO timestamp in the local timezone without the offset suffix", () => {
+    const formatted = formatLogAbsoluteTime(fixture, { withSeconds: true });
+    expect(formatted).not.toContain("+00:00");
+    expect(formatted).not.toBe(fixture);
+    expect(Number.isNaN(new Date(fixture).getTime())).toBe(false);
+  });
+
+  it("returns the original string when the date is invalid", () => {
+    expect(formatLogAbsoluteTime("not-a-date", { withSeconds: true })).toBe(
+      "not-a-date",
+    );
+  });
+});
+
+describe("formatLogIsoTime", () => {
+  it("keeps the original ISO string including +00:00 and fractional seconds", () => {
+    const fixture = "2026-08-17T11:49:15.213736600+00:00";
+    expect(formatLogIsoTime(fixture)).toBe(fixture);
+  });
+
+  it("returns the original string when the date is invalid", () => {
+    expect(formatLogIsoTime("not-a-date")).toBe("not-a-date");
   });
 });
 

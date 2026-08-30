@@ -15,6 +15,7 @@ type ExecuteStep = (context: {
 type RunCiHelpers = {
   CI_LANES: Record<string, CiStep[]>;
   parseCiArgs: (args: string[]) => { lane: string };
+  selectWindowsCommandCandidate: (candidates: string[], fallback: string) => string;
   spawnStep: (context: {
     lane: string;
     signal: AbortSignal;
@@ -33,7 +34,14 @@ type RunCiHelpers = {
 };
 
 // @ts-expect-error The CI runner is an ESM Node script outside the TS source tree.
-const { CI_LANES, parseCiArgs, runCi, spawnStep } = (await import("../../../scripts/run-ci.mjs")) as RunCiHelpers;
+const runCiHelpers = (await import("../../../scripts/check/run-ci.mjs")) as RunCiHelpers;
+const {
+  CI_LANES,
+  parseCiArgs,
+  runCi,
+  selectWindowsCommandCandidate,
+  spawnStep,
+} = runCiHelpers;
 
 const tempDirs: string[] = [];
 
@@ -44,6 +52,17 @@ afterEach(() => {
 });
 
 describe("CI command lanes", () => {
+  it("uses where.exe candidate order instead of preferring a later command shim", () => {
+    expect(selectWindowsCommandCandidate([
+      "C:\\tools\\pnpm.exe",
+      "C:\\fallback\\pnpm.cmd",
+    ], "pnpm")).toBe("C:\\tools\\pnpm.exe");
+    expect(selectWindowsCommandCandidate(["C:\\tools\\pnpm.cmd"], "pnpm")).toBe(
+      "C:\\tools\\pnpm.cmd",
+    );
+    expect(selectWindowsCommandCandidate([], "pnpm")).toBe("pnpm");
+  });
+
   it("keeps quick, common, and platform ownership explicit", () => {
     const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
       scripts: Record<string, string>;
@@ -121,7 +140,7 @@ describe("CI command lanes", () => {
 
     const cli = spawnSync(
       process.execPath,
-      ["scripts/run-ci.mjs", "--lane", "missing"],
+      ["scripts/check/run-ci.mjs", "--lane", "missing"],
       { cwd: process.cwd(), encoding: "utf8" },
     );
     expect(cli.status).toBe(1);

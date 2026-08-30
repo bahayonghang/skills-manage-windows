@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Audit disk/read/export/DOM absence of raw frontend and backend seeds."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Check exact code/correlation parity and unknown behavior."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Check diagnostic references do not replace localized user feedback."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Check runtime tests are discoverable and exactly-once assertions execute."}
+{"file":".trellis/tasks/08-26-runtime-diagnostics-correlation/prd.md","reason":"Verify backend authority, frontend view, source distinction and recursion acceptance."}
+{"file": ".trellis/spec/backend/operation-observability.md", "reason": "Verify the frozen observability contract remains exhaustive, correlated, non-duplicative and fail-safe."}

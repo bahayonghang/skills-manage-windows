@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "AC1-AC4 核对远端链接分类为 managed_link、direct_copy/conflict/unavailable 零写拒绝、卸载后 lock 与 links 一致"}
+{"file": ".trellis/spec/backend/skill-deletion-integrity.md", "reason": "AC3/AC4 核对普通目录场景不执行任何删除命令，independent direct copies 逐字节保留"}
+{"file": ".trellis/spec/backend/central-mutation-lock.md", "reason": "AC6 核对远端 guard 生效时另一远端写返回 Busy，且不阻塞 Local 写"}
+{"file": ".trellis/spec/backend/fs-db-operation-journal.md", "reason": "AC5 三个阶段各注入一次中断，recovery 可重试并收敛"}
+{"file": ".trellis/spec/backend/operation-observability.md", "reason": "远端写操作的操作日志字段与 job 关联需符合既有观测约定"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "AC9 哨兵 token 不出现在 IPC message 与操作日志"}
+{"file": ".trellis/spec/backend/test-support.md", "reason": "AC1-AC8 的远端 fake runner 与中断注入需复用既有测试支撑设施"}
+{"file": ".trellis/spec/quality/test-suite-layout.md", "reason": "新增测试的文件归属与命名约定"}
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "AC11 just ci 通过；真实 SSH 主机行为标记 UNVERIFIED"}
+{"file": ".trellis/spec/quality/index.md", "reason": "质量层 Quality Check 入口"}

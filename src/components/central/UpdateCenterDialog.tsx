@@ -12,12 +12,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { BatchDeleteCentralSkillsDialog } from "@/components/central/BatchDeleteCentralSkillsDialog";
 import { formatBackendError } from "@/lib/backendError";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
+import { usePlatformStore } from "@/stores/platformStore";
 import {
   useUpdateCenterStore,
   type UpdateCenterTab,
 } from "@/stores/updateCenterStore";
+import type {
+  BatchDeleteCentralSkillPreviewResult,
+  BatchDeleteCentralSkillRequest,
+} from "@/types";
 import type {
   SkillRefreshMode,
   SkillRefreshScope,
@@ -111,13 +117,28 @@ export function UpdateCenterDialog() {
   const setActiveTab = useUpdateCenterStore((state) => state.setActiveTab);
   const setRefreshMode = useUpdateCenterStore((state) => state.setRefreshMode);
   const skills = useCentralSkillsStore((state) => state.skills ?? []);
+  const agents = useCentralSkillsStore((state) => state.agents ?? []);
   const repositories = useCentralSkillsStore(
     (state) => state.repositories ?? [],
   );
+  const isDeleting = useCentralSkillsStore((state) => state.isDeleting);
+  const loadUnknownSourceResetPreview = useCentralSkillsStore(
+    (state) => state.loadUnknownSourceResetPreview,
+  );
+  const resetUnknownSourceSkills = useCentralSkillsStore(
+    (state) => state.resetUnknownSourceSkills,
+  );
+  const refreshCounts = usePlatformStore((state) => state.refreshCounts);
 
   const [scopeKind, setScopeKind] = useState<SkillRefreshScopeKind>("all");
   const [decisions, setDecisions] = useState<DecisionState>(emptyDecisionState);
   const [isCleaningLeftovers, setIsCleaningLeftovers] = useState(false);
+  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+  const [resetPreview, setResetPreview] =
+    useState<BatchDeleteCentralSkillPreviewResult | null>(null);
+  const [resetSkillIds, setResetSkillIds] = useState<string[]>([]);
+  const [isResetPreviewLoading, setIsResetPreviewLoading] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
   const existingSkillSources = useMemo(
     () => buildSkillConflictSourceMap(skills),
     [skills],
@@ -399,6 +420,91 @@ export function UpdateCenterDialog() {
     }
   }
 
+  function handleResetDialogOpenChange(open: boolean) {
+    setIsResetDialogOpen(open);
+    if (!open) {
+      setResetPreview(null);
+      setResetSkillIds([]);
+      setResetError(null);
+      setIsResetPreviewLoading(false);
+    }
+  }
+
+  async function handleResetUnknownSource() {
+    setResetPreview(null);
+    setResetSkillIds([]);
+    setResetError(null);
+    setIsResetDialogOpen(true);
+    setIsResetPreviewLoading(true);
+    try {
+      const preview = await loadUnknownSourceResetPreview();
+      setResetSkillIds(preview.skillIds);
+      setResetPreview(preview.preview);
+    } catch (err) {
+      const message = t("central.updateCenter.resetUnknownSourcePreviewError", {
+        error: formatBackendError(err, t),
+      });
+      setResetError(message);
+      toast.error(message);
+    } finally {
+      setIsResetPreviewLoading(false);
+    }
+  }
+
+  async function handleResetUnknownSourceConfirm(
+    requests: BatchDeleteCentralSkillRequest[],
+  ) {
+    const removeCopyAgentIds = Array.from(
+      new Set(requests.flatMap((request) => request.remove_agent_ids)),
+    );
+    try {
+      const result = await resetUnknownSourceSkills(
+        requests.map((request) => request.skill_id),
+        removeCopyAgentIds,
+      );
+      try {
+        await refreshCounts();
+      } catch (err) {
+        toast.error(
+          t("central.refreshError", {
+            error: formatBackendError(err, t),
+          }),
+        );
+      }
+      if (result.failed.length > 0) {
+        const itemMessages = result.failed.map((item) => {
+          const formatted = formatBackendError(
+            item.error_code ? `${item.error_code}:${item.error}` : item.error,
+            t,
+          );
+          return `${item.skill_id}: ${formatted}`;
+        });
+        setResetError(itemMessages.join("\n"));
+        toast.error(
+          t("central.updateCenter.resetUnknownSourcePartial", {
+            succeeded: result.succeeded.length,
+            failed: result.failed.length,
+          }),
+        );
+        return result;
+      }
+      toast.success(
+        t("central.updateCenter.resetUnknownSourceSuccess", {
+          count: result.succeeded.length,
+        }),
+      );
+      handleResetDialogOpenChange(false);
+      return result;
+    } catch (err) {
+      const message = t("central.updateCenter.resetUnknownSourceError", {
+        error: formatBackendError(err, t),
+      });
+      setResetError(message);
+      toast.error(message);
+      return { succeeded: [], failed: [] };
+    }
+  }
+
   const handlers: UpdateCenterTabHandlers = {
     updateUpdatable(skillId, patch) {
       setDecisions((current) => ({
@@ -480,9 +586,13 @@ export function UpdateCenterDialog() {
     retryRepositories(repositoryIds, mode) {
       void handleRetryRepositories(repositoryIds, mode);
     },
+    resetUnknownSource() {
+      void handleResetUnknownSource();
+    },
   };
 
   return (
+    <>
     <Dialog
       open={isDialogOpen}
       onOpenChange={(open) => {
@@ -524,7 +634,9 @@ export function UpdateCenterDialog() {
               existingSkillSources={existingSkillSources}
               repositorySources={repositorySources}
               retryingRepositoryIds={retryingRepositoryIds}
-              actionsDisabled={isRefreshing || isApplying || isForcing}
+              actionsDisabled={
+                isRefreshing || isApplying || isForcing || isDeleting
+              }
             />
           </div>
         </DialogBody>
@@ -631,5 +743,26 @@ export function UpdateCenterDialog() {
         </p>
       </DialogContent>
     </Dialog>
+    <BatchDeleteCentralSkillsDialog
+      open={isResetDialogOpen}
+      onOpenChange={handleResetDialogOpenChange}
+      skillIds={resetSkillIds}
+      preview={resetPreview}
+      agents={agents}
+      isPreviewLoading={isResetPreviewLoading}
+      isDeleting={isDeleting}
+      error={resetError}
+      title={t("central.updateCenter.resetUnknownSource")}
+      description={t("central.updateCenter.resetUnknownSourceDesc")}
+      dangerTitle={t("central.updateCenter.resetUnknownSourceDanger", {
+        count: resetPreview?.previews.length ?? resetSkillIds.length,
+      })}
+      confirmLabel={t("central.updateCenter.resetUnknownSourceConfirm", {
+        count: resetPreview?.previews.length ?? resetSkillIds.length,
+      })}
+      confirmTestId="confirm-reset-unknown-source-skills"
+      onConfirm={handleResetUnknownSourceConfirm}
+    />
+    </>
   );
 }

@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "核对三个子任务合入后 spec 与实现无矛盾中间态（PAC4）"}
+{"file": ".trellis/spec/quality/ci-quality-gate.md", "reason": "每个子任务各自 just ci 通过；任务 PR 目标分支为 dev（PAC6）"}
+{"file": ".trellis/spec/quality/index.md", "reason": "质量层 Quality Check 入口"}
+{"file": ".trellis/spec/quality/observability-gates.md", "reason": "新增或改签名的 skills_cli_* 命令需通过 registry 与日志策略闸门"}
+{"file": ".trellis/spec/frontend/renderer-authority-boundary.md", "reason": "核对没有出现第二套选择状态或绕过 skillsCliStore 的直接 invoke（PAC3）"}
+{"file": ".trellis/tasks/08-27-skills-cli-availability-remote/research/current-state-evidence.md", "reason": "集成评审时逐条比对结论是否仍成立，尤其 Unavailable 判据（PAC2）"}

@@ -39,11 +39,7 @@ pub(super) fn file_sha256(bytes: &[u8]) -> [u8; 32] {
 }
 
 pub(super) fn hex_encode(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        out.push_str(&format!("{:02x}", byte));
-    }
-    out
+    crate::hashing::encode_lower_hex(bytes)
 }
 
 /// Compute the framed aggregate digest for `entries` under `domain`.
@@ -70,4 +66,33 @@ pub(super) fn aggregate_digest(domain: &str, entries: &[DigestFileEntry]) -> Str
         DIGEST_ALGORITHM_PREFIX,
         hex_encode(hasher.finalize().as_slice())
     )
+}
+
+/// Domain-separated skill content digest from already-loaded file bytes.
+/// Paths must be skill-relative POSIX paths. Ordering is enforced here.
+pub(crate) fn skill_content_digest_from_file_bytes(files: &[(String, Vec<u8>)]) -> String {
+    let entries = files
+        .iter()
+        .map(|(path, bytes)| DigestFileEntry {
+            path: path.clone(),
+            byte_len: bytes.len() as u64,
+            sha256: file_sha256(bytes),
+        })
+        .collect::<Vec<_>>();
+    aggregate_digest(SKILL_CONTENT_DIGEST_DOMAIN, &entries)
+}
+
+/// Same framed digest as [`skill_content_digest_from_file_bytes`], from
+/// already-hashed `(path, byte_len, sha256)` records. Used when a remote host
+/// hashed the files and this process only aggregates.
+pub(crate) fn skill_content_digest_from_hashed_files(files: &[(String, u64, [u8; 32])]) -> String {
+    let entries = files
+        .iter()
+        .map(|(path, byte_len, sha256)| DigestFileEntry {
+            path: path.clone(),
+            byte_len: *byte_len,
+            sha256: *sha256,
+        })
+        .collect::<Vec<_>>();
+    aggregate_digest(SKILL_CONTENT_DIGEST_DOMAIN, &entries)
 }

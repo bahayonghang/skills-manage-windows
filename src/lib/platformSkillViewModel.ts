@@ -1,11 +1,14 @@
+import { getPlatformSkillRowKey } from "@/lib/platformDuplicateSkills";
 import { buildSearchText, normalizeSearchQuery } from "@/lib/search";
 import type { ScannedSkill } from "@/types";
+import type { SkillUsageStat } from "@/types/usage";
 
 export type PlatformSourceFilter = "all" | "user" | "plugin";
 export type PlatformOriginFilter =
   | { kind: "all" }
   | { kind: "standalone" }
-  | { kind: "central"; repoKey?: string };
+  | { kind: "central"; repoKey?: string }
+  | { kind: "skillsCli" };
 export type PlatformSortField =
   "repository" | "name" | "installedAt" | "updatedAt" | "callCount";
 export type PlatformSortDirection = "asc" | "desc";
@@ -38,7 +41,13 @@ export interface DerivePlatformSkillRowsInput {
   sort: PlatformSortState;
   groupBy: PlatformGroupBy;
   labels: PlatformSkillGroupLabels;
-  usageCounts?: Record<string, number>;
+  usageStats?: Record<string, SkillUsageStat>;
+  usageReady?: boolean;
+}
+
+export interface PlatformLifetimeUsage {
+  rank: number | null;
+  count: number;
 }
 
 export interface DerivePlatformSkillRowsOutput {
@@ -47,6 +56,7 @@ export interface DerivePlatformSkillRowsOutput {
   filteredSkills: ScannedSkill[];
   sortedSkills: ScannedSkill[];
   groups: PlatformSkillGroup[];
+  lifetimeUsageByRowKey: Record<string, PlatformLifetimeUsage>;
 }
 
 interface RepositoryGroupInfo {
@@ -78,12 +88,16 @@ function getUpdatedSortTimestamp(skill: ScannedSkill): number {
   return parseSortableTimestamp(skill.updated_at ?? skill.scanned_at);
 }
 
-function getSkillCallCount(
+function getSkillUsageStat(
   skill: ScannedSkill,
-  usageCounts?: Record<string, number>,
-): number {
-  const count = usageCounts?.[skill.name] ?? 0;
-  return Number.isFinite(count) ? count : 0;
+  usageStats?: Record<string, SkillUsageStat>,
+): { count: number; lastUsedMs: number } {
+  const stat = usageStats?.[skill.name];
+  const count = stat?.count;
+  return {
+    count: typeof count === "number" && Number.isFinite(count) ? count : 0,
+    lastUsedMs: stat?.lastUsedMs ?? 0,
+  };
 }
 
 function compareTimestamps(
@@ -172,10 +186,19 @@ export function getPlatformRepositoryGroupInfo(
   };
 }
 
-/** 与 SkillCardBadges.SourceIndicator 同语义：symlink 即中央链接，其余归独立安装 */
+/**
+ * Install origin for a platform skill row.
+ *
+ * Prefer backend `install_origin` (lock + resolved link target). Fall back to
+ * `link_type === "symlink"` → Central only for older rows that lack the field.
+ * A Skills CLI junction/symlink is `skillsCli`, not SkillPort Central.
+ */
 export function getPlatformSkillOrigin(
   skill: ScannedSkill,
-): "central" | "standalone" {
+): "central" | "standalone" | "skillsCli" {
+  if (skill.install_origin === "skills_cli") return "skillsCli";
+  if (skill.install_origin === "central") return "central";
+  if (skill.install_origin === "standalone") return "standalone";
   return skill.link_type === "symlink" ? "central" : "standalone";
 }
 
@@ -192,6 +215,7 @@ export interface PlatformOriginNavModel {
   total: number;
   centralCount: number;
   standaloneCount: number;
+  skillsCliCount: number;
   /** 仅统计 origin=central 且仓库已指派的行；按 label 排序 */
   repos: Array<{ key: string; label: string; count: number }>;
   /** symlink 且仓库未指派（缺失或 is_unknown）的行数 */
@@ -203,6 +227,7 @@ export function derivePlatformOriginNav(
 ): PlatformOriginNavModel {
   let centralCount = 0;
   let standaloneCount = 0;
+  let skillsCliCount = 0;
   let unassignedCentralCount = 0;
   const repoBuckets = new Map<
     string,
@@ -210,8 +235,13 @@ export function derivePlatformOriginNav(
   >();
 
   for (const skill of skills) {
-    if (getPlatformSkillOrigin(skill) === "standalone") {
+    const origin = getPlatformSkillOrigin(skill);
+    if (origin === "standalone") {
       standaloneCount += 1;
+      continue;
+    }
+    if (origin === "skillsCli") {
+      skillsCliCount += 1;
       continue;
     }
     centralCount += 1;
@@ -245,6 +275,7 @@ export function derivePlatformOriginNav(
     total: skills.length,
     centralCount,
     standaloneCount,
+    skillsCliCount,
     repos,
     unassignedCentralCount,
   };
@@ -254,12 +285,23 @@ function matchesOriginFilter(
   skill: ScannedSkill,
   filter: PlatformOriginFilter,
 ): boolean {
-  if (filter.kind === "all") return true;
-  const origin = getPlatformSkillOrigin(skill);
-  if (filter.kind === "standalone") return origin === "standalone";
-  if (origin !== "central") return false;
-  if (filter.repoKey === undefined) return true;
-  return getPlatformOriginRepoKey(skill) === filter.repoKey;
+  switch (filter.kind) {
+    case "all":
+      return true;
+    case "standalone":
+      return getPlatformSkillOrigin(skill) === "standalone";
+    case "skillsCli":
+      return getPlatformSkillOrigin(skill) === "skillsCli";
+    case "central": {
+      if (getPlatformSkillOrigin(skill) !== "central") return false;
+      if (filter.repoKey === undefined) return true;
+      return getPlatformOriginRepoKey(skill) === filter.repoKey;
+    }
+    default: {
+      const _exhaustive: never = filter;
+      return _exhaustive;
+    }
+  }
 }
 
 export function comparePlatformSkills(
@@ -267,7 +309,8 @@ export function comparePlatformSkills(
   b: ScannedSkill,
   sort: PlatformSortState,
   labels: PlatformSkillGroupLabels,
-  usageCounts?: Record<string, number>,
+  usageStats?: Record<string, SkillUsageStat>,
+  usageReady?: boolean,
 ): number {
   const dir = sort.direction === "asc" ? 1 : -1;
 
@@ -284,9 +327,15 @@ export function comparePlatformSkills(
   }
 
   if (sort.field === "callCount") {
-    const countComparison =
-      getSkillCallCount(a, usageCounts) - getSkillCallCount(b, usageCounts);
+    if (usageReady !== true) {
+      return compareSkillNames(a, b);
+    }
+    const aStat = getSkillUsageStat(a, usageStats);
+    const bStat = getSkillUsageStat(b, usageStats);
+    const countComparison = aStat.count - bStat.count;
     if (countComparison !== 0) return countComparison * dir;
+    const lastUsedComparison = aStat.lastUsedMs - bStat.lastUsedMs;
+    if (lastUsedComparison !== 0) return lastUsedComparison * dir;
     return compareSkillNames(a, b);
   }
 
@@ -355,6 +404,42 @@ function groupPlatformSkills(
   });
 }
 
+/** Competition ranks (1,2,2,4) by count desc, then lastUsedMs desc. Zero count → null. */
+export function assignUsageRanks(
+  skills: readonly ScannedSkill[],
+  stats: Record<string, SkillUsageStat>,
+): Record<string, PlatformLifetimeUsage> {
+  const items = skills.map((skill, index) => {
+    const usage = getSkillUsageStat(skill, stats);
+    return { skill, index, ...usage };
+  });
+  items.sort((a, b) => {
+    if (a.count !== b.count) return b.count - a.count;
+    if (a.lastUsedMs !== b.lastUsedMs) return b.lastUsedMs - a.lastUsedMs;
+    const nameComparison = compareSkillNames(a.skill, b.skill);
+    if (nameComparison !== 0) return nameComparison;
+    return a.index - b.index;
+  });
+
+  const out: Record<string, PlatformLifetimeUsage> = {};
+  let lastKey: string | null = null;
+  let lastRank = 0;
+  items.forEach((item, position) => {
+    const rowKey = getPlatformSkillRowKey(item.skill);
+    if (item.count === 0) {
+      out[rowKey] = { rank: null, count: 0 };
+      return;
+    }
+    const key = `${item.count}:${item.lastUsedMs}`;
+    if (key !== lastKey) {
+      lastRank = position + 1;
+      lastKey = key;
+    }
+    out[rowKey] = { rank: lastRank, count: item.count };
+  });
+  return out;
+}
+
 export function derivePlatformSkillRows(
   input: DerivePlatformSkillRowsInput,
 ): DerivePlatformSkillRowsOutput {
@@ -370,9 +455,23 @@ export function derivePlatformSkillRows(
     matchesSearch(skill, query),
   );
   const sortedSkills = [...filteredSkills].sort((a, b) =>
-    comparePlatformSkills(a, b, input.sort, input.labels, input.usageCounts),
+    comparePlatformSkills(
+      a,
+      b,
+      input.sort,
+      input.labels,
+      input.usageStats,
+      input.usageReady,
+    ),
   );
   const groups = groupPlatformSkills(sortedSkills, input.groupBy, input.labels);
+  const lifetimeUsageByRowKey: Record<string, PlatformLifetimeUsage> = {};
+  if (input.usageReady === true) {
+    const stats = input.usageStats ?? {};
+    for (const group of groups) {
+      Object.assign(lifetimeUsageByRowKey, assignUsageRanks(group.skills, stats));
+    }
+  }
 
   return {
     sourceFilteredSkills,
@@ -380,5 +479,6 @@ export function derivePlatformSkillRows(
     filteredSkills,
     sortedSkills,
     groups,
+    lifetimeUsageByRowKey,
   };
 }

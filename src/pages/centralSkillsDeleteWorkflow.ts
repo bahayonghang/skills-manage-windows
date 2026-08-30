@@ -4,11 +4,12 @@ import { toast } from "sonner";
 
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
+import { formatBackendError } from "@/lib/backendError";
 import type {
   BatchDeleteCentralSkillPreviewResult,
   BatchDeleteCentralSkillRequest,
+  DeleteCentralSkillPreview,
   DeleteSkillRepositoryPreview,
-  SkillDetail,
   SkillRepositoryWithStats,
   SkillWithLinks,
 } from "@/types";
@@ -25,7 +26,7 @@ export interface CentralSkillsDeleteWorkflowState {
 export interface CentralSkillsDeleteWorkflowSetters {
   setBatchDeletePreview: StateSetter<BatchDeleteCentralSkillPreviewResult | null>;
   setBatchDeletePreviewError: StateSetter<string | null>;
-  setDeletePreview: StateSetter<SkillDetail | null>;
+  setDeletePreview: StateSetter<DeleteCentralSkillPreview | null>;
   setDeletePreviewError: StateSetter<string | null>;
   setDeleteTargetSkill: StateSetter<SkillWithLinks | null>;
   setIsBatchDeleteDialogOpen: StateSetter<boolean>;
@@ -126,7 +127,7 @@ export function useCentralSkillsDeleteWorkflow({
       const preview = await loadDeletePreview(skill.id);
       setDeletePreview(preview);
     } catch (err) {
-      const message = String(err);
+      const message = formatBackendError(err, t);
       setDeletePreviewError(message);
       toast.error(t("central.deletePreviewError", { error: message }));
     } finally {
@@ -144,7 +145,7 @@ export function useCentralSkillsDeleteWorkflow({
       const preview = await loadBatchDeletePreview(selectedSkillIds);
       setBatchDeletePreview(preview);
     } catch (err) {
-      const message = String(err);
+      const message = formatBackendError(err, t);
       setBatchDeletePreviewError(message);
       toast.error(t("central.batchDeletePreviewError", { error: message }));
     } finally {
@@ -189,7 +190,7 @@ export function useCentralSkillsDeleteWorkflow({
       setRepositoryDeletePreview(preview);
       setIsRepositoryDeleteDialogOpen(true);
     } catch (err) {
-      const message = String(err);
+      const message = formatBackendError(err, t);
       setRepositoryDeletePreviewError(message);
       toast.error(t("central.deleteRepositoryError", { error: message }));
     } finally {
@@ -199,10 +200,12 @@ export function useCentralSkillsDeleteWorkflow({
 
   async function handleDeleteCentralSkill(
     skillId: string,
-    removeAgentIds: string[]
+    removeAgentIds: string[],
+    force = false
   ) {
+    setDeletePreviewError(null);
     try {
-      await deleteCentralSkill(skillId, removeAgentIds);
+      await deleteCentralSkill(skillId, removeAgentIds, force);
       await refreshCounts();
       toast.success(
         t("central.deleteSkillSuccess", {
@@ -211,7 +214,7 @@ export function useCentralSkillsDeleteWorkflow({
       );
       handleDeleteDialogOpenChange(false);
     } catch (err) {
-      const message = String(err);
+      const message = formatBackendError(err, t);
       setDeletePreviewError(message);
       toast.error(t("central.deleteSkillError", { error: message }));
       throw err;
@@ -221,6 +224,7 @@ export function useCentralSkillsDeleteWorkflow({
   async function handleBatchDeleteCentralSkills(
     requests: BatchDeleteCentralSkillRequest[]
   ) {
+    setBatchDeletePreviewError(null);
     try {
       const result = await deleteCentralSkills(requests);
       await refreshCounts();
@@ -246,7 +250,7 @@ export function useCentralSkillsDeleteWorkflow({
       handleBatchDeleteDialogOpenChange(false);
       return result;
     } catch (err) {
-      const message = String(err);
+      const message = formatBackendError(err, t);
       setBatchDeletePreviewError(message);
       toast.error(t("central.deleteSkillError", { error: message }));
       throw err;
@@ -260,6 +264,7 @@ export function useCentralSkillsDeleteWorkflow({
       throw new Error("Repository delete target is missing");
     }
 
+    setRepositoryDeletePreviewError(null);
     try {
       const result = await deleteSkillRepository(
         repositoryDeleteTarget.id,
@@ -299,7 +304,7 @@ export function useCentralSkillsDeleteWorkflow({
       handleRepositoryDeleteDialogOpenChange(false);
       return result.delete_result;
     } catch (err) {
-      const message = String(err);
+      const message = formatBackendError(err, t);
       setRepositoryDeletePreviewError(message);
       toast.error(t("central.deleteRepositoryError", { error: message }));
       throw err;

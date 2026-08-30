@@ -1,0 +1,7 @@
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Core reviewed diagnostics and additive IpcError correlation must preserve typed error contracts."}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"The deep module must centralize allowlists and reject raw Display or sensitive values."}
+{"file":".trellis/spec/backend/fs-db-operation-journal.md","reason":"Operation lifecycle must remain distinct from physical recovery evidence."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Registry, DB, IPC and module tests must remain discoverable and non-zero."}
+{"file":".trellis/tasks/08-26-ssh-update-observability-dialog/design.md","reason":"Parent architecture fixes the module seam, operation ID reuse and lifecycle semantics."}
+{"file":".trellis/tasks/08-26-ssh-update-observability-dialog/research/logging-coverage-audit.md","reason":"Current registry, free-form recorder and correlation gaps motivating the core."}
+{"file": ".trellis/spec/backend/operation-observability.md", "reason": "Consume the frozen command policy, operation lifecycle, correlation, privacy and named-boundary contract."}

@@ -509,10 +509,12 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
         {
           skill_id: "frontend-design",
           remove_agent_ids: ["cursor"],
+          force: false,
         },
         {
           skill_id: "code-reviewer",
           remove_agent_ids: [],
+          force: false,
         },
       ]);
     });
@@ -563,6 +565,7 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
         {
           skill_id: "frontend-design",
           remove_agent_ids: [],
+          force: false,
         },
       ]);
     });

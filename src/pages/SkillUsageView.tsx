@@ -17,6 +17,7 @@ import { ProviderHealthList } from "@/components/usage/ProviderHealthList";
 import { RecentCallsFeed } from "@/components/usage/RecentCallsFeed";
 import { SkillUsageDetailPanel } from "@/components/usage/SkillUsageDetailPanel";
 import { SkillUsageTable } from "@/components/usage/SkillUsageTable";
+import { UnusedSkillsPanel } from "@/components/usage/UnusedSkillsPanel";
 import { UsageMetricStrip } from "@/components/usage/UsageMetricStrip";
 import { formatUsageRelativeTime } from "@/components/usage/usageFormat";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,10 @@ export function SkillUsageView() {
     providers,
     recent,
     detail,
+    unused,
+    unusedLoading,
+    unusedError,
+    pendingUnlinkKeys,
     scope,
     selectedSource,
     selectedSkill,
@@ -45,10 +50,12 @@ export function SkillUsageView() {
     refreshError,
     usedCachedData,
     lastRefreshMs,
+    backgroundScanning,
     refresh,
     selectSource,
     loadDetail,
     clearDetail,
+    unlinkUnusedSkillFromAgents,
   } = useUsageBindings();
 
   const kpis = overview?.kpis ?? {
@@ -89,6 +96,18 @@ export function SkillUsageView() {
             {scope && <ScopeBadge scope={scope} />}
           </div>
           <div className="flex items-center gap-2">
+            {backgroundScanning && (
+              <span
+                data-testid="background-scan-hint"
+                className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:inline-flex"
+              >
+                <Loader2
+                  aria-hidden
+                  className="size-3 animate-spin motion-reduce:animate-none"
+                />
+                {t("skillUsage.scanningBackground")}
+              </span>
+            )}
             <span className="hidden text-xs text-muted-foreground sm:inline">
               {lastRefreshMs
                 ? t("skillUsage.lastRefreshed", {
@@ -170,7 +189,7 @@ export function SkillUsageView() {
           >
             <UsageSection
               title={t("skillUsage.panels.topSkills")}
-              className="min-h-[32rem] xl:row-span-3"
+              className="min-h-[32rem] contain-layout"
               fill
             >
               <SkillUsageTable
@@ -181,42 +200,60 @@ export function SkillUsageView() {
               />
             </UsageSection>
 
-            {selectedSkill ? (
-              <UsageSection title={t("skillUsage.panels.detail")}>
-                <SkillUsageDetailPanel
-                  detail={detail}
-                  loading={detailLoading}
-                  onClose={closeDetail}
-                />
-              </UsageSection>
-            ) : (
+            <div className="flex min-w-0 flex-col gap-4">
+              {selectedSkill ? (
+                <UsageSection title={t("skillUsage.panels.detail")}>
+                  <SkillUsageDetailPanel
+                    detail={detail}
+                    loading={detailLoading}
+                    onClose={closeDetail}
+                  />
+                </UsageSection>
+              ) : (
+                <UsageSection
+                  title={t("skillUsage.panels.recent")}
+                  range={t("skillUsage.range.latestCalls", { count: 20 })}
+                >
+                  <div className="scrollbar-subtle max-h-[26rem] overflow-y-auto">
+                    <RecentCallsFeed calls={recent} onSelect={selectSkill} />
+                  </div>
+                </UsageSection>
+              )}
+
               <UsageSection
-                title={t("skillUsage.panels.recent")}
-                range={t("skillUsage.range.latestCalls", { count: 20 })}
+                title={t("skillUsage.panels.heatmap")}
+                range={t("skillUsage.range.lastWeeks", { count: 16 })}
+                className="contain-layout"
               >
-                <div className="scrollbar-subtle max-h-[26rem] overflow-y-auto">
-                  <RecentCallsFeed calls={recent} onSelect={selectSkill} />
-                </div>
+                <ActivityHeatmap days={overview?.heatmap ?? []} />
               </UsageSection>
-            )}
+
+              {selectedSkill && (
+                <UsageSection
+                  title={t("skillUsage.panels.recent")}
+                  range={t("skillUsage.range.latestCalls", { count: 20 })}
+                >
+                  <div className="scrollbar-subtle max-h-[26rem] overflow-y-auto">
+                    <RecentCallsFeed calls={recent} onSelect={selectSkill} />
+                  </div>
+                </UsageSection>
+              )}
+            </div>
 
             <UsageSection
-              title={t("skillUsage.panels.heatmap")}
-              range={t("skillUsage.range.lastWeeks", { count: 16 })}
+              title={t("skillUsage.unused.title")}
+              className="xl:col-span-2"
             >
-              <ActivityHeatmap days={overview?.heatmap ?? []} />
+              <UnusedSkillsPanel
+                report={unused}
+                loading={unusedLoading}
+                error={unusedError}
+                selectedSkill={selectedSkill}
+                onSelect={selectSkill}
+                onUnlinkAgents={unlinkUnusedSkillFromAgents}
+                pendingUnlinkKeys={pendingUnlinkKeys}
+              />
             </UsageSection>
-
-            {selectedSkill && (
-              <UsageSection
-                title={t("skillUsage.panels.recent")}
-                range={t("skillUsage.range.latestCalls", { count: 20 })}
-              >
-                <div className="scrollbar-subtle max-h-[26rem] overflow-y-auto">
-                  <RecentCallsFeed calls={recent} onSelect={selectSkill} />
-                </div>
-              </UsageSection>
-            )}
           </div>
         )}
 
@@ -339,9 +376,11 @@ function UsageSkeleton() {
           ))}
         </div>
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(22rem,0.85fr)]">
-          <div className="h-[34rem] rounded-md border border-border bg-muted/30 xl:row-span-2" />
-          <div className="h-56 rounded-md border border-border bg-muted/25" />
-          <div className="h-64 rounded-md border border-border bg-muted/20" />
+          <div className="h-[34rem] rounded-md border border-border bg-muted/30" />
+          <div className="flex min-w-0 flex-col gap-4">
+            <div className="h-56 rounded-md border border-border bg-muted/25" />
+            <div className="h-64 rounded-md border border-border bg-muted/20" />
+          </div>
         </div>
       </div>
       <div

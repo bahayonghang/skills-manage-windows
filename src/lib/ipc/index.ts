@@ -20,6 +20,9 @@ export {
 export {
   IpcInvokeError,
   ipcFixtureError,
+  isReviewedIpcCode,
+  isSafeCorrelationId,
+  isSafeIpcCode,
   isIpcErrorPayload,
   normalizeIpcRejection,
   sanitizeIpcFailureArgs,

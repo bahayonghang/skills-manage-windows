@@ -19,6 +19,7 @@
 ## 核心能力
 
 - 中央技能库与按平台安装、卸载工作流。
+- 在本机 Local 目标上管理 Skills CLI 全局技能（`npx skills -g`）。SkillPort 并不把 `~/.agents/skills/` 整棵树视为 Skills CLI 所有；所有权以 Skills CLI lock 文件为准。
 - 完整技能详情视图，支持 Markdown 预览、原始源码查看和 AI 解释生成。
 - 通过技能集合整理和批量安装 skills。
 - 支持扫描本地项目级 skill 库的 Discover 能力。
@@ -185,12 +186,12 @@ xattr -dr com.apple.quarantine "/Applications/SkillPort.app"
 
 ### 前置依赖
 
-- [Node.js](https://nodejs.org/) 22 LTS（见 `.node-version`）
-- [pnpm](https://pnpm.io/) 10.12.3
-- [Rust toolchain](https://rustup.rs/) 1.97.0（见 `rust-toolchain.toml`）
+- [Node.js](https://nodejs.org/) 26（见 `.node-version`）
+- [pnpm](https://pnpm.io/) 10.34.5
+- [Rust toolchain](https://rustup.rs/) 1.98.0（见 `rust-toolchain.toml`）
 - Tauri v2 系统依赖：<https://v2.tauri.app/start/prerequisites/>
 
-仓库工具链固定为 Node 22、pnpm 10.12.3 和 Rust 1.97.0。
+仓库工具链固定为 Node 26、pnpm 10.34.5 和 Rust 1.98.0。
 
 ### 安装依赖
 

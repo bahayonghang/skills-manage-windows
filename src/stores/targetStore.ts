@@ -35,6 +35,7 @@ interface TargetState {
   updatingPasswordTargetId: string | null;
   switchingTargetId: string | null;
   deletingTargetId: string | null;
+  requiresTargetReload: boolean;
   error: string | null;
   wslDistributionError: string | null;
 
@@ -75,6 +76,17 @@ function markActive(
   }));
 }
 
+async function refreshTargetsAfterMutation(
+  loadTargets: () => Promise<void>,
+  markReloadRequired: () => void,
+): Promise<void> {
+  try {
+    await loadTargets();
+  } catch {
+    markReloadRequired();
+  }
+}
+
 export const useTargetStore = create<TargetState>((set, get) => ({
   targets: [LOCAL_TARGET],
   activeTarget: LOCAL_TARGET,
@@ -89,6 +101,7 @@ export const useTargetStore = create<TargetState>((set, get) => ({
   updatingPasswordTargetId: null,
   switchingTargetId: null,
   deletingTargetId: null,
+  requiresTargetReload: false,
   error: null,
   wslDistributionError: null,
 
@@ -101,8 +114,6 @@ export const useTargetStore = create<TargetState>((set, get) => ({
 
     if (targetsResult.status === "rejected") {
       set({
-        targets: [LOCAL_TARGET],
-        activeTarget: LOCAL_TARGET,
         error: String(targetsResult.reason),
         quarantineStatus:
           quarantineResult.status === "fulfilled"
@@ -130,6 +141,7 @@ export const useTargetStore = create<TargetState>((set, get) => ({
           ? String(quarantineResult.reason)
           : null,
       isLoading: false,
+      requiresTargetReload: false,
     });
   },
 
@@ -167,7 +179,9 @@ export const useTargetStore = create<TargetState>((set, get) => ({
         ]),
         isCreating: false,
       }));
-      await get().loadTargets();
+      await refreshTargetsAfterMutation(get().loadTargets, () =>
+        set({ requiresTargetReload: true }),
+      );
       return target;
     } catch (err) {
       set({ error: String(err), isCreating: false });
@@ -181,7 +195,9 @@ export const useTargetStore = create<TargetState>((set, get) => ({
       const target = await invoke("update_ssh_target", {
         request,
       });
-      await get().loadTargets();
+      await refreshTargetsAfterMutation(get().loadTargets, () =>
+        set({ requiresTargetReload: true }),
+      );
       return target;
     } catch (err) {
       set({ error: String(err) });
@@ -221,7 +237,9 @@ export const useTargetStore = create<TargetState>((set, get) => ({
         ]),
         isCreating: false,
       }));
-      await get().loadTargets();
+      await refreshTargetsAfterMutation(get().loadTargets, () =>
+        set({ requiresTargetReload: true }),
+      );
       return target;
     } catch (err) {
       set({ error: String(err), isCreating: false });
@@ -235,7 +253,9 @@ export const useTargetStore = create<TargetState>((set, get) => ({
       const target = await invoke("update_wsl_target", {
         request,
       });
-      await get().loadTargets();
+      await refreshTargetsAfterMutation(get().loadTargets, () =>
+        set({ requiresTargetReload: true }),
+      );
       return target;
     } catch (err) {
       set({ error: String(err) });
@@ -266,7 +286,9 @@ export const useTargetStore = create<TargetState>((set, get) => ({
         password,
       });
       if (result.ok) {
-        await get().loadTargets();
+        await refreshTargetsAfterMutation(get().loadTargets, () =>
+          set({ requiresTargetReload: true }),
+        );
       }
       return result;
     } catch (err) {
@@ -281,7 +303,9 @@ export const useTargetStore = create<TargetState>((set, get) => ({
     set({ deletingTargetId: targetId, error: null });
     try {
       await invoke("delete_target", { targetId });
-      await get().loadTargets();
+      await refreshTargetsAfterMutation(get().loadTargets, () =>
+        set({ requiresTargetReload: true }),
+      );
     } catch (err) {
       set({ error: String(err) });
       throw err;
@@ -300,7 +324,9 @@ export const useTargetStore = create<TargetState>((set, get) => ({
         targets: markActive(state.targets, activeTarget.id),
         activeTarget,
       }));
-      await get().loadTargets();
+      await refreshTargetsAfterMutation(get().loadTargets, () =>
+        set({ requiresTargetReload: true }),
+      );
       return activeTarget;
     } catch (err) {
       set({ error: String(err) });

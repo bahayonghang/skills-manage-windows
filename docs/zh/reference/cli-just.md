@@ -17,10 +17,10 @@
 大多数配方都是 `scripts/` 下 Node 脚本的薄包装；`just install` 会先做平台分流，再进入构建或安装路径：
 
 ```text
-just sync-version  →  node scripts/sync-version.mjs
-just ci            →  node scripts/run-ci.mjs
-just build         →  node scripts/build.mjs
-just install       →  macOS：just build；Windows：先 just build，再 node scripts/install.mjs
+just sync-version  →  node scripts/check/sync-version.mjs
+just ci            →  node scripts/check/run-ci.mjs
+just build         →  node scripts/build/build.mjs
+just install       →  macOS：just build；Windows：先 just build，再 node scripts/build/install.mjs
 ```
 
 要看每条配方实际做什么，最快的方式是同时读 `justfile` 和对应 Node 脚本。
@@ -28,7 +28,7 @@ just install       →  macOS：just build；Windows：先 just build，再 node
 ## 本地门禁
 
 ```text
-[just ci] ──► sync-version ──► scripts/run-ci.mjs
+[just ci] ──► sync-version ──► scripts/check/run-ci.mjs
                                  │
                                  ├─ web:  pnpm typecheck
                                  │        pnpm lint

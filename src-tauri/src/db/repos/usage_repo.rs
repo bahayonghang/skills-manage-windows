@@ -109,6 +109,10 @@ pub struct SkillCountRow {
     pub last_used_ms: i64,
 }
 
+/// SQLite 绑定变量上限按保守的 999 计：skill_calls 每行 6 个变量、
+/// skill_usage_metadata 每行 7 个变量，100 行/块远低于上限。
+const INSERT_CHUNK_ROWS: usize = 100;
+
 /// 原子替换指定 target 的 skill_calls：事务内先 DELETE WHERE target_id=?，
 /// 再批量 INSERT，最后 upsert provider 健康状态与 scan_state。
 ///
@@ -139,19 +143,20 @@ pub async fn replace_calls_for_target(
         .execute(&mut *tx)
         .await?;
 
-    for call in calls {
-        sqlx::query(
-            "INSERT INTO skill_calls (target_id, skill, timestamp_ms, project, session_id, source)
-             VALUES (?, ?, ?, ?, ?, ?)",
-        )
-        .bind(target_id)
-        .bind(&call.skill)
-        .bind(call.timestamp_ms)
-        .bind(&call.project)
-        .bind(&call.session_id)
-        .bind(&call.source)
-        .execute(&mut *tx)
-        .await?;
+    // 多行批插（QueryBuilder 分块），取代逐行 INSERT 的 per-row 往返。
+    for chunk in calls.chunks(INSERT_CHUNK_ROWS) {
+        let mut builder = QueryBuilder::<Sqlite>::new(
+            "INSERT INTO skill_calls (target_id, skill, timestamp_ms, project, session_id, source) ",
+        );
+        builder.push_values(chunk, |mut row, call| {
+            row.push_bind(target_id)
+                .push_bind(&call.skill)
+                .push_bind(call.timestamp_ms)
+                .push_bind(&call.project)
+                .push_bind(&call.session_id)
+                .push_bind(&call.source);
+        });
+        builder.build().execute(&mut *tx).await?;
     }
 
     // provider 表用 INSERT OR REPLACE，幂等更新一次扫描周期内每个 provider
@@ -173,22 +178,22 @@ pub async fn replace_calls_for_target(
         .await?;
     }
 
-    for item in metadata {
-        sqlx::query(
+    for chunk in metadata.chunks(INSERT_CHUNK_ROWS) {
+        let mut builder = QueryBuilder::<Sqlite>::new(
             "INSERT INTO skill_usage_metadata
              (target_id, skill, match_status, resolved_skill_id,
-              static_token_estimate, static_byte_count, scanned_at_ms)
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(target_id)
-        .bind(&item.skill)
-        .bind(&item.match_status)
-        .bind(&item.resolved_skill_id)
-        .bind(item.static_token_estimate)
-        .bind(item.static_byte_count)
-        .bind(scan_completed_at_ms)
-        .execute(&mut *tx)
-        .await?;
+              static_token_estimate, static_byte_count, scanned_at_ms) ",
+        );
+        builder.push_values(chunk, |mut row, item| {
+            row.push_bind(target_id)
+                .push_bind(&item.skill)
+                .push_bind(&item.match_status)
+                .push_bind(&item.resolved_skill_id)
+                .push_bind(item.static_token_estimate)
+                .push_bind(item.static_byte_count)
+                .push_bind(scan_completed_at_ms);
+        });
+        builder.build().execute(&mut *tx).await?;
     }
 
     sqlx::query(
@@ -615,6 +620,53 @@ mod tests {
         let remote_metadata = list_usage_metadata(&pool, "ssh-prod").await.unwrap();
         assert_eq!(remote_metadata.len(), 1);
         assert_eq!(remote_metadata[0].match_status, "unmatched");
+    }
+
+    #[tokio::test]
+    async fn batched_insert_spans_chunks_and_preserves_all_rows() {
+        let pool = mem_pool().await;
+        // 250 条 > INSERT_CHUNK_ROWS（100）→ 跨 3 个块
+        let calls: Vec<NewSkillCall> = (0..250)
+            .map(|i| NewSkillCall {
+                skill: format!("skill-{i}"),
+                timestamp_ms: 1_700_000_000_000 + i,
+                project: format!("/project-{}", i % 5),
+                session_id: format!("session-{}", i % 7),
+                source: "Codex CLI".to_string(),
+            })
+            .collect();
+        let metadata: Vec<NewSkillUsageMetadata> = (0..250)
+            .map(|i| NewSkillUsageMetadata {
+                skill: format!("skill-{i}"),
+                match_status: "unmatched".to_string(),
+                resolved_skill_id: None,
+                static_token_estimate: None,
+                static_byte_count: None,
+            })
+            .collect();
+        replace_calls_for_target(&pool, "local", &calls, &[], &metadata, 10)
+            .await
+            .unwrap();
+
+        let stored = list_calls_for_target(&pool, "local").await.unwrap();
+        assert_eq!(stored.len(), 250);
+        let first = stored.iter().find(|c| c.skill == "skill-0").unwrap();
+        assert_eq!(first.project, "/project-0");
+        assert_eq!(first.session_id, "session-0");
+        let last = stored.iter().find(|c| c.skill == "skill-249").unwrap();
+        assert_eq!(last.timestamp_ms, 1_700_000_000_000 + 249);
+        assert_eq!(
+            list_usage_metadata(&pool, "local").await.unwrap().len(),
+            250
+        );
+
+        // 替换语义不变：第二批替换第一批
+        replace_calls_for_target(&pool, "local", &[call("review")], &[], &[], 20)
+            .await
+            .unwrap();
+        let stored = list_calls_for_target(&pool, "local").await.unwrap();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].skill, "review");
     }
 
     #[tokio::test]

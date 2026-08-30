@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Audit all token, URL, ref, path, content, AI and process seed absence."}
+{"file":".trellis/spec/backend/import-deep-link-lifecycle.md","reason":"Check import handoff behavior while the task PRD enforces runtime-only preview semantics."}
+{"file":".trellis/spec/backend/process-supervision.md","reason":"Check CLI logging does not weaken cancellation, timeout or output limits."}
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"Check stable errors and unknown fail-closed behavior."}
+{"file":".trellis/tasks/08-26-audit-marketplace-import-cli/prd.md","reason":"Verify every owned policy entry and acceptance criterion."}
+{"file": ".trellis/spec/backend/operation-observability.md", "reason": "Verify the frozen observability contract remains exhaustive, correlated, non-duplicative and fail-safe."}

@@ -97,13 +97,23 @@ describe("backend error helpers", () => {
       "github_import.transport_failed",
       "github_import.rate_limited",
       "github_import.access_denied",
+      "github_import.configured_token_failed",
       "github_import.repo_not_found",
       "github_import.archive_unavailable",
       "github_import.response_invalid",
       "github_import.invalid_url",
       "github_import.budget_exceeded",
       "github_import.credential_unavailable",
+      "github_import.no_importable_skills",
+      "github_import.selection_unavailable",
+      "github_import.invalid_candidate",
+      "github_import.source_path_missing",
+      "github_import.target_exists",
+      "github_import.duplicate_selection",
+      "github_import.rename_conflict",
       "central_updates.repository_check_failed",
+      "central_updates.inventory_refresh_required",
+      "central_updates.snapshot_changed",
     ];
 
     for (const language of ["en", "zh"] as const) {
@@ -135,6 +145,40 @@ describe("backend error helpers", () => {
       expect(message).toBe(expected[language]);
       expect(message).not.toContain("private-skill-id");
       expect(message).not.toContain("UNIQUE constraint failed");
+    }
+  });
+
+  it("localizes central delete recovery codes without leaking path or token", async () => {
+    const cases = [
+      {
+        code: "central_operation.delete_restore_collision",
+        en: "Central recovery evidence conflicts with the current files. Review and resolve the pending operation in Operation Logs.",
+        zh: "Central 恢复证据发生冲突。请在操作日志中检查并处理待恢复操作。",
+      },
+      {
+        code: "central_skills.force_delete_blocked",
+        en: "Force delete is not available for this Central skill.",
+        zh: "当前无法强制删除该中央技能。",
+      },
+      {
+        code: "central_skills.delete_failed",
+        en: "This Central skill could not be deleted.",
+        zh: "无法删除该中央技能。",
+      },
+    ] as const;
+
+    for (const language of ["en", "zh"] as const) {
+      await i18n.changeLanguage(language);
+      for (const item of cases) {
+        const message = formatBackendError(
+          `${item.code}:C:\\\\Users\\\\alice\\\\.skillsmanage\\\\skills\\\\yao-meta ghp_secret manifest_json`,
+          i18n.t,
+        );
+        expect(message).toBe(item[language]);
+        expect(message).not.toContain("yao-meta");
+        expect(message).not.toContain("ghp_secret");
+        expect(message).not.toContain("manifest_json");
+      }
     }
   });
 });

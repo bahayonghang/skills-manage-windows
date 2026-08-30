@@ -1,0 +1,33 @@
+{
+  "id": "runtime-diagnostics-correlation",
+  "name": "runtime-diagnostics-correlation",
+  "title": "Runtime 诊断、IPC 失败保真与去重",
+  "description": "让全部 fallible IPC 在 backend 留安全 Runtime evidence，并让 frontend recorder 保真关联且可辨认双视角事件。",
+  "status": "completed",
+  "dev_type": "bugfix",
+  "scope": "backend,frontend,quality,observability",
+  "package": null,
+  "priority": "P1",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-08-26",
+  "completedAt": "2026-08-27",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "08-26-ssh-update-observability-dialog",
+  "relatedFiles": [
+    "src-tauri/src/ipc_error.rs",
+    "src-tauri/src/logging.rs",
+    "src/lib/ipc/invoke.ts",
+    "src/lib/runtimeLogger.ts",
+    "src/types/runtimeLogs.ts",
+    "src/stores/runtimeLogStore.ts"
+  ],
+  "notes": "Dependency: 08-26-observability-core-contracts completed and its interface frozen.",
+  "meta": {}
+}

@@ -1,4 +1,6 @@
 import { invoke, isTauriRuntime } from "@/lib/ipc";
+import { IpcInvokeError } from "@/lib/ipc/errors";
+import { backendErrorStateValue } from "@/lib/backendError";
 import {
   BatchDeleteCentralSkillPreviewResult,
   BatchInstallResult,
@@ -11,6 +13,7 @@ import {
 } from "@/types";
 import { indexUpdateStates } from "./centralSkillsStore.shared";
 import type { CentralSkillsState, CentralStoreContext } from "./centralSkillsStore.types";
+import { useUpdateCenterStore } from "./updateCenterStore";
 
 function normalizeBatchInstallResult(result: BatchInstallResult): Required<BatchInstallResult> {
   return {
@@ -35,9 +38,11 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
   | "batchInstallSkills"
   | "loadDeletePreview"
   | "loadBatchDeletePreview"
+  | "loadUnknownSourceResetPreview"
   | "loadRepositoryDeletePreview"
   | "deleteCentralSkill"
   | "deleteCentralSkills"
+  | "resetUnknownSourceSkills"
   | "deleteSkillRepository"
   | "togglePlatformLink"
 > {
@@ -115,7 +120,19 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
       throw new Error("Desktop-only feature: Central skill deletion is available in the Tauri app.");
     }
 
-    return invoke("get_skill_detail", { skillId });
+    const result = await invoke<BatchDeleteCentralSkillPreviewResult>("preview_delete_central_skills", {
+      skillIds: [skillId],
+    });
+    const preview = result.previews[0];
+    if (preview) {
+      return preview;
+    }
+    const failure = result.failed[0];
+    throw new IpcInvokeError({
+      code: failure?.error_code || "central_skills.delete_preview_failed",
+      message: failure?.error || "This Central skill could not be deleted.",
+      retryable: false,
+    });
   },
 
   loadBatchDeletePreview: async (skillIds) => {
@@ -128,6 +145,10 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
     });
   },
 
+  loadUnknownSourceResetPreview: async () => {
+    return invoke("preview_reset_unknown_source_skills");
+  },
+
   loadRepositoryDeletePreview: async (repositoryId) => {
     if (!isTauriRuntime()) {
       throw new Error("Desktop-only feature: repository deletion is available in the Tauri app.");
@@ -138,14 +159,14 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
     });
   },
 
-  deleteCentralSkill: async (skillId, removeAgentIds) => {
+  deleteCentralSkill: async (skillId, removeAgentIds, force = false) => {
     if (!isTauriRuntime()) {
       throw new Error("Desktop-only feature: Central skill deletion is available in the Tauri app.");
     }
 
     set({ isDeleting: true, error: null });
     try {
-      await invoke("delete_central_skill", { skillId, removeAgentIds });
+      await invoke("delete_central_skill", { skillId, removeAgentIds, force });
       const [skills, repositories, tags, reviews] = await Promise.all([
         invoke<SkillWithLinks[]>("get_central_skills"),
         invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
@@ -163,7 +184,7 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
         isDeleting: false,
       });
     } catch (err) {
-      set({ error: String(err), isDeleting: false });
+      set({ error: backendErrorStateValue(err), isDeleting: false });
       throw err;
     }
   },
@@ -195,7 +216,41 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
       });
       return result;
     } catch (err) {
-      set({ error: String(err), isDeleting: false });
+      set({ error: backendErrorStateValue(err), isDeleting: false });
+      throw err;
+    }
+  },
+
+  resetUnknownSourceSkills: async (skillIds, removeCopyAgentIds) => {
+    set({ isDeleting: true, error: null });
+    try {
+      const result = await invoke("reset_unknown_source_skills", {
+        skillIds,
+        removeCopyAgentIds,
+      });
+      const [skills, repositories, tags, reviews, updateStates] = await Promise.all([
+        invoke<SkillWithLinks[]>("get_central_skills"),
+        invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
+        invoke<SkillTag[]>("get_skill_tags"),
+        invoke<SkillAiTagReview[]>("get_pending_ai_tag_reviews"),
+        invoke("get_central_skill_update_states"),
+      ]);
+      set({
+        skills: skills ?? [],
+        repositories: repositories ?? [],
+        tags: tags ?? [],
+        aiTagReviews: reviews ?? [],
+        updateStatuses: indexUpdateStates(updateStates ?? []),
+        isDeleting: false,
+      });
+      try {
+        await useUpdateCenterStore.getState().loadInventory();
+      } catch (inventoryError) {
+        set({ error: backendErrorStateValue(inventoryError) });
+      }
+      return result;
+    } catch (err) {
+      set({ error: backendErrorStateValue(err), isDeleting: false });
       throw err;
     }
   },
@@ -228,7 +283,7 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
       });
       return result;
     } catch (err) {
-      set({ error: String(err), isDeleting: false });
+      set({ error: backendErrorStateValue(err), isDeleting: false });
       throw err;
     }
   },

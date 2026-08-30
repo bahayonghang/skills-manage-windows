@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ActivityPanel } from "@/components/dashboard/sections/ActivityPanel";
@@ -12,6 +13,7 @@ import type { DashboardViewModel } from "@/pages/dashboardViewModel";
 interface DashboardShellProps {
   onNavigate: (path: string) => void;
   viewModel: DashboardViewModel;
+  extra?: ReactNode;
 }
 
 const GRID_TWO_COL =
@@ -20,6 +22,7 @@ const GRID_TWO_COL =
 export function DashboardShell({
   onNavigate,
   viewModel,
+  extra,
 }: DashboardShellProps) {
   const { t } = useTranslation();
 
@@ -90,6 +93,7 @@ export function DashboardShell({
             isLogsLoading={viewModel.isLogsLoading}
             logTotal={viewModel.logTotal}
           />
+          {extra}
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { AgentWithStatus, CentralSkillUpdateState, SkillDetail, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "@/types";
+import { AgentWithStatus, CentralSkillUpdateState, DeleteCentralSkillPreview, SkillRepositoryWithStats, SkillTag, SkillWithLinks } from "@/types";
 import type {
   CentralRepositorySyncApplyResult,
   CentralRepositorySyncPreview,
@@ -122,18 +122,11 @@ const mockUpdateStates: CentralSkillUpdateState[] = [
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-const mockDeletePreview: SkillDetail = {
-  id: "frontend-design",
-  row_id: "frontend-design",
-  name: "frontend-design",
-  description: "Build distinctive frontend UIs",
-  file_path: "~/.skillsmanage/skills/frontend-design/SKILL.md",
-  dir_path: "~/.skillsmanage/skills/frontend-design",
-  canonical_path: "~/.skillsmanage/skills/frontend-design",
-  is_central: true,
-  source: "native",
-  scanned_at: "2026-04-09T00:00:00Z",
-  installations: [
+const mockDeletePreview: DeleteCentralSkillPreview = {
+  skill_id: "frontend-design",
+  skill_name: "frontend-design",
+  central_path: "~/.skillsmanage/skills/frontend-design",
+  copy_installations: [
     {
       skill_id: "frontend-design",
       agent_id: "cursor",
@@ -143,10 +136,7 @@ const mockDeletePreview: SkillDetail = {
       installed_at: "2026-04-10T00:00:00Z",
     },
   ],
-  collections: [],
-  repository: mockRepositories[0],
-  tags: mockTags,
-  is_source_unknown: false,
+  auto_removed_agent_ids: ["claude-code"],
 };
 
 describe("centralSkillsStore", () => {
@@ -421,16 +411,19 @@ describe("centralSkillsStore", () => {
 
   // ── installSkill ──────────────────────────────────────────────────────────
 
-  it("loads delete preview from skill detail", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce(mockDeletePreview);
+  it("loads delete preview from preview_delete_central_skills", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({
+      previews: [mockDeletePreview],
+      failed: [],
+    });
 
     const preview = await useCentralSkillsStore
       .getState()
       .loadDeletePreview("frontend-design");
 
     expect(preview).toEqual(mockDeletePreview);
-    expect(invoke).toHaveBeenCalledWith("get_skill_detail", {
-      skillId: "frontend-design",
+    expect(invoke).toHaveBeenCalledWith("preview_delete_central_skills", {
+      skillIds: ["frontend-design"],
     });
   });
 
@@ -449,6 +442,7 @@ describe("centralSkillsStore", () => {
     expect(invoke).toHaveBeenCalledWith("delete_central_skill", {
       skillId: "frontend-design",
       removeAgentIds: ["cursor"],
+      force: false,
     });
     expect(invoke).toHaveBeenCalledWith("get_central_skills");
     expect(invoke).toHaveBeenCalledWith("get_skill_repositories");
@@ -458,6 +452,25 @@ describe("centralSkillsStore", () => {
     expect(useCentralSkillsStore.getState().isDeleting).toBe(false);
   });
 
+  it("passes the force flag to delete_central_skill", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce([mockSkills[1]])
+      .mockResolvedValueOnce(mockRepositories)
+      .mockResolvedValueOnce(mockTags)
+      .mockResolvedValueOnce([]);
+
+    await useCentralSkillsStore
+      .getState()
+      .deleteCentralSkill("frontend-design", ["cursor"], true);
+
+    expect(invoke).toHaveBeenCalledWith("delete_central_skill", {
+      skillId: "frontend-design",
+      removeAgentIds: ["cursor"],
+      force: true,
+    });
+  });
+
   it("loads batch delete preview for selected central skills", async () => {
     const preview = {
       previews: [
@@ -465,7 +478,7 @@ describe("centralSkillsStore", () => {
           skill_id: "frontend-design",
           skill_name: "frontend-design",
           central_path: "~/.skillsmanage/skills/frontend-design",
-          copy_installations: mockDeletePreview.installations,
+          copy_installations: mockDeletePreview.copy_installations,
           auto_removed_agent_ids: ["claude-code"],
         },
       ],
@@ -524,6 +537,80 @@ describe("centralSkillsStore", () => {
     expect(useCentralSkillsStore.getState().isDeleting).toBe(false);
   });
 
+  it("loads unknown-source reset preview from the active target", async () => {
+    const preview = {
+      skillIds: ["npx-skill"],
+      preview: {
+        previews: [
+          {
+            skill_id: "npx-skill",
+            skill_name: "npx-skill",
+            central_path: "~/.skillsmanage/skills/npx-skill",
+            copy_installations: [],
+            auto_removed_agent_ids: [],
+          },
+        ],
+        failed: [],
+      },
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(preview);
+
+    const result = await useCentralSkillsStore
+      .getState()
+      .loadUnknownSourceResetPreview();
+
+    expect(result).toEqual(preview);
+    expect(invoke).toHaveBeenCalledWith("preview_reset_unknown_source_skills");
+  });
+
+  it("resets unknown-source skills and reloads central plus inventory", async () => {
+    const result = {
+      succeeded: [
+        {
+          skill_id: "npx-skill",
+          removed_central_path: "~/.skillsmanage/skills/npx-skill",
+          removed_agent_ids: [],
+          retained_agent_ids: [],
+        },
+      ],
+      failed: [],
+    };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(result)
+      .mockResolvedValueOnce([mockSkills[1]])
+      .mockResolvedValueOnce(mockRepositories)
+      .mockResolvedValueOnce(mockTags)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce({
+        updatable: [],
+        remoteAdded: [],
+        remoteMissing: [],
+        unsupported: [],
+        platformDuplicates: [],
+        deletedPlatformCopies: [],
+        orphans: [],
+        failedRepositories: [],
+        generatedAt: "2026-08-14T00:00:00Z",
+      });
+
+    const actual = await useCentralSkillsStore
+      .getState()
+      .resetUnknownSourceSkills(["npx-skill"], []);
+
+    expect(actual).toEqual(result);
+    expect(invoke).toHaveBeenCalledWith("reset_unknown_source_skills", {
+      skillIds: ["npx-skill"],
+      removeCopyAgentIds: [],
+    });
+    expect(invoke).toHaveBeenCalledWith("get_central_skills");
+    expect(invoke).toHaveBeenCalledWith("get_skill_update_inventory", {
+      scope: null,
+    });
+    expect(useCentralSkillsStore.getState().skills).toEqual([mockSkills[1]]);
+    expect(useCentralSkillsStore.getState().isDeleting).toBe(false);
+  });
+
   it("loads repository delete preview", async () => {
     const repository: SkillRepositoryWithStats = {
       id: "github-openai-skills-main",
@@ -548,7 +635,7 @@ describe("centralSkillsStore", () => {
             skill_id: "frontend-design",
             skill_name: "frontend-design",
             central_path: "~/.skillsmanage/skills/frontend-design",
-            copy_installations: mockDeletePreview.installations,
+            copy_installations: mockDeletePreview.copy_installations,
             auto_removed_agent_ids: ["claude-code"],
           },
         ],
@@ -633,7 +720,9 @@ describe("centralSkillsStore", () => {
         .deleteCentralSkill("frontend-design", [])
     ).rejects.toThrow("delete failed");
 
-    expect(useCentralSkillsStore.getState().error).toBe("delete failed");
+    expect(useCentralSkillsStore.getState().error).toBe(
+      "storage.unavailable:delete failed",
+    );
     expect(useCentralSkillsStore.getState().isDeleting).toBe(false);
   });
 
@@ -1719,6 +1808,119 @@ describe("centralSkillsStore", () => {
     expect(useCentralSkillsStore.getState().updateStatuses["frontend-design"]).toEqual(
       mockUpdateStates[0]
     );
+  });
+
+  it("marks portable state import failed when post-import refresh rejects", async () => {
+    const refreshError = ipcFixtureError(
+      "storage.unavailable",
+      "Central refresh unavailable.",
+    );
+    const importResult = {
+      sourcesAdded: 0,
+      sourcesSkipped: 0,
+      importedSkills: [],
+      skippedSkills: [],
+      failedSkills: [],
+      tagsRestored: 0,
+    };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(importResult)
+      .mockRejectedValueOnce(refreshError)
+      .mockResolvedValueOnce(mockRepositories)
+      .mockResolvedValueOnce(mockTags)
+      .mockResolvedValueOnce(mockUpdateStates);
+
+    const importPromise = useCentralSkillsStore
+      .getState()
+      .importSkillportState("{\"kind\":\"skillport/state-export\"}", []);
+    const jobId = useCentralSkillsStore.getState().portabilityJob.jobId;
+
+    await expect(importPromise).rejects.toThrow("Central refresh unavailable.");
+
+    const state = useCentralSkillsStore.getState();
+    expect(jobId).toEqual(expect.any(String));
+    expect(state.portabilityJob).toMatchObject({
+      jobId,
+      status: "failed",
+      error: "Central refresh unavailable.",
+    });
+    expect(["running", "cancelling"]).not.toContain(state.portabilityJob.status);
+  });
+
+  it("ignores stale portable state refresh completion after target reset", async () => {
+    let resolveSkills!: (skills: SkillWithLinks[]) => void;
+    const importResult = {
+      sourcesAdded: 0,
+      sourcesSkipped: 0,
+      importedSkills: [],
+      skippedSkills: [],
+      failedSkills: [],
+      tagsRestored: 0,
+    };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(importResult)
+      .mockReturnValueOnce(new Promise<SkillWithLinks[]>((resolve) => {
+        resolveSkills = resolve;
+      }))
+      .mockResolvedValueOnce(mockRepositories)
+      .mockResolvedValueOnce(mockTags)
+      .mockResolvedValueOnce(mockUpdateStates);
+
+    const importPromise = useCentralSkillsStore
+      .getState()
+      .importSkillportState("{\"kind\":\"skillport/state-export\"}", []);
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(5));
+
+    useCentralSkillsStore.getState().resetForTargetChange();
+    useCentralSkillsStore.setState({ skills: [mockSkills[1]] });
+    resolveSkills(mockSkills);
+
+    await expect(importPromise).resolves.toEqual(importResult);
+    const state = useCentralSkillsStore.getState();
+    expect(state.skills).toEqual([mockSkills[1]]);
+    expect(state.repositories).toEqual([]);
+    expect(state.tags).toEqual([]);
+    expect(state.updateStatuses).toEqual({});
+    expect(state.portabilityJob).toMatchObject({ jobId: null, status: "idle" });
+  });
+
+  it("ignores stale portable state refresh error after target reset", async () => {
+    let rejectSkills!: (error: unknown) => void;
+    const refreshError = ipcFixtureError(
+      "storage.unavailable",
+      "Stale Central refresh unavailable.",
+    );
+    const importResult = {
+      sourcesAdded: 0,
+      sourcesSkipped: 0,
+      importedSkills: [],
+      skippedSkills: [],
+      failedSkills: [],
+      tagsRestored: 0,
+    };
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(importResult)
+      .mockReturnValueOnce(new Promise<SkillWithLinks[]>((_resolve, reject) => {
+        rejectSkills = reject;
+      }))
+      .mockResolvedValueOnce(mockRepositories)
+      .mockResolvedValueOnce(mockTags)
+      .mockResolvedValueOnce(mockUpdateStates);
+
+    const importPromise = useCentralSkillsStore
+      .getState()
+      .importSkillportState("{\"kind\":\"skillport/state-export\"}", []);
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(5));
+
+    useCentralSkillsStore.getState().resetForTargetChange();
+    useCentralSkillsStore.setState({ skills: [mockSkills[1]] });
+    rejectSkills(refreshError);
+
+    await expect(importPromise).rejects.toThrow("Stale Central refresh unavailable.");
+    const state = useCentralSkillsStore.getState();
+    expect(state.skills).toEqual([mockSkills[1]]);
+    expect(state.error).toBeNull();
+    expect(state.portabilityJob).toMatchObject({ jobId: null, status: "idle" });
   });
 
   it("cancels the active AI tag job", async () => {

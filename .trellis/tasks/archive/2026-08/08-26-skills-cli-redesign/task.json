@@ -1,0 +1,33 @@
+{
+  "id": "skills-cli-redesign",
+  "name": "skills-cli-redesign",
+  "title": "Skills CLI 全局页重设计",
+  "description": "Skills CLI 全局页按任务内持久化设计契约完成重设计：计数收进标题行、按来源仓库分组、紧凑卡片、三步安装弹窗、批量操作栏、详情/更新抽屉与安全卸载确认。父任务只负责共享需求、子任务依赖和集成验收。",
+  "status": "completed",
+  "dev_type": "feature",
+  "scope": "full",
+  "package": "app",
+  "priority": "P1",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-08-26",
+  "completedAt": "2026-08-27",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-26-backend-contract",
+    "08-26-page-shell",
+    "08-26-batch-actions",
+    "08-26-install-wizard",
+    "08-26-detail-drawer",
+    "08-26-update-center"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

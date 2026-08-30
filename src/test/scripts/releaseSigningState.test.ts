@@ -8,7 +8,7 @@ type SigningHelpers = {
 };
 
 // @ts-expect-error The release signing helper is an ESM Node script outside the TS source tree.
-const module = await import("../../../scripts/release-signing-state.mjs");
+const module = await import("../../../scripts/release/release-signing-state.mjs");
 const { azureSigningConfiguration, validateSigningState } = module as SigningHelpers;
 
 const files = {

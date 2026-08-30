@@ -38,6 +38,17 @@ Central Skills 不等同于 Universal Agents。只有显式安装到目标平台
 
 Codex CLI、Cursor、OpenCode、Amp、Copilot 等 universal agents 读取这个全局位置。Google 平台需要区分：Antigravity 全局目录是 `~/.gemini/antigravity/skills/`，Antigravity CLI 全局目录是 `~/.gemini/antigravity-cli/skills/`，两者的项目级技能仍共享 `.agents/skills/`；Gemini CLI 作为 legacy/shared 目标承载 `~/.gemini/skills/`。
 
+### Skills CLI global
+
+官方 `skills` npm 包（SkillPort 使用未钉死的 `npx skills`，跟随 npm `latest`）的全局（`-g`）生命周期。SkillPort 在本机 Local 目标上通过 `node` + npx JS CLI 调用它，用来预览、安装和卸载全局技能。
+
+约束：
+
+- 不把 `~/.agents/skills/` 整棵树当成 Skills CLI 所有。所有权以 lock 为准：`$XDG_STATE_HOME/skills/.skill-lock.json` 或 `~/.agents/.skill-lock.json`。
+- 不是 Central（`~/.skillsmanage/skills/`），也不是「拥有全部 Universal Agents」。
+- MVP 只支持 Local target。SSH/WSL 不得 spawn 或用本机 lock 做远程 leftover 保护。
+- 安装不得默认 `--all`、`--agent '*'` 或 `--copy`。官方默认 symlink。
+
 ### Platform
 
 SkillPort 支持的目标工具或平台，例如 Claude Code、Codex CLI、Cursor、Antigravity、Antigravity CLI、Gemini CLI (legacy)、OpenCode、OpenClaw。Platform 有自己的 skills 目录，也可能共享 Universal Agents 目录。

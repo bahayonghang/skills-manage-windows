@@ -43,6 +43,7 @@ fn operation_log_offset(offset: Option<i64>) -> i64 {
 
 #[derive(Debug, Clone)]
 struct NormalizedOperationLogFilter {
+    operation_id: Option<String>,
     query: Option<String>,
     target_kind: Option<String>,
     target_id: Option<String>,
@@ -57,6 +58,7 @@ struct NormalizedOperationLogFilter {
 impl From<&OperationLogFilter> for NormalizedOperationLogFilter {
     fn from(filter: &OperationLogFilter) -> Self {
         Self {
+            operation_id: normalize_optional_filter(&filter.operation_id),
             query: normalize_optional_filter(&filter.query).map(|value| format!("%{}%", value)),
             target_kind: normalize_optional_filter(&filter.target_kind),
             target_id: normalize_optional_filter(&filter.target_id),
@@ -76,6 +78,9 @@ fn push_operation_log_filters(
 ) {
     builder.push(" WHERE 1 = 1");
 
+    if let Some(value) = &filter.operation_id {
+        builder.push(" AND id = ").push_bind(value.clone());
+    }
     if let Some(value) = &filter.target_kind {
         builder.push(" AND target_kind = ").push_bind(value.clone());
     }
@@ -106,6 +111,7 @@ fn push_operation_log_filters(
                 summary LIKE ",
         );
         builder.push_bind(value.clone());
+        builder.push(" OR id LIKE ").push_bind(value.clone());
         builder
             .push(" OR error_summary LIKE ")
             .push_bind(value.clone());
@@ -122,12 +128,20 @@ fn push_operation_log_filters(
 
 async fn insert_operation_log_row<'e, E>(
     executor: E,
+    operation_id: Option<&str>,
     entry: NewOperationLogEntry,
 ) -> Result<String, sqlx::Error>
 where
     E: Executor<'e, Database = Sqlite>,
 {
-    let id = Uuid::new_v4().to_string();
+    let id = match operation_id {
+        Some(value) => Uuid::parse_str(value)
+            .map_err(|_| {
+                sqlx::Error::InvalidArgument("Operation log id must be a valid UUID.".to_string())
+            })?
+            .to_string(),
+        None => Uuid::new_v4().to_string(),
+    };
     let created_at = Utc::now().to_rfc3339();
     let level = normalize_required_log_value(&entry.level, "info");
     let target_kind = normalize_required_log_value(&entry.target_kind, "local");
@@ -171,18 +185,98 @@ pub(crate) async fn insert_operation_log_in_transaction(
     transaction: &mut Transaction<'_, Sqlite>,
     entry: NewOperationLogEntry,
 ) -> Result<String, sqlx::Error> {
-    insert_operation_log_row(&mut **transaction, entry).await
+    insert_operation_log_row(&mut **transaction, None, entry).await
 }
 
 pub async fn insert_operation_log(
     pool: &DbPool,
     entry: NewOperationLogEntry,
 ) -> Result<OperationLogEntry, sqlx::Error> {
-    let id = insert_operation_log_row(pool, entry).await?;
+    let id = insert_operation_log_row(pool, None, entry).await?;
 
     get_operation_log(pool, &id).await?.ok_or_else(|| {
         sqlx::Error::InvalidArgument("Inserted operation log was not found.".to_string())
     })
+}
+
+/// Insert an operation row with its pre-generated audit/correlation id.
+///
+/// This is intentionally separate from the compatibility insertion API so
+/// existing callers retain generated row ids while the observability module
+/// can establish identity before a long-running operation starts.
+pub async fn insert_operation_log_with_id(
+    pool: &DbPool,
+    operation_id: &str,
+    entry: NewOperationLogEntry,
+) -> Result<OperationLogEntry, sqlx::Error> {
+    let id = insert_operation_log_row(pool, Some(operation_id), entry).await?;
+
+    get_operation_log(pool, &id).await?.ok_or_else(|| {
+        sqlx::Error::InvalidArgument("Inserted operation log was not found.".to_string())
+    })
+}
+
+/// Replace the mutable outcome fields of an existing started row.
+/// `id` and `created_at` remain the attempt identity and start time.
+pub async fn update_operation_log(
+    pool: &DbPool,
+    operation_id: &str,
+    entry: NewOperationLogEntry,
+) -> Result<Option<OperationLogEntry>, sqlx::Error> {
+    let level = normalize_required_log_value(&entry.level, "info");
+    let target_kind = normalize_required_log_value(&entry.target_kind, "local");
+    let target_id = normalize_required_log_value(&entry.target_id, "local");
+    let category = normalize_required_log_value(&entry.category, "general");
+    let action = normalize_required_log_value(&entry.action, "operation");
+    let status = normalize_required_log_value(&entry.status, "succeeded");
+    let summary = normalize_required_log_value(&entry.summary, "Operation completed.");
+    let result = sqlx::query(
+        "UPDATE operation_logs SET
+            level = ?, target_kind = ?, target_id = ?, target_label = ?,
+            category = ?, action = ?, status = ?, subject_type = ?,
+            subject_id = ?, subject_label = ?, summary = ?, error_summary = ?,
+            details_json = ?, duration_ms = ?, batch_id = ?
+         WHERE id = ? AND status = 'started'",
+    )
+    .bind(level)
+    .bind(target_kind)
+    .bind(target_id)
+    .bind(entry.target_label)
+    .bind(category)
+    .bind(action)
+    .bind(status)
+    .bind(entry.subject_type)
+    .bind(entry.subject_id)
+    .bind(entry.subject_label)
+    .bind(summary)
+    .bind(entry.error_summary)
+    .bind(entry.details_json)
+    .bind(entry.duration_ms)
+    .bind(entry.batch_id)
+    .bind(operation_id)
+    .execute(pool)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Ok(None);
+    }
+    get_operation_log(pool, operation_id).await
+}
+
+/// Mark attempts left in `started` by a prior desktop process as interrupted.
+/// This records only audit truth and never mutates the FS/DB recovery journal.
+pub async fn mark_started_operation_logs_interrupted(pool: &DbPool) -> Result<u64, sqlx::Error> {
+    sqlx::query(
+        "UPDATE operation_logs SET
+            level = 'warn',
+            status = 'interrupted',
+            summary = 'Operation was interrupted before completion.',
+            error_summary = NULL
+         WHERE status = 'started'",
+    )
+    .execute(pool)
+    .await
+    .map(|result| result.rows_affected())
 }
 
 pub async fn get_operation_log(

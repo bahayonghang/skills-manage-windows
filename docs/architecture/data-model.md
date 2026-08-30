@@ -50,7 +50,7 @@ deletion uses the pool's per-connection foreign-key enforcement for cascade.
 
 ## Field Reference
 
-Field details are regenerated from `src-tauri/src/db/schema/*.rs` by `scripts/build-schema-table.mjs` — never edit the generated section by hand.
+Field details are regenerated from `src-tauri/src/db/schema/*.rs` by `scripts/docs/build-schema-table.mjs` — never edit the generated section by hand.
 
 <!--@include: ./_generated/data-model.md-->
 

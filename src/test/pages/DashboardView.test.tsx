@@ -7,6 +7,7 @@ import { DashboardView } from "@/pages/DashboardView";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useOperationLogStore } from "@/stores/operationLogStore";
 import { usePlatformStore } from "@/stores/platformStore";
+import { useSkillsCliStore } from "@/stores/skillsCliStore";
 import { useTargetStore } from "@/stores/targetStore";
 import type {
   AgentWithStatus,
@@ -265,6 +266,12 @@ describe("DashboardView", () => {
       activeTarget: localTarget,
       targets: [localTarget, wslTarget],
     };
+    useSkillsCliStore.setState({
+      skills: [],
+      targets: [],
+      loadAll: vi.fn(async () => {}),
+      inventoryError: null,
+    });
     installStoreMocks();
   });
 
@@ -442,5 +449,48 @@ describe("DashboardView", () => {
     expect(
       screen.getByText(/No activity data yet|暂无活动数据/),
     ).toBeInTheDocument();
+  });
+
+  it("renders the Skills CLI census on Local without changing central summary", async () => {
+    const summary = platformState.dashboardCentralSummary;
+    const loadAll = vi.fn(async () => {});
+    useSkillsCliStore.setState({ loadAll });
+    renderDashboard();
+    expect(
+      await screen.findByTestId("dashboard-skills-cli-census"),
+    ).toBeInTheDocument();
+    expect(loadAll).toHaveBeenCalled();
+    expect(platformState.dashboardCentralSummary).toBe(summary);
+    expect(mockRefreshDashboardSummary).not.toHaveBeenCalledTimes(2);
+  });
+
+  it("does not load or render the Skills CLI census on a non-Local target", () => {
+    const loadAll = vi.fn(async () => {});
+    useSkillsCliStore.setState({ loadAll });
+    targetState = { activeTarget: wslTarget, targets: [localTarget, wslTarget] };
+    installStoreMocks();
+    renderDashboard();
+    expect(
+      screen.queryByTestId("dashboard-skills-cli-census"),
+    ).not.toBeInTheDocument();
+    expect(loadAll).not.toHaveBeenCalled();
+  });
+
+  it("keeps dashboard central summary intact when the Skills CLI loader fails", async () => {
+    const summary = platformState.dashboardCentralSummary;
+    const loadAll = vi.fn(async () => {
+      useSkillsCliStore.setState({
+        inventoryError: "internal.unexpected:list failed",
+      });
+    });
+    useSkillsCliStore.setState({ loadAll });
+    renderDashboard();
+    await waitFor(() => {
+      expect(loadAll).toHaveBeenCalled();
+    });
+    expect(platformState.dashboardCentralSummary).toEqual(summary);
+    expect(platformState.dashboardCentralSummary).toMatchObject({
+      centralSkillCount: 3,
+    });
   });
 });

@@ -84,7 +84,8 @@ fn operation_stage(index: usize) -> OperationUpdateStage {
     let write = sample_write(index);
     let operation_id = format!("op-{index}");
     let parent = "/home/tester/.skillsmanage/skills";
-    let file_digest = format!("{:x}", Sha256::digest(&write.files[0].bytes));
+    let file_digest =
+        crate::hashing::encode_lower_hex(Sha256::digest(&write.files[0].bytes).as_ref());
     OperationUpdateStage {
         manifest: crate::services::central_operation::UpdateManifest {
             version: crate::services::central_operation::MANIFEST_VERSION,
@@ -106,7 +107,9 @@ fn successful_stage_hashes(stages: &[OperationUpdateStage]) -> String {
     stages
         .iter()
         .map(|stage| {
-            let digest = format!("{:x}", Sha256::digest(&stage.write.files[0].bytes));
+            let digest = crate::hashing::encode_lower_hex(
+                Sha256::digest(&stage.write.files[0].bytes).as_ref(),
+            );
             remote_hash_output(&stage.manifest.staging, &digest)
         })
         .collect()
@@ -151,7 +154,10 @@ fn hash_entries_is_stable_across_input_order() {
     let right = hash_entries(vec![("a.txt".to_string(), one), ("b.txt".to_string(), two)]);
 
     assert_eq!(left, right);
-    assert!(left.starts_with("sha256-manifest:"));
+    assert_eq!(
+        left,
+        "sha256-manifest:f9c188d8bbe4db3aa4b9047a0f86f0beb3709639aa453edcc97ec35a47a62e51"
+    );
 }
 
 #[test]
@@ -308,8 +314,8 @@ async fn remote_hash_fallback_bounds_entries_at_thirty_two_mib_plus_one() {
 async fn ssh_and_wsl_fake_runners_cover_update_stage_swap_and_phase_loss_rollback() {
     use crate::services::central_operation::{UpdateManifest, MANIFEST_VERSION};
 
-    let old_file_digest = format!("{:x}", Sha256::digest(b"old"));
-    let new_file_digest = format!("{:x}", Sha256::digest(b"new"));
+    let old_file_digest = crate::hashing::encode_lower_hex(Sha256::digest(b"old").as_ref());
+    let new_file_digest = crate::hashing::encode_lower_hex(Sha256::digest(b"new").as_ref());
     let old_fingerprint = hash_entries(vec![("SKILL.md".to_string(), old_file_digest.clone())]);
     let new_fingerprint = hash_entries(vec![("SKILL.md".to_string(), new_file_digest.clone())]);
     for (runner, fs) in fake_remote_update_filesystems() {
@@ -367,7 +373,7 @@ async fn ssh_and_wsl_fake_runners_cover_update_stage_swap_and_phase_loss_rollbac
 async fn ssh_and_wsl_remote_update_finalize_is_idempotent_after_cleanup() {
     use crate::services::central_operation::{UpdateManifest, MANIFEST_VERSION};
 
-    let file_digest = format!("{:x}", Sha256::digest(b"new"));
+    let file_digest = crate::hashing::encode_lower_hex(Sha256::digest(b"new").as_ref());
     let new_fingerprint = hash_entries(vec![("SKILL.md".to_string(), file_digest.clone())]);
     for (runner, fs) in fake_remote_update_filesystems() {
         let target = "/home/tester/.skillsmanage/skills/demo";
@@ -384,7 +390,7 @@ async fn ssh_and_wsl_remote_update_finalize_is_idempotent_after_cleanup() {
             had_target: true,
             old_fingerprint: Some(hash_entries(vec![(
                 "SKILL.md".to_string(),
-                format!("{:x}", Sha256::digest(b"old")),
+                crate::hashing::encode_lower_hex(Sha256::digest(b"old").as_ref()),
             )])),
             new_fingerprint: new_fingerprint.clone(),
             copies: Vec::new(),
@@ -415,11 +421,11 @@ async fn ssh_and_wsl_remote_update_finalize_is_idempotent_after_cleanup() {
 async fn ssh_and_wsl_rollback_restores_backup_when_failed_swap_left_target_missing() {
     use crate::services::central_operation::{OperationPhase, UpdateManifest, MANIFEST_VERSION};
 
-    let old_file_digest = format!("{:x}", Sha256::digest(b"old"));
+    let old_file_digest = crate::hashing::encode_lower_hex(Sha256::digest(b"old").as_ref());
     let old_fingerprint = hash_entries(vec![("SKILL.md".to_string(), old_file_digest.clone())]);
     let new_fingerprint = hash_entries(vec![(
         "SKILL.md".to_string(),
-        format!("{:x}", Sha256::digest(b"new")),
+        crate::hashing::encode_lower_hex(Sha256::digest(b"new").as_ref()),
     )]);
     for (runner, fs) in fake_remote_update_filesystems() {
         let manifest = UpdateManifest {

@@ -24,7 +24,7 @@ type ReleaseContextHelpers = {
 };
 
 // @ts-expect-error The release context helper is an ESM Node script outside the TS source tree.
-const releaseContextModule = await import("../../../scripts/release-context.mjs");
+const releaseContextModule = await import("../../../scripts/release/release-context.mjs");
 const { parseReleaseTag, resolveReleaseTag, resolveRehearsalRef, validateVersionSet } = releaseContextModule as ReleaseContextHelpers;
 
 describe("release context", () => {
@@ -66,7 +66,7 @@ describe("release context", () => {
       ["merge-base", "--is-ancestor", "abc123", "origin/main"],
     ]);
 
-    const source = readFileSync("scripts/release-context.mjs", "utf8");
+    const source = readFileSync("scripts/release/release-context.mjs", "utf8");
     expect(source).toContain('"--locked"');
   });
 

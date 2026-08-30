@@ -10,11 +10,12 @@
 3. **匹配语义**（单一定义点）：key 归一化（lowercase、`-` 折叠为 `_`）后，长 needle 以 substring 匹配（保证 `accessToken` 这类驼峰压扁复合词命中）；短 needle（`pat`）要求 token 边界（两侧为端点或非字母数字），避免 `path`/`pattern` 误伤。
 4. **新增敏感类别**：只改 `redaction.rs` 的词表并在该模块补一类测试；`operation_and_runtime_redact_the_same_keys` parity 测试自动守卫两个 JSON 入口不再漂移。若行正则也需覆盖新类别，两个 regex 的 alternation 组同步补词。
 5. **标记不统一是有意为之**：`[redacted]`（Operation Log，DB 历史行沿用）与 `[REDACTED]`（Runtime Log，前端 fixture 依赖）由模块内部封装，调用方与前端不得依赖对方层的标记字面量。
-6. **前端防线**：`src/lib/runtimeLogger.ts` 的 `SENSITIVE_KEY_PATTERN` 在敏感值过 IPC 前预脱敏，词表须与后端保持同步（后端权威，前端 belt-and-suspenders）。
-7. **两层日志模型勿混**：Operation Log 是持久化前脱敏；Runtime Log 是读取/导出时脱敏（磁盘文件保留原文）。改动脱敏时机属于行为变更，需独立评审。
+6. **前端防线**：`src/lib/runtimeLogger.ts` 按 source 构造固定诊断结构。IPC args 仅保留层级与非字符串 scalar，所有字符串替换为 `[REDACTED]`，对象 key 改为 `field_N`；全局错误仅保留 allowlisted Error name 与安全行列。不得维护另一份敏感词表，也不得把任意动态 key/code/message 当成“已脱敏”。
+7. **两层日志模型勿混**：Operation Log 在持久化前脱敏。新的 structured Runtime event 也必须在 `tracing`/磁盘前通过 typed/allowlisted boundary；读取与导出脱敏是兼容历史行的最后防线，不能作为新事件写 raw message、path、host、stack、reason 或对象 key 的理由。
 8. **Recovery journal 是第三类受控存储**：`fs_db_operations.manifest_json` 可保存恢复所需完整路径和 fingerprint，但不得进入 Operation Log、Runtime Log、IPC summary、状态导出或 telemetry。IPC/Operation Log 仅暴露 operation/target/kind/phase、稳定 error code 与 `CentralOperationError::redacted_message()`；tracing 禁止格式化含 source/path 的原始 recovery error。
 9. **Update apply 单项诊断使用 allowlist**：Operation Log `failureItems` 只允许 `step`、安全逻辑 `identifier`、受控 `phase`、稳定 `errorCode` 和稳定 `errorCategory`，最多 50 项并记录截断数。Runtime apply 事件只记录排序去重的 code/category 与 phase counts。两层都不得记录 item `error`、manifest、完整路径、URL、repository source path 或命令输出。`step` 必须收敛到固定动作表；`identifier` 只保留有限长度的 ASCII 逻辑 ID（含 `agent_id::skill_id` 和 repository 前缀），不符合约束的动态输入统一降级为 `batch`。
 10. **Refresh/retry 仓库诊断使用同一 allowlist**：Operation Log 只允许安全 `repositoryId` 和静态 code/category，最多 50 项；Runtime Log 只允许聚合 code/category 与 retry 数字。持久化历史值在日志前重新校验；URL、owner/repo/ref、HTTP status/detail、响应正文、reqwest Display 与 failed row `error` 不得成为日志输入。
+11. **不可变库存身份不属于诊断载荷**：pending additions 可持久化完整 commit SHA 与 repository digest 作为 Apply 权威，但两者不得进入 IPC error、Operation Log、Runtime Log、telemetry 或 portable export。GitHub 401/403 必须由 typed `used_auth` 事实映射为匿名 `access_denied` 或 `configured_token_failed`；禁止记录 token、Authorization header 或为分类解析动态 Display。
 
 ## Scenario: Structured IPC Error Payload
 
@@ -25,13 +26,13 @@
 ### 2. Signatures
 
 ```text
-IpcError { code: String, message: String, retryable: bool }
-failure recorder { command, sanitized args, normalized public error }
+IpcError { code: String, message: String, retryable: bool, correlationId?: UUID }
+failure recorder { command, ordinal sanitized args, normalized public error, operation UUID, correlation origin }
 ```
 
 ### 3. Contracts
 
-- payload 只允许稳定 code、已审查 public message 和 retryable；不附带 source/details。
+- payload 只允许稳定 code、已审查 public message、retryable 和可选 UUID correlationId；不附带 source/details。
 - PAT、AI key、SSH password/private key、绝对/相对路径、命令/env、stdout/stderr、
   snapshot token/digest 和文件内容不得进入 IPC error、failure recorder 或状态导出。
 - Archive redirect rejection 的 Operation Log 只记录静态
@@ -48,7 +49,11 @@ failure recorder { command, sanitized args, normalized public error }
   error category、phase、duration 这些静态或数值字段。缺少这一条时「See runtime logs
   for details」会指向只有前端通用重复记录的文件。
 - frontend recorder 保留对象/数组 shape 与非字符串 scalar，所有字符串参数替换为
-  `[REDACTED]`；未知 rejection 的 message 固定化。
+  `[REDACTED]`，所有对象 key 改为固定序号；未知 rejection 的 message/code 固定化。`REVIEWED_IPC_ERROR_CODES`
+  是 Rust 唯一 allowlist，并由 IPC codegen 生成 TypeScript 清单；renderer 在调用 recorder 前拒绝清单外 code，
+  Rust ingress 再按 `public_message_for_code` 独立复核，不能用语法正则替代审核。
+- window error / unhandled rejection 不接收动态 code、message、filename、stack 或 reason；只接收 allowlisted Error
+  name 和非负行列。frontend Runtime log 的 operation ID 必须为 UUID。
 
 ### 4. Validation & Error Matrix
 
@@ -60,7 +65,8 @@ failure recorder { command, sanitized args, normalized public error }
 | domain failure without a reviewed code | static `errorCategory` in Operation Log; IPC still `internal.unexpected`      |
 | known legacy coded family              | canonical message; raw details dropped                                        |
 | unknown Display/string/object          | `internal.unexpected` fixed message                                           |
-| args containing any string             | same shape, string replaced                                                   |
+| args containing any string or dynamic key | same nesting/scalars, ordinal keys, string replaced                        |
+| syntactically valid but unknown code    | `internal.unexpected`                                                         |
 
 ### 5. Good / Base / Bad Cases
 
@@ -72,6 +78,9 @@ failure recorder { command, sanitized args, normalized public error }
 
 - Serialize adversarial seeds and assert exact seed absence.
 - Assert recorder args contain no original string at any nesting depth.
+- Put path/URL/token seeds in both object keys and values; assert neither frontend payload nor written Runtime line
+  contains them.
+- Assert syntactically valid but unreviewed error codes are replaced and concurrent recorder writes are not suppressed.
 - Assert existing coded AI/GitHub/local-archive behavior retains only canonical public meaning.
 - Assert archive redirect adversarial PAT/URL/path/body seeds are absent from IPC,
   Operation Log details, and Runtime failure records while the stable code remains visible.

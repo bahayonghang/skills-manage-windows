@@ -382,7 +382,7 @@ async fn record_registry_sync_error_best_effort(
     attempt_time: &str,
     error: &MarketplaceError,
 ) {
-    if let Err(marker_error) = sqlx::query(
+    if let Err(_marker_error) = sqlx::query(
         "UPDATE skill_registries
          SET last_attempted_sync = ?, last_sync_status = ?, last_sync_error = ?
          WHERE id = ?",
@@ -396,7 +396,6 @@ async fn record_registry_sync_error_best_effort(
     {
         tracing::warn!(
             registry_id,
-            error = %marker_error,
             "failed to record marketplace registry sync error"
         );
     }

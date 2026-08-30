@@ -30,6 +30,7 @@
 - SSH/WSL recovery protocol tests use the shared `FakeRunner` seam and assert complete script/argv/stdin plus stable output rows. They must not expose credentials, full command output, or host paths in expected diagnostics.
 - Real Windows WSL rename/restore smoke is ignored unless `SKILLPORT_TEST_WSL_DISTRO` names an available disposable distro. FakeRunner parity is required even when the live smoke cannot run.
 - Tests that exercise production Central mutation entrypoints share a test-only in-process mutex for the real default file-lock path. Do not replace the production timeout or OS lock with this mutex; low-level isolated-path tests must still prove contention, timeout, crash release, and different-target independence.
+- Negative redaction/leak assertions must use complete high-entropy sentinels (for example a domain-specific token plus a random-looking suffix), not common substrings such as HTTP status numbers, `response`, elapsed milliseconds, or short path components. Whole-record serialization can legitimately contain those common values in timestamps, IDs, counters, or safe metadata, producing concurrency-sensitive false failures.
 
 ## 巡检命令
 

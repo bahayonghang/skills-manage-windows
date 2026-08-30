@@ -24,6 +24,23 @@ pub async fn recover_pending_operations(
     target: &ActiveTarget,
 ) -> Result<Vec<PendingOperationSummary>, CentralOperationError>;
 
+pub async fn preview_pending_delete_recovery(
+    pool: &DbPool,
+    target: &ActiveTarget,
+    skill_id: &str,
+    remote: Option<&ConnectedRemoteTarget>,
+) -> Result<Option<PendingDeleteRecoveryPreview>, CentralOperationError>;
+
+pub async fn force_abandon_prepared_delete_under_guard(
+    pool: &DbPool,
+    target: &ActiveTarget,
+    skill_id: &str,
+    remote: Option<&ConnectedRemoteTarget>,
+) -> Result<ForceAbandonDecision, CentralOperationError>;
+
+delete_central_skill(skill_id, remove_agent_ids, force: Option<bool>)
+delete_central_skills(requests: Vec<BatchDeleteCentralSkillRequest /* force: bool */>)
+
 pub async fn insert_fs_db_operation(
     pool: &DbPool,
     operation: NewFsDbOperation<'_>,
@@ -75,6 +92,9 @@ Delete may use `fs_staged -> db_committed` because its backup rename is the dest
 - Only terminal rows are eligible for retention deletion. Pending rows and their recovery artifacts have no TTL cleanup.
 - Installation mutations check matching nonterminal rows while holding the same target mutation guard. A pending row blocks only the same target and skill.
 - Explicit reconciliation previews `central_delete/prepared` evidence under the target guard and applies only `prepared -> rolled_back` after a fresh preview. Apply never mutates filesystem or business tables; remaining artifacts, owned missing paths, fingerprint drift, target mismatch, or inspection failure block it.
+- Force-delete is a separate delete-dialog escape hatch. With `force=true`, the same target mutation lock first abandons an eligible `central_delete/prepared` row (`prepared -> rolled_back`, journal only) and then runs a new journaled delete of **current** owned paths. Restore / Retry stay fail-closed: `(original missing, backup missing)` remains `delete_restore_collision`.
+- Force-abandon eligibility ignores fingerprint drift and owned-missing paths. It still blocks on backup/marker remaining, `phase != prepared`, unsupported kind, invalid/inconsistent manifest, or target mismatch. Missing unowned platform paths do not block.
+- Delete preview may attach `pending_recovery` (operation id/kind/phase, stable error code, `force_delete_eligible`, blocker codes). IPC, Operation Logs, and toasts must not include paths, fingerprints, or `manifest_json`. Single-delete collisions map to `central_operation.delete_restore_collision`, not `internal.unexpected`.
 
 ## 4. Validation & Error Matrix
 
@@ -93,6 +113,9 @@ Delete may use `fs_staged -> db_committed` because its backup rename is the dest
 | Unrelated skill has a pending row when a batch starts | Do not inspect, retry, timestamp, or rewrite that row's recovery evidence |
 | Repeated restore/finalize/retry | Return the same converged old/new state without overwriting new user data |
 | Operation Logs list/detail/export | Contain summary/code/ID only; never contain `manifest_json` or full paths |
+| `force=false` and selected skill has a `prepared` delete whose expected paths are `(false, false)` | Restore fail-closes with `delete_restore_collision`; retain the pending row |
+| `force=true`, no backup/marker, `central_delete/prepared`, fingerprint may have drifted | `prepared -> rolled_back`, then a new journaled delete of current owned paths |
+| `force=true` but backup/marker remains or phase is not `prepared` | `central_skills.force_delete_blocked`; do not mutate filesystem or the journal |
 
 ## 5. Good / Base / Bad Cases
 
@@ -102,6 +125,8 @@ Delete may use `fs_staged -> db_committed` because its backup rename is the dest
 - **Bad**: delete the directory first and then call `db::delete_skill`; a DB failure loses user data.
 - **Bad**: log `error = %error` when the source may contain a path or remote diagnostic; log the stable error code and persist `redacted_message()` instead.
 - **Bad**: ignore marker cleanup, rollback, journal, or finalize errors with `let _ =`; the caller would report a false terminal state.
+- **Good**: a stale `prepared` delete lists vanished platform copies and a drifted Central fingerprint, but no backup/marker; force-delete rolls the journal back and deletes the current Central copy.
+- **Bad**: treat `(false, false)` as already-gone inside restore/Retry so a later delete proceeds without an explicit force confirmation.
 
 ## 6. Tests Required (Assertion Points)
 
@@ -114,6 +139,7 @@ Delete may use `fs_staged -> db_committed` because its backup rename is the dest
 - A multi-file first content upsert preserves identical `SKILL.md`, references, scripts, and assets payloads across Local, Fake SSH, and Fake WSL, with `had_target=false` and per-skill commit/digest provenance.
 - SSH and WSL FakeRunner tests assert complete supervised scripts, marker/fingerprint protocol, rollback/finalize idempotence, and redacted errors. Real WSL smoke stays ignored unless `SKILLPORT_TEST_WSL_DISTRO` is set.
 - Frontend tests cover loading, empty, pending, retry success/failure, offline target, target-switch latest-wins, cached-log availability, and narrow-screen no-overlap.
+- Force-delete tests cover the yao-meta shape (duplicate gone platform paths, Central present, drifted fingerprint), backup/marker rejection, non-`prepared` rejection, and reviewed `delete_restore_collision` / `force_delete_blocked` IPC codes with no path leak.
 - Minimum closeout gate: focused frontend/Rust tests, `cargo fmt --all -- --check`, locked all-target Clippy/tests, default-concurrency `just ci`, task validation, and `git diff --check`.
 
 ## 7. Wrong vs Correct

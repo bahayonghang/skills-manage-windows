@@ -58,6 +58,14 @@ const positiveCases: UnifiedSkillCardProps[] = [
     onInstallTo: noop,
     onRemove: noop,
   },
+  {
+    variant: "skillsCli",
+    layout: "denseRow",
+    name: "case-skills-cli",
+    placements: [],
+    onDetail: noop,
+    onUninstall: noop,
+  },
 ];
 
 /**
@@ -112,6 +120,18 @@ const negativeCases: UnifiedSkillCardProps[] = [
     onInstall: noop,
   },
   {
+    variant: "central",
+    name: "bad-central-lifetime",
+    checkbox: { checked: false, onChange: noop },
+    onDetail: noop,
+    onInstallTo: noop,
+    onUninstallFromPlatforms: noop,
+    onUpdateCentral: noop,
+    onDeleteFromCentral: noop,
+    // @ts-expect-error 场景互斥：central 不接受 platform 专属的 lifetimeUsage
+    lifetimeUsage: { rank: 1, count: 4 },
+  },
+  {
     variant: "project",
     name: "bad-project",
     originBadge: { kind: "central", label: "中央" },
@@ -121,16 +141,63 @@ const negativeCases: UnifiedSkillCardProps[] = [
     // @ts-expect-error 场景互斥：project 不接受 import 专属的 onInstallToCentral
     onInstallToCentral: noop,
   },
+  {
+    variant: "skillsCli",
+    layout: "denseRow",
+    name: "bad-skills-cli",
+    placements: [],
+    onDetail: noop,
+    onUninstall: noop,
+    // @ts-expect-error 场景互斥：skillsCli 不接受 collection 专属的 onRemove
+    onRemove: noop,
+  },
+  {
+    variant: "central",
+    name: "bad-central-layout",
+    checkbox: { checked: false, onChange: noop },
+    onDetail: noop,
+    onInstallTo: noop,
+    onUninstallFromPlatforms: noop,
+    onUpdateCentral: noop,
+    onDeleteFromCentral: noop,
+    // @ts-expect-error 场景互斥：central 不接受 skillsCli 专属的 layout
+    layout: "denseRow",
+  },
+  {
+    variant: "platform",
+    name: "bad-platform-placements",
+    sourceType: "copy",
+    originKind: null,
+    isReadOnly: false,
+    onDetail: noop,
+    uninstallFromLabel: "卸载",
+    // @ts-expect-error 场景互斥：platform 不接受 skillsCli 专属的 placements
+    placements: [],
+  },
+  {
+    variant: "central",
+    name: "bad-central-uninstall-lock",
+    checkbox: { checked: false, onChange: noop },
+    onDetail: noop,
+    onInstallTo: noop,
+    onUninstallFromPlatforms: noop,
+    onUpdateCentral: noop,
+    onDeleteFromCentral: noop,
+    // @ts-expect-error 场景互斥：central 不接受 skillsCli 专属的 uninstallLockReason
+    uninstallLockReason: "locked",
+  },
 ];
 
 // JSX 形态同样被拒绝（单行元素，directive 覆盖整行）
 const jsxNegativeCase = [
   // @ts-expect-error 场景互斥（JSX 形态）：collection 不接受 central 专属的 statusChipLabel
   <UnifiedSkillCard key="jsx-bad" variant="collection" name="jsx-bad" onDetail={noop} onInstallTo={noop} onRemove={noop} statusChipLabel="可更新" />,
+  // @ts-expect-error 场景互斥（JSX 形态）：skillsCli 不接受 marketplace 专属的 onInstall
+  <UnifiedSkillCard key="jsx-skills-cli" variant="skillsCli" layout="denseRow" name="jsx-cli" placements={[]} onDetail={noop} onUninstall={noop} onInstall={noop} />,
 ];
 
 describe("UnifiedSkillCard 场景 interface", () => {
-  it("六个场景的最小合法 props 均可渲染", () => {
+  it("七个场景的最小合法 props 均可渲染", () => {
     for (const props of positiveCases) {
       const { unmount } = render(<UnifiedSkillCard {...props} />);
       expect(screen.getByText(props.name)).toBeInTheDocument();
@@ -139,7 +206,7 @@ describe("UnifiedSkillCard 场景 interface", () => {
   });
 
   it("互斥负例仅存在于编译期（运行时对象可构造）", () => {
-    expect(negativeCases).toHaveLength(5);
-    expect(jsxNegativeCase).toHaveLength(1);
+    expect(negativeCases).toHaveLength(10);
+    expect(jsxNegativeCase).toHaveLength(2);
   });
 });

@@ -270,13 +270,16 @@ pub(super) fn fingerprint_files(files: &[super::super::RemoteSkillFile]) -> Stri
         .iter()
         .map(|file| {
             let digest = Sha256::digest(&file.bytes);
-            (file.relative_path.clone(), format!("{digest:x}"))
+            (
+                file.relative_path.clone(),
+                crate::hashing::encode_lower_hex(digest.as_ref()),
+            )
         })
         .collect();
     hash_entries(entries)
 }
 
 pub(super) fn short_digest(value: &str) -> String {
-    let digest = format!("{:x}", Sha256::digest(value.as_bytes()));
+    let digest = crate::hashing::encode_lower_hex(Sha256::digest(value.as_bytes()).as_ref());
     digest[..16].to_string()
 }

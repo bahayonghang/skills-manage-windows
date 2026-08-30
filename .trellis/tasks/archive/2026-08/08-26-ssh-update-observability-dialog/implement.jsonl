@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/domain-error-enums.md","reason":"All operation and runtime failures must preserve reviewed stable diagnostics through the IPC boundary."}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Operation and Runtime events must share the existing allowlist and sensitive-data boundaries."}
+{"file":".trellis/spec/backend/settings-domain-boundary.md","reason":"Settings and secret changes require safe operation facts without logging keys or values."}
+{"file":".trellis/spec/backend/fs-db-operation-journal.md","reason":"Long-running and recoverable mutations must distinguish audit lifecycle from recovery evidence."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Visible failures must keep coded feedback while correlating to safe diagnostics."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Registry, recorder, migration, store and dialog tests must remain discoverable and non-zero."}
+{"file":".trellis/tasks/08-26-ssh-update-observability-dialog/research/logging-coverage-audit.md","reason":"Repository-wide command inventory, current coverage evidence and structural logging gaps."}
+{"file": ".trellis/spec/backend/operation-observability.md", "reason": "Consume the frozen command policy, operation lifecycle, correlation, privacy and named-boundary contract."}

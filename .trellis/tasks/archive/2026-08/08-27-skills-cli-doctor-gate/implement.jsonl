@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "本任务直接修订该契约：doctor 探测、launcher 规则、错误矩阵 cli_unavailable 行、Base case 表述"}
+{"file": ".trellis/spec/backend/domain-error-enums.md", "reason": "cli_unavailable 收敛为 write-path only，错误码分流必须符合该约定"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "add 失败路径不得把 stderr/路径/URL 放进 IpcError.message 或未脱敏日志"}
+{"file": ".trellis/spec/backend/process-supervision.md", "reason": "改动 spawn 路径错误映射时需保持超时/输出上限/隐藏窗口语义"}
+{"file": ".trellis/spec/backend/index.md", "reason": "后端层 Pre-Development Checklist 入口"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "runtimeError 收敛后，安装失败改由 actionError + toast 呈现，需符合该规范"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端层 Pre-Development Checklist 入口"}
+{"file": ".trellis/spec/frontend/renderer-authority-boundary.md", "reason": "组件不得直接 invoke，写动作归 skillsCliStore"}
+{"file": ".trellis/tasks/08-27-skills-cli-availability-remote/research/current-state-evidence.md", "reason": "cli_unavailable 链路、runtimeBlocked 过度封锁的 file:line 证据"}

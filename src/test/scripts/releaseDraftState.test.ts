@@ -20,9 +20,9 @@ type ReleaseFixture = {
 };
 
 // @ts-expect-error The release helpers are ESM Node scripts outside the TS source tree.
-const artifactModule = await import("../../../scripts/release-artifacts.mjs");
+const artifactModule = await import("../../../scripts/release/release-artifacts.mjs");
 // @ts-expect-error The release helpers are ESM Node scripts outside the TS source tree.
-const stateModule = await import("../../../scripts/release-draft-state.mjs");
+const stateModule = await import("../../../scripts/release/release-draft-state.mjs");
 const { expectedReleaseAssets } = artifactModule as ReleaseAssetHelpers;
 const { validateReleaseState } = stateModule as ReleaseStateHelpers;
 

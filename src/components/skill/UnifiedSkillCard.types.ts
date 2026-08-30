@@ -1,6 +1,11 @@
 import type { MouseEventHandler, Ref } from "react";
 
-import type { AgentWithStatus, CentralSkillUpdateState, ClaudeSourceKind } from "@/types";
+import type {
+  AgentWithStatus,
+  CentralSkillUpdateState,
+  ClaudeSourceKind,
+  SkillsCliPlacement,
+} from "@/types";
 
 /**
  * 卡片视觉密度：
@@ -90,10 +95,14 @@ export interface PlatformSkillCardProps extends SkillCardCoreProps {
   variant: "platform";
   sourceType: "symlink" | "copy" | "native";
   originKind: ClaudeSourceKind | null;
+  /** Backend/view-model origin; CLI junctions are not Central. */
+  installOrigin?: "central" | "standalone" | "skillsCli";
   isReadOnly: boolean;
   publisher?: string;
   /** 「近 30 天调用 N 次」徽章；仅当数值 > 0 时渲染。 */
   usageBadge?: number;
+  /** 全历史名次。undefined = 未就绪不渲染；rank null = 无记录。 */
+  lifetimeUsage?: { rank: number | null; count: number };
   /** 只读行（native 等）不出现多选框。 */
   checkbox?: SkillCardCheckbox;
   isLoading?: boolean;
@@ -148,6 +157,21 @@ export interface CollectionSkillCardProps extends SkillCardCoreProps {
   onRemove: () => void;
 }
 
+/** Skills CLI 全局技能卡片：dense-row 布局，卸载确认由页面完成。 */
+export interface SkillsCliSkillCardProps extends SkillCardCoreProps {
+  variant: "skillsCli";
+  layout: "denseRow";
+  path?: string | null;
+  placements: readonly SkillsCliPlacement[];
+  checkbox?: SkillCardCheckbox;
+  updateAvailable?: boolean;
+  onDetail: MouseEventHandler<HTMLButtonElement>;
+  onManageLinks?: () => void;
+  onUninstall: () => void;
+  isLoading?: boolean;
+  uninstallLockReason?: string;
+}
+
 /**
  * 唯一技能卡片实现的显式场景 interface：调用方声明 `variant` + 该场景的窄 props，
  * 场景间互斥的 props 在编译期被拒绝（判别联合 + excess property check）。
@@ -158,4 +182,5 @@ export type UnifiedSkillCardProps =
   | ProjectSkillCardProps
   | ImportSkillCardProps
   | MarketplaceSkillCardProps
-  | CollectionSkillCardProps;
+  | CollectionSkillCardProps
+  | SkillsCliSkillCardProps;

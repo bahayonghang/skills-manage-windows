@@ -189,6 +189,16 @@ pub struct PreparedDeleteReconciliationPreview {
     pub blocker_codes: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PendingDeleteRecoveryPreview {
+    pub operation_id: String,
+    pub operation_kind: String,
+    pub phase: String,
+    pub error_code: Option<String>,
+    pub force_delete_eligible: bool,
+    pub blocker_codes: Vec<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

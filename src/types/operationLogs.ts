@@ -1,7 +1,13 @@
 // ─── Operation Log Types ─────────────────────────────────────────────────────
 
 export type OperationLogLevel = "info" | "warn" | "error";
-export type OperationLogStatus = "succeeded" | "failed" | "partial" | "cancelled";
+export type OperationLogStatus =
+  | "started"
+  | "succeeded"
+  | "failed"
+  | "partial"
+  | "cancelled"
+  | "interrupted";
 export type OperationLogTargetKind = "local" | "ssh" | "wsl";
 
 export interface OperationLogEntry {
@@ -25,6 +31,7 @@ export interface OperationLogEntry {
 }
 
 export interface OperationLogFilter {
+  operationId?: string;
   query?: string;
   targetKind?: OperationLogTargetKind | "";
   targetId?: string;

@@ -1,4 +1,5 @@
 mod error;
+mod force_abandon;
 mod fs;
 mod path;
 mod reconcile;
@@ -6,6 +7,10 @@ mod recovery;
 mod types;
 
 pub use error::CentralOperationError;
+pub use force_abandon::{
+    force_abandon_prepared_delete_under_guard, preview_pending_delete_recovery,
+    ForceAbandonDecision,
+};
 pub use reconcile::{preview_prepared_delete_reconciliation, reconcile_prepared_delete};
 pub use recovery::{list_pending_operations, recover_pending_operations, retry_operation};
 pub(crate) use recovery::{
@@ -14,7 +19,8 @@ pub(crate) use recovery::{
 };
 pub use types::{
     CopyProjection, DeleteManifest, ManagedPath, OperationKind, OperationManifest, OperationPhase,
-    PendingOperationSummary, PreparedDeleteReconciliationPreview, UpdateManifest, MANIFEST_VERSION,
+    PendingDeleteRecoveryPreview, PendingOperationSummary, PreparedDeleteReconciliationPreview,
+    UpdateManifest, MANIFEST_VERSION,
 };
 
 pub(crate) use fs::{

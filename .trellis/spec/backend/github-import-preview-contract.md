@@ -557,6 +557,77 @@ Bare `github`, bare `settings`, or embedded character sequences such as the
   and configured-token denial messages.
 - Full gate: `just ci`.
 
+## Scenario: Preview Domain Error IPC Coding
+
+### 1. Scope / Trigger
+
+Apply this scenario when GitHub preview returns a domain failure that the
+wizard must show as a reviewed public message. The first coded case is
+`NoImportableSkills`. Do not use this scenario to expand candidate discovery
+or to import repositories that have no `SKILL.md`.
+
+### 2. Signatures
+
+```rust
+impl GithubImportError {
+    pub fn ipc_error_code(&self) -> Option<&'static str>;
+    pub fn to_ipc_error(&self) -> String;
+}
+```
+
+`NoImportableSkills` maps to `github_import.no_importable_skills`. The enum
+`#[error]` Display stays the historical `NO_IMPORTABLE_SKILLS_ERROR` string
+for CLI `NotFound` mapping.
+
+### 3. Contracts
+
+- Preview with zero importable candidates returns `NoImportableSkills`.
+- `to_ipc_error()` emits `github_import.no_importable_skills:<Display>`.
+- `IpcError::from_legacy_boundary` keeps only the code and the reviewed
+  static sentence: `This GitHub repository does not contain an importable skill.`
+- The wizard renders `backendErrors.github_import.no_importable_skills` through
+  `formatBackendError`. It must not show `internal.unexpected` or
+  `See runtime logs for details.`
+- This failure is not a preview-snapshot lifecycle error. The wizard must not
+  show the re-preview hint or PAT guidance.
+- Frontend Runtime Log `ipc.failure` details must include the stable code.
+  Preview remains read-only and does not write Operation Log.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+| --- | --- |
+| Repository has no `SKILL.md` | `github_import.no_importable_skills`; wizard shows i18n copy |
+| Envelope contains a path, token, or repo URL after the code | IPC message stays the reviewed static sentence |
+| Historical uncoded Display string reaches the wizard | Keep the historical text; do not force the new code |
+| `NoSelections` or other uncoded variants | Keep Display text; do not collapse them in this change |
+
+### 5. Tests Required
+
+- Backend envelope test: `ipc_code`, prefix, no path/token leak, and
+  `preview_snapshot_code() == None`.
+- `IpcError` from-legacy test for the reviewed public sentence.
+- Frontend normalize test for the coded string.
+- Wizard test for the coded envelope: i18n visible, no runtime-log fallback,
+  no re-preview hint, no PAT guidance.
+- Runtime logger test: `preview_github_repo_import` details include the code.
+- Full gate: `just ci`.
+
+### 6. Wrong vs Correct
+
+#### Wrong
+
+```rust
+// Leaving NoImportableSkills uncoded drops the failure into internal.unexpected.
+_ => return None,
+```
+
+#### Correct
+
+```rust
+Self::NoImportableSkills => "github_import.no_importable_skills",
+```
+
 ## Scenario: Root Skill Repository Content Boundary
 
 ### 1. Scope / Trigger
@@ -1136,6 +1207,61 @@ snapshot.verify_integrity(&selections)?;
 
 A lost or moved snapshot is a user-visible "preview again", never a silent
 re-fetch.
+
+## Scenario: Central Update Immutable Addition Authority
+
+### 1. Scope / Trigger
+
+Apply this scenario when Update Center refresh or decision apply changes remote
+addition discovery, pending-addition persistence, snapshot caching, or Local /
+SSH / WSL GitHub import. Unlike the renderer preview registry, this authority
+must survive cache eviction and application restart.
+
+### 2. Contracts
+
+- Refresh resolves each display repository ref to one full 40-hex commit SHA,
+  acquires the repository at that pinned ref, and computes the existing
+  `sha256-v1:<hex>` repository snapshot digest. Every pending addition from that
+  snapshot persists the same commit and digest.
+- Apply groups selections by repository and treats the pending rows as the only
+  content authority. A selected row that is missing, has legacy `NULL`
+  provenance, has malformed provenance, or disagrees with another selected row
+  returns `central_updates.inventory_refresh_required` before mutation.
+- A Local exact cache hit verifies both the immutable identity and retained
+  bytes, then uses the snapshot-only importer without a GitHub request. A miss
+  downloads the persisted commit directly and accepts it only when the complete
+  repository digest matches. Apply never resolves the display branch.
+- SSH / WSL creates a remote workspace from the persisted full commit, computes
+  the complete remote repository manifest digest, and calls the workspace-only
+  importer only after equality. Cleanup runs on every outcome.
+- Successful Local and remote imports persist the full commit and per-candidate
+  content digest on `skill_repository_members`. Repository snapshot bytes and
+  credentials are never persisted.
+- `central_updates.snapshot_changed` is the fixed pre-mutation failure for an
+  identity-matched cache whose bytes are corrupt or a pinned reacquisition whose
+  digest differs. The failed pending rows remain available for refresh/retry.
+
+### 3. Validation Matrix
+
+| Condition | Required result |
+| --- | --- |
+| Fresh cache contains exact commit, digest, and bytes | Import with zero acquisition |
+| Cache missing, expired, evicted, or oversized | Acquire the persisted full SHA once; never resolve branch |
+| Branch moves after Refresh | Continue using Refresh-time commit and bytes |
+| Selected pending identity is absent, malformed, or mixed | `inventory_refresh_required`; no Central mutation |
+| Pinned bytes do not reproduce repository digest | `snapshot_changed`; no Central mutation |
+| One repository fails while another succeeds | Preserve ordered partial success and only delete successful rows |
+
+### 4. Tests Required
+
+- Inventory tests proving repository grouping, exact-cache zero acquisition,
+  cache-miss full-SHA acquisition, legacy `NULL` rejection, digest mismatch,
+  successful pending-row cleanup, and failure-row retention.
+- Refresh persistence tests asserting full commit and digest on pending rows.
+- Remote repository/candidate digest parity tests using the existing manifest
+  parser and pinned-ref helper; real SSH/WSL end-to-end evidence remains subject
+  to the transport-seam limitation documented above.
+- Migration, coded-error/i18n, Rust locked tests, and full `just ci`.
 
 ## Scenario: Manual Single-Segment Branch Selection
 

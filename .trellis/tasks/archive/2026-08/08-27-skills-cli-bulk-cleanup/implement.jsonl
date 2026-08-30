@@ -1,0 +1,12 @@
+{"file": ".trellis/spec/backend/skills-cli-global.md", "reason": "删除路径契约：只删 owned canonical/lock/managed links，保留 direct copies，conflict 零写；apply_updates 单仓库请求"}
+{"file": ".trellis/spec/frontend/renderer-authority-boundary.md", "reason": "组件不得直接 invoke；新增写动作必须归 skillsCliStore（R8）"}
+{"file": ".trellis/spec/frontend/skill-card-scenarios.md", "reason": "复用 UnifiedSkillCard 的 skillsCli variant；清理入口不得新建卡片实现"}
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "partial failure 的 toast 与内联错误语义，必须走 skillsCliActionToast 与 formatBackendError"}
+{"file": ".trellis/spec/frontend/job-correlation-cancellation.md", "reason": "批量更新按 repositoryKey 分组时每组需独立 renderer jobId（R5）"}
+{"file": ".trellis/spec/frontend/icon-control-hit-area.md", "reason": "新增图标按钮的 40px 热区与 focus ring（R10）"}
+{"file": ".trellis/spec/frontend/typography-tokens.md", "reason": "排版优化不得引入页面私有字号，需用既有 token（R10）"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端层 Pre-Development Checklist 入口"}
+{"file": ".trellis/spec/backend/central-mutation-lock.md", "reason": "逐项批量每项独立申请 target mutation guard，需理解 Busy 语义以正确处理 AC9b"}
+{"file": ".trellis/spec/backend/exclusive-job-lifecycle.md", "reason": "逐项批量每项独立申请 job lease；同族 busy 的重映射行为影响批量结果汇总"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "多选框架已存在，本任务只补 Update/按平台 unlink/清理入口三处缺口"}
+{"file": ".trellis/tasks/08-27-skills-cli-availability-remote/research/current-state-evidence.md", "reason": "Unavailable 四种 reason_code 的判定顺序、批量现状与后端逐项约束的 file:line 证据"}

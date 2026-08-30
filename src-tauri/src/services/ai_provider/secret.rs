@@ -10,6 +10,33 @@ const LEGACY_AI_API_KEY_SETTING_KEY: &str = AI_API_KEY_SECRET_KEY;
 const DEFAULT_AI_PROVIDER: &str = "claude";
 const AI_API_KEY_MIGRATION_SETTING_KEY: &str = "ai_api_key_keyring_migration_v1";
 
+#[derive(Clone, Copy)]
+enum AiApiKeyMigrationFailureReason {
+    SecretStoreSet,
+    UnavailableStorageState,
+    ReadbackMismatch,
+    ReadbackError,
+    ProviderSecretStoreSet,
+    ProviderUnavailableStorageState,
+    ProviderReadbackMismatch,
+    ProviderReadbackError,
+}
+
+impl AiApiKeyMigrationFailureReason {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::SecretStoreSet => "secret_store_set",
+            Self::UnavailableStorageState => "unavailable_storage_state",
+            Self::ReadbackMismatch => "readback_mismatch",
+            Self::ReadbackError => "readback_error",
+            Self::ProviderSecretStoreSet => "provider_secret_store_set",
+            Self::ProviderUnavailableStorageState => "provider_unavailable_storage_state",
+            Self::ProviderReadbackMismatch => "provider_readback_mismatch",
+            Self::ProviderReadbackError => "provider_readback_error",
+        }
+    }
+}
+
 #[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -80,7 +107,10 @@ fn map_secret_error(action: &str, error: crate::secrets::SecretError) -> String 
     format!("Failed to {} AI API key: {}", action, error)
 }
 
-async fn record_ai_api_key_migration_failure(pool: &DbPool, error: &str, reason: &str) {
+async fn record_ai_api_key_migration_failure(
+    pool: &DbPool,
+    reason: AiApiKeyMigrationFailureReason,
+) {
     crate::operation_log::record_operation_log_best_effort(
         pool,
         crate::operation_log::local_target_context(),
@@ -91,10 +121,10 @@ async fn record_ai_api_key_migration_failure(pool: &DbPool, error: &str, reason:
             "AI API key migration to secure storage failed",
         )
         .subject("setting", LEGACY_AI_API_KEY_SETTING_KEY, "AI API key")
-        .error(error)
+        .error("AI API key migration to secure storage failed.")
         .details(json!({
             "key": LEGACY_AI_API_KEY_SETTING_KEY,
-            "reason": reason,
+            "reason": reason.as_str(),
             "legacySettingRetained": true,
         })),
     )
@@ -124,8 +154,11 @@ async fn delete_legacy_ai_api_key_setting(pool: &DbPool) -> Result<(), AiProvide
     Ok(())
 }
 
-fn log_ai_api_key_migration_warning(message: impl AsRef<str>) {
-    tracing::warn!(message = %message.as_ref(), "AI API key migration warning");
+fn log_ai_api_key_migration_warning(reason: AiApiKeyMigrationFailureReason) {
+    tracing::warn!(
+        reason = reason.as_str(),
+        "AI API key migration to secure storage failed; legacy setting retained"
+    );
 }
 
 async fn migrate_ai_api_key_to_secret_store(
@@ -144,11 +177,9 @@ async fn migrate_ai_api_key_to_secret_store(
         Ok(storage_state) => storage_state,
         Err(error) => {
             let mapped_error = map_secret_error("migrate", error);
-            log_ai_api_key_migration_warning(format!(
-                "AI API key migration failed; keeping legacy settings value: {}",
-                mapped_error
-            ));
-            record_ai_api_key_migration_failure(pool, &mapped_error, "secret_store_set").await;
+            let reason = AiApiKeyMigrationFailureReason::SecretStoreSet;
+            log_ai_api_key_migration_warning(reason);
+            record_ai_api_key_migration_failure(pool, reason).await;
             return Ok(Some(mapped_error));
         }
     };
@@ -157,11 +188,9 @@ async fn migrate_ai_api_key_to_secret_store(
             "Failed to migrate AI API key: unavailable storage state {:?}",
             storage_state
         );
-        log_ai_api_key_migration_warning(format!(
-            "AI API key migration did not produce an available secret state: {:?}",
-            storage_state
-        ));
-        record_ai_api_key_migration_failure(pool, &mapped_error, "unavailable_storage_state").await;
+        let reason = AiApiKeyMigrationFailureReason::UnavailableStorageState;
+        log_ai_api_key_migration_warning(reason);
+        record_ai_api_key_migration_failure(pool, reason).await;
         return Ok(Some(mapped_error));
     }
 
@@ -174,19 +203,16 @@ async fn migrate_ai_api_key_to_secret_store(
         Ok(_) => {
             let mapped_error =
                 "Failed to verify migrated AI API key; keeping legacy settings value.";
-            log_ai_api_key_migration_warning(
-                "AI API key migration readback did not match; keeping legacy settings value.",
-            );
-            record_ai_api_key_migration_failure(pool, mapped_error, "readback_mismatch").await;
+            let reason = AiApiKeyMigrationFailureReason::ReadbackMismatch;
+            log_ai_api_key_migration_warning(reason);
+            record_ai_api_key_migration_failure(pool, reason).await;
             Ok(Some(mapped_error.to_string()))
         }
         Err(error) => {
             let mapped_error = map_secret_error("verify migrated", error);
-            log_ai_api_key_migration_warning(format!(
-                "AI API key migration readback failed; keeping legacy settings value: {}",
-                mapped_error
-            ));
-            record_ai_api_key_migration_failure(pool, &mapped_error, "readback_error").await;
+            let reason = AiApiKeyMigrationFailureReason::ReadbackError;
+            log_ai_api_key_migration_warning(reason);
+            record_ai_api_key_migration_failure(pool, reason).await;
             Ok(Some(mapped_error))
         }
     }
@@ -206,12 +232,9 @@ async fn migrate_ai_api_key_to_provider_secret_store(
         Ok(storage_state) => storage_state,
         Err(error) => {
             let mapped_error = map_secret_error("migrate", error);
-            log_ai_api_key_migration_warning(format!(
-                "AI API key migration to provider secret failed; keeping legacy settings value: {}",
-                mapped_error
-            ));
-            record_ai_api_key_migration_failure(pool, &mapped_error, "provider_secret_store_set")
-                .await;
+            let reason = AiApiKeyMigrationFailureReason::ProviderSecretStoreSet;
+            log_ai_api_key_migration_warning(reason);
+            record_ai_api_key_migration_failure(pool, reason).await;
             return Ok(Some(mapped_error));
         }
     };
@@ -220,16 +243,9 @@ async fn migrate_ai_api_key_to_provider_secret_store(
             "Failed to migrate AI API key: unavailable storage state {:?}",
             storage_state
         );
-        log_ai_api_key_migration_warning(format!(
-            "AI API key migration to provider secret did not produce an available secret state: {:?}",
-            storage_state
-        ));
-        record_ai_api_key_migration_failure(
-            pool,
-            &mapped_error,
-            "provider_unavailable_storage_state",
-        )
-        .await;
+        let reason = AiApiKeyMigrationFailureReason::ProviderUnavailableStorageState;
+        log_ai_api_key_migration_warning(reason);
+        record_ai_api_key_migration_failure(pool, reason).await;
         return Ok(Some(mapped_error));
     }
 
@@ -242,21 +258,16 @@ async fn migrate_ai_api_key_to_provider_secret_store(
         Ok(_) => {
             let mapped_error =
                 "Failed to verify migrated AI API key; keeping legacy settings value.";
-            log_ai_api_key_migration_warning(
-                "AI API key provider migration readback did not match; keeping legacy settings value.",
-            );
-            record_ai_api_key_migration_failure(pool, mapped_error, "provider_readback_mismatch")
-                .await;
+            let reason = AiApiKeyMigrationFailureReason::ProviderReadbackMismatch;
+            log_ai_api_key_migration_warning(reason);
+            record_ai_api_key_migration_failure(pool, reason).await;
             Ok(Some(mapped_error.to_string()))
         }
         Err(error) => {
             let mapped_error = map_secret_error("verify migrated", error);
-            log_ai_api_key_migration_warning(format!(
-                "AI API key provider migration readback failed; keeping legacy settings value: {}",
-                mapped_error
-            ));
-            record_ai_api_key_migration_failure(pool, &mapped_error, "provider_readback_error")
-                .await;
+            let reason = AiApiKeyMigrationFailureReason::ProviderReadbackError;
+            log_ai_api_key_migration_warning(reason);
+            record_ai_api_key_migration_failure(pool, reason).await;
             Ok(Some(mapped_error))
         }
     }
@@ -527,10 +538,16 @@ mod tests {
     async fn legacy_ai_api_key_migration_failure_keeps_setting_and_marker_absent() {
         let pool = setup_test_db().await;
         let secrets = MockSecretStore::default();
-        secrets.set_set_error(SecretError::Other("keyring down".to_string()));
-        db::set_setting(&pool, LEGACY_AI_API_KEY_SETTING_KEY, "sk-legacy")
-            .await
-            .unwrap();
+        let private_error =
+            "keyring down at C:\\Users\\operator\\private.internal for sk_live_secret123";
+        secrets.set_set_error(SecretError::Other(private_error.to_string()));
+        db::set_setting(
+            &pool,
+            LEGACY_AI_API_KEY_SETTING_KEY,
+            "sk_live_legacy_secret456",
+        )
+        .await
+        .unwrap();
 
         let state = get_ai_api_key_state_impl(&pool, &secrets, None)
             .await
@@ -547,7 +564,7 @@ mod tests {
                 .await
                 .unwrap()
                 .as_deref(),
-            Some("sk-legacy")
+            Some("sk_live_legacy_secret456")
         );
         assert_eq!(
             db::get_setting(&pool, AI_API_KEY_MIGRATION_SETTING_KEY)
@@ -560,8 +577,32 @@ mod tests {
                 .await
                 .unwrap()
                 .as_deref(),
-            Some("sk-legacy")
+            Some("sk_live_legacy_secret456")
         );
+
+        let page = db::list_operation_logs(
+            &pool,
+            db::OperationLogFilter {
+                action: Some("settings.ai_api_key_migration".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("list migration logs");
+        assert!(page.total >= 1);
+        assert!(page.entries.iter().all(|entry| {
+            entry.error_summary.as_deref() == Some("AI API key migration to secure storage failed.")
+        }));
+        let persisted_log = serde_json::to_string(&page.entries).expect("serialize persisted logs");
+        for secret in [
+            private_error,
+            "C:\\Users\\operator",
+            "private.internal",
+            "sk_live_secret123",
+            "sk_live_legacy_secret456",
+        ] {
+            assert!(!persisted_log.contains(secret), "leaked {secret}");
+        }
     }
 
     #[tokio::test]

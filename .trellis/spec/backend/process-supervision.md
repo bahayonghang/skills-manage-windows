@@ -2,7 +2,12 @@
 
 ## 1. Scope / Trigger
 
-适用于 `targets` 层启动的 SSH、WSL 命令与 WSL discovery。任何新增远端 process 入口都必须经过 `CommandRunner`，不得在 async 函数内直接调用同步 `.output()` / `wait_with_output()`，也不得绕开 supervisor 自行收集无界输出。
+适用于 `targets` 层启动的 SSH、WSL 命令、WSL discovery，以及经 `ProcessRunner` /
+`NodeProcessRunner` 启动的本机 node（Skills CLI doctor/preview/add/remove）。
+任何新增 process 入口都必须经过 `CommandRunner`，不得在 async 函数内直接调用
+同步 `.output()` / `wait_with_output()`，也不得绕开 supervisor 自行收集无界输出。
+Windows 上 `ProcessTreeGuard::prepare` 必须对传入的 `Command` 设置
+`CREATE_NO_WINDOW`（`0x08000000`）；`ProcessRunner::run` 必须经过该 prepare。
 
 ## 2. Signatures
 
@@ -40,6 +45,7 @@ ceiling. Stderr remains capped at 1 MiB.
 - stdout/stderr 分别在追加 chunk 前检查 cap；超额 chunk 不进入 buffer。任一 reader 超限、IO 失败、timeout 或 cancel 都进入同一 tree terminate + 最长 5 s reap 路径。
 - 现有 `AtomicBool` 作业取消通过 50 ms Tokio polling adapter 接入。Central batch 仍在 chunk 之间检查取消，同时把同一 flag 传给正在运行的 bulk process。
 - Windows child 在返回调用方前必须进入带 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` 的 Job Object；assign 失败时杀掉并 reap child，禁止降级为无监督执行。`windows-sys` 只启用已批准的 Foundation/JobObjects/Threading features；由于 generated `CreateJobObjectW` 被不必要地 gate 到 `Win32_Security`，仅该 null-security-attributes 函数使用最小 FFI，其他 ABI 全用 generated types/functions。
+- Windows spawn 隐藏控制台：`ProcessTreeGuard::prepare` 调用 `hide_child_window`（`CREATE_NO_WINDOW`）。SSH/WSL `base_command` 已设置时同值幂等。自动化必须断言 prepare 之后的 `Command`（Debug 或记录 flags）含 `0x08000000`，且 `ProcessRunner::run` 走 prepare；禁止只断言 `hidden_child_creation_flags() == CREATE_NO_WINDOW`。孙进程窗口不作为自动化绿灯的唯一证据。
 - Unix command spawn 前进入新 process group；取消和 guard Drop 对负 pgid 发强制终止，直接 child 始终 reap。`kill_on_drop` 只是直接 child 后备，不等价于 process-tree 清理。
 - 正常非零退出继续由 SSH/WSL transport 分类。错误、日志与 operation details 不包含 command、host、username、stdin/stdout/stderr 或 askpass 环境。
 
@@ -64,9 +70,11 @@ ceiling. Stderr remains capped at 1 MiB.
 ## 6. Tests Required
 
 - 真实 fixture process：never-exit timeout、单线程 runtime 公平性、两个并发 supervisor、stdin broken pipe、stdout/stderr cap。broken-pipe fixture 必须关闭继承的 OS stdin descriptor/handle；仅 drop `std::io::stdin()` 返回的非 owning 句柄不会关闭底层 pipe，不能作为跨平台证据。并发性用两个 child 互等 marker 的 barrier 证明启动重叠，禁止用紧固定墙钟阈值；后者在 `just ci` 的 Web/Rust 并行负载下会产生假失败。
+- 断言 timeout、cancellation 或 output-limit 主错误且需要主动清理的 fixture，必须保持 controlled child 存活，直到 supervisor 完成终止与 reap；自然退出竞态必须作为独立场景测试，不得混入这类主错误断言。
 - process tree：fixture parent 生成 descendant，cancel 和 supervisor future drop 后等待 marker 窗口，断言 descendant 未存活；Windows 由 Job Object 路径执行，Unix 由 process group 路径执行。
 - FakeRunner：program/args/stdin 保持字节兼容，并断言 probe/standard/bulk policy 选择。
 - TargetsError：timeout 与 output cap 映射为 typed variant；既有 start/write/wait Display 文案不变。
+- Windows：`ProcessTreeGuard::prepare` 之后的 Command 含 `CREATE_NO_WINDOW`；`ProcessRunner::run` 测试路径调用 prepare。
 - 运行 `cargo test targets --locked`、受影响服务定向测试、全量 locked Rust gate 与 `just ci`。
 
 ## 7. Wrong vs Correct

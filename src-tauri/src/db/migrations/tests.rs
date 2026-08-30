@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 use sqlx::{Connection, Row, SqliteConnection};
 use tempfile::TempDir;
 
-use super::{backup, descriptor_checksum, versions};
+use super::{apply_migration, backup, descriptor_checksum, versions};
 use crate::db;
 
 const FIXTURE_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/db");
@@ -166,7 +166,7 @@ fn fixture_manifest_and_files_are_locked() {
         );
         let bytes = std::fs::read(fixture_path(&fixture)).unwrap();
         assert_eq!(
-            format!("{:x}", Sha256::digest(bytes)),
+            crate::hashing::encode_lower_hex(Sha256::digest(bytes).as_ref()),
             fixture.fixture_sha256,
             "{} fixture checksum drift",
             fixture.tag
@@ -181,6 +181,9 @@ fn migration_sources_are_checksum_locked() {
         descriptor_checksum(2).unwrap(),
         descriptor_checksum(3).unwrap(),
         descriptor_checksum(4).unwrap(),
+        descriptor_checksum(5).unwrap(),
+        descriptor_checksum(6).unwrap(),
+        descriptor_checksum(7).unwrap(),
     ];
     assert_eq!(
         checksums,
@@ -189,9 +192,123 @@ fn migration_sources_are_checksum_locked() {
             "92aeea552f562f4142946460635a6d7d2d75c89f8899ea2063a80c213bcf14aa",
             "ad1c327066e8bd7a0f5d5aca5ccd6666247d92fc2dfbee5d9c37c6a60ae948a8",
             "f1225528d87dccc2b06e0553a241fd3f0e56463cf69faafb18976401da111188",
+            "1d7efcd9c5d218f4ccf4f3c4d59a286129e8e4090e6786a4fa7075313bec2ba3",
+            "1144ab4443ad86e574690ad1c7ebe2e15b9b546031a63ddf596a5e9aba6c502d",
+            "739c87f61d50e40dc06a4e2fdc3a7f7bcd3643067ec15e951f0a3fda04e977d2",
         ]
     );
     assert_eq!(checksums.len(), versions::MIGRATIONS.len());
+}
+
+#[tokio::test]
+async fn migration_six_preserves_legacy_pending_additions_and_accepts_new_identity() {
+    let directory = TempDir::new().unwrap();
+    let database_path = directory.path().join("migration-six.sqlite");
+    let pool = crate::db::pool::create_pool(&database_path).await.unwrap();
+    for version in 1..=5 {
+        apply_migration(&pool, version).await.unwrap();
+    }
+
+    sqlx::query(
+        "INSERT INTO skill_repository_pending_additions
+         (repository_id, source_path, skill_id, skill_name,
+          conflict_existing_skill_id, discovered_at)
+         VALUES ('github:owner-repo-main', 'skills/legacy', 'legacy',
+                 'Legacy', NULL, '2026-08-19T00:00:00Z')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    apply_migration(&pool, 6).await.unwrap();
+    let migrated_columns = sqlx::query("PRAGMA table_info(skill_repository_pending_additions)")
+        .fetch_all(&pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| row.try_get::<String, _>("name").unwrap())
+        .collect::<Vec<_>>();
+    assert!(
+        migrated_columns.contains(&"resolved_commit_sha".to_string()),
+        "{migrated_columns:?}"
+    );
+    assert!(
+        migrated_columns.contains(&"snapshot_digest".to_string()),
+        "{migrated_columns:?}"
+    );
+    let legacy = db::list_pending_additions(&pool).await.unwrap();
+    assert_eq!(legacy.len(), 1);
+    assert_eq!(legacy[0].resolved_commit_sha, None);
+    assert_eq!(legacy[0].snapshot_digest, None);
+
+    db::upsert_pending_addition(
+        &pool,
+        &db::SkillRepositoryPendingAddition {
+            repository_id: "github:owner-repo-main".to_string(),
+            source_path: "skills/legacy".to_string(),
+            skill_id: "legacy".to_string(),
+            skill_name: "Legacy".to_string(),
+            conflict_existing_skill_id: None,
+            resolved_commit_sha: Some("a".repeat(40)),
+            snapshot_digest: Some("sha256-v1:repository".to_string()),
+            discovered_at: "2026-08-20T00:00:00Z".to_string(),
+        },
+    )
+    .await
+    .unwrap();
+    let refreshed = db::list_pending_additions(&pool).await.unwrap();
+    let expected_commit_sha = "a".repeat(40);
+    assert_eq!(
+        refreshed[0].resolved_commit_sha.as_deref(),
+        Some(expected_commit_sha.as_str())
+    );
+    assert_eq!(
+        refreshed[0].snapshot_digest.as_deref(),
+        Some("sha256-v1:repository")
+    );
+}
+
+#[tokio::test]
+async fn migration_seven_creates_skills_cli_update_tables_and_reopens() {
+    let directory = TempDir::new().unwrap();
+    let database_path = directory.path().join("migration-seven.sqlite");
+    let pool = crate::db::pool::create_pool(&database_path).await.unwrap();
+    for version in 1..=6 {
+        apply_migration(&pool, version).await.unwrap();
+    }
+    apply_migration(&pool, 7).await.unwrap();
+
+    for table in [
+        "skills_cli_update_repositories",
+        "skills_cli_update_states",
+        "skills_cli_update_operations",
+    ] {
+        let present = sqlx::query(
+            "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = ?",
+        )
+        .bind(table)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .try_get::<i64, _>("count")
+        .unwrap();
+        assert_eq!(present, 1, "{table} missing after v7");
+    }
+
+    let versions = sqlx::query("SELECT version FROM schema_migrations ORDER BY version")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(versions.len(), 7);
+    pool.close().await;
+
+    let reopened = crate::db::open_database(&database_path).await.unwrap();
+    let reopened_versions = sqlx::query("SELECT version FROM schema_migrations ORDER BY version")
+        .fetch_all(&reopened)
+        .await
+        .unwrap();
+    assert_eq!(reopened_versions.len(), 7);
+    reopened.close().await;
 }
 
 #[tokio::test]
@@ -217,7 +334,7 @@ async fn selected_release_fixtures_upgrade_with_backup_and_cascades() {
                 .fetch_all(&pool)
                 .await
                 .unwrap();
-        assert_eq!(versions.len(), 4);
+        assert_eq!(versions.len(), 7);
         for (index, row) in versions.iter().enumerate() {
             let version = i64::try_from(index + 1).unwrap();
             assert_eq!(row.try_get::<i64, _>("version").unwrap(), version);
@@ -237,6 +354,20 @@ async fn selected_release_fixtures_upgrade_with_backup_and_cascades() {
         assert!(!sentinel.try_get::<String, _>("uid").unwrap().is_empty());
         assert_owned_foreign_keys(&pool).await;
         assert!(file_has_table(&database_path, "fs_db_operations").await);
+        // Migration 5 adds the incremental usage-scan file cache.
+        assert!(file_has_table(&database_path, "skill_call_file_cache").await);
+        let pending_columns = sqlx::query("PRAGMA table_info(skill_repository_pending_additions)")
+            .fetch_all(&pool)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|row| row.try_get::<String, _>("name").unwrap())
+            .collect::<Vec<_>>();
+        assert!(pending_columns.contains(&"resolved_commit_sha".to_string()));
+        assert!(pending_columns.contains(&"snapshot_digest".to_string()));
+        assert!(file_has_table(&database_path, "skills_cli_update_repositories").await);
+        assert!(file_has_table(&database_path, "skills_cli_update_states").await);
+        assert!(file_has_table(&database_path, "skills_cli_update_operations").await);
         // Migration 4 adds nullable per-skill provenance; pre-existing rows stay
         // NULL and are read as "provenance unknown".
         let provenance = db::get_skill_repository_provenance(&pool, "fixture-skill")
@@ -408,7 +539,7 @@ async fn preflight_rejects_checksum_gap_and_future_versions_without_backup() {
     )
     .await;
     assert_preflight_rejection(
-        "INSERT INTO schema_migrations (version, checksum, applied_at) VALUES (5, 'future', 'now')",
+        "INSERT INTO schema_migrations (version, checksum, applied_at) VALUES (8, 'future', 'now')",
         "newer than supported",
     )
     .await;
