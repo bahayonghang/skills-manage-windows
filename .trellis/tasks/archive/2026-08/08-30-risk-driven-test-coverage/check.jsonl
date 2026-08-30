@@ -1,0 +1,9 @@
+{"file":".trellis/spec/quality/index.md","reason":"Quality guideline routing for independent review."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Test discovery, ownership, and nonzero focused evidence."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Required frontend, Rust, and final just ci gates."}
+{"file":".trellis/spec/backend/transactional-mutations.md","reason":"Review rollback and validation-before-write invariants."}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Review credential and diagnostic leakage assertions."}
+{"file":".trellis/spec/frontend/job-correlation-cancellation.md","reason":"Review stale async write and terminal-state coverage."}
+{"file":".trellis/spec/frontend/renderer-authority-boundary.md","reason":"Review credential storage and plaintext exclusion."}
+{"file":".trellis/tasks/08-30-risk-driven-test-coverage/research/backend-risk-coverage.md","reason":"Compare implementation against backend risk findings."}
+{"file":".trellis/tasks/08-30-risk-driven-test-coverage/research/frontend-risk-coverage.md","reason":"Compare implementation against frontend risk findings."}

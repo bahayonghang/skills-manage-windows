@@ -1,0 +1,12 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend ownership and applicable service/database contracts."}
+{"file":".trellis/spec/backend/transactional-mutations.md","reason":"Validation-before-write and top-level transaction invariants."}
+{"file":".trellis/spec/backend/settings-domain-boundary.md","reason":"Target settings quarantine and authority boundary."}
+{"file":".trellis/spec/backend/redaction-policy.md","reason":"Public IPC and diagnostics sensitive-data boundary."}
+{"file":".trellis/spec/backend/test-support.md","reason":"Rust test fixtures and visibility rules."}
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend store ownership and applicable renderer contracts."}
+{"file":".trellis/spec/frontend/job-correlation-cancellation.md","reason":"Portable import stale completion/error and terminal-state contract."}
+{"file":".trellis/spec/frontend/renderer-authority-boundary.md","reason":"Credential write-only and renderer secret boundary."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Store loading, error, and rethrow behavior."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Test ownership, discovery, focused commands, and zero-test evidence."}
+{"file":".trellis/tasks/08-30-risk-driven-test-coverage/research/backend-risk-coverage.md","reason":"Risk-ranked backend gaps, anchors, and focused commands."}
+{"file":".trellis/tasks/08-30-risk-driven-test-coverage/research/frontend-risk-coverage.md","reason":"Risk-ranked frontend gaps, anchors, and focused commands."}
