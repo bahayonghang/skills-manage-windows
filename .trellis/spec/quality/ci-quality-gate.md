@@ -25,8 +25,8 @@ just audit
 
 Toolchain:
   .node-version / package.json engines -> Node 26
-  package.json packageManager         -> pnpm 10.12.3
-  rust-toolchain.toml                 -> Rust 1.97.0 + rustfmt + clippy
+  package.json packageManager         -> pnpm 10.34.5
+  rust-toolchain.toml                 -> Rust 1.98.0 + rustfmt + clippy
 
 just doctor
   -> node scripts/check/doctor.mjs (read-only environment diagnostics)
@@ -185,16 +185,25 @@ binary build does not prove that required sidecars or package utilities exist.
 - Every external Action in `.github/workflows/*.yml` is referenced by a full
   40-character commit SHA. Version comments are informational; Dependabot's
   weekly `github-actions` updates keep the commits reviewable and current.
+- The pinned Node 24 Action runtimes require Actions Runner 2.327.1 or newer.
+  The repository uses GitHub-hosted runners only. Checkout v7's unsafe fork
+  opt-in remains disabled; the workflows do not use `pull_request_target` or
+  `workflow_run`. Release artifact names are unique and immutable, and download
+  digest mismatches fail closed. `actions/attest` v4 generates SLSA provenance
+  directly; `create-storage-record: false` preserves the publish job's existing
+  least-privilege permission set.
 - `pnpm audit --prod --json` blocks high/critical advisories. `cargo audit
   --json` blocks every vulnerability. Moderate/low npm advisories and Cargo
   informational warnings remain visible without expanding this gate's scope.
 - Exceptions are exact `(ecosystem, advisory)` entries with non-empty owner and
   reason plus an ISO expiry date. Malformed, duplicate, expired, cross-ecosystem,
   or unused entries fail closed.
-- Current exceptions expire on 2026-08-11: React Router's RSC-only advisory has
-  no stable fixed release, and `tauri-plugin-sql 2.4.0` internally enables the
-  SQLx/RSA closure even when the application uses only SQLite. Neither exception
-  permits a package-wide or severity-wide ignore.
+- Current exceptions expire on 2026-11-30. SQLx 0.8.6's optional MySQL lock
+  closure retains `rsa 0.9.10`, whose advisory has no patched release, and
+  `rust_decimal 1.41.0` retains optional `rkyv 0.7.46`, whose fix begins at the
+  incompatible 0.8.17 line. Both packages remain in `Cargo.lock` but are absent
+  from normal and `--target all` inverse dependency trees. The exceptions are
+  advisory-specific and do not permit a package-wide or severity-wide ignore.
 
 ### Branch protection contract
 

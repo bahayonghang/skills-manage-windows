@@ -597,7 +597,7 @@ pub(super) fn skill_files_from_snapshot(
 pub(super) fn fingerprint_lock_bytes(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
+    crate::hashing::encode_lower_hex(hasher.finalize().as_ref())
 }
 
 fn lock_fingerprint(lock_path: &Path) -> Result<String, SkillsCliError> {

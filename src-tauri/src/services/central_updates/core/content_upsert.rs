@@ -381,8 +381,8 @@ mod tests {
         let mut output = format!("ROOT\t{root}\n");
         for file in files {
             output.push_str(&format!(
-                "{:x}\t{}\n",
-                Sha256::digest(&file.bytes),
+                "{}\t{}\n",
+                crate::hashing::encode_lower_hex(Sha256::digest(&file.bytes).as_ref()),
                 file.relative_path
             ));
         }

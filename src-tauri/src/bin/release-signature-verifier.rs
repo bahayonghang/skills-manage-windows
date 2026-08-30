@@ -66,21 +66,36 @@ fn main() {
 mod tests {
     use super::*;
 
+    const SIGNATURE_TEXT: &str = "untrusted comment: signature from minisign secret key\nRWQf6LRCGA9i59SLOFxz6NxvASXDJeRtuZykwQepbDEGt87ig1BNpWaVWuNrm73YiIiJbq71Wi+dP9eKL8OC351vwIasSSbXxwA=\ntrusted comment: timestamp:1555779966\tfile:test\nQtKMXWyYcwdpZAlPF7tE2ENJkRd1ujvKjlj1m9RtHTBnZPa5WKU5uWRs5GoP5M/VqE81QFuMKI5k/SfNQUaOAA==";
+    const WRAPPED_SIGNATURE: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIG1pbmlzaWduIHNlY3JldCBrZXkKUldRZjZMUkNHQTlpNTlTTE9GeHo2Tnh2QVNYREplUnR1Wnlrd1FlcGJERUd0ODdpZzFCTnBXYVZXdU5ybTczWWlJaUpicTcxV2krZFA5ZUtMOE9DMzUxdndJYXNTU2JYeHdBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNTU1Nzc5OTY2CWZpbGU6dGVzdApRdEtNWFd5WWN3ZHBaQWxQRjd0RTJFTkprUmQxdWp2S2psajFtOVJ0SFRCblpQYTVXS1U1dVdSczVHb1A1TS9WcUU4MVFGdU1LSTVrL1NmTlFVYU9BQT09";
+    const PUBLIC_KEY_TEXT: &str = "untrusted comment: minisign public key E7620F1842B4E81F\nRWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3";
+    const WRAPPED_PUBLIC_KEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkgRTc2MjBGMTg0MkI0RTgxRgpSV1FmNkxSQ0dBOWk1M21sWWVjTzRJelQ1MVRHUHB2V3VjTlNDaDFDQk0wUVRhTG43M1k3R0ZPMw==";
+
     fn wrapped_signature() -> String {
-        STANDARD.encode(
-            "untrusted comment: signature from minisign secret key\nRWQf6LRCGA9i59SLOFxz6NxvASXDJeRtuZykwQepbDEGt87ig1BNpWaVWuNrm73YiIiJbq71Wi+dP9eKL8OC351vwIasSSbXxwA=\ntrusted comment: timestamp:1555779966\tfile:test\nQtKMXWyYcwdpZAlPF7tE2ENJkRd1ujvKjlj1m9RtHTBnZPa5WKU5uWRs5GoP5M/VqE81QFuMKI5k/SfNQUaOAA==",
-        )
+        STANDARD.encode(SIGNATURE_TEXT)
     }
 
     fn wrapped_public_key() -> String {
-        STANDARD.encode(
-            "untrusted comment: minisign public key E7620F1842B4E81F\nRWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3",
-        )
+        STANDARD.encode(PUBLIC_KEY_TEXT)
+    }
+
+    #[test]
+    fn preserves_published_minisign_fixture_bytes() {
+        assert_eq!(wrapped_signature(), WRAPPED_SIGNATURE);
+        assert_eq!(wrapped_public_key(), WRAPPED_PUBLIC_KEY);
+        assert_eq!(
+            STANDARD.decode(WRAPPED_SIGNATURE).unwrap(),
+            SIGNATURE_TEXT.as_bytes()
+        );
+        assert_eq!(
+            STANDARD.decode(WRAPPED_PUBLIC_KEY).unwrap(),
+            PUBLIC_KEY_TEXT.as_bytes()
+        );
     }
 
     #[test]
     fn accepts_runtime_compatible_wrapped_signature() {
-        verify_signature(b"test", &wrapped_signature(), &wrapped_public_key()).unwrap();
+        verify_signature(b"test", WRAPPED_SIGNATURE, WRAPPED_PUBLIC_KEY).unwrap();
     }
 
     #[test]

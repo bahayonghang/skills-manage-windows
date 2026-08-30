@@ -44,12 +44,12 @@ pub(super) fn normalize_wsl_list_output(bytes: &[u8]) -> String {
     let nul_count = bytes.iter().filter(|byte| **byte == 0).count();
     if !bytes.is_empty() && nul_count > bytes.len() / 4 {
         let mut words = Vec::with_capacity(bytes.len() / 2);
-        let mut chunks = bytes.chunks_exact(2);
-        for chunk in &mut chunks {
+        let (chunks, remainder) = bytes.as_chunks::<2>();
+        for chunk in chunks {
             words.push(u16::from_le_bytes([chunk[0], chunk[1]]));
         }
         let mut decoded = String::from_utf16_lossy(&words);
-        if let Some(remainder) = chunks.remainder().first() {
+        if let Some(remainder) = remainder.first() {
             if *remainder != 0 {
                 decoded.push(char::from(*remainder));
             }

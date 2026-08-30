@@ -851,8 +851,8 @@ async fn ac15_leftover_local_apply_is_busy_while_default_lock_held() {
     std::fs::create_dir_all(&leftover).unwrap();
     crate::test_support::set_agent_dir(&pool, "cursor", &cursor_dir).await;
 
-    let _holder = crate::services::central_mutation::acquire_target_mutation_guard(
-        &ActiveTarget::Local,
+    let _holder = crate::services::central_mutation::acquire_central_mutation_guard_at(
+        crate::paths::central_mutation_lock_path(),
         "hold leftover lock",
         std::time::Duration::from_secs(5),
     )

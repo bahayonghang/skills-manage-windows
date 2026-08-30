@@ -61,7 +61,7 @@ jobs:
           [ "$GITHUB_REF" = "refs/heads/main" ] || { echo "Manual releases must run from the main workflow definition." >&2; exit 1; }
 
       - name: Checkout context resolver
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -104,31 +104,31 @@ jobs:
       id-token: write
     steps:
       - name: Checkout frozen release commit
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release-context.outputs.sha }}
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
-          version: 10.12.3
+          version: 10.34.5
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "26"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # 1.97.0
+        uses: dtolnay/rust-toolchain@f8be11a05b1d4f3fcebe6410cc16743212b999b0 # 1.98.0
         with:
-          toolchain: "1.97.0"
+          toolchain: "1.98.0"
           targets: x86_64-pc-windows-msvc
 
       - name: Cache Rust artifacts
-        uses: swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: |
             src-tauri -> target
@@ -192,7 +192,7 @@ jobs:
 
       - name: Azure login for Artifact Signing
         if: ${{ steps.azure-config.outputs.configured == 'true' }}
-        uses: Azure/login@1384c340ab2dda50fed2bee3041d1d87018aa5e8 # v2
+        uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -211,7 +211,7 @@ jobs:
 
       - name: Sign Windows files with Azure Artifact Signing
         if: ${{ steps.azure-config.outputs.configured == 'true' }}
-        uses: Azure/artifact-signing-action@b443cf8ea4124818d2ea9f043cba29fc3ec47b16 # v1
+        uses: Azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
         with:
           endpoint: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
           signing-account-name: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
@@ -270,14 +270,14 @@ jobs:
           node scripts/release/generate-latest-json.mjs --version $env:RELEASE_VERSION --tag $env:RELEASE_TAG --asset-dir release-assets
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: desktop-release-windows
           path: release-assets/*
           if-no-files-found: error
 
       - name: Upload Windows signing evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-signing-evidence
           path: |
@@ -292,16 +292,16 @@ jobs:
     runs-on: windows-2022
     steps:
       - name: Checkout frozen release verifier
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release-context.outputs.sha }}
       - name: Download Windows release artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: desktop-release-windows
           path: smoke-assets
       - name: Download Windows signing evidence
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: windows-signing-evidence
           path: smoke-evidence
@@ -341,27 +341,27 @@ jobs:
     runs-on: macos-14
     steps:
       - name: Checkout frozen release commit
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release-context.outputs.sha }}
       - name: Setup pnpm
-        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
-          version: 10.12.3
+          version: 10.34.5
           run_install: false
       - name: Setup Node.js
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "26"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # 1.97.0
+        uses: dtolnay/rust-toolchain@f8be11a05b1d4f3fcebe6410cc16743212b999b0 # 1.98.0
         with:
-          toolchain: "1.97.0"
+          toolchain: "1.98.0"
           targets: aarch64-apple-darwin,x86_64-apple-darwin
       - name: Cache Rust artifacts
-        uses: swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: |
             src-tauri -> target
@@ -402,7 +402,7 @@ jobs:
           cp "${DMGS[0]}" "release-assets/skillport_${RELEASE_VERSION}_macos_universal.dmg"
           tar -C "$(dirname "${APPS[0]}")" -czf "release-assets/skillport_${RELEASE_VERSION}_macos_universal.tar.gz" "$(basename "${APPS[0]}")"
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: desktop-release-macos
           path: release-assets/*
@@ -425,26 +425,26 @@ jobs:
             continue_on_error: true
     steps:
       - name: Checkout frozen release commit
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release-context.outputs.sha }}
       - name: Setup pnpm
-        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
-          version: 10.12.3
+          version: 10.34.5
           run_install: false
       - name: Setup Node.js
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "26"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # 1.97.0
+        uses: dtolnay/rust-toolchain@f8be11a05b1d4f3fcebe6410cc16743212b999b0 # 1.98.0
         with:
-          toolchain: "1.97.0"
+          toolchain: "1.98.0"
       - name: Cache Rust artifacts
-        uses: swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: |
             src-tauri -> target
@@ -477,7 +477,7 @@ jobs:
           cp "${RPMS[0]}" "release-assets/skillport_${RELEASE_VERSION}_linux_${ASSET_ARCH}.rpm"
           cp "${APPIMAGES[0]}" "release-assets/skillport_${RELEASE_VERSION}_linux_${ASSET_ARCH}.AppImage"
       - name: Upload Linux artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: desktop-release-linux-${{ matrix.asset-arch }}
           path: release-assets/*
@@ -489,24 +489,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout frozen release commit
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release-context.outputs.sha }}
       - name: Setup pnpm
-        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
-          version: 10.12.3
+          version: 10.34.5
           run_install: false
       - name: Setup Node.js
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "26"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # 1.97.0
+        uses: dtolnay/rust-toolchain@f8be11a05b1d4f3fcebe6410cc16743212b999b0 # 1.98.0
         with:
-          toolchain: "1.97.0"
+          toolchain: "1.98.0"
       - name: Install verifier system deps
         run: |
           sudo apt-get update
@@ -516,13 +516,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Download platform artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: desktop-release-*
           path: release-assets
           merge-multiple: true
       - name: Download Windows signing evidence
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: windows-signing-evidence
           path: signing-evidence
@@ -545,14 +545,14 @@ jobs:
           mkdir -p release-validation
           node -e 'const fs=require("fs"); const signing=JSON.parse(fs.readFileSync("signing-evidence/windows-signing.json")); fs.writeFileSync("release-validation/release-validation.json", JSON.stringify({mode:process.env.RELEASE_MODE,sha:process.env.RELEASE_SHA,tag:process.env.RELEASE_TAG,version:process.env.RELEASE_VERSION,authenticode:signing.authenticode,updaterSignature:signing.updaterSignature,assets:fs.readdirSync("release-assets").sort()},null,2)+"\n")'
       - name: Upload validated release set
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: validated-desktop-release
           path: release-assets/*
           retention-days: 14
           if-no-files-found: error
       - name: Upload release validation evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: desktop-release-validation
           path: release-validation/release-validation.json
@@ -577,26 +577,22 @@ jobs:
       RELEASE_NAME: ${{ needs.release-context.outputs.release_name }}
     steps:
       - name: Checkout frozen release metadata
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release-context.outputs.sha }}
       - name: Download validated release set
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: validated-desktop-release
           path: release-assets
-      - name: Generate build provenance predicate
-        id: provenance-predicate
-        uses: actions/attest-build-provenance/predicate@1176ef556905f349f669722abf30bce1a6e16e01 # predicate@1.1.5
       - name: Attest final Windows release bytes
-        uses: actions/attest@11bbd243972067817e9ed160cb123cab3601f436 # v2
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: |
             release-assets/*windows_x64_nsis.exe
             release-assets/*windows_x64.msi
             release-assets/*windows_x64.zip
-          predicate-type: ${{ steps.provenance-predicate.outputs.predicate-type }}
-          predicate: ${{ steps.provenance-predicate.outputs.predicate }}
+          create-storage-record: false
       - name: Prepare release notes
         run: node scripts/release/prepare-release-body.mjs --version "$RELEASE_VERSION" --output release-body.md
       - name: Verify remote tag target

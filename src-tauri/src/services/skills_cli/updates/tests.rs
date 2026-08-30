@@ -128,6 +128,10 @@ fn digest_ignores_mtime_and_sees_content() {
     let root = temp.path().join("demo");
     write_skill(&root, "hello");
     let first = digest_skill_directory(&root).unwrap();
+    assert_eq!(
+        first,
+        "sha256-v1:967a0dd251571067dd8945ed12725d610d79c6926635a9649572f5053e9d881c"
+    );
     {
         let file = fs::OpenOptions::new()
             .write(true)

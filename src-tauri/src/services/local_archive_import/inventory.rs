@@ -82,11 +82,7 @@ pub(crate) fn fingerprint_of(bytes: &[u8]) -> ArchiveFingerprint {
 }
 
 fn hex_encode(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        out.push_str(&format!("{:02x}", byte));
-    }
-    out
+    crate::hashing::encode_lower_hex(bytes)
 }
 
 fn map_budget(error: BudgetExceeded) -> LocalArchiveImportError {
@@ -97,6 +93,134 @@ fn map_budget(error: BudgetExceeded) -> LocalArchiveImportError {
 /// mostly Markdown and small assets; anything above this ratio is treated as
 /// a potential zip bomb and rejected before any staging write.
 const MAX_COMPRESSION_RATIO: u64 = 200;
+
+const UNIX_FILE_TYPE_MASK: u32 = 0o170000;
+const UNIX_FILE_TYPE_REGULAR: u32 = 0o100000;
+const UNIX_FILE_TYPE_DIRECTORY: u32 = 0o040000;
+const UNIX_FILE_TYPE_SYMLINK: u32 = 0o120000;
+
+/// Validate one unambiguous classic EOCD and return its raw entry count.
+///
+/// `zip` stores entries in an `IndexMap` keyed by raw filename, so duplicate
+/// names are collapsed before callers can inspect them. We therefore count the
+/// fixed central-directory record boundaries independently and require them to
+/// end exactly at the EOCD. This does not interpret entry data or extra fields.
+/// ZIP64 is rejected because the local entry budget is below its threshold.
+fn validated_classic_entry_count<R: std::io::Read + std::io::Seek>(
+    archive_bytes: &[u8],
+    zip: &ZipArchive<R>,
+) -> Result<usize, LocalArchiveImportError> {
+    const EOCD_SIGNATURE: &[u8; 4] = b"PK\x05\x06";
+    const ZIP64_LOCATOR_SIGNATURE: &[u8; 4] = b"PK\x06\x07";
+    const CENTRAL_SIGNATURE: &[u8; 4] = b"PK\x01\x02";
+    const EOCD_FIXED_LEN: usize = 22;
+    const CENTRAL_FIXED_LEN: usize = 46;
+    const MAX_COMMENT_LEN: usize = u16::MAX as usize;
+
+    let read_u16 = |bytes: &[u8], offset| u16::from_le_bytes([bytes[offset], bytes[offset + 1]]);
+    let read_u32 = |bytes: &[u8], offset| {
+        u32::from_le_bytes([
+            bytes[offset],
+            bytes[offset + 1],
+            bytes[offset + 2],
+            bytes[offset + 3],
+        ])
+    };
+    let search_start = archive_bytes
+        .len()
+        .saturating_sub(EOCD_FIXED_LEN + MAX_COMMENT_LEN);
+    let search_end = archive_bytes.len().saturating_sub(EOCD_FIXED_LEN);
+    let mut valid_footer = None;
+
+    for eocd_offset in (search_start..=search_end).rev() {
+        let Some(eocd) = archive_bytes.get(eocd_offset..eocd_offset + EOCD_FIXED_LEN) else {
+            continue;
+        };
+        if &eocd[..4] != EOCD_SIGNATURE
+            || eocd_offset + EOCD_FIXED_LEN + read_u16(eocd, 20) as usize != archive_bytes.len()
+        {
+            continue;
+        }
+
+        let count_on_disk = read_u16(eocd, 8);
+        let total_count = read_u16(eocd, 10);
+        let central_size = read_u32(eocd, 12);
+        let central_offset = read_u32(eocd, 16);
+        let has_zip64_locator = eocd_offset >= 20
+            && &archive_bytes[eocd_offset - 20..eocd_offset - 16] == ZIP64_LOCATOR_SIGNATURE;
+        if has_zip64_locator
+            || count_on_disk == u16::MAX
+            || total_count == u16::MAX
+            || central_size == u32::MAX
+            || central_offset == u32::MAX
+        {
+            return Err(LocalArchiveImportError::UnsupportedArchiveEntry {
+                path: "archive".to_string(),
+                reason: "ZIP64 archives are not supported".to_string(),
+            });
+        }
+        if read_u16(eocd, 4) != 0 || read_u16(eocd, 6) != 0 || count_on_disk != total_count {
+            return Err(LocalArchiveImportError::UnsupportedArchiveEntry {
+                path: "archive".to_string(),
+                reason: "multi-disk archives are not supported".to_string(),
+            });
+        }
+
+        let Some(central_start) = eocd_offset.checked_sub(central_size as usize) else {
+            continue;
+        };
+        let Some(archive_offset) = central_start.checked_sub(central_offset as usize) else {
+            continue;
+        };
+        let mut cursor = central_start;
+        let mut raw_count = 0_usize;
+        while cursor < eocd_offset {
+            let Some(header) = archive_bytes.get(cursor..cursor + CENTRAL_FIXED_LEN) else {
+                break;
+            };
+            if &header[..4] != CENTRAL_SIGNATURE {
+                break;
+            }
+            let variable_len = read_u16(header, 28) as usize
+                + read_u16(header, 30) as usize
+                + read_u16(header, 32) as usize;
+            let Some(next) = cursor
+                .checked_add(CENTRAL_FIXED_LEN)
+                .and_then(|value| value.checked_add(variable_len))
+            else {
+                break;
+            };
+            if next > eocd_offset {
+                break;
+            }
+            cursor = next;
+            raw_count += 1;
+        }
+        if cursor != eocd_offset || raw_count != total_count as usize {
+            continue;
+        }
+        if valid_footer
+            .replace((raw_count, archive_offset, central_start))
+            .is_some()
+        {
+            return Err(LocalArchiveImportError::ArchiveReadFailed(
+                "ambiguous ZIP footer".to_string(),
+            ));
+        }
+    }
+
+    let (raw_count, archive_offset, central_start) = valid_footer.ok_or_else(|| {
+        LocalArchiveImportError::ArchiveReadFailed("invalid ZIP central directory".to_string())
+    })?;
+    if zip.offset() != archive_offset as u64
+        || zip.central_directory_start() != central_start as u64
+    {
+        return Err(LocalArchiveImportError::ArchiveReadFailed(
+            "ZIP parser metadata mismatch".to_string(),
+        ));
+    }
+    Ok(raw_count)
+}
 
 /// Build the inventory of validated regular-file entries from raw archive
 /// bytes. Performs all safety, budget, and structure checks.
@@ -116,6 +240,11 @@ pub(crate) fn build_inventory(
     })?;
 
     let total_entries = zip.len();
+    if validated_classic_entry_count(archive_bytes, &zip)? != total_entries {
+        return Err(LocalArchiveImportError::PathConflict(
+            "duplicate archive entry names".to_string(),
+        ));
+    }
     if total_entries > budget.archive_files {
         return Err(LocalArchiveImportError::BudgetExceeded(
             BudgetExceeded::new(
@@ -155,6 +284,7 @@ pub(crate) fn build_inventory(
         let encrypted = entry.encrypted();
         let compression = entry.compression();
         let is_symlink = entry.is_symlink();
+        let unix_mode = entry.unix_mode();
 
         if encrypted {
             return Err(LocalArchiveImportError::UnsupportedArchiveEntry {
@@ -166,6 +296,17 @@ pub(crate) fn build_inventory(
             return Err(LocalArchiveImportError::UnsupportedArchiveEntry {
                 path: raw_name,
                 reason: "symlink entries are not supported".to_string(),
+            });
+        }
+        if unix_mode.is_some_and(|mode| {
+            !matches!(
+                mode & UNIX_FILE_TYPE_MASK,
+                0 | UNIX_FILE_TYPE_REGULAR | UNIX_FILE_TYPE_DIRECTORY | UNIX_FILE_TYPE_SYMLINK
+            )
+        }) {
+            return Err(LocalArchiveImportError::UnsupportedArchiveEntry {
+                path: raw_name,
+                reason: "non-regular entries are not supported".to_string(),
             });
         }
         if !matches!(
@@ -289,6 +430,12 @@ pub(crate) fn build_inventory(
 fn normalize_file_path(raw: &str) -> Result<String, LocalArchiveImportError> {
     if raw.is_empty() {
         return Ok(String::new());
+    }
+    if raw.contains('\0') {
+        return Err(LocalArchiveImportError::InvalidArchiveEntry {
+            path: raw.to_string(),
+            reason: "NUL byte in path".to_string(),
+        });
     }
     if raw.starts_with('/') {
         return Err(LocalArchiveImportError::InvalidArchiveEntry {

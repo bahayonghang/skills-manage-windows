@@ -39,11 +39,7 @@ pub(super) fn file_sha256(bytes: &[u8]) -> [u8; 32] {
 }
 
 pub(super) fn hex_encode(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        out.push_str(&format!("{:02x}", byte));
-    }
-    out
+    crate::hashing::encode_lower_hex(bytes)
 }
 
 /// Compute the framed aggregate digest for `entries` under `domain`.

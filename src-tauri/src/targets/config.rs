@@ -284,7 +284,7 @@ fn quarantine_incident(
         detected_at: Utc::now().to_rfc3339(),
         reason_code: reason.as_str().to_string(),
         source_bytes: raw.len() as u64,
-        source_sha256: format!("{:x}", Sha256::digest(raw.as_bytes())),
+        source_sha256: crate::hashing::encode_lower_hex(Sha256::digest(raw.as_bytes()).as_ref()),
     }
 }
 

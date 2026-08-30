@@ -8,8 +8,8 @@ const repoRoot = resolveRepoRoot(import.meta.url);
 
 export const TOOLCHAIN = Object.freeze({
   nodeMajor: 26,
-  pnpm: "10.12.3",
-  rust: "1.97.0",
+  pnpm: "10.34.5",
+  rust: "1.98.0",
 });
 
 const secretNamePattern = /(token|secret|password|passwd|api[_-]?key|private[_-]?key|credential)/i;
@@ -198,7 +198,7 @@ export function collectDoctorChecks({
       args: ["--version"],
       expected: TOOLCHAIN.pnpm,
       mode: "exact",
-      hint: "activate pnpm 10.12.3 without changing the repository",
+      hint: "activate pnpm 10.34.5 without changing the repository",
     }, options),
     checkVersion({
       id: "rustc",
@@ -207,7 +207,7 @@ export function collectDoctorChecks({
       args: ["--version"],
       expected: TOOLCHAIN.rust,
       mode: "exact",
-      hint: "install or select Rust 1.97.0 with rustup",
+      hint: "install or select Rust 1.98.0 with rustup",
     }, options),
     checkVersion({
       id: "cargo",
@@ -216,7 +216,7 @@ export function collectDoctorChecks({
       args: ["--version"],
       expected: TOOLCHAIN.rust,
       mode: "exact",
-      hint: "install or select Rust 1.97.0 with rustup",
+      hint: "install or select Rust 1.98.0 with rustup",
     }, options),
     checkPresence({
       id: "just",

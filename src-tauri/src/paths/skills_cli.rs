@@ -54,7 +54,7 @@ fn sanitize_recovery_target_id(target_id: &str) -> String {
     if safe {
         target_id.to_string()
     } else {
-        format!("{:x}", Sha256::digest(target_id.as_bytes()))
+        crate::hashing::encode_lower_hex(Sha256::digest(target_id.as_bytes()).as_ref())
     }
 }
 

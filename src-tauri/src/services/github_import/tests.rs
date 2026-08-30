@@ -4718,8 +4718,10 @@ metadata:
             let backward = aggregate_digest(REPOSITORY_SNAPSHOT_DIGEST_DOMAIN, &reversed);
 
             assert_eq!(forward, backward);
-            assert!(forward.starts_with("sha256-v1:"));
-            assert_eq!(forward.len(), "sha256-v1:".len() + 64);
+            assert_eq!(
+                forward,
+                "sha256-v1:813331ee2c7f524059c838b430c906e199b5fb88e64c6e6607d660e0fa07021f"
+            );
         }
 
         #[test]

@@ -3,7 +3,7 @@
 SkillPort is a React + TypeScript + Tauri desktop application fork whose primary local delivery
 target is a stable Windows installer. Use `pnpm` and `just` from the repository root.
 
-The pinned local toolchain is Node 26, pnpm 10.12.3, and Rust 1.97.0. The standard local entry
+The pinned local toolchain is Node 26, pnpm 10.34.5, and Rust 1.98.0. The standard local entry
 points are `just doctor`, `just check`, `just ci`, and `just audit`.
 
 ## Start Here

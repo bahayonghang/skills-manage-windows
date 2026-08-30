@@ -579,8 +579,8 @@ mod tests {
         let pool = crate::test_support::mem_pool().await;
         let state = test_app_state(pool.clone());
         let definition = operation_definition("refresh_skill_update_inventory");
-        let raw_seed =
-            "token=secret https://example.invalid C:\\Users\\alice\\private HTTP 301 response";
+        let raw_seed = "token=boundary_secret_7f91 https://boundary-host-7f91.invalid \
+                        C:\\Users\\boundary_user_7f91\\private HTTP boundary_status_301_7f91";
         let result = crate::observability::run_operation(
             &state,
             definition,
@@ -625,7 +625,12 @@ mod tests {
         assert_eq!(details["errorCategory"], "github_import.transport_failed");
         assert_eq!(details["phase"], "network");
         let serialized = serde_json::to_string(entry).unwrap();
-        for seed in ["secret", "example.invalid", "Users", "301", "response"] {
+        for seed in [
+            "boundary_secret_7f91",
+            "boundary-host-7f91.invalid",
+            "boundary_user_7f91",
+            "boundary_status_301_7f91",
+        ] {
             assert!(!serialized.contains(seed), "leaked {seed}");
         }
     }

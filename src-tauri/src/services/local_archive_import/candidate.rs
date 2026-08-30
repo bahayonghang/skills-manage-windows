@@ -319,6 +319,14 @@ mod tests {
         buf.into_inner()
     }
 
+    fn corrupt_first_entry_payload(bytes: &mut [u8]) {
+        assert!(bytes.starts_with(&[0x50, 0x4b, 0x03, 0x04]));
+        let name_len = u16::from_le_bytes([bytes[26], bytes[27]]) as usize;
+        let extra_len = u16::from_le_bytes([bytes[28], bytes[29]]) as usize;
+        let payload_start = 30 + name_len + extra_len;
+        bytes[payload_start] ^= 0x01;
+    }
+
     fn build_inventory(bytes: &[u8]) -> ZipInventory {
         crate::services::local_archive_import::inventory::build_inventory(
             bytes,
@@ -381,6 +389,25 @@ mod tests {
         let inv = build_inventory(&bytes);
         let err = resolve_candidate(&inv, &bytes, ResourceBudget::default_skill()).unwrap_err();
         assert_eq!(err.code(), "skill_frontmatter_missing");
+    }
+
+    #[test]
+    fn rejects_crc_mismatch_while_reading_skill_manifest() {
+        let mut bytes = make_zip(&[("SKILL.md", b"---\nname: crc-fixture\n---\n")]);
+        corrupt_first_entry_payload(&mut bytes);
+        let inventory = build_inventory(&bytes);
+        let err = resolve_candidate(&inventory, &bytes, ResourceBudget::default_skill())
+            .expect_err("CRC mismatch must fail closed");
+        assert_eq!(err.code(), "archive_read_failed");
+    }
+
+    #[test]
+    fn rejects_non_utf8_skill_manifest() {
+        let bytes = make_zip(&[("SKILL.md", &[0xff, 0xfe, 0xfd])]);
+        let inventory = build_inventory(&bytes);
+        let err = resolve_candidate(&inventory, &bytes, ResourceBudget::default_skill())
+            .expect_err("non-UTF-8 SKILL.md must fail closed");
+        assert_eq!(err.code(), "unsupported_archive_entry");
     }
 
     #[test]

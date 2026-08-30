@@ -3,6 +3,7 @@ pub mod cli_api;
 pub mod commands;
 pub mod db;
 pub mod fs_util;
+mod hashing;
 #[cfg(feature = "ipc-codegen")]
 pub mod ipc_codegen;
 pub mod ipc_error;

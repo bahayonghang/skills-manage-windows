@@ -407,7 +407,7 @@ async fn ac4_remote_remove_keeps_direct_copy_and_conflict_is_zero_write() {
 async fn ac5_remote_recovery_converges_from_three_phases() {
     wipe_skill_recovery("ac5");
     let lock = lock_json(&["ac5"]);
-    let fingerprint = format!("{:x}", Sha256::digest(lock.as_bytes()));
+    let fingerprint = crate::hashing::encode_lower_hex(Sha256::digest(lock.as_bytes()).as_ref());
     let phases = ["prepared", "staged", "metadata_committed"];
     for phase in phases {
         let runner = Arc::new(FakeRunner::new());
@@ -479,7 +479,7 @@ async fn ac6_remote_and_local_guards_are_independent_file_paths() {
             .await;
     assert!(busy.is_err());
 
-    let digest = format!("{:x}", Sha256::digest(b"ssh-cli-test"));
+    let digest = crate::hashing::encode_lower_hex(Sha256::digest(b"ssh-cli-test").as_ref());
     let production = crate::paths::central_mutation_lock_path()
         .parent()
         .unwrap()

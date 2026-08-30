@@ -418,7 +418,7 @@ mod windows_reparse {
         let path_buffer_start = names_start + name_offset;
         let sub_bytes_start = path_buffer_start + sub_offset;
         let sub_bytes_end = sub_bytes_start.saturating_add(sub_len);
-        if sub_bytes_end > buffer.len() || !sub_len.is_multiple_of(2) {
+        if sub_bytes_end > buffer.len() {
             return Err(InstallationError::ManagedDirectoryLinkInspect(
                 io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -426,9 +426,18 @@ mod windows_reparse {
                 ),
             ));
         }
-        let wide: Vec<u16> = buffer[sub_bytes_start..sub_bytes_end]
-            .chunks_exact(2)
-            .map(|chunk| u16::from_le_bytes(chunk.try_into().unwrap()))
+        let (wide_chunks, remainder) = buffer[sub_bytes_start..sub_bytes_end].as_chunks::<2>();
+        if !remainder.is_empty() {
+            return Err(InstallationError::ManagedDirectoryLinkInspect(
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "reparse substitute name out of range",
+                ),
+            ));
+        }
+        let wide: Vec<u16> = wide_chunks
+            .iter()
+            .map(|chunk| u16::from_le_bytes(*chunk))
             .collect();
         let nt_path = OsString::from_wide(&wide);
         let dos = nt_to_dos_path(&nt_path);

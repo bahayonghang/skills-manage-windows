@@ -166,7 +166,7 @@ fn fixture_manifest_and_files_are_locked() {
         );
         let bytes = std::fs::read(fixture_path(&fixture)).unwrap();
         assert_eq!(
-            format!("{:x}", Sha256::digest(bytes)),
+            crate::hashing::encode_lower_hex(Sha256::digest(bytes).as_ref()),
             fixture.fixture_sha256,
             "{} fixture checksum drift",
             fixture.tag

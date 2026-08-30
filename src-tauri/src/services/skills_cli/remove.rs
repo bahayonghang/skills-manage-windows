@@ -760,7 +760,7 @@ fn remove_backup_dir(path: &Path) -> Result<(), SkillsCliError> {
 }
 
 pub(super) fn hex_digest(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    crate::hashing::encode_lower_hex(Sha256::digest(bytes).as_ref())
 }
 
 pub(super) fn hit_fault(fault: RemoveFault) -> Result<(), SkillsCliError> {

@@ -556,7 +556,7 @@ fn hash_entries(mut entries: Vec<(String, String)>) -> String {
 }
 
 fn hex_digest(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+    crate::hashing::encode_lower_hex(bytes)
 }
 
 fn relative_path_string(root: &Path, path: &Path) -> Result<String, CentralUpdatesError> {

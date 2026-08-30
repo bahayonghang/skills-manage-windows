@@ -287,12 +287,9 @@ describe("UpdateCenterDialog unknown-source reset", () => {
 
     const dialogs = screen.getAllByRole("dialog");
     const resetDialog = dialogs[dialogs.length - 1];
-    expect(within(resetDialog).getByRole("alert").textContent).toContain(
-      "broken-skill",
-    );
-    expect(within(resetDialog).getByRole("alert").textContent).toContain(
-      "无法删除该中央技能",
-    );
+    const alert = await within(resetDialog).findByRole("alert");
+    expect(alert.textContent).toContain("broken-skill");
+    expect(alert.textContent).toContain("无法删除该中央技能");
     expect(
       screen.getByTestId("confirm-reset-unknown-source-skills"),
     ).toBeInTheDocument();

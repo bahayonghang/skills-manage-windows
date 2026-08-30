@@ -69,7 +69,7 @@ fn skill_digest(body: &str) -> String {
 }
 
 fn file_sha_hex(body: &str) -> String {
-    format!("{:x}", Sha256::digest(body.as_bytes()))
+    crate::hashing::encode_lower_hex(Sha256::digest(body.as_bytes()).as_ref())
 }
 
 fn hash_output(root: &str, body: &str) -> String {

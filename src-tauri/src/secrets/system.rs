@@ -76,14 +76,14 @@ fn hex_encode(bytes: &[u8]) -> String {
 
 #[cfg(windows)]
 fn hex_decode(value: &str) -> Result<Vec<u8>, SecretError> {
-    if !value.len().is_multiple_of(2) {
+    let (chunks, remainder) = value.as_bytes().as_chunks::<2>();
+    if !remainder.is_empty() {
         return Err(SecretError::Other(
             "Protected secret payload is not valid hex.".to_string(),
         ));
     }
-    value
-        .as_bytes()
-        .chunks_exact(2)
+    chunks
+        .iter()
         .map(|chunk| {
             let high = (chunk[0] as char).to_digit(16).ok_or_else(|| {
                 SecretError::Other("Protected secret payload is not valid hex.".to_string())

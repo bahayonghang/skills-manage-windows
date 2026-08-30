@@ -34,9 +34,9 @@ function allSteps() {
 describe("developer and PR experience contract", () => {
   it("declares one Node/pnpm/Rust toolchain", () => {
     expect(nodeVersion).toBe("26");
-    expect(packageJson.packageManager).toBe("pnpm@10.12.3");
+    expect(packageJson.packageManager).toBe("pnpm@10.34.5");
     expect(packageJson.engines?.node).toBe("26.x");
-    expect(rustToolchain).toContain('channel = "1.97.0"');
+    expect(rustToolchain).toContain('channel = "1.98.0"');
     expect(rustToolchain).toContain('components = ["rustfmt", "clippy"]');
   });
 
@@ -44,7 +44,7 @@ describe("developer and PR experience contract", () => {
     const steps = allSteps();
     const pnpmSetupSteps = steps.filter((step) => step.uses?.startsWith("pnpm/action-setup@"));
     expect(pnpmSetupSteps.length).toBeGreaterThan(0);
-    expect(pnpmSetupSteps.every((step) => step.with?.version === "10.12.3")).toBe(true);
+    expect(pnpmSetupSteps.every((step) => step.with?.version === "10.34.5")).toBe(true);
 
     const nodeSetupSteps = steps.filter((step) => step.uses?.startsWith("actions/setup-node@"));
     expect(nodeSetupSteps.length).toBeGreaterThan(0);
@@ -52,7 +52,7 @@ describe("developer and PR experience contract", () => {
 
     const rustSetupSteps = steps.filter((step) => step.uses?.startsWith("dtolnay/rust-toolchain@"));
     expect(rustSetupSteps.length).toBeGreaterThan(0);
-    expect(rustSetupSteps.every((step) => step.with?.toolchain === "1.97.0")).toBe(true);
+    expect(rustSetupSteps.every((step) => step.with?.toolchain === "1.98.0")).toBe(true);
   });
 
   it("exposes read-only doctor and audit gates while local check/ci auto-sync version", () => {
@@ -107,8 +107,8 @@ describe("developer and PR experience contract", () => {
 
     for (const document of [english, chinese, contributing, agents, quality]) {
       expect(document).toContain("Node 26");
-      expect(document).toContain("pnpm 10.12.3");
-      expect(document).toContain("Rust 1.97.0");
+      expect(document).toContain("pnpm 10.34.5");
+      expect(document).toContain("Rust 1.98.0");
       expect(document).toContain("just doctor");
       expect(document).toContain("just check");
       expect(document).toContain("just ci");

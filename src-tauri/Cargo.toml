@@ -47,10 +47,10 @@ keyring = "3"
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-sha2 = "0.10"
+sha2 = { version = "0.11", default-features = false }
 thiserror = "2"
 async-trait = "0.1"
-base64 = "0.22.1"
+base64 = { version = "0.23.1", default-features = false, features = ["std"] }
 minisign-verify = "0.2.5"
 walkdir = "2"
 regex = "1"
@@ -60,7 +60,7 @@ fs2 = "0.4"
 clap = { version = "4", features = ["derive"] }
 # Local archive (ZIP) skill import: pure-Rust reader, no shell extraction.
 # License: MIT OR Apache-2.0. Used by `services::local_archive_import`.
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 specta = { version = "=2.0.0-rc.25", features = ["derive", "function", "tokio"], optional = true }
 specta-serde = { version = "=0.0.12", optional = true }
 specta-typescript = { version = "=0.0.12", optional = true }
