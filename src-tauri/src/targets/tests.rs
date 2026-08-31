@@ -563,6 +563,36 @@ pub(super) mod suite {
     }
 
     #[test]
+    fn sanitize_target_id_and_remote_cache_db_path_reject_hostile_ids() {
+        let app_data = crate::paths::app_data_dir();
+        let escaped = app_data.join("escape");
+        let escaped_existed = escaped.exists();
+        for id in ["../escape", "a/b", r"a\b", " ", "ssh-demo\n1"] {
+            assert!(
+                sanitize_target_id(id).is_err(),
+                "sanitize_target_id({id:?}) must reject"
+            );
+            assert!(
+                remote_cache_db_path(id).is_err(),
+                "remote_cache_db_path({id:?}) must reject before directory creation"
+            );
+        }
+        assert_eq!(
+            escaped.exists(),
+            escaped_existed,
+            "../escape must not create a directory outside the target-cache root"
+        );
+        let path = remote_cache_db_path("ssh-demo_1").unwrap();
+        assert!(path.ends_with(Path::new("targets").join("ssh-demo_1").join("db.sqlite")));
+        assert!(
+            path.parent()
+                .is_some_and(|parent| parent.file_name().is_some_and(|name| name == "ssh-demo_1")),
+            "valid cache db must live in a single target-id directory: {}",
+            path.display()
+        );
+    }
+
+    #[test]
     fn wsl_request_to_config_trims_required_fields() {
         let config = request_to_wsl_config(
             CreateWslTargetRequest {
@@ -1550,5 +1580,281 @@ mkdir -p -- "$HOME/.skillsmanage/skills" && printf 'MKDIR_OK\n'"#
             }
             other => panic!("unexpected error: {other:?}"),
         }
+    }
+
+    fn probed_password_ssh(id: &str, password: &str) -> RemoteTargetConfig {
+        RemoteTargetConfig {
+            id: id.to_string(),
+            label: "Lab".to_string(),
+            host: "lab.local".to_string(),
+            username: "alice".to_string(),
+            port: 22,
+            auth_method: SshAuthMethod::Password,
+            key_path: String::new(),
+            credential_key: Some(format!("{id}:ssh-password")),
+            protected_password: None,
+            password: Some(password.to_string()),
+            remote_home: "/home/alice".to_string(),
+            remote_os: "Linux".to_string(),
+            symlink_enabled: false,
+        }
+    }
+
+    fn probed_key_ssh(id: &str) -> RemoteTargetConfig {
+        RemoteTargetConfig {
+            id: id.to_string(),
+            label: "Lab".to_string(),
+            host: "lab.local".to_string(),
+            username: "alice".to_string(),
+            port: 22,
+            auth_method: SshAuthMethod::Key,
+            key_path: "~/.ssh/id_ed25519".to_string(),
+            credential_key: None,
+            protected_password: None,
+            password: None,
+            remote_home: "/home/alice".to_string(),
+            remote_os: "Linux".to_string(),
+            symlink_enabled: false,
+        }
+    }
+
+    async fn reject_setting_key(pool: &DbPool, key: &str, trigger_name: &str) {
+        sqlx::query(&format!(
+            "CREATE TRIGGER {trigger_name} BEFORE INSERT ON settings \
+             WHEN NEW.key = '{key}' \
+             BEGIN SELECT RAISE(FAIL, 'target mutation persistence failure'); END"
+        ))
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    fn stored_password(backend: &MemoryCredentialBackend, target_id: &str) -> Option<String> {
+        backend
+            .passwords
+            .lock()
+            .unwrap()
+            .get(&format!("{target_id}:ssh-password"))
+            .cloned()
+    }
+
+    async fn ssh_settings_raw(pool: &DbPool) -> String {
+        db::get_setting(pool, TARGETS_SETTING_KEY)
+            .await
+            .unwrap()
+            .unwrap_or_default()
+    }
+
+    #[tokio::test]
+    async fn create_ssh_target_persist_failure_leaves_empty_list_and_no_credential() {
+        const PASSWORD: &str = "ssh-pass-r2-7f3a9c2e1b88";
+        let backend = Arc::new(MemoryCredentialBackend::default());
+        let registry = TargetRegistry::with_credential_backend(backend.clone());
+        let pool = memory_db().await;
+        let target = probed_password_ssh("ssh-create-1", PASSWORD);
+        reject_setting_key(&pool, TARGETS_SETTING_KEY, "reject_create_ssh_targets").await;
+
+        let err = persist_new_ssh_target_with_cache(
+            &registry,
+            &pool,
+            target.clone(),
+            RemoteCacheInit::Prefill(memory_db().await),
+        )
+        .await
+        .expect_err("persist trigger must fail create");
+        assert!(matches!(err, TargetsError::Db(_)), "{err}");
+        assert!(load_remote_targets(&pool).await.unwrap().is_empty());
+        assert!(stored_password(&backend, "ssh-create-1").is_none());
+        assert!(!registry.has_cached_pool("ssh-create-1"));
+        assert!(!ssh_settings_raw(&pool).await.contains(PASSWORD));
+
+        sqlx::query("DROP TRIGGER reject_create_ssh_targets")
+            .execute(&pool)
+            .await
+            .unwrap();
+        persist_new_ssh_target_with_cache(
+            &registry,
+            &pool,
+            target,
+            RemoteCacheInit::Prefill(memory_db().await),
+        )
+        .await
+        .unwrap();
+        let listed = load_remote_targets(&pool).await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, "ssh-create-1");
+        assert_eq!(
+            stored_password(&backend, "ssh-create-1").as_deref(),
+            Some(PASSWORD)
+        );
+        assert_eq!(backend.passwords.lock().unwrap().len(), 1);
+        assert!(!ssh_settings_raw(&pool).await.contains(PASSWORD));
+        assert!(registry.has_cached_pool("ssh-create-1"));
+    }
+
+    #[tokio::test]
+    async fn create_ssh_target_cache_failure_rolls_back_list_credential_and_pool() {
+        const PASSWORD: &str = "ssh-pass-r2-cache-fail-9c1d";
+        let backend = Arc::new(MemoryCredentialBackend::default());
+        let registry = TargetRegistry::with_credential_backend(backend.clone());
+        let pool = memory_db().await;
+        let target = probed_password_ssh("ssh-create-2", PASSWORD);
+
+        let err =
+            persist_new_ssh_target_with_cache(&registry, &pool, target, RemoteCacheInit::Fail)
+                .await
+                .expect_err("cache init failure must fail create");
+        assert!(matches!(err, TargetsError::Io { .. }), "{err}");
+        assert!(load_remote_targets(&pool).await.unwrap().is_empty());
+        assert!(stored_password(&backend, "ssh-create-2").is_none());
+        assert!(!registry.has_cached_pool("ssh-create-2"));
+        assert!(!ssh_settings_raw(&pool).await.contains(PASSWORD));
+    }
+
+    #[tokio::test]
+    async fn update_ssh_target_password_persist_failure_keeps_old_password() {
+        const OLD_PASSWORD: &str = "ssh-pass-r2-old-aa11bb22";
+        const NEW_PASSWORD: &str = "ssh-pass-r2-new-cc33dd44";
+        let backend = Arc::new(MemoryCredentialBackend::default());
+        let registry = TargetRegistry::with_credential_backend(backend.clone());
+        let pool = memory_db().await;
+        let mut previous = probed_password_ssh("ssh-update-1", OLD_PASSWORD);
+        registry.save_target_password(&mut previous).unwrap();
+        previous.password = None;
+        save_remote_targets(&pool, std::slice::from_ref(&previous))
+            .await
+            .unwrap();
+        let before = persisted_target_settings(&pool).await;
+        reject_setting_key(&pool, TARGETS_SETTING_KEY, "reject_update_ssh_targets").await;
+
+        let mut updated = previous.clone();
+        updated.password = Some(NEW_PASSWORD.to_string());
+        updated.host = "other.local".to_string();
+        updated.username = "bob".to_string();
+        let err = persist_updated_ssh_target_with_cache(
+            &registry,
+            &pool,
+            previous.clone(),
+            updated,
+            true,
+            RemoteCacheInit::Prefill(memory_db().await),
+        )
+        .await
+        .expect_err("persist trigger must fail password update");
+        assert!(matches!(err, TargetsError::Db(_)), "{err}");
+        assert_eq!(persisted_target_settings(&pool).await, before);
+        let listed = load_remote_targets(&pool).await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, "ssh-update-1");
+        assert_eq!(listed[0].host, "lab.local");
+        assert_eq!(listed[0].username, "alice");
+        assert_eq!(
+            stored_password(&backend, "ssh-update-1").as_deref(),
+            Some(OLD_PASSWORD)
+        );
+        assert_eq!(backend.passwords.lock().unwrap().len(), 1);
+        let raw = ssh_settings_raw(&pool).await;
+        assert!(!raw.contains(OLD_PASSWORD));
+        assert!(!raw.contains(NEW_PASSWORD));
+    }
+
+    #[tokio::test]
+    async fn update_ssh_target_password_to_key_converges_when_credential_delete_fails() {
+        const PASSWORD: &str = "ssh-pass-r2-switch-ee55ff66";
+        let backend = Arc::new(MemoryCredentialBackend::default());
+        let registry = TargetRegistry::with_credential_backend(backend.clone());
+        let pool = memory_db().await;
+        let mut previous = probed_password_ssh("ssh-update-2", PASSWORD);
+        registry.save_target_password(&mut previous).unwrap();
+        previous.password = None;
+        save_remote_targets(&pool, std::slice::from_ref(&previous))
+            .await
+            .unwrap();
+        *backend.delete_error.lock().unwrap() = Some(CredentialStoreError::Other(
+            "credential vault unavailable".to_string(),
+        ));
+
+        let updated = probed_key_ssh("ssh-update-2");
+        let err = persist_updated_ssh_target_with_cache(
+            &registry,
+            &pool,
+            previous,
+            updated,
+            false,
+            RemoteCacheInit::Prefill(memory_db().await),
+        )
+        .await
+        .expect_err("credential delete failure must fail auth-method switch");
+        assert!(matches!(err, TargetsError::CredentialStore(_)), "{err}");
+        let listed = load_remote_targets(&pool).await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].auth_method, SshAuthMethod::Password);
+        assert_eq!(listed[0].id, "ssh-update-2");
+        assert_eq!(listed[0].host, "lab.local");
+        assert_eq!(
+            stored_password(&backend, "ssh-update-2").as_deref(),
+            Some(PASSWORD)
+        );
+        assert!(!ssh_settings_raw(&pool).await.contains(PASSWORD));
+    }
+
+    #[tokio::test]
+    async fn create_wsl_target_cache_failure_rolls_back_list() {
+        let registry = TargetRegistry::default();
+        let pool = memory_db().await;
+        let mut target = wsl_target();
+        target.id = "wsl-create-1".to_string();
+
+        let err = persist_new_wsl_target_with_cache(
+            &registry,
+            &pool,
+            target.clone(),
+            RemoteCacheInit::Fail,
+        )
+        .await
+        .expect_err("cache init failure must fail WSL create");
+        assert!(matches!(err, TargetsError::Io { .. }), "{err}");
+        assert!(load_wsl_targets(&pool).await.unwrap().is_empty());
+        assert!(!registry.has_cached_pool("wsl-create-1"));
+
+        persist_new_wsl_target_with_cache(
+            &registry,
+            &pool,
+            target,
+            RemoteCacheInit::Prefill(memory_db().await),
+        )
+        .await
+        .unwrap();
+        let listed = load_wsl_targets(&pool).await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, "wsl-create-1");
+        assert!(registry.has_cached_pool("wsl-create-1"));
+    }
+
+    #[tokio::test]
+    async fn update_wsl_target_cache_failure_rolls_back_list() {
+        let registry = TargetRegistry::default();
+        let pool = memory_db().await;
+        let previous = wsl_target();
+        save_wsl_targets(&pool, std::slice::from_ref(&previous))
+            .await
+            .unwrap();
+        registry.insert_test_pool(&previous.id, memory_db().await);
+        let before = persisted_target_settings(&pool).await;
+        let mut updated = previous.clone();
+        updated.label = "Ubuntu renamed".to_string();
+        updated.distribution = "Ubuntu-25.04".to_string();
+
+        let err =
+            persist_updated_wsl_target_with_cache(&registry, &pool, updated, RemoteCacheInit::Fail)
+                .await
+                .expect_err("cache init failure must fail WSL update");
+        assert!(matches!(err, TargetsError::Io { .. }), "{err}");
+        assert_eq!(persisted_target_settings(&pool).await, before);
+        let listed = load_wsl_targets(&pool).await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].label, "Ubuntu");
+        assert_eq!(listed[0].distribution, "Ubuntu-24.04");
+        assert!(!registry.has_cached_pool(&previous.id));
     }
 }

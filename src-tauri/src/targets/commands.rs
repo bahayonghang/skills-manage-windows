@@ -1,6 +1,4 @@
-use super::config::{
-    load_target_config_snapshot, persist_target_deletion_settings, restore_target_settings,
-};
+use super::config::{persist_target_deletion_settings, restore_target_settings};
 use super::*;
 pub async fn create_ssh_target_impl(
     registry: &TargetRegistry,
@@ -14,36 +12,10 @@ pub async fn create_ssh_target_impl(
         return Err(TargetsError::UnsupportedRemoteOs(probe.remote_os));
     }
 
-    let mut targets = load_remote_targets(local_db).await?;
     let mut target = base;
     target.remote_home = probe.remote_home;
     target.remote_os = probe.remote_os;
-    let credential_state = if target.auth_method == SshAuthMethod::Password {
-        Some(registry.save_target_password(&mut target)?)
-    } else {
-        None
-    };
-    if target.auth_method == SshAuthMethod::Password {
-        target.password = None;
-    }
-
-    let stored_target = target.clone();
-    targets.push(stored_target.clone());
-    if let Err(error) = save_remote_targets(local_db, &targets).await {
-        let mut cleanup_target = stored_target.clone();
-        let _ = registry.delete_target_password(&mut cleanup_target);
-        return Err(error);
-    }
-    registry.remote_db(&stored_target).await?;
-
-    let active_id = active_target_id(local_db).await?;
-    let mut summary = registry.target_summary(&stored_target, active_id.as_str());
-    if let Some(state) = credential_state {
-        summary.credential_status = Some(state.status);
-        summary.credential_error = state.error;
-        summary.has_stored_password = Some(state.status.is_available());
-    }
-    Ok(summary)
+    persist_new_ssh_target(registry, local_db, target).await
 }
 
 pub async fn update_ssh_target_impl(
@@ -51,7 +23,7 @@ pub async fn update_ssh_target_impl(
     local_db: &DbPool,
     request: UpdateSshTargetRequest,
 ) -> Result<TargetSummary, TargetsError> {
-    let mut targets = load_remote_targets(local_db).await?;
+    let targets = load_remote_targets(local_db).await?;
     let index = targets
         .iter()
         .position(|target| target.id == request.id)
@@ -75,38 +47,14 @@ pub async fn update_ssh_target_impl(
 
     updated_target.remote_home = probe.remote_home;
     updated_target.remote_os = probe.remote_os;
-    let credential_state = if updated_target.auth_method == SshAuthMethod::Password {
-        if supplied_password {
-            Some(registry.save_target_password(&mut updated_target)?)
-        } else {
-            let state = registry.target_credential_state(&updated_target);
-            updated_target.password = None;
-            state
-        }
-    } else {
-        updated_target.password = None;
-        None
-    };
-
-    targets[index] = updated_target.clone();
-    save_remote_targets(local_db, &targets).await?;
-    if previous_target.auth_method == SshAuthMethod::Password
-        && updated_target.auth_method != SshAuthMethod::Password
-    {
-        let mut cleanup_target = previous_target.clone();
-        let _ = registry.delete_target_password(&mut cleanup_target);
-    }
-    registry.drop_remote_pool(&updated_target.id);
-    registry.remote_db(&updated_target).await?;
-
-    let active_id = active_target_id(local_db).await?;
-    let mut summary = registry.target_summary(&updated_target, active_id.as_str());
-    if let Some(state) = credential_state {
-        summary.credential_status = Some(state.status);
-        summary.credential_error = state.error;
-        summary.has_stored_password = Some(state.status.is_available());
-    }
-    Ok(summary)
+    persist_updated_ssh_target(
+        registry,
+        local_db,
+        previous_target,
+        updated_target,
+        supplied_password,
+    )
+    .await
 }
 
 pub async fn test_ssh_target_impl(
@@ -257,15 +205,7 @@ pub async fn create_wsl_target_impl(
 
     target.remote_home = probe.remote_home;
     target.remote_os = probe.remote_os;
-    let mut targets = load_wsl_targets(local_db).await?;
-    targets.push(target.clone());
-    save_wsl_targets(local_db, &targets).await?;
-    registry
-        .remote_db_for(&target.id, &target.remote_home)
-        .await?;
-
-    let active_id = active_target_id(local_db).await?;
-    Ok(registry.wsl_target_summary(&target, active_id.as_str()))
+    persist_new_wsl_target(registry, local_db, target).await
 }
 
 pub async fn update_wsl_target_impl(
@@ -273,7 +213,7 @@ pub async fn update_wsl_target_impl(
     local_db: &DbPool,
     request: UpdateWslTargetRequest,
 ) -> Result<TargetSummary, TargetsError> {
-    let mut targets = load_wsl_targets(local_db).await?;
+    let targets = load_wsl_targets(local_db).await?;
     let index = targets
         .iter()
         .position(|target| target.id == request.id)
@@ -286,16 +226,7 @@ pub async fn update_wsl_target_impl(
     }
     updated_target.remote_home = probe.remote_home;
     updated_target.remote_os = probe.remote_os;
-
-    targets[index] = updated_target.clone();
-    save_wsl_targets(local_db, &targets).await?;
-    registry.drop_remote_pool(&updated_target.id);
-    registry
-        .remote_db_for(&updated_target.id, &updated_target.remote_home)
-        .await?;
-
-    let active_id = active_target_id(local_db).await?;
-    Ok(registry.wsl_target_summary(&updated_target, active_id.as_str()))
+    persist_updated_wsl_target(registry, local_db, updated_target).await
 }
 
 pub async fn test_wsl_target_impl(
@@ -430,38 +361,6 @@ pub async fn get_active_target_impl(
         .into_iter()
         .find(|target| target.id == active_id)
         .ok_or_else(|| TargetsError::TargetNotFound(active_id))
-}
-
-pub async fn active_target_id(local_db: &DbPool) -> Result<String, TargetsError> {
-    Ok(load_target_config_snapshot(local_db)
-        .await?
-        .active_target_id)
-}
-
-pub async fn load_remote_targets(
-    local_db: &DbPool,
-) -> Result<Vec<RemoteTargetConfig>, TargetsError> {
-    Ok(load_target_config_snapshot(local_db).await?.ssh_targets)
-}
-
-pub(super) async fn save_remote_targets(
-    local_db: &DbPool,
-    targets: &[RemoteTargetConfig],
-) -> Result<(), TargetsError> {
-    let raw = serde_json::to_string(targets)?;
-    Ok(db::set_setting(local_db, TARGETS_SETTING_KEY, &raw).await?)
-}
-
-pub async fn load_wsl_targets(local_db: &DbPool) -> Result<Vec<WslTargetConfig>, TargetsError> {
-    Ok(load_target_config_snapshot(local_db).await?.wsl_targets)
-}
-
-pub(super) async fn save_wsl_targets(
-    local_db: &DbPool,
-    targets: &[WslTargetConfig],
-) -> Result<(), TargetsError> {
-    let raw = serde_json::to_string(targets)?;
-    Ok(db::set_setting(local_db, WSL_TARGETS_SETTING_KEY, &raw).await?)
 }
 
 pub(super) fn request_to_config(
@@ -712,15 +611,10 @@ pub fn remote_cache_db_path(target_id: &str) -> Result<PathBuf, TargetsError> {
 }
 
 pub(super) fn sanitize_target_id(target_id: &str) -> Result<String, TargetsError> {
-    let trimmed = target_id.trim();
-    if trimmed.is_empty()
-        || !trimmed
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
-    {
+    if !is_allowed_target_id_token(target_id) {
         return Err(TargetsError::InvalidTargetId);
     }
-    Ok(trimmed.to_string())
+    Ok(target_id.trim().to_string())
 }
 
 pub(super) fn credential_key_for_target(target_id: &str) -> String {

@@ -6,6 +6,14 @@ pub(super) const SSH_PASSWORD_SERVICE: &str = "SkillPort SSH Targets";
 pub(super) const SSH_ASKPASS_HELPER_ENV: &str = "SKILLPORT_SSH_ASKPASS_HELPER";
 pub(super) const SSH_PASSWORD_ENV: &str = "SKILLPORT_SSH_PASSWORD";
 pub const LOCAL_TARGET_ID: &str = "local";
+
+pub(super) fn is_allowed_target_id_token(target_id: &str) -> bool {
+    let trimmed = target_id.trim();
+    !trimmed.is_empty()
+        && trimmed
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+}
 pub(super) const TARGET_CONFIG_QUARANTINE_SETTING_KEY: &str = "target_config_quarantine_v1";
 #[cfg(windows)]
 pub(super) const CREATE_NO_WINDOW: u32 = 0x08000000;

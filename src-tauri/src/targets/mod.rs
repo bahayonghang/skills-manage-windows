@@ -20,6 +20,7 @@ mod cred;
 mod error;
 mod exec;
 mod model;
+mod persist;
 mod process_api;
 mod process_tree;
 mod registry;
@@ -36,6 +37,7 @@ pub use config::{get_target_config_quarantine_status_impl, recover_target_config
 use cred::*;
 use exec::*;
 use model::*;
+pub use persist::*;
 use process_api::*;
 #[cfg(test)]
 use wsl_discovery::*;
