@@ -55,6 +55,7 @@ describe("updateCenterStore", () => {
       isForcing: false,
       lastRefreshedAt: null,
       error: null,
+      requiresInventoryReload: false,
     });
   });
 
@@ -254,6 +255,69 @@ describe("updateCenterStore", () => {
       },
     );
   });
+
+  it("requires inventory reload when apply succeeds but get_skill_update_inventory rejects", async () => {
+    const decisions: SkillUpdateDecisions = {
+      updates: [],
+      keepMissing: [],
+      deleteMissing: [],
+      importAdditions: [],
+      skipAdditions: [],
+      unskipAdditions: [],
+      removePlatformDuplicates: [],
+      removeDeletedPlatformCopies: [],
+    };
+    const result: SkillUpdateApplyResult = {
+      updatedSkillIds: ["frontend-design"],
+      keptMissingSkillIds: [],
+      deletedSkillIds: [],
+      importedSkillIds: [],
+      skippedAdditions: [],
+      unskippedAdditions: [],
+      removedPlatformDuplicatePaths: [],
+      removedDeletedPlatformCopyPaths: [],
+      failures: [],
+    };
+    mockInvoke
+      .mockResolvedValueOnce(result)
+      .mockRejectedValueOnce(
+        ipcFixtureError("storage.unavailable", "inventory failed"),
+      );
+
+    await expect(
+      useUpdateCenterStore.getState().apply(decisions, { kind: "all" }),
+    ).rejects.toThrow("inventory failed");
+
+    const state = useUpdateCenterStore.getState();
+    expect(state.isApplying).toBe(false);
+    expect(state.error).toBe("inventory failed");
+    expect(state.requiresInventoryReload).toBe(true);
+    expect(mockInvoke).toHaveBeenNthCalledWith(
+      1,
+      "apply_skill_update_decisions",
+      {
+        jobId: expect.any(String),
+        decisions,
+      },
+    );
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "get_skill_update_inventory", {
+      scope: { kind: "all" },
+    });
+  });
+
+  it("clears requiresInventoryReload after a successful loadInventory", async () => {
+    useUpdateCenterStore.setState({
+      requiresInventoryReload: true,
+      error: "inventory failed",
+    });
+    mockInvoke.mockResolvedValueOnce(emptyInventory());
+
+    await useUpdateCenterStore.getState().loadInventory({ kind: "all" });
+
+    expect(useUpdateCenterStore.getState().requiresInventoryReload).toBe(false);
+    expect(useUpdateCenterStore.getState().inventory).toEqual(emptyInventory());
+  });
+
   describe("retryRepositories", () => {
     function inventoryWithFailure(repositoryId: string): SkillUpdateInventory {
       return {
