@@ -54,6 +54,11 @@ export interface CentralSkillsState {
   updatingSkillIds: string[];
   /** Agent ID currently being toggled (null = idle). */
   togglingAgentId: string | null;
+  /**
+   * Mutation committed but a follow-up refresh failed. The last write is real;
+   * the in-memory list may be stale until the next successful load/refresh.
+   */
+  requiresCentralReload: boolean;
   error: string | null;
 
   // Actions

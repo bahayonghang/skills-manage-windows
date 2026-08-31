@@ -430,6 +430,7 @@ export function createCentralSkillsInitialState() {
     isCheckingUpdates: false,
     updatingSkillIds: [],
     togglingAgentId: null,
+    requiresCentralReload: false,
     error: null,
   };
 }

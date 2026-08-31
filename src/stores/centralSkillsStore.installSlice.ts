@@ -53,9 +53,10 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
    */
   installSkill: async (skillId, agentIds, method, projectPath) => {
     set({ isInstalling: true, error: null });
+    const trimmedProjectPath = projectPath?.trim() ? projectPath.trim() : null;
+    let result: BatchInstallResult;
     try {
-      const trimmedProjectPath = projectPath?.trim() ? projectPath.trim() : null;
-      const result = trimmedProjectPath
+      result = trimmedProjectPath
         ? await invoke("batch_install_central_skills", {
             skillIds: [skillId],
             agentIds,
@@ -81,38 +82,66 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
             agentIds,
             method,
           }).then(normalizeBatchInstallResult);
-
-      // Refresh central skills to get updated link status.
-      const skills = await invoke<SkillWithLinks[]>("get_central_skills");
-      const repositories = await invoke<SkillRepositoryWithStats[]>("get_skill_repositories");
-      set({ skills, repositories: repositories ?? get().repositories, isInstalling: false });
-
-      return normalizeBatchInstallResult(result);
     } catch (err) {
       set({ error: String(err), isInstalling: false });
       throw err;
     }
+
+    try {
+      const skills = await invoke<SkillWithLinks[]>("get_central_skills");
+      const repositories = await invoke<SkillRepositoryWithStats[]>("get_skill_repositories");
+      set({
+        skills,
+        repositories: repositories ?? get().repositories,
+        isInstalling: false,
+        requiresCentralReload: false,
+      });
+    } catch (refreshErr) {
+      set({
+        error: String(refreshErr),
+        isInstalling: false,
+        requiresCentralReload: true,
+      });
+      throw refreshErr;
+    }
+
+    return normalizeBatchInstallResult(result);
   },
 
   batchInstallSkills: async (skillIds, agentIds, method, projectPath) => {
     set({ isInstalling: true, error: null });
+    let result: Required<CentralBatchInstallResult>;
     try {
-      const result = await invoke("batch_install_central_skills", {
+      result = await invoke("batch_install_central_skills", {
         skillIds,
         agentIds,
         method,
         projectPath: projectPath ?? null,
       }).then(normalizeCentralBatchInstallResult);
-
-      const skills = await invoke<SkillWithLinks[]>("get_central_skills");
-      const repositories = await invoke<SkillRepositoryWithStats[]>("get_skill_repositories");
-      set({ skills, repositories: repositories ?? get().repositories, isInstalling: false });
-
-      return result;
     } catch (err) {
       set({ error: String(err), isInstalling: false });
       throw err;
     }
+
+    try {
+      const skills = await invoke<SkillWithLinks[]>("get_central_skills");
+      const repositories = await invoke<SkillRepositoryWithStats[]>("get_skill_repositories");
+      set({
+        skills,
+        repositories: repositories ?? get().repositories,
+        isInstalling: false,
+        requiresCentralReload: false,
+      });
+    } catch (refreshErr) {
+      set({
+        error: String(refreshErr),
+        isInstalling: false,
+        requiresCentralReload: true,
+      });
+      throw refreshErr;
+    }
+
+    return result;
   },
 
   loadDeletePreview: async (skillId) => {
@@ -167,6 +196,12 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
     set({ isDeleting: true, error: null });
     try {
       await invoke("delete_central_skill", { skillId, removeAgentIds, force });
+    } catch (err) {
+      set({ error: backendErrorStateValue(err), isDeleting: false });
+      throw err;
+    }
+
+    try {
       const [skills, repositories, tags, reviews] = await Promise.all([
         invoke<SkillWithLinks[]>("get_central_skills"),
         invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
@@ -182,10 +217,15 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
           Object.entries(get().updateStatuses).filter(([id]) => id !== skillId)
         ),
         isDeleting: false,
+        requiresCentralReload: false,
       });
-    } catch (err) {
-      set({ error: backendErrorStateValue(err), isDeleting: false });
-      throw err;
+    } catch (refreshErr) {
+      set({
+        error: backendErrorStateValue(refreshErr),
+        isDeleting: false,
+        requiresCentralReload: true,
+      });
+      throw refreshErr;
     }
   },
 
@@ -304,13 +344,27 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
       } else {
         await invoke("install_skill_to_agent", { skillId, agentId, method: "auto" });
       }
-
-      const skills = await invoke<SkillWithLinks[]>("get_central_skills");
-      const repositories = await invoke<SkillRepositoryWithStats[]>("get_skill_repositories");
-      set({ skills, repositories: repositories ?? get().repositories, togglingAgentId: null });
     } catch (err) {
       set({ error: String(err), togglingAgentId: null });
       throw err;
+    }
+
+    try {
+      const skills = await invoke<SkillWithLinks[]>("get_central_skills");
+      const repositories = await invoke<SkillRepositoryWithStats[]>("get_skill_repositories");
+      set({
+        skills,
+        repositories: repositories ?? get().repositories,
+        togglingAgentId: null,
+        requiresCentralReload: false,
+      });
+    } catch (refreshErr) {
+      set({
+        error: String(refreshErr),
+        togglingAgentId: null,
+        requiresCentralReload: true,
+      });
+      throw refreshErr;
     }
   },
   };
