@@ -329,6 +329,9 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
   - Assert frozen tag checkout, required-job DAG, optional artifact rules, draft
     ordering, least privilege, final tag recheck, sole public transition,
     metadata/checksum failures, and updater signature tamper cases.
+  - `generate-latest-json.mjs` rejects missing/empty `.sig` and zero or duplicate
+    NSIS assets before writing `latest.json`; `prepare-release-body.mjs` covers
+    exact notes, series `major.minor.md`, and fallback.
 - `cargo test --manifest-path src-tauri/Cargo.toml --bin release-signature-verifier --locked`
   - A runtime-compatible wrapped minisign fixture passes; changed installer,
     signature, and public key fail.
