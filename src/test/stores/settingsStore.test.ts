@@ -365,6 +365,90 @@ describe("settingsStore", () => {
     expect(useSettingsStore.getState().isTestingGitHubPat).toBe(false);
   });
 
+  const GITHUB_PAT_SENTINEL = "ghp_risk_coverage_sentinel_token";
+
+  function expectGitHubPatAbsentFromStore(thrown?: unknown) {
+    const state = useSettingsStore.getState();
+    expect(JSON.stringify(state)).not.toContain(GITHUB_PAT_SENTINEL);
+    expect(state.githubPatState).not.toHaveProperty("token");
+    expect(state.githubPatState).not.toHaveProperty("value");
+    expect(state.githubPatState).not.toHaveProperty("pat");
+    expect(state.error === null || !state.error.includes(GITHUB_PAT_SENTINEL)).toBe(true);
+    if (thrown !== undefined) {
+      expect(String(thrown)).not.toContain(GITHUB_PAT_SENTINEL);
+    }
+  }
+
+  it("saveGitHubPat reject clears saving and rethrows without retaining the PAT", async () => {
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("github.pat_persist_failed"));
+
+    const thrown = await useSettingsStore
+      .getState()
+      .saveGitHubPat(GITHUB_PAT_SENTINEL)
+      .then(
+        () => {
+          throw new Error("expected saveGitHubPat to reject");
+        },
+        (error: unknown) => error,
+      );
+
+    const state = useSettingsStore.getState();
+    expect(state.isSavingGitHubPat).toBe(false);
+    expect(state.error).toBe("Error: github.pat_persist_failed");
+    expectGitHubPatAbsentFromStore(thrown);
+  });
+
+  it("clearGitHubPat reject clears saving and rethrows", async () => {
+    useSettingsStore.setState({
+      githubPatState: { configured: true, storageState: "stored", error: null },
+    });
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("github.pat_clear_failed"));
+
+    await expect(useSettingsStore.getState().clearGitHubPat()).rejects.toThrow(
+      "github.pat_clear_failed",
+    );
+
+    const state = useSettingsStore.getState();
+    expect(state.isSavingGitHubPat).toBe(false);
+    expect(state.error).toBe("Error: github.pat_clear_failed");
+    expect(state.githubPatState.configured).toBe(true);
+    expectGitHubPatAbsentFromStore();
+  });
+
+  it("testGitHubPat reject clears testing and rethrows", async () => {
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("github.pat_test_failed"));
+
+    await expect(useSettingsStore.getState().testGitHubPat()).rejects.toThrow(
+      "github.pat_test_failed",
+    );
+
+    const state = useSettingsStore.getState();
+    expect(state.isTestingGitHubPat).toBe(false);
+    expect(state.error).toBe("Error: github.pat_test_failed");
+    expectGitHubPatAbsentFromStore();
+  });
+
+  it("saveGitHubPat success omits the PAT sentinel from store state", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({
+      configured: true,
+      storageState: "stored",
+      error: null,
+    });
+
+    await useSettingsStore.getState().saveGitHubPat(GITHUB_PAT_SENTINEL);
+
+    expect(invoke).toHaveBeenCalledWith("set_github_pat", {
+      value: GITHUB_PAT_SENTINEL,
+    });
+    expect(useSettingsStore.getState().githubPatState).toEqual({
+      configured: true,
+      storageState: "stored",
+      error: null,
+    });
+    expect(useSettingsStore.getState().isSavingGitHubPat).toBe(false);
+    expectGitHubPatAbsentFromStore();
+  });
+
   it("loadAiSettings reads AI settings with one batch command", async () => {
     vi.mocked(invoke)
       .mockResolvedValueOnce({
