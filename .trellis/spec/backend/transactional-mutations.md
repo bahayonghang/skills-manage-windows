@@ -26,6 +26,17 @@ replacement.
   removing the newly materialized target; a replaced symlink is restored before
   returning the database error. Uninstall deletes metadata before filesystem
   removal and restores the complete installation row if removal fails.
+- `ensure_centralized` may return early only when `canonical_dir/SKILL.md` exists
+  **and** the skill row is already `is_central`. A leftover copy with
+  `is_central = false` must still be upserted. A copy created on this call is
+  removed if the upsert fails.
+- Central store relocation copies into the new root, then rewrites
+  `agents.global_skills_dir`, builtin `scan_directories.path`, central skill
+  `file_path`/`canonical_path`, and native Central `skill_installations` paths in
+  one SQLite transaction. Path rewrite is exact-root or `old_root/` prefix, never
+  unbounded SQL `REPLACE`. A later statement failure rolls all four tables back
+  and deletes skill directories created at the new root on this call. Overwritten
+  same-name target content is not restored here.
 - Marketplace fetch and parse complete before opening the cache transaction. A
   successful fetch replaces, rather than upserts into, the registry snapshot:
   delete old rows, insert all fresh rows, and publish success metadata in one
@@ -58,6 +69,13 @@ replacement.
   canonical source, project target, and complete installation row converge to
   the pre-call state; symlink variants may skip only when the platform cannot
   create them.
+- `ensure_centralized` tests inject upsert failure after copy, leftover
+  `SKILL.md` with `is_central = false`, and Local install entrypoints; retry
+  after dropping the trigger must set `is_central` and `canonical_path`.
+- Central relocate tests inject agents UPDATE failure and a later skills path
+  rewrite failure, assert four-table snapshots plus source and target-only
+  bytes, prove `store` vs `store-extra` prefix isolation, and retry after
+  dropping the trigger.
 - Marketplace tests cover A,B -> B,C, empty, second-insert failure,
   success-status failure, deferred commit failure, later-chunk failure, and
   remove rollback.
