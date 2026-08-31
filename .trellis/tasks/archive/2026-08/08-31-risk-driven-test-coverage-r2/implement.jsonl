@@ -1,0 +1,13 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend ownership and applicable service/database contracts."}
+{"file":".trellis/spec/backend/transactional-mutations.md","reason":"Validation-before-write, top-level transaction, and FS+DB compensation."}
+{"file":".trellis/spec/backend/settings-domain-boundary.md","reason":"Target settings plus credential rollback and quarantine ID rules."}
+{"file":".trellis/spec/backend/test-support.md","reason":"Rust fixtures, trigger seams, FakeRunner, and visibility rules."}
+{"file":".trellis/spec/backend/path-policy.md","reason":"Central and target-cache path boundaries."}
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend store ownership and applicable renderer contracts."}
+{"file":".trellis/spec/frontend/renderer-authority-boundary.md","reason":"PAT write-only and renderer secret boundary."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Store loading, error, rethrow, and mutation-versus-refresh split."}
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Command-routed IPC test mock; do not add adapter padding."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Test ownership, discovery, focused commands, and zero-test evidence."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"just ci completion gate and 800-line production source budget."}
+{"file":".trellis/tasks/08-31-risk-driven-test-coverage-r2/research/backend-risk-coverage-r2.md","reason":"Ranked remaining backend gaps, anchors, and focused cargo filters."}
+{"file":".trellis/tasks/08-31-risk-driven-test-coverage-r2/research/frontend-risk-coverage-r2.md","reason":"Ranked remaining frontend/script gaps, anchors, and focused vitest commands."}
