@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import * as S from "./centralSkillsViewTestSupport";
 
 const {
+  ASYNC_UI_TIMEOUT_MS,
   toast,
   mockRepositories,
   mockDeleteCentralPreview,
@@ -371,11 +372,26 @@ describe("CentralSkillsView repositories + installs（V2 markup）", () => {
     await waitFor(() => {
       expect(mockLoadDeletePreview).toHaveBeenCalledWith("frontend-design");
     });
-    expect(screen.getByText("/Users/test/.cursor/skills/frontend-design")).toBeInTheDocument();
-    expect(screen.getByRole("dialog")).toHaveTextContent("Claude Code");
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /Cursor/i }));
-    fireEvent.click(screen.getByRole("button", { name: /\u5220\u9664\u4e2d\u592e\u6280\u80fd/i }));
+    const dialog = await screen.findByRole(
+      "dialog",
+      {},
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    await waitFor(
+      () => {
+        expect(
+          within(dialog).getByText("/Users/test/.cursor/skills/frontend-design"),
+        ).toBeInTheDocument();
+        expect(dialog).toHaveTextContent("Claude Code");
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /Cursor/i }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /\u5220\u9664\u4e2d\u592e\u6280\u80fd/i }),
+    );
 
     await waitFor(() => {
       expect(mockDeleteCentralSkill).toHaveBeenCalledWith("frontend-design", ["cursor"], false);

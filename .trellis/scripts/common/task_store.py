@@ -268,6 +268,31 @@ def _default_prd_content(title: str, description: str | None = None) -> str:
 """
 
 
+def _resolve_create_base_branch(repo_root: Path, explicit: str | None) -> str:
+    """Resolve ``base_branch`` from local Git state before any task write."""
+    _, branch_out, _ = run_git(
+        ["branch", "--show-current"],
+        cwd=repo_root,
+        timeout=5,
+    )
+    current_branch = branch_out.strip() or "main"
+    if explicit:
+        return explicit
+    resolved_base_branch = resolve_default_branch(repo_root)
+    if resolved_base_branch:
+        return resolved_base_branch
+    print(
+        colored(
+            f"warning: could not resolve the repository's default branch "
+            f"(no remote configured, offline, etc.); stamping base_branch as "
+            f"the checked-out branch '{current_branch}'. Pass --base-branch to override.",
+            Colors.YELLOW,
+        ),
+        file=sys.stderr,
+    )
+    return current_branch
+
+
 # =============================================================================
 # Command: create
 # =============================================================================
@@ -397,14 +422,8 @@ def cmd_create(args: argparse.Namespace) -> int:
         )
         return 1
 
-    ensure_tasks_dir(repo_root)
-
-    if not _closed_task_destination(dir_name, repo_root):
-        print(
-            colored("Error: task path is not a closed child of .trellis/tasks", Colors.RED),
-            file=sys.stderr,
-        )
-        return 1
+    explicit_base_branch: str | None = getattr(args, "base_branch", None)
+    base_branch = _resolve_create_base_branch(repo_root, explicit_base_branch)
 
     tasks_dir = get_tasks_dir(repo_root)
     task_dir = tasks_dir / dir_name
@@ -417,39 +436,21 @@ def cmd_create(args: argparse.Namespace) -> int:
         print("Use a new slug if you intend to create a new task.", file=sys.stderr)
         return 1
 
+    ensure_tasks_dir(repo_root)
+
+    if not _closed_task_destination(dir_name, repo_root):
+        print(
+            colored("Error: task path is not a closed child of .trellis/tasks", Colors.RED),
+            file=sys.stderr,
+        )
+        return 1
+
     if task_dir.exists():
         print(colored(f"Warning: Task directory already exists: {dir_name}", Colors.YELLOW), file=sys.stderr)
     else:
         task_dir.mkdir(parents=True)
 
     today = datetime.now().strftime("%Y-%m-%d")
-
-    # Record the PR target branch. Prefer the repo's actual default branch
-    # (origin/HEAD) so creating a task from a feature branch doesn't
-    # mis-stamp that feature branch as the PR target (#399 item 1). Falls
-    # back to the checked-out branch when the default can't be resolved
-    # (no remote configured, offline, etc.) — the pre-existing behavior.
-    # --base-branch lets the caller override both when neither is correct.
-    _, branch_out, _ = run_git(["branch", "--show-current"], cwd=repo_root)
-    current_branch = branch_out.strip() or "main"
-    explicit_base_branch: str | None = getattr(args, "base_branch", None)
-    if explicit_base_branch:
-        base_branch = explicit_base_branch
-    else:
-        resolved_base_branch = resolve_default_branch(repo_root)
-        if resolved_base_branch:
-            base_branch = resolved_base_branch
-        else:
-            base_branch = current_branch
-            print(
-                colored(
-                    f"warning: could not resolve the repository's default branch "
-                    f"(no remote configured, offline, etc.); stamping base_branch as "
-                    f"the checked-out branch '{base_branch}'. Pass --base-branch to override.",
-                    Colors.YELLOW,
-                ),
-                file=sys.stderr,
-            )
 
     description = (args.description or "").strip()
     if not description.strip():

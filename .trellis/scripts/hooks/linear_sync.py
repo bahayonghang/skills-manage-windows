@@ -31,9 +31,22 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+
+_SCRIPTS_DIR = Path(__file__).resolve().parents[1]
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from common.subprocess_supervision import (
+    DEFAULT_STREAM_CAP_BYTES,
+    LINEARIS_TIMEOUT_SECONDS,
+    BoundedProcessResult,
+    classify_json_command,
+    format_process_diagnostic,
+    run_bounded_process,
+)
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -87,21 +100,37 @@ def _write_task(data: dict, path: str) -> None:
         f.write("\n")
 
 
-def _linearis(*args: str) -> dict | None:
-    result = subprocess.run(
-        ["linearis", *args],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
+LINEARIS_ARGV = ["linearis"]
+
+
+@dataclass(frozen=True)
+class LinearisResult:
+    kind: str
+    payload: dict | None
+    process: BoundedProcessResult
+
+
+def invoke_linearis(*args: str) -> LinearisResult:
+    result = run_bounded_process(
+        [*LINEARIS_ARGV, *args],
+        timeout_seconds=LINEARIS_TIMEOUT_SECONDS,
+        max_stdout_bytes=DEFAULT_STREAM_CAP_BYTES,
+        max_stderr_bytes=DEFAULT_STREAM_CAP_BYTES,
     )
-    if result.returncode != 0:
-        print(f"linearis error: {result.stderr.strip()}", file=sys.stderr)
+    kind = classify_json_command(result)
+    payload: dict | None = None
+    if kind == "ok":
+        text = result.stdout.decode("utf-8", errors="replace").strip()
+        payload = json.loads(text) if text else None
+    return LinearisResult(kind=kind, payload=payload, process=result)
+
+
+def _linearis(*args: str) -> dict | None:
+    result = invoke_linearis(*args)
+    if result.kind != "ok":
+        print(format_process_diagnostic(result.process, label="linearis"), file=sys.stderr)
         sys.exit(1)
-    stdout = result.stdout.strip()
-    if stdout:
-        return json.loads(stdout)
-    return None
+    return result.payload
 
 
 def _get_linear_issue(task: dict) -> str | None:

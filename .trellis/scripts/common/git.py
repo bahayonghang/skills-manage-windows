@@ -39,26 +39,28 @@ def run_git(
 
 
 def resolve_default_branch(repo_root: Path) -> str | None:
-    """Resolve the repository's default branch (origin/HEAD target).
+    """Resolve the repository's default branch from local refs/config only.
 
-    Tries the local `refs/remotes/origin/HEAD` symbolic ref first (no
-    network access), then falls back to `git remote show origin` (which
-    may hit the network but also repairs a missing/stale symbolic-ref).
-    Returns None when neither resolves, so callers can fall back to their
-    own pre-existing behavior.
+    Reads ``refs/remotes/origin/HEAD`` then repo-local ``init.defaultBranch``.
+    Does not call ``git remote show`` or any other network Git command.
+    Returns None when neither local source resolves so callers can use an
+    explicit ``--base-branch`` or the checked-out branch fallback.
     """
-    rc, out, _ = run_git(["symbolic-ref", "refs/remotes/origin/HEAD"], cwd=repo_root)
+    rc, out, _ = run_git(
+        ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"],
+        cwd=repo_root,
+        timeout=5,
+    )
     if rc == 0 and out.strip():
         return out.strip().rsplit("/", 1)[-1]
 
-    rc, out, _ = run_git(["remote", "show", "origin"], cwd=repo_root)
-    if rc == 0:
-        for line in out.splitlines():
-            line = line.strip()
-            if line.startswith("HEAD branch:"):
-                branch = line.split(":", 1)[1].strip()
-                if branch and branch != "(unknown)":
-                    return branch
+    rc, out, _ = run_git(
+        ["config", "--local", "--get", "init.defaultBranch"],
+        cwd=repo_root,
+        timeout=5,
+    )
+    if rc == 0 and out.strip():
+        return out.strip()
 
     return None
 

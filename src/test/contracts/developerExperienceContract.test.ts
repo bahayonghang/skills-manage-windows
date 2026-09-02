@@ -1,8 +1,10 @@
 /// <reference types="node" />
 
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
+import { parseFrontmatter } from "@/lib/frontmatter";
 
 type WorkflowStep = {
   run?: string;
@@ -124,3 +126,98 @@ describe("developer and PR experience contract", () => {
     }
   });
 });
+
+type SkillCatalogEntry = {
+  name: string;
+  entrypoint: string;
+  raw: string;
+};
+
+type SkillCatalogIssue = "duplicate-name" | "duplicate-entrypoint" | "bootstarp";
+
+function collectSkills(root: string): SkillCatalogEntry[] {
+  if (!existsSync(root) || !statSync(root).isDirectory()) {
+    return [];
+  }
+  const entries: SkillCatalogEntry[] = [];
+  for (const dirent of readdirSync(root, { withFileTypes: true })) {
+    if (!dirent.isDirectory()) {
+      continue;
+    }
+    const skillMd = join(root, dirent.name, "SKILL.md");
+    if (!existsSync(skillMd)) {
+      continue;
+    }
+    const raw = readFileSync(skillMd, "utf8");
+    const parsed = parseFrontmatter(raw);
+    const name = String(parsed.frontmatterData.name ?? dirent.name);
+    entries.push({
+      name,
+      entrypoint: dirent.name,
+      raw: `${parsed.frontmatterRaw}\n${dirent.name}`,
+    });
+  }
+  return entries;
+}
+
+function catalogIssues(entries: SkillCatalogEntry[]): SkillCatalogIssue[] {
+  const issues: SkillCatalogIssue[] = [];
+  const names = entries.map((entry) => entry.name);
+  const entrypoints = entries.map((entry) => entry.entrypoint);
+  if (new Set(names).size !== names.length) {
+    issues.push("duplicate-name");
+  }
+  if (new Set(entrypoints).size !== entrypoints.length) {
+    issues.push("duplicate-entrypoint");
+  }
+  if (entries.some((entry) => /bootstarp/i.test(`${entry.name}\n${entry.entrypoint}\n${entry.raw}`))) {
+    issues.push("bootstarp");
+  }
+  return issues;
+}
+
+describe("Trellis skill catalog contract", () => {
+  const skillRoots = [".agents/skills", ".claude/skills"] as const;
+
+  it("fails on duplicate skill names", () => {
+    expect(
+      catalogIssues([
+        { name: "trellis-spec-bootstrap", entrypoint: "a", raw: "name: trellis-spec-bootstrap" },
+        { name: "trellis-spec-bootstrap", entrypoint: "b", raw: "name: trellis-spec-bootstrap" },
+      ]),
+    ).toEqual(["duplicate-name"]);
+  });
+
+  it("fails on duplicate skill entrypoints", () => {
+    expect(
+      catalogIssues([
+        { name: "one", entrypoint: "trellis-spec-bootstrap", raw: "name: one" },
+        { name: "two", entrypoint: "trellis-spec-bootstrap", raw: "name: two" },
+      ]),
+    ).toEqual(["duplicate-entrypoint"]);
+  });
+
+  it("fails on a bootstarp misspelling", () => {
+    expect(
+      catalogIssues([
+        {
+          name: "trellis-spec-bootstarp",
+          entrypoint: "trellis-spec-bootstarp",
+          raw: "name: trellis-spec-bootstarp",
+        },
+      ]),
+    ).toEqual(["bootstarp"]);
+  });
+
+  it("keeps unique catalogs without trellis-spec-bootstarp when skill trees exist", () => {
+    for (const root of skillRoots) {
+      if (!existsSync(root)) {
+        continue;
+      }
+      expect(existsSync(join(root, "trellis-spec-bootstarp"))).toBe(false);
+      expect(existsSync(join(root, "trellis-spec-bootstrap", "SKILL.md"))).toBe(true);
+      expect(catalogIssues(collectSkills(root))).toEqual([]);
+    }
+  });
+});
+
