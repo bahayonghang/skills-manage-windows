@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/fs-db-operation-journal.md", "reason": "定义跨文件系统与数据库恢复协议"}
+{"file": ".trellis/spec/backend/transactional-mutations.md", "reason": "约束事务提交与回滚语义"}
+{"file": ".trellis/spec/backend/central-mutation-lock.md", "reason": "target mutation guard must serialize import with delete/update/install"}
+{"file": ".trellis/spec/backend/central-update-batching.md", "reason": "update_skills_batch is the only production orchestrator"}
+{"file": ".trellis/spec/backend/github-import-preview-contract.md", "reason": "preview/summary/progress public behavior must stay compatible"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "journal/IPC/logs must not leak credentials or file contents"}
+{"file": ".trellis/spec/backend/startup-recovery.md", "reason": "Local startup recovers Local pending rows only"}
+{"file": ".trellis/spec/backend/transport-seam.md", "reason": "SSH/WSL apply through CentralFs without auto-connecting at startup"}
+{"file": ".trellis/spec/backend/test-support.md", "reason": "fault-injection fixtures for Local/Fake SSH/Fake WSL"}

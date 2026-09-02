@@ -1,0 +1,36 @@
+{
+  "id": "github-import-fs-db-atomicity",
+  "name": "github-import-fs-db-atomicity",
+  "title": "GitHub 导入 FS-DB 原子性与恢复",
+  "description": "修复远程覆盖导入提前删除 backup、本地回滚吞错和远程导入缺失 target mutation guard。",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P0",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-09-02",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "09-02-engineering-audit-remediation",
+  "relatedFiles": [
+    "src-tauri/src/services/github_import/import.rs",
+    "src-tauri/src/services/github_import/remote.rs",
+    "src-tauri/src/services/central_updates/core/content_upsert.rs",
+    "src-tauri/src/services/central_updates/core/batch.rs",
+    "src-tauri/src/services/central_mutation/mod.rs",
+    "src-tauri/src/services/central_operation/recovery.rs"
+  ],
+  "notes": "",
+  "meta": {
+    "audit_severity": "critical",
+    "estimated_effort": "M"
+  }
+}
