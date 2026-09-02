@@ -214,3 +214,173 @@ describe.each(["build-ipc-dict.mjs", "build-schema-table.mjs"])(
     });
   },
 );
+
+function rustSqlModule(statements: string[]): string {
+  return statements.map((sql) => `sqlx::query("${sql}");`).join("\n") + "\n";
+}
+
+function generateSchemaMarkdown(sourceText: string, fileName = "example.rs"): string {
+  const rootDir = mkdtempSync(join(tmpdir(), "skillport-schema-parse-"));
+  const sourceDir = join(rootDir, "source");
+  const outputFile = join(rootDir, "generated", "data-model.md");
+  try {
+    mkdirSync(sourceDir, { recursive: true });
+    writeFileSync(join(sourceDir, fileName), sourceText, "utf8");
+    return schemaModule.generateSchemaDocs({
+      sourceDir,
+      outputFile,
+      rootDir,
+      log: () => undefined,
+    });
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+}
+
+describe("schema table parser", () => {
+  it("keeps ALTER ADD COLUMN once using the ALTER definition", () => {
+    const markdown = generateSchemaMarkdown(
+      rustSqlModule([
+        `CREATE TABLE IF NOT EXISTS skill_tags (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL
+        )`,
+        "ALTER TABLE skill_tags ADD COLUMN group_id TEXT NOT NULL DEFAULT 'ungrouped'",
+      ]),
+    );
+
+    expect(markdown.match(/\| `group_id` \|/g)).toEqual(["| `group_id` |"]);
+    expect(markdown).toContain(
+      "| `group_id` | `TEXT` | no | `'ungrouped'` | — |",
+    );
+  });
+
+  it("omits indexes after DROP INDEX", () => {
+    const markdown = generateSchemaMarkdown(
+      rustSqlModule([
+        "CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY)",
+        "CREATE INDEX IF NOT EXISTS idx_items_id ON items(id)",
+        "DROP INDEX IF EXISTS idx_items_id",
+      ]),
+    );
+
+    expect(markdown).not.toContain("idx_items_id");
+    expect(markdown).not.toContain("Indexes:");
+  });
+
+  it("keeps only the rebuilt index definition after DROP then CREATE", () => {
+    const markdown = generateSchemaMarkdown(
+      rustSqlModule([
+        `CREATE TABLE IF NOT EXISTS items (
+            id TEXT PRIMARY KEY,
+            name TEXT
+        )`,
+        "CREATE INDEX IF NOT EXISTS idx_items ON items(id)",
+        "DROP INDEX IF EXISTS idx_items",
+        "CREATE INDEX IF NOT EXISTS idx_items ON items(id, name)",
+      ]),
+    );
+
+    expect(markdown).toContain("- `idx_items` on `(id, name)` non-unique");
+    expect(markdown).not.toContain("- `idx_items` on `(id)` non-unique");
+    expect(markdown.match(/`idx_items`/g)).toEqual(["`idx_items`"]);
+  });
+
+  it("labels unique and non-unique indexes", () => {
+    const markdown = generateSchemaMarkdown(
+      rustSqlModule([
+        `CREATE TABLE IF NOT EXISTS skills (
+            id TEXT PRIMARY KEY,
+            uid TEXT,
+            is_central BOOLEAN NOT NULL DEFAULT 0
+        )`,
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_skills_uid ON skills(uid)",
+        "CREATE INDEX IF NOT EXISTS idx_skills_is_central ON skills(is_central)",
+      ]),
+    );
+
+    expect(markdown).toContain("- `idx_skills_uid` on `(uid)` unique");
+    expect(markdown).toContain(
+      "- `idx_skills_is_central` on `(is_central)` non-unique",
+    );
+  });
+
+  it("fails closed on unsupported schema DDL with source path and category", () => {
+    const rootDir = mkdtempSync(join(tmpdir(), "skillport-schema-unknown-"));
+    const sourceDir = join(rootDir, "source");
+    const outputFile = join(rootDir, "generated", "data-model.md");
+
+    try {
+      mkdirSync(sourceDir, { recursive: true });
+      writeFileSync(
+        join(sourceDir, "legacy.rs"),
+        rustSqlModule([
+          "CREATE TABLE IF NOT EXISTS examples (id TEXT PRIMARY KEY)",
+          "ALTER TABLE examples RENAME TO renamed",
+        ]),
+        "utf8",
+      );
+
+      expect(() =>
+        schemaModule.generateSchemaDocs({
+          sourceDir,
+          outputFile,
+          rootDir,
+          log: () => undefined,
+        }),
+      ).toThrow(/unsupported ALTER TABLE in source\/legacy\.rs:\d/);
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("ignores ordinary DML backfill statements", () => {
+    const markdown = generateSchemaMarkdown(
+      rustSqlModule([
+        `CREATE TABLE IF NOT EXISTS skills (
+            id TEXT PRIMARY KEY,
+            uid TEXT
+        )`,
+        "UPDATE skills SET uid = 'backfill' WHERE uid IS NULL",
+        "INSERT INTO skills (id) VALUES ('seed')",
+      ]),
+    );
+
+    expect(markdown).toContain("### `skills`");
+    expect(markdown).toContain("| `uid` | `TEXT` | yes | — | — |");
+  });
+
+  it("documents repository unique uid index and known incremental columns", () => {
+    const sourceDir = join(
+      repositoryRoot,
+      "src-tauri",
+      "src",
+      "db",
+      "schema",
+    );
+    const rootDir = mkdtempSync(join(tmpdir(), "skillport-schema-repo-"));
+    const outputFile = join(rootDir, "generated", "data-model.md");
+
+    try {
+      const markdown = schemaModule.generateSchemaDocs({
+        sourceDir,
+        outputFile,
+        rootDir: repositoryRoot,
+        log: () => undefined,
+      });
+
+      expect(markdown).toContain("- `idx_skills_uid` on `(uid)` unique");
+      expect(markdown).toContain(
+        "- `idx_skills_is_central` on `(is_central)` non-unique",
+      );
+      expect(markdown).toContain("| `group_id` | `TEXT` | yes | — | — |");
+      expect(markdown).toContain("| `proposed_name` | `TEXT` | yes | — | — |");
+      expect(markdown).toContain(
+        "| `proposed_description` | `TEXT` | yes | — | — |",
+      );
+      expect(markdown).toContain("| `last_synced_at` | `TEXT` | yes | — | — |");
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+});

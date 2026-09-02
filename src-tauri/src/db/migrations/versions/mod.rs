@@ -17,12 +17,19 @@ pub(super) struct MigrationDescriptor {
 
 pub(super) const PUBLISHED_WINDOWS_V1_CHECKSUM: &str =
     "aabde4fd51822355cbe2a7982ac895073f6e49e9f34882a50086d145462a736d";
+/// Checksum written by released binaries before base CREATE TABLE included
+/// the ensure_column upgrade columns. Preflight accepts this exact digest.
+pub(super) const PUBLISHED_PRE_FINAL_SCHEMA_V1_CHECKSUM: &str =
+    "173296a19419edf197e3baa3b22de1f33184a1d8631141549751fbf1cfc24f7f";
 
 pub(super) const MIGRATIONS: [MigrationDescriptor; 7] = [
     MigrationDescriptor {
         version: 1,
         source: v1::SOURCE,
-        legacy_checksums: &[PUBLISHED_WINDOWS_V1_CHECKSUM],
+        legacy_checksums: &[
+            PUBLISHED_WINDOWS_V1_CHECKSUM,
+            PUBLISHED_PRE_FINAL_SCHEMA_V1_CHECKSUM,
+        ],
     },
     MigrationDescriptor {
         version: 2,

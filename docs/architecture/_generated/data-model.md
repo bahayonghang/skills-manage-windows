@@ -24,7 +24,7 @@
 | `added_at` | `TEXT` | no | — | — |
 
 Indexes:
-- `idx_collection_skills_skill_id` on `(skill_id)`
+- `idx_collection_skills_skill_id` on `(skill_id)` non-unique
 
 ## `src-tauri/src/db/schema/core.rs`
 
@@ -46,8 +46,9 @@ Indexes:
 | `fs_updated_at` | `TEXT` | yes | — | — |
 
 Indexes:
-- `idx_skills_is_central` on `(is_central)`
-- `idx_skills_is_central_name` on `(is_central, name)`
+- `idx_skills_uid` on `(uid)` unique
+- `idx_skills_is_central` on `(is_central)` non-unique
+- `idx_skills_is_central_name` on `(is_central, name)` non-unique
 
 ### `skill_installations`
 
@@ -61,7 +62,7 @@ Indexes:
 | `created_at` | `TEXT` | no | `(datetime('now'))` | — |
 
 Indexes:
-- `idx_skill_installations_agent_skill_id` on `(agent_id, skill_id)`
+- `idx_skill_installations_agent_skill_id` on `(agent_id, skill_id)` non-unique
 
 ### `agent_skill_observations`
 
@@ -84,8 +85,8 @@ Indexes:
 | `fs_updated_at` | `TEXT` | yes | — | — |
 
 Indexes:
-- `idx_agent_skill_observations_agent_id` on `(agent_id)`
-- `idx_agent_skill_observations_agent_name_dir` on `(agent_id, name, dir_path)`
+- `idx_agent_skill_observations_agent_id` on `(agent_id)` non-unique
+- `idx_agent_skill_observations_agent_name_dir` on `(agent_id, name, dir_path)` non-unique
 
 ### `agents`
 
@@ -177,6 +178,7 @@ Indexes:
 | `is_unknown` | `BOOLEAN` | no | `0` | — |
 | `created_at` | `TEXT` | no | — | — |
 | `updated_at` | `TEXT` | no | — | — |
+| `last_synced_at` | `TEXT` | yes | — | — |
 
 ### `skill_repository_members`
 
@@ -189,7 +191,7 @@ Indexes:
 | `updated_at` | `TEXT` | no | — | — |
 
 Indexes:
-- `idx_skill_repository_members_repository_skill_id` on `(repository_id, skill_id)`
+- `idx_skill_repository_members_repository_skill_id` on `(repository_id, skill_id)` non-unique
 
 ### `skill_repository_sync_skips`
 
@@ -204,7 +206,7 @@ Indexes:
 | `last_seen_at` | `TEXT` | no | — | — |
 
 Indexes:
-- `idx_skill_repository_sync_skips_repository_seen` on `(repository_id, last_seen_at DESC)`
+- `idx_skill_repository_sync_skips_repository_seen` on `(repository_id, last_seen_at DESC)` non-unique
 
 ### `skill_update_states`
 
@@ -223,8 +225,8 @@ Indexes:
 | `error` | `TEXT` | yes | — | — |
 
 Indexes:
-- `idx_skill_update_states_checked_skill` on `(last_checked_at DESC, skill_id)`
-- `idx_skill_update_states_status_skill` on `(status, skill_id)`
+- `idx_skill_update_states_checked_skill` on `(last_checked_at DESC, skill_id)` non-unique
+- `idx_skill_update_states_status_skill` on `(status, skill_id)` non-unique
 
 ### `skill_tag_groups`
 
@@ -239,7 +241,7 @@ Indexes:
 | `updated_at` | `TEXT` | no | — | — |
 
 Indexes:
-- `idx_skill_tag_groups_sort_order` on `(sort_order)`
+- `idx_skill_tag_groups_sort_order` on `(sort_order)` non-unique
 
 ### `skill_tags`
 
@@ -252,6 +254,7 @@ Indexes:
 | `is_builtin` | `BOOLEAN` | no | `0` | — |
 | `created_at` | `TEXT` | no | — | — |
 | `updated_at` | `TEXT` | no | — | — |
+| `group_id` | `TEXT` | yes | — | — |
 
 ### `skill_tag_links`
 
@@ -265,7 +268,7 @@ Indexes:
 | `added_at` | `TEXT` | no | — | — |
 
 Indexes:
-- `idx_skill_tag_links_tag_id` on `(tag_id)`
+- `idx_skill_tag_links_tag_id` on `(tag_id)` non-unique
 
 ### `skill_ai_tag_reviews`
 
@@ -278,9 +281,11 @@ Indexes:
 | `status` | `TEXT` | no | `'pending'` | — |
 | `suggested_at` | `TEXT` | no | — | — |
 | `updated_at` | `TEXT` | no | — | — |
+| `proposed_name` | `TEXT` | yes | — | — |
+| `proposed_description` | `TEXT` | yes | — | — |
 
 Indexes:
-- `idx_skill_ai_tag_reviews_status_updated_skill_tag` on `(status, updated_at DESC, skill_id, tag_id)`
+- `idx_skill_ai_tag_reviews_status_updated_skill_tag` on `(status, updated_at DESC, skill_id, tag_id)` non-unique
 
 ### `skill_repository_pending_additions`
 
@@ -294,7 +299,7 @@ Indexes:
 | `discovered_at` | `TEXT` | no | — | — |
 
 Indexes:
-- `idx_skill_repository_pending_additions_repo` on `(repository_id, discovered_at DESC)`
+- `idx_skill_repository_pending_additions_repo` on `(repository_id, discovered_at DESC)` non-unique
 
 ### `skill_update_inventory_runs`
 
@@ -337,8 +342,8 @@ Indexes:
 | `error` | `TEXT` | yes | — | — |
 
 Indexes:
-- `idx_skill_update_inventory_entries_skill` on `(skill_id, bucket)`
-- `idx_skill_update_inventory_entries_repo` on `(repository_id, bucket)`
+- `idx_skill_update_inventory_entries_skill` on `(skill_id, bucket)` non-unique
+- `idx_skill_update_inventory_entries_repo` on `(repository_id, bucket)` non-unique
 
 ## `src-tauri/src/db/schema/projects.rs`
 
@@ -370,7 +375,7 @@ Indexes:
 | `created_at` | `TEXT` | no | — | — |
 
 Indexes:
-- `idx_psi_project` on `(project_id)`
+- `idx_psi_project` on `(project_id)` non-unique
 
 ## `src-tauri/src/db/schema/saved_views.rs`
 
@@ -388,7 +393,7 @@ Indexes:
 | `updated_at` | `TEXT` | no | — | — |
 
 Indexes:
-- `idx_skill_saved_views_order` on `(sort_order)`
+- `idx_skill_saved_views_order` on `(sort_order)` non-unique
 
 ## `src-tauri/src/db/schema/settings.rs`
 
@@ -422,12 +427,12 @@ Indexes:
 | `batch_id` | `TEXT` | yes | — | — |
 
 Indexes:
-- `idx_operation_logs_created_at` on `(created_at)`
-- `idx_operation_logs_target` on `(target_kind, target_id)`
-- `idx_operation_logs_level_status` on `(level, status)`
-- `idx_operation_logs_action` on `(action)`
-- `idx_operation_logs_category` on `(category)`
-- `idx_operation_logs_batch_id` on `(batch_id)`
+- `idx_operation_logs_created_at` on `(created_at)` non-unique
+- `idx_operation_logs_target` on `(target_kind, target_id)` non-unique
+- `idx_operation_logs_level_status` on `(level, status)` non-unique
+- `idx_operation_logs_action` on `(action)` non-unique
+- `idx_operation_logs_category` on `(category)` non-unique
+- `idx_operation_logs_batch_id` on `(batch_id)` non-unique
 
 ## `src-tauri/src/db/schema/usage.rs`
 
@@ -444,12 +449,12 @@ Indexes:
 | `source` | `TEXT` | no | — | — |
 
 Indexes:
-- `idx_skill_calls_skill` on `(skill)`
-- `idx_skill_calls_source` on `(source)`
-- `idx_skill_calls_ts` on `(timestamp_ms)`
-- `idx_skill_calls_target` on `(target_id)`
-- `idx_skill_calls_target_ts` on `(target_id, timestamp_ms)`
-- `idx_skill_calls_target_skill_ts` on `(target_id, skill, timestamp_ms)`
+- `idx_skill_calls_skill` on `(skill)` non-unique
+- `idx_skill_calls_source` on `(source)` non-unique
+- `idx_skill_calls_ts` on `(timestamp_ms)` non-unique
+- `idx_skill_calls_target` on `(target_id)` non-unique
+- `idx_skill_calls_target_ts` on `(target_id, timestamp_ms)` non-unique
+- `idx_skill_calls_target_skill_ts` on `(target_id, skill, timestamp_ms)` non-unique
 
 ### `skill_call_providers`
 
@@ -482,4 +487,4 @@ Indexes:
 | `scanned_at_ms` | `INTEGER` | no | — | — |
 
 Indexes:
-- `idx_skill_usage_metadata_resolved` on `(target_id, resolved_skill_id)`
+- `idx_skill_usage_metadata_resolved` on `(target_id, resolved_skill_id)` non-unique

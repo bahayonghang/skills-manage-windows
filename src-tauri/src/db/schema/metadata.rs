@@ -24,7 +24,8 @@ pub(super) async fn init(connection: &mut SqliteConnection) -> Result<(), sqlx::
             pinned      BOOLEAN NOT NULL DEFAULT 0,
             is_unknown  BOOLEAN NOT NULL DEFAULT 0,
             created_at  TEXT NOT NULL,
-            updated_at  TEXT NOT NULL
+            updated_at  TEXT NOT NULL,
+            last_synced_at TEXT
         )",
     )
     .execute(&mut *connection)
@@ -154,7 +155,8 @@ pub(super) async fn init(connection: &mut SqliteConnection) -> Result<(), sqlx::
             color       TEXT,
             is_builtin  BOOLEAN NOT NULL DEFAULT 0,
             created_at  TEXT NOT NULL,
-            updated_at  TEXT NOT NULL
+            updated_at  TEXT NOT NULL,
+            group_id    TEXT
         )",
     )
     .execute(&mut *connection)
@@ -199,6 +201,8 @@ pub(super) async fn init(connection: &mut SqliteConnection) -> Result<(), sqlx::
             status       TEXT NOT NULL DEFAULT 'pending',
             suggested_at TEXT NOT NULL,
             updated_at   TEXT NOT NULL,
+            proposed_name TEXT,
+            proposed_description TEXT,
             PRIMARY KEY (skill_id, tag_id)
         )",
     )
