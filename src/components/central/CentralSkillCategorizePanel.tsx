@@ -271,7 +271,11 @@ export function CentralSkillCategorizePanel({
                         <span className="rounded-full bg-muted px-2 py-0.5">
                           {review.tag.name}
                         </span>
-                        <span>{Math.round(review.confidence * 100)}%</span>
+                        <span>
+                          {review.confidence == null
+                            ? "—"
+                            : `${Math.round(review.confidence * 100)}%`}
+                        </span>
                       </div>
                     </div>
                     <AlertTriangle className="size-4 shrink-0 text-warning-foreground" />

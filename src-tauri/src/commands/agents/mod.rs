@@ -19,6 +19,7 @@ use crate::AppState;
 
 /// An agent enriched with a live `is_detected` flag derived from the file
 /// system at query time, rather than from the last scan run.
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentWithStatus {
     pub id: String,
@@ -369,6 +370,7 @@ pub async fn set_agent_enabled_impl(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn get_agents(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<Vec<AgentWithStatus>> {

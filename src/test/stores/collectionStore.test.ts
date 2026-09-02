@@ -200,7 +200,7 @@ describe("collectionStore", () => {
     expect(state.collections).toHaveLength(3);
   });
 
-  it("createCollection with no description passes undefined", async () => {
+  it("createCollection with no description passes null", async () => {
     const newCollection: Collection = {
       id: "col-3",
       name: "Test",
@@ -215,7 +215,7 @@ describe("collectionStore", () => {
 
     await useCollectionStore.getState().createCollection("Test");
 
-    expect(invoke).toHaveBeenCalledWith("create_collection", { name: "Test", description: undefined });
+    expect(invoke).toHaveBeenCalledWith("create_collection", { name: "Test", description: null });
   });
 
   // ── updateCollection ───────────────────────────────────────────────────────

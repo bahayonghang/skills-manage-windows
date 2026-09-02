@@ -1,12 +1,5 @@
 import { invoke, isTauriRuntime } from "@/lib/ipc";
-import {
-  SkillAiTagReview,
-  SkillRepository,
-  SkillRepositoryWithStats,
-  SkillTag,
-  SkillTagSuggestionResult,
-  SkillWithLinks,
-} from "@/types";
+import { SkillTagSuggestionResult } from "@/types";
 import {
   createRunningAiTagJob,
   summarizeAiTagResults,
@@ -69,14 +62,18 @@ export function createCentralMetadataSlice({
       return mutateThenRefresh(
         set,
         () =>
-          invoke<SkillRepository>("create_or_update_skill_repository", {
+          invoke("create_or_update_skill_repository", {
+            id: null,
             name,
             sourceType: "manual",
+            owner: null,
+            repo: null,
+            branch: null,
+            url: null,
+            isUnknown: null,
           }),
         async () => {
-          const repositories = await invoke<SkillRepositoryWithStats[]>(
-            "get_skill_repositories",
-          );
+          const repositories = await invoke("get_skill_repositories");
           return { repositories };
         },
       );
@@ -88,8 +85,8 @@ export function createCentralMetadataSlice({
         () => invoke("assign_skills_to_repository", { skillIds, repositoryId }),
         async () => {
           const [skills, repositories] = await Promise.all([
-            invoke<SkillWithLinks[]>("get_central_skills"),
-            invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
+            invoke("get_central_skills"),
+            invoke("get_skill_repositories"),
           ]);
           return { skills, repositories };
         },
@@ -100,14 +97,12 @@ export function createCentralMetadataSlice({
       await mutateThenRefresh(
         set,
         () =>
-          invoke<SkillRepository>("set_skill_repository_pinned", {
+          invoke("set_skill_repository_pinned", {
             repositoryId,
             pinned,
           }),
         async () => {
-          const repositories = await invoke<SkillRepositoryWithStats[]>(
-            "get_skill_repositories",
-          );
+          const repositories = await invoke("get_skill_repositories");
           return { repositories };
         },
       );
@@ -121,9 +116,14 @@ export function createCentralMetadataSlice({
       }
       return mutateThenRefresh(
         set,
-        () => invoke<SkillTag>("create_skill_tag", { name }),
+        () =>
+          invoke("create_skill_tag", {
+            name,
+            description: null,
+            color: null,
+          }),
         async () => {
-          const tags = await invoke<SkillTag[]>("get_skill_tags");
+          const tags = await invoke("get_skill_tags");
           return { tags };
         },
       );
@@ -134,7 +134,7 @@ export function createCentralMetadataSlice({
         set,
         () => invoke("assign_skill_tags", { skillIds, tagIds }),
         async () => {
-          const skills = await invoke<SkillWithLinks[]>("get_central_skills");
+          const skills = await invoke("get_central_skills");
           return { skills };
         },
       );
@@ -146,7 +146,7 @@ export function createCentralMetadataSlice({
         set,
         () => invoke("unassign_skill_tags", { skillId, tagIds }),
         async () => {
-          const skills = await invoke<SkillWithLinks[]>("get_central_skills");
+          const skills = await invoke("get_central_skills");
           return { skills };
         },
       );
@@ -158,9 +158,7 @@ export function createCentralMetadataSlice({
         return;
       }
       try {
-        const reviews = await invoke<SkillAiTagReview[]>(
-          "get_pending_ai_tag_reviews",
-        );
+        const reviews = await invoke("get_pending_ai_tag_reviews");
         set({ aiTagReviews: reviews ?? [], error: null });
       } catch (err) {
         set({ error: String(err) });
@@ -173,8 +171,8 @@ export function createCentralMetadataSlice({
         () => invoke("accept_ai_tag_review", { skillId, tagIds }),
         async () => {
           const [skills, reviews] = await Promise.all([
-            invoke<SkillWithLinks[]>("get_central_skills"),
-            invoke<SkillAiTagReview[]>("get_pending_ai_tag_reviews"),
+            invoke("get_central_skills"),
+            invoke("get_pending_ai_tag_reviews"),
           ]);
           return { skills, aiTagReviews: reviews ?? [] };
         },
@@ -186,9 +184,7 @@ export function createCentralMetadataSlice({
         set,
         () => invoke("skip_ai_tag_review", { skillId }),
         async () => {
-          const reviews = await invoke<SkillAiTagReview[]>(
-            "get_pending_ai_tag_reviews",
-          );
+          const reviews = await invoke("get_pending_ai_tag_reviews");
           return { aiTagReviews: reviews ?? [] };
         },
       );
@@ -206,12 +202,9 @@ export function createCentralMetadataSlice({
       });
       let result: SkillTagSuggestionResult[];
       try {
-        result = await invoke<SkillTagSuggestionResult[]>(
-          "bulk_suggest_skill_tags",
-          {
-            skillIds,
-          },
-        );
+        result = await invoke("bulk_suggest_skill_tags", {
+          skillIds,
+        });
       } catch (err) {
         set((state) => ({
           error: String(err),
@@ -226,8 +219,8 @@ export function createCentralMetadataSlice({
       }
       try {
         const [skills, reviews] = await Promise.all([
-          invoke<SkillWithLinks[]>("get_central_skills"),
-          invoke<SkillAiTagReview[]>("get_pending_ai_tag_reviews"),
+          invoke("get_central_skills"),
+          invoke("get_pending_ai_tag_reviews"),
         ]);
         set((state) => ({
           skills,

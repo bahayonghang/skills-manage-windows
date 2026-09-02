@@ -241,7 +241,7 @@ describe("centralSkillsStore", () => {
     expect(invoke).toHaveBeenCalledWith("get_skill_tags");
     expect(invoke).toHaveBeenCalledWith("get_pending_ai_tag_reviews");
     expect(invoke).toHaveBeenCalledWith("get_central_skill_update_states");
-    expect(invoke).toHaveBeenCalledWith("get_ai_api_key_state");
+    expect(invoke).toHaveBeenCalledWith("get_ai_api_key_state", { provider: null });
   });
 
   it("populates skills and agents after successful loadCentralSkills", async () => {
@@ -1216,8 +1216,14 @@ describe("centralSkillsStore", () => {
 
     expect(result).toEqual(createdRepository);
     expect(invoke).toHaveBeenCalledWith("create_or_update_skill_repository", {
+      id: null,
       name: "my-repo",
       sourceType: "manual",
+      owner: null,
+      repo: null,
+      branch: null,
+      url: null,
+      isUnknown: null,
     });
     expect(invoke).toHaveBeenCalledWith("get_skill_repositories");
     expect(useCentralSkillsStore.getState().isMetadataUpdating).toBe(false);
@@ -1234,7 +1240,11 @@ describe("centralSkillsStore", () => {
     const result = await useCentralSkillsStore.getState().createTag("custom-tag");
 
     expect(result).toEqual(createdTag);
-    expect(invoke).toHaveBeenCalledWith("create_skill_tag", { name: "custom-tag" });
+    expect(invoke).toHaveBeenCalledWith("create_skill_tag", {
+      name: "custom-tag",
+      description: null,
+      color: null,
+    });
     expect(invoke).toHaveBeenCalledWith("get_skill_tags");
     expect(useCentralSkillsStore.getState().tags).toEqual([...mockTags, createdTag]);
     expect(useCentralSkillsStore.getState().isMetadataUpdating).toBe(false);

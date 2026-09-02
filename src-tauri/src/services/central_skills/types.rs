@@ -53,6 +53,7 @@ pub struct CentralSkillsPage {
 /// the skill detail IPC response. This is the frontend-facing version of
 /// `db::SkillInstallation` — `created_at` from the DB is exposed as
 /// `installed_at` for clarity.
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillInstallationDetail {
     pub skill_id: String,
@@ -118,6 +119,7 @@ pub struct DeleteCentralSkillResult {
     pub retained_agent_ids: Vec<String>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeleteCentralSkillPreview {
     pub skill_id: String,
@@ -177,6 +179,7 @@ where
     serializer.serialize_str("This Central skill could not be deleted.")
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BatchDeleteCentralSkillPreviewResult {
     pub previews: Vec<DeleteCentralSkillPreview>,
@@ -215,6 +218,7 @@ pub struct ResetUnknownSourceSkillsPreview {
     pub preview: BatchDeleteCentralSkillPreviewResult,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeleteSkillRepositoryPreview {
     pub repository: SkillRepositoryWithStats,

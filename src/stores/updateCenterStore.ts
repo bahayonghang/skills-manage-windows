@@ -369,7 +369,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
     let result: SkillUpdateApplyResult;
     try {
       result = isTauriRuntime()
-        ? await invoke<SkillUpdateApplyResult>("apply_skill_update_decisions", {
+        ? await invoke("apply_skill_update_decisions", {
             jobId,
             decisions,
           })

@@ -2,14 +2,8 @@ import { invoke, isTauriRuntime } from "@/lib/ipc";
 import { IpcInvokeError } from "@/lib/ipc/errors";
 import { backendErrorStateValue } from "@/lib/backendError";
 import {
-  BatchDeleteCentralSkillPreviewResult,
   BatchInstallResult,
   CentralBatchInstallResult,
-  DeleteSkillRepositoryPreview,
-  SkillAiTagReview,
-  SkillRepositoryWithStats,
-  SkillTag,
-  SkillWithLinks,
 } from "@/types";
 import { indexUpdateStates } from "./centralSkillsStore.shared";
 import type { CentralSkillsState, CentralStoreContext } from "./centralSkillsStore.types";
@@ -88,8 +82,8 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
     }
 
     try {
-      const skills = await invoke<SkillWithLinks[]>("get_central_skills");
-      const repositories = await invoke<SkillRepositoryWithStats[]>("get_skill_repositories");
+      const skills = await invoke("get_central_skills");
+      const repositories = await invoke("get_skill_repositories");
       set({
         skills,
         repositories: repositories ?? get().repositories,
@@ -124,8 +118,8 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
     }
 
     try {
-      const skills = await invoke<SkillWithLinks[]>("get_central_skills");
-      const repositories = await invoke<SkillRepositoryWithStats[]>("get_skill_repositories");
+      const skills = await invoke("get_central_skills");
+      const repositories = await invoke("get_skill_repositories");
       set({
         skills,
         repositories: repositories ?? get().repositories,
@@ -149,7 +143,7 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
       throw new Error("Desktop-only feature: Central skill deletion is available in the Tauri app.");
     }
 
-    const result = await invoke<BatchDeleteCentralSkillPreviewResult>("preview_delete_central_skills", {
+    const result = await invoke("preview_delete_central_skills", {
       skillIds: [skillId],
     });
     const preview = result.previews[0];
@@ -169,7 +163,7 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
       throw new Error("Desktop-only feature: Central skill deletion is available in the Tauri app.");
     }
 
-    return invoke<BatchDeleteCentralSkillPreviewResult>("preview_delete_central_skills", {
+    return invoke("preview_delete_central_skills", {
       skillIds,
     });
   },
@@ -183,7 +177,7 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
       throw new Error("Desktop-only feature: repository deletion is available in the Tauri app.");
     }
 
-    return invoke<DeleteSkillRepositoryPreview>("preview_delete_skill_repository", {
+    return invoke("preview_delete_skill_repository", {
       repositoryId,
     });
   },
@@ -203,10 +197,10 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
 
     try {
       const [skills, repositories, tags, reviews] = await Promise.all([
-        invoke<SkillWithLinks[]>("get_central_skills"),
-        invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
-        invoke<SkillTag[]>("get_skill_tags"),
-        invoke<SkillAiTagReview[]>("get_pending_ai_tag_reviews"),
+        invoke("get_central_skills"),
+        invoke("get_skill_repositories"),
+        invoke("get_skill_tags"),
+        invoke("get_pending_ai_tag_reviews"),
       ]);
       set({
         skills: skills ?? [],
@@ -240,10 +234,10 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
         requests,
       });
       const [skills, repositories, tags, reviews, updateStates] = await Promise.all([
-        invoke<SkillWithLinks[]>("get_central_skills"),
-        invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
-        invoke<SkillTag[]>("get_skill_tags"),
-        invoke<SkillAiTagReview[]>("get_pending_ai_tag_reviews"),
+        invoke("get_central_skills"),
+        invoke("get_skill_repositories"),
+        invoke("get_skill_tags"),
+        invoke("get_pending_ai_tag_reviews"),
         invoke("get_central_skill_update_states"),
       ]);
       set({
@@ -269,10 +263,10 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
         removeCopyAgentIds,
       });
       const [skills, repositories, tags, reviews, updateStates] = await Promise.all([
-        invoke<SkillWithLinks[]>("get_central_skills"),
-        invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
-        invoke<SkillTag[]>("get_skill_tags"),
-        invoke<SkillAiTagReview[]>("get_pending_ai_tag_reviews"),
+        invoke("get_central_skills"),
+        invoke("get_skill_repositories"),
+        invoke("get_skill_tags"),
+        invoke("get_pending_ai_tag_reviews"),
         invoke("get_central_skill_update_states"),
       ]);
       set({
@@ -307,10 +301,10 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
         requests,
       });
       const [skills, repositories, tags, reviews, updateStates] = await Promise.all([
-        invoke<SkillWithLinks[]>("get_central_skills"),
-        invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
-        invoke<SkillTag[]>("get_skill_tags"),
-        invoke<SkillAiTagReview[]>("get_pending_ai_tag_reviews"),
+        invoke("get_central_skills"),
+        invoke("get_skill_repositories"),
+        invoke("get_skill_tags"),
+        invoke("get_pending_ai_tag_reviews"),
         invoke("get_central_skill_update_states"),
       ]);
       set({
@@ -350,8 +344,8 @@ export function createCentralInstallSlice({ set, get }: CentralStoreContext): Pi
     }
 
     try {
-      const skills = await invoke<SkillWithLinks[]>("get_central_skills");
-      const repositories = await invoke<SkillRepositoryWithStats[]>("get_skill_repositories");
+      const skills = await invoke("get_central_skills");
+      const repositories = await invoke("get_skill_repositories");
       set({
         skills,
         repositories: repositories ?? get().repositories,

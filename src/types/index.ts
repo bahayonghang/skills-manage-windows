@@ -5,8 +5,8 @@ export interface AgentWithStatus {
   display_name: string;
   category: string;
   global_skills_dir: string;
-  project_skills_dir?: string;
-  icon_name?: string;
+  project_skills_dir?: string | null;
+  icon_name?: string | null;
   is_detected: boolean;
   is_builtin: boolean;
   is_enabled: boolean;
@@ -158,13 +158,15 @@ export interface Skill {
   id: string;
   uid?: string | null;
   name: string;
-  description?: string;
+  description?: string | null;
   file_path: string;
-  canonical_path?: string;
+  canonical_path?: string | null;
   is_central: boolean;
-  source?: string;
-  content?: string;
+  source?: string | null;
+  content?: string | null;
   scanned_at: string;
+  fs_created_at?: string | null;
+  fs_updated_at?: string | null;
 }
 
 export interface SkillInstallation {
@@ -172,7 +174,7 @@ export interface SkillInstallation {
   agent_id: string;
   installed_path: string;
   link_type: string;
-  symlink_target?: string;
+  symlink_target?: string | null;
   /** ISO 8601 timestamp of when the skill was first installed. */
   installed_at?: string;
 }
@@ -324,8 +326,8 @@ export interface SkillRepositoryWithStats extends SkillRepository {
 export interface SkillTag {
   id: string;
   name: string;
-  description?: string;
-  color?: string;
+  description?: string | null;
+  color?: string | null;
   is_builtin: boolean;
   created_at: string;
   updated_at: string;
@@ -335,7 +337,7 @@ export interface SkillTag {
 export interface SkillTagSuggestion {
   skill_id: string;
   tag: SkillTag;
-  confidence: number;
+  confidence: number | null;
   reason: string;
 }
 
@@ -343,18 +345,18 @@ export interface SkillTagProposal {
   skill_id: string;
   tag_id: string;
   proposed_name: string;
-  proposed_description?: string;
-  confidence: number;
+  proposed_description?: string | null;
+  confidence: number | null;
   reason: string;
 }
 
 export interface SkillTagSuggestionResult {
   skill_id: string;
-  skill_name?: string;
+  skill_name?: string | null;
   suggestions: SkillTagSuggestion[];
   proposals: SkillTagProposal[];
   succeeded?: boolean;
-  error?: string;
+  error?: string | null;
   low_confidence_count?: number;
 }
 
@@ -362,7 +364,7 @@ export interface SkillAiTagReview {
   skill_id: string;
   skill_name: string;
   tag: SkillTag;
-  confidence: number;
+  confidence: number | null;
   reason: string;
   suggested_at: string;
   updated_at: string;
@@ -483,7 +485,7 @@ export interface CentralSkillUpdateResult {
 export interface ScanDirectory {
   id: number;
   path: string;
-  label?: string;
+  label?: string | null;
   is_active: boolean;
   is_builtin: boolean;
   added_at: string;
@@ -613,14 +615,14 @@ export interface ObsidianImportResult {
 export interface SkillRegistry {
   id: string;
   name: string;
-  source_type: "github" | "http_json";
+  source_type: string;
   url: string;
   normalized_url?: string | null;
   is_builtin: boolean;
   is_enabled: boolean;
   last_synced: string | null;
   last_attempted_sync?: string | null;
-  last_sync_status?: "never" | "success" | "error";
+  last_sync_status?: string;
   last_sync_error?: string | null;
   cache_updated_at?: string | null;
   cache_expires_at?: string | null;
@@ -633,7 +635,7 @@ export interface MarketplaceSkill {
   id: string;
   registry_id: string;
   name: string;
-  description?: string;
+  description?: string | null;
   download_url: string;
   is_installed: boolean;
   synced_at: string;

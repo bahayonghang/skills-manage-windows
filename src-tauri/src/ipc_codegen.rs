@@ -110,22 +110,24 @@ fn render_contract(
             format!("{{ {} }}", fields.join("; "))
         };
 
-        let result = command
-            .result()
-            .ok_or_else(|| contract_error(format!("command `{}` has no result", command.name())))?;
-        let (ok, error) = extract_result(result, exporter.types).ok_or_else(|| {
-            contract_error(format!(
-                "command `{}` must return IpcResult<T>",
-                command.name()
-            ))
-        })?;
-        if !is_ipc_error(error, exporter.types) {
-            return Err(contract_error(format!(
-                "command `{}` has an unexpected error type",
-                command.name()
-            )));
-        }
-        let result = render_phase(ok, Phase::Serialize, exporter)?;
+        let result = match command.result() {
+            None => "null".to_string(),
+            Some(result) => {
+                let ok = match extract_result(result, exporter.types) {
+                    Some((ok, error)) => {
+                        if !is_ipc_error(error, exporter.types) {
+                            return Err(contract_error(format!(
+                                "command `{}` has an unexpected error type",
+                                command.name()
+                            )));
+                        }
+                        ok
+                    }
+                    None => result,
+                };
+                render_phase(ok, Phase::Serialize, exporter)?
+            }
+        };
         map.push_str(&format!(
             "  {}: command<{}, {}>(),\n",
             command.name(),

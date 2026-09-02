@@ -126,7 +126,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       return;
     }
     try {
-      const dirs = await invoke<ScanDirectory[]>("get_scan_directories");
+      const dirs = await invoke("get_scan_directories");
       set({ scanDirectories: dirs, isLoadingScanDirs: false });
     } catch (err) {
       set({ error: String(err), isLoadingScanDirs: false });
@@ -148,7 +148,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       }));
       return dir;
     }
-    const dir = await invoke<ScanDirectory>("add_scan_directory", {
+    const dir = await invoke("add_scan_directory", {
       path,
       label: label || null,
     });
@@ -180,7 +180,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       }));
       return;
     }
-    await invoke<void>("set_scan_directory_active", { path, isActive: active });
+    await invoke("set_scan_directory_active", { path, isActive: active });
     set((state) => ({
       scanDirectories: state.scanDirectories.map((dir) =>
         dir.path === path ? { ...dir, is_active: active } : dir
@@ -199,7 +199,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       return;
     }
     try {
-      const value = await invoke<string | null>("get_setting", {
+      const value = await invoke("get_setting", {
         key: CENTRAL_UPDATE_CHECK_MODE_SETTING_KEY,
       });
       set({

@@ -188,7 +188,7 @@ pub async fn list_projects_impl(pool: &DbPool) -> Result<Vec<ProjectDto>, Projec
             pinned: p.pinned,
             added_at: p.added_at,
             last_scanned_at: p.last_scanned_at,
-            skill_count: skills.len(),
+            skill_count: u32::try_from(skills.len()).unwrap_or(u32::MAX),
         });
     }
     Ok(dtos)

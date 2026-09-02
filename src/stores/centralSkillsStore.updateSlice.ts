@@ -3,19 +3,10 @@ import { parseBackendError } from "@/lib/backendError";
 import {
   AiTagProgressPayload,
   CentralSkillUpdateProgressPayload,
-  CentralSkillUpdateResult,
-  CentralSkillUpdateState,
   SkillportStatePortabilityProgressPayload,
-  SkillportStateImportPreview,
   SkillportStateImportResolution,
   SkillportStateImportResult,
-  SkillRepositoryWithStats,
-  SkillTag,
-  SkillWithLinks,
 } from "@/types";
-import type {
-  CentralRepositorySyncPreview,
-} from "@/types/centralRepositorySync";
 import {
   AI_TAG_PROGRESS_EVENT,
   CENTRAL_UPDATE_PROGRESS_EVENT,
@@ -87,7 +78,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       updateJob: createRunningUpdateJob("checking", targetIds, jobId),
     });
     try {
-      const states = await invoke<CentralSkillUpdateState[]>("check_central_skill_updates", {
+      const states = await invoke("check_central_skill_updates", {
         jobId,
         skillIds: skillIds ?? null,
       });
@@ -147,7 +138,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       updateJob: createRunningUpdateJob("checking", targetIds, jobId),
     });
     try {
-      const preview = await invoke<CentralRepositorySyncPreview>(
+      const preview = await invoke(
         "check_central_repository_sync",
         {
           jobId,
@@ -225,9 +216,9 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
         { decisions: ipcDecisions }
       );
       const [skills, repositories, tags, updateStates] = await Promise.all([
-        invoke<SkillWithLinks[]>("get_central_skills"),
-        invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
-        invoke<SkillTag[]>("get_skill_tags"),
+        invoke("get_central_skills"),
+        invoke("get_skill_repositories"),
+        invoke("get_skill_tags"),
         invoke("get_central_skill_update_states"),
       ]);
       const failed =
@@ -299,11 +290,11 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       updateJob: createRunningUpdateJob("updating", skillIds, jobId),
     });
     try {
-      const result = await invoke<CentralSkillUpdateResult>("update_central_skills", {
+      const result = await invoke("update_central_skills", {
         jobId,
         skillIds,
       });
-      const skills = await invoke<SkillWithLinks[]>("get_central_skills");
+      const skills = await invoke("get_central_skills");
       set((state) => state.updateJob.jobId === jobId ? ({
         skills: skills ?? [],
         updateStatuses: mergeUpdateStates(state.updateStatuses, result.states ?? []),
@@ -371,8 +362,8 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
         skillIds,
       });
       const [skills, repositories, updateStates] = await Promise.all([
-        invoke<SkillWithLinks[]>("get_central_skills"),
-        invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
+        invoke("get_central_skills"),
+        invoke("get_skill_repositories"),
         invoke("get_central_skill_update_states"),
       ]);
       set((state) => ({
@@ -477,7 +468,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       },
     });
     try {
-      const json = await invoke<string>("export_skillport_state", { jobId, options: {} });
+      const json = await invoke("export_skillport_state", { jobId, options: {} });
       set((state) => state.portabilityJob.jobId === jobId ? ({
         portabilityJob:
           state.portabilityJob.jobId === jobId && state.portabilityJob.status === "running"
@@ -518,7 +509,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       },
     });
     try {
-      const preview = await invoke<SkillportStateImportPreview>("preview_skillport_state_import", {
+      const preview = await invoke("preview_skillport_state_import", {
         jobId,
         json,
       });
@@ -558,7 +549,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
       },
     });
     try {
-      const result = await invoke<{ json: string; preview: SkillportStateImportPreview }>(
+      const result = await invoke(
         "preview_skillport_state_import_file",
         { jobId, path },
       );
@@ -599,7 +590,7 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
     });
     let result: SkillportStateImportResult;
     try {
-      result = await invoke<SkillportStateImportResult>("import_skillport_state", {
+      result = await invoke("import_skillport_state", {
         jobId,
         json,
         resolutions,
@@ -616,9 +607,9 @@ export function createCentralUpdateSlice({ set, get, bumpGeneration }: CentralSt
     }
     try {
       const [skills, repositories, tags, updateStates] = await Promise.all([
-        invoke<SkillWithLinks[]>("get_central_skills"),
-        invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
-        invoke<SkillTag[]>("get_skill_tags"),
+        invoke("get_central_skills"),
+        invoke("get_skill_repositories"),
+        invoke("get_skill_tags"),
         invoke("get_central_skill_update_states"),
       ]);
       set((state) => state.portabilityJob.jobId === jobId ? ({

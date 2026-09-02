@@ -255,6 +255,7 @@ pub async fn get_central_skills_page(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn preview_delete_central_skills(
     state: State<'_, AppState>,
     skill_ids: Vec<String>,
@@ -459,6 +460,7 @@ pub async fn reset_unknown_source_skills(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn preview_delete_skill_repository(
     state: State<'_, AppState>,
     repository_id: String,

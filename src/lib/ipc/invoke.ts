@@ -40,20 +40,15 @@ function dispatch<T>(command: string, args: unknown): Promise<T> {
 
 /**
  * 全仓唯一 IPC 入口（例外：runtimeLogger 走 invokeRaw，见下）。
- * 命令名 ∈ IPC_COMMANDS 时按名推导 args/result；未类型化命令走第二个
- * overload（`invoke<T>("cmd", args)`），入 map 后删掉显式泛型即获得类型。
+ * 命令名必须 ∈ IPC_COMMANDS，按名推导 args/result。
  * Tauri 运行时直连后端；浏览器演示态路由到 fixture 注册表。
  */
 export function invoke<K extends keyof IpcCommandMap>(
   command: K,
   ...args: CommandArgs<K> extends undefined ? [] : [CommandArgs<K>]
-): Promise<CommandResult<K>>;
-export function invoke<T = unknown>(
-  command: string,
-  args?: unknown,
-): Promise<T>;
-export function invoke<T>(command: string, args?: unknown): Promise<T> {
-  const result = dispatch<T>(command, args);
+): Promise<CommandResult<K>> {
+  const payload = args[0];
+  const result = dispatch<CommandResult<K>>(command, payload);
 
   // 测试里 invoke 可能被 mock 成返回 undefined 的 vi.fn，需守住 .catch 可用
   if (!result || typeof result.catch !== "function") {
@@ -65,7 +60,7 @@ export function invoke<T>(command: string, args?: unknown): Promise<T> {
     if (command !== "record_frontend_runtime_log") {
       ipcFailureRecorder?.(
         command,
-        sanitizeIpcFailureArgs(args),
+        sanitizeIpcFailureArgs(payload),
         normalized,
       );
     }
@@ -77,11 +72,15 @@ export function invoke<T>(command: string, args?: unknown): Promise<T> {
  * 裸通道：绕过 fixture 路由与 failure recorder，直连 Tauri。
  * 仅供 runtimeLogger 日志自举使用（recorder 落盘自身失败会递归）。
  */
-export function invokeRaw<T>(command: string, args?: unknown): Promise<T> {
-  if (args === undefined) {
-    return tauriInvoke<T>(command);
+export function invokeRaw<K extends keyof IpcCommandMap>(
+  command: K,
+  ...args: CommandArgs<K> extends undefined ? [] : [CommandArgs<K>]
+): Promise<CommandResult<K>> {
+  const payload = args[0];
+  if (payload === undefined) {
+    return tauriInvoke<CommandResult<K>>(command);
   }
-  return tauriInvoke<T>(command, args as TauriInvokeArgs);
+  return tauriInvoke<CommandResult<K>>(command, payload as TauriInvokeArgs);
 }
 
 /** 浏览器演示态返回 no-op unlisten，调用方无需再包 isTauriRuntime guard。 */

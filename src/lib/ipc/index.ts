@@ -33,7 +33,6 @@ export {
   IPC_COMMANDS,
   HANDWRITTEN_IPC_COMMAND_NAMES,
   TYPED_IPC_COMMAND_NAMES,
-  UNTYPED_IPC_COMMANDS,
   type CommandArgs,
   type CommandResult,
   type IpcCommandMap,

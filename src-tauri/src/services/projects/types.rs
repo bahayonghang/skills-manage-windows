@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectDto {
@@ -12,9 +13,10 @@ pub struct ProjectDto {
     pub pinned: bool,
     pub added_at: String,
     pub last_scanned_at: Option<String>,
-    pub skill_count: usize,
+    pub skill_count: u32,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectSkillDto {
@@ -35,6 +37,7 @@ pub struct ProjectSkillDto {
 
 /// 反向视图：一个 skill 装在哪些项目下、走哪个 agent、用哪种 link_type。
 /// 用于中央 skill 详情页 sidebar 显示「装在哪些项目」。
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectUsingSkillDto {

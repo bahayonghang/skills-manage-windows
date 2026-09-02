@@ -453,7 +453,7 @@ cargo metadata bins     -> skillport, skillport-cli, release-signature-verifier
 | --- | --- |
 | Rust arg/Serde field rename without artifact | byte check |
 | generated name absent from runtime/caller | parity test |
-| allowlist grows or overlaps typed map | count/overlap test |
+| untyped string overload or generated/handwritten overlap | coverage/typecheck |
 | artifact contains runtime import/callable invoke/unknown | artifact contract test |
 | raw string command rejection returns | fallibility boundary test |
 | Specta output narrower than the Rust/SQLx persisted field | typecheck or persisted-value compatibility test |
@@ -466,7 +466,7 @@ cargo metadata bins     -> skillport, skillport-cli, release-signature-verifier
 - Good: regenerate once, check twice, commit Rust source and deterministic artifact together.
 - Good: a persisted status enum derives SQLx/Serde/Specta from one Rust definition and all historical
   text values decode to the generated TypeScript union.
-- Base: remaining 47 commands stay explicitly allowlisted.
+- Base: every frontend-invoked command is in the generated or handwritten typed map; `invoke` has no string overload.
 - Bad: hand-edit generated output, use a Specta-only type override over `String`, float RC
   dependencies, parse names as proof of result types, or add a feature-gated bin to the application package.
 

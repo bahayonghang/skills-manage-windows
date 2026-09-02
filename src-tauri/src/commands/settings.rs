@@ -170,6 +170,7 @@ pub async fn set_settings_impl(
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn get_scan_directories(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<Vec<ScanDirectory>> {
@@ -180,6 +181,7 @@ pub async fn get_scan_directories(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn add_scan_directory(
     state: State<'_, AppState>,
     path: String,
@@ -235,6 +237,7 @@ pub async fn remove_scan_directory(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn set_scan_directory_active(
     state: State<'_, AppState>,
     path: String,
@@ -273,6 +276,7 @@ pub async fn get_setting(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn get_settings(
     state: State<'_, AppState>,
     keys: Vec<String>,
@@ -393,6 +397,7 @@ pub async fn set_setting(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn set_settings(
     state: State<'_, AppState>,
     values: HashMap<String, String>,

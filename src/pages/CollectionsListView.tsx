@@ -532,7 +532,7 @@ export function CollectionsListView() {
                           variant="collection"
                           key={skill.id}
                           name={skill.name}
-                          description={skill.description}
+                          description={skill.description ?? undefined}
                           aiSummary={aiSummaries[skill.id]}
                           onDetail={() => handleOpenDrawer(skill.id)}
                           detailButtonRef={(node) =>

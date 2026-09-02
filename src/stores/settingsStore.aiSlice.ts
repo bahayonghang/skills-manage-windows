@@ -264,7 +264,7 @@ export function createAiSettingsSlice<TState extends AiSettingsStoreState>(
         return;
       }
       try {
-        const values = await invoke<Record<string, string | null>>("get_settings", {
+        const values = await invoke("get_settings", {
           keys: AI_SETTING_KEYS,
         });
         const loadedSettings = normalizeAiSettings(values);

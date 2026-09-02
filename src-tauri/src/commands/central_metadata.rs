@@ -28,6 +28,7 @@ pub use crate::services::ai_tagging::{
 };
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn get_skill_repositories(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<Vec<SkillRepositoryWithStats>> {
@@ -44,6 +45,7 @@ pub async fn get_skill_repositories(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 #[allow(clippy::too_many_arguments)]
 pub async fn create_or_update_skill_repository(
     state: State<'_, AppState>,
@@ -105,6 +107,7 @@ pub async fn create_or_update_skill_repository(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn assign_skills_to_repository(
     state: State<'_, AppState>,
     repository_id: String,
@@ -147,6 +150,7 @@ pub async fn assign_skills_to_repository(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn set_skill_repository_pinned(
     state: State<'_, AppState>,
     repository_id: String,
@@ -189,6 +193,7 @@ pub async fn set_skill_repository_pinned(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn get_skill_tags(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<Vec<SkillTag>> {
@@ -221,6 +226,7 @@ pub async fn get_central_top_tags(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn create_skill_tag(
     state: State<'_, AppState>,
     name: String,
@@ -259,6 +265,7 @@ pub async fn create_skill_tag(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn assign_skill_tags(
     state: State<'_, AppState>,
     skill_ids: Vec<String>,
@@ -339,6 +346,7 @@ pub async fn unassign_skill_tags(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn get_pending_ai_tag_reviews(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<Vec<SkillAiTagReview>> {
@@ -355,6 +363,7 @@ pub async fn get_pending_ai_tag_reviews(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn accept_ai_tag_review(
     state: State<'_, AppState>,
     skill_id: String,
@@ -395,6 +404,7 @@ pub async fn accept_ai_tag_review(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn skip_ai_tag_review(
     state: State<'_, AppState>,
     skill_id: String,
@@ -469,6 +479,7 @@ pub async fn suggest_skill_tags(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn bulk_suggest_skill_tags(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -536,6 +547,7 @@ pub async fn bulk_suggest_skill_tags(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn cancel_ai_tag_job(
     state: State<'_, AppState>,
     job_id: String,

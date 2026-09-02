@@ -28,7 +28,7 @@ async function importObsidianSkillToPlatform(
   return invoke("import_obsidian_skill_to_platform", {
     dirPath: skill.dir_path,
     agentId,
-    method,
+    method: method ?? null,
   });
 }
 

@@ -108,7 +108,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
       return;
     }
     try {
-      const collections = await invoke<Collection[]>("get_collections");
+      const collections = await invoke("get_collections");
       set({ collections: collections ?? [], isLoading: false, hasLoaded: true });
       usePlatformStore.getState().setCollectionCount(collections?.length ?? 0);
     } catch (err) {
@@ -122,9 +122,12 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
   createCollection: async (name: string, description?: string) => {
     set({ error: null });
     try {
-      const collection = await invoke<Collection>("create_collection", { name, description });
+      const collection = await invoke("create_collection", {
+        name,
+        description: description ?? null,
+      });
       // Refresh collections list.
-      const collections = await invoke<Collection[]>("get_collections");
+      const collections = await invoke("get_collections");
       set({ collections: collections ?? [], hasLoaded: true });
       usePlatformStore.getState().setCollectionCount(collections?.length ?? 0);
       return collection;
@@ -140,13 +143,13 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
   updateCollection: async (id: string, name: string, description?: string) => {
     set({ error: null });
     try {
-      const collection = await invoke<Collection>("update_collection", {
+      const collection = await invoke("update_collection", {
         collectionId: id,
         name,
-        description,
+        description: description ?? null,
       });
       // Refresh collections list.
-      const collections = await invoke<Collection[]>("get_collections");
+      const collections = await invoke("get_collections");
       set({ collections: collections ?? [], hasLoaded: true });
       usePlatformStore.getState().setCollectionCount(collections?.length ?? 0);
       // Also update currentDetail if it's for this collection.
@@ -176,7 +179,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
     try {
       await invoke("delete_collection", { collectionId: id });
       // Refresh collections list.
-      const collections = await invoke<Collection[]>("get_collections");
+      const collections = await invoke("get_collections");
       set({ collections: collections ?? [], hasLoaded: true });
       usePlatformStore.getState().setCollectionCount(collections?.length ?? 0);
       // Clear currentDetail if it was for this collection.
@@ -214,7 +217,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
       return;
     }
     try {
-      const detail = await invoke<CollectionDetail>("get_collection_detail", {
+      const detail = await invoke("get_collection_detail", {
         collectionId: id,
       });
       if (isCurrentRequest()) {
@@ -281,7 +284,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
    */
   exportCollection: async (collectionId: string) => {
     try {
-      return await invoke<string>("export_collection", { collectionId });
+      return await invoke("export_collection", { collectionId });
     } catch (err) {
       set({ error: String(err) });
       throw err;
@@ -296,7 +299,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
     try {
       const collection = await invoke("import_collection", { json });
       // Refresh collections list.
-      const collections = await invoke<Collection[]>("get_collections");
+      const collections = await invoke("get_collections");
       set({ collections: collections ?? [], hasLoaded: true });
       usePlatformStore.getState().setCollectionCount(collections?.length ?? 0);
       return collection;
@@ -313,7 +316,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
       return;
     }
     try {
-      const collections = await invoke<Collection[]>("get_collections");
+      const collections = await invoke("get_collections");
       set({ collections: collections ?? [], hasLoaded: true });
       usePlatformStore.getState().setCollectionCount(collections?.length ?? 0);
     } catch (err) {

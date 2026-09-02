@@ -21,19 +21,20 @@ import type { UnlistenFn } from "@tauri-apps/api/event";
 import { invoke, listen, type UnlistenFn } from "@/lib/ipc";
 ```
 
-## 约定 2：命令按名类型化（双 overload + 覆盖率 ratchet）
+## 约定 2：命令按名类型化（无 untyped 回退）
 
-**What**：`src/lib/ipc/commandMap.ts` 的 `IPC_COMMANDS` 按命令名登记 args/result 类型（`command<Args, Result>()` 幻影值模式，单一来源同时供类型推导与运行时枚举）。`invoke` 双 overload：命令 ∈ map → 按名推导，无需写泛型；未类型化命令走 `invoke<T>(command, args?)` 兼容 overload。
+**What**：`src/lib/ipc/commandMap.ts` 的 `IPC_COMMANDS` 由 generated map ∪ handwritten map 组成（`command<Args, Result>()` 幻影值）。`invoke` / `invokeRaw` 只接受 `keyof IpcCommandMap`：命令名、args、result 均按名推导。禁止生产 string/generic fallback，也禁止 `UNTYPED_IPC_COMMANDS` 允许清单。
 
-**新增 IPC 命令的操作**：优先在 `IPC_COMMANDS` 加一行类型化条目；确有理由暂缓时登记进 `UNTYPED_IPC_COMMANDS` 允许清单。`src/test/contracts/ipcCommandCoverage.test.ts` 强制：全仓 invoke 字面量 ∈ map ∪ 清单、清单零僵尸条目、命令类型化后必须离开清单（只减不增）、map ≥ 40。
+**新增 IPC 命令的操作**：在 `ipc_registry.rs::__skillport_generated_commands` 登记既有 Rust command path，给实际 boundary DTO 补最小 `specta::Type`，运行 `pnpm ipc:codegen`。不得手写平行 schema，不得恢复 string overload。`src/test/contracts/ipcCommandCoverage.test.ts` 强制：全仓 invoke 字面量 ∈ generated ∪ handwritten、两 map 无重叠、runtime−frontend 精确等于 backend-only、generated args/result 不含 `unknown`、map ≥ 40。
 
 **Wrong vs Correct**：
 
 ```ts
-// ❌ Wrong：已入 map 的命令还写显式泛型（掩盖类型漂移）
+// ❌ Wrong：显式泛型或任意 string 掩盖漂移
 const skills = await invoke<ScannedSkill[]>("get_skills_by_agent", { agentId });
+await invoke("not_a_real_command" as string, {});
 
-// ✅ Correct：按名推导（map 中 get_skills_by_agent 已定义返回类型）
+// ✅ Correct：按名推导
 const skills = await invoke("get_skills_by_agent", { agentId });
 ```
 
@@ -87,8 +88,8 @@ normalizeIpcRejection(error: unknown): Error
 failureRecorder(command, sanitizedArgs, normalizedError): void
 ```
 
-typed、generated、untyped 与 backend-only command 的当前数量由 `ipcCommandCoverage.test.ts` 从 registry 和
-command map 计算，不在本规范复制快照。
+typed、generated 与 backend-only command 的当前数量由 `ipcCommandCoverage.test.ts` 从 registry 和
+command map 计算，不在本规范复制快照。生产路径不再有 untyped allowlist。
 
 ### 3. Contracts
 

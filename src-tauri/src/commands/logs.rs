@@ -362,6 +362,7 @@ pub async fn clear_runtime_logs(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub fn record_frontend_runtime_log(payload: FrontendRuntimeLogPayload) {
     logging::record_frontend_runtime_log(payload);
 }

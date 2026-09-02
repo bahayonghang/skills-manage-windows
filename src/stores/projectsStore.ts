@@ -49,7 +49,7 @@ async function refreshProjectSkills(
       | ((state: ProjectsState) => Partial<ProjectsState>)
   ) => void
 ): Promise<ProjectSkill[]> {
-  const skills = await invoke<ProjectSkill[]>("get_project_skills", {
+  const skills = await invoke("get_project_skills", {
     id: projectId,
   });
   set((state) => ({
@@ -115,7 +115,7 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
     }
     try {
       await setupScannedListener(set);
-      const list = await invoke<Project[]>("list_projects");
+      const list = await invoke("list_projects");
       set({ projects: list, isLoading: false });
     } catch (err) {
       set({ error: String(err), isLoading: false });
@@ -127,7 +127,7 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
       return null;
     }
     try {
-      const picked = await invoke<string | null>("pick_project_folder");
+      const picked = await invoke("pick_project_folder");
       return picked ?? null;
     } catch (err) {
       set({ error: String(err) });
@@ -142,7 +142,7 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
     }
     try {
       await setupScannedListener(set);
-      const project = await invoke<Project>("add_project", { path });
+      const project = await invoke("add_project", { path });
       set((state) => {
         const exists = state.projects.some((p) => p.id === project.id);
         const projects = exists
@@ -206,7 +206,7 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
       return { scanningProjectIds: next, error: null };
     });
     try {
-      const skillCount = await invoke<number>("rescan_project", { id });
+      const skillCount = await invoke("rescan_project", { id });
       set((state) => {
         const next = new Set(state.scanningProjectIds);
         next.delete(id);

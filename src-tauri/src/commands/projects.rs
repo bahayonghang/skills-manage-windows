@@ -25,6 +25,7 @@ const PROJECT_SCANNED_EVENT: &str = "project:scanned";
 /// 弹原生文件夹选择对话框，返回用户挑选的项目根绝对路径。
 /// 用户取消返回 `Ok(None)`，前端据此决定是否继续 add 流程。
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn pick_project_folder(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -78,6 +79,7 @@ pub async fn pick_project_folder(
 /// add 项目：立即返回 ProjectDto（skill_count 初始为 0），扫描在后台异步执行，
 /// 完成后 emit `project:scanned`。
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn add_project(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -151,6 +153,7 @@ pub async fn add_project(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn list_projects(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<Vec<ProjectDto>> {
@@ -166,6 +169,7 @@ pub async fn list_projects(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn rename_project(
     state: State<'_, AppState>,
     id: String,
@@ -196,6 +200,7 @@ pub async fn rename_project(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn set_project_pinned(
     state: State<'_, AppState>,
     id: String,
@@ -230,11 +235,12 @@ pub async fn set_project_pinned(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn rescan_project(
     state: State<'_, AppState>,
     app: AppHandle,
     id: String,
-) -> crate::ipc_error::IpcResult<usize> {
+) -> crate::ipc_error::IpcResult<u32> {
     crate::ipc_boundary_async!("rescan_project", {
         let entry = crate::ipc_registry::command_policy("rescan_project")
             .expect("rescan_project must be registered");
@@ -248,9 +254,9 @@ pub async fn rescan_project(
             &state,
             definition,
             context,
-            |count: &usize| {
+            |count: &u32| {
                 SafeOperationResult::succeeded("Project rescanned.")
-                    .count(SafeDetailKey::AffectedCount, *count as u64)
+                    .count(SafeDetailKey::AffectedCount, u64::from(*count))
             },
             || async move {
                 let count = projects::rescan_project_impl(&pool, &id)
@@ -265,7 +271,7 @@ pub async fn rescan_project(
                         skill_count: count,
                     },
                 );
-                Ok(count)
+                Ok(u32::try_from(count).unwrap_or(u32::MAX))
             },
         )
         .await
@@ -273,6 +279,7 @@ pub async fn rescan_project(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn get_project_skills(
     state: State<'_, AppState>,
     id: String,
@@ -417,6 +424,7 @@ pub async fn uninstall_skill_from_project(
 
 /// 反查中央 skill 装在哪些项目，供详情页 sidebar 展示。
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn list_projects_using_skill(
     state: State<'_, AppState>,
     skill_id: String,

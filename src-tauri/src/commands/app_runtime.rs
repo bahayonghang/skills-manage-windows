@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum AppPlatform {
@@ -9,6 +10,7 @@ pub enum AppPlatform {
     Other,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AppRuntimeInfo {
@@ -37,6 +39,7 @@ pub fn app_runtime_info() -> AppRuntimeInfo {
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub fn get_app_runtime_info() -> AppRuntimeInfo {
     app_runtime_info()
 }

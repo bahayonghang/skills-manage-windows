@@ -6,9 +6,13 @@ import {
   isSafeCorrelationId,
   registerIpcFailureRecorder,
   sanitizeIpcFailureArgs,
+  type CommandArgs,
 } from "@/lib/ipc";
 
 type RuntimeLogLevel = NonNullable<FrontendRuntimeLogPayload["level"]>;
+
+type RuntimeLogCommandPayload = CommandArgs<"record_frontend_runtime_log">["payload"];
+type RuntimeLogDetails = Exclude<RuntimeLogCommandPayload["details"], undefined>;
 
 type RuntimeLogEventDetail =
   FrontendRuntimeLogPayload | string | null | undefined;
@@ -91,8 +95,8 @@ function safeNumber(value: unknown): number | undefined {
     : undefined;
 }
 
-function redactValue(value: unknown, depth = 0): unknown {
-  if (value == null) return value;
+function redactValue(value: unknown, depth = 0): RuntimeLogDetails | null {
+  if (value == null) return null;
   if (typeof value === "string") return "[REDACTED]";
   if (typeof value === "number" || typeof value === "boolean") return value;
   if (value instanceof Error) {
@@ -105,7 +109,7 @@ function redactValue(value: unknown, depth = 0): unknown {
       .map((item) => redactValue(item, depth + 1));
   }
   if (typeof value === "object") {
-    const redacted: Record<string, unknown> = {};
+    const redacted: { [key: string]: RuntimeLogDetails } = {};
     const entries = Object.entries(value as Record<string, unknown>).slice(
       0,
       MAX_OBJECT_FIELDS,
@@ -118,7 +122,7 @@ function redactValue(value: unknown, depth = 0): unknown {
   return "[Unsupported]";
 }
 
-function normalizeIpcFailureDetails(details: unknown): unknown {
+function normalizeIpcFailureDetails(details: unknown): RuntimeLogDetails | undefined {
   if (!details || typeof details !== "object") return undefined;
   const candidate = details as {
     command?: unknown;
@@ -153,12 +157,12 @@ function normalizeIpcFailureDetails(details: unknown): unknown {
 function normalizeGlobalFailureDetails(
   details: unknown,
   includePosition: boolean,
-): unknown {
+): RuntimeLogDetails {
   if (!details || typeof details !== "object") {
     return { errorName: "Error" };
   }
   const candidate = details as Record<string, unknown>;
-  const normalized: Record<string, unknown> = {
+  const normalized: { [key: string]: RuntimeLogDetails } = {
     errorName:
       typeof candidate.errorName === "string"
         ? reviewedErrorName(candidate.errorName)
@@ -173,7 +177,10 @@ function normalizeGlobalFailureDetails(
   return normalized;
 }
 
-function normalizeDetails(source: string, details: unknown): unknown {
+function normalizeDetails(
+  source: string,
+  details: unknown,
+): RuntimeLogDetails | null | undefined {
   if (source === "ipc.failure") return normalizeIpcFailureDetails(details);
   if (source === "window.error") {
     return normalizeGlobalFailureDetails(details, true);
@@ -186,7 +193,7 @@ function normalizeDetails(source: string, details: unknown): unknown {
 
 function normalizePayload(
   payload: FrontendRuntimeLogPayload,
-): FrontendRuntimeLogPayload {
+): RuntimeLogCommandPayload {
   const source = normalizeSource(payload.source);
   return {
     level: normalizeLevel(payload.level),
@@ -225,7 +232,7 @@ export async function recordFrontendRuntimeLog(
   if (!hasTauriRuntime()) return;
 
   try {
-    await invokeRaw<void>("record_frontend_runtime_log", {
+    await invokeRaw("record_frontend_runtime_log", {
       payload: normalizePayload(payload),
     });
   } catch {
