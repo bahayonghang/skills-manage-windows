@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "遵守前端依赖方向和 i18n 约束"}
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "保持 Tauri 事件适配边界"}
