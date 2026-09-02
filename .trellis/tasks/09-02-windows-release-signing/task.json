@@ -1,0 +1,29 @@
+{
+  "id": "windows-release-signing",
+  "name": "windows-release-signing",
+  "title": "Windows 发布签名与密钥边界",
+  "description": "修正主程序、安装包、updater 签名顺序并最小化 updater 私钥与 OIDC 暴露。",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-09-02",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "09-02-engineering-audit-remediation",
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "audit_severity": "high",
+    "estimated_effort": "M"
+  }
+}
