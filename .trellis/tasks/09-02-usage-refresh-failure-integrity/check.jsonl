@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/best-effort-writes.md", "reason": "区分远程失败与持久化替换"}
+{"file": ".trellis/spec/backend/skill-usage-analytics.md", "reason": "usage refresh must not drop cache on remote failure"}

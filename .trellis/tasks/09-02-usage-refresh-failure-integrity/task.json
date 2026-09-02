@@ -1,0 +1,29 @@
+{
+  "id": "usage-refresh-failure-integrity",
+  "name": "usage-refresh-failure-integrity",
+  "title": "Usage 远程刷新失败数据保全",
+  "description": "让远程 usage transport 失败保持为错误，避免以空成功覆盖已有缓存。",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-09-02",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "09-02-engineering-audit-remediation",
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "audit_severity": "high",
+    "estimated_effort": "S"
+  }
+}
