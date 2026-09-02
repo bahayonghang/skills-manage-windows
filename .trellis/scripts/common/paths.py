@@ -12,6 +12,7 @@ Provides:
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -459,6 +460,134 @@ def get_package_path(package: str, repo_root: Path | None = None) -> Path | None
         rel_path = str(info)
 
     return repo_root / rel_path
+
+
+# =============================================================================
+# Repo containment (untrusted path -> canonical in-root path)
+# =============================================================================
+
+_DRIVE_PREFIX_RE = re.compile(r"^[A-Za-z]:")
+_EXTENDED_UNC_PREFIX = "\\\\?\\UNC\\"
+_EXTENDED_PATH_PREFIX = "\\\\?\\"
+_MANIFEST_DIAG_LIMIT = 80
+
+
+class PathContainmentError(ValueError):
+    """Untrusted path is not contained in the allowed root.
+
+    ``kind`` is a stable error category. ``manifest`` is the original untrusted
+    value (truncated in ``str(self)``). The resolved outside absolute path is
+    never included.
+    """
+
+    def __init__(self, kind: str, manifest: str = "") -> None:
+        self.kind = kind
+        self.manifest = manifest
+        shown = truncate_manifest_for_diag(manifest)
+        if shown:
+            super().__init__(f"{kind}: {shown}")
+        else:
+            super().__init__(kind)
+
+
+def truncate_manifest_for_diag(manifest: str, limit: int = _MANIFEST_DIAG_LIMIT) -> str:
+    """Truncate an untrusted manifest path for diagnostics (no resolving)."""
+    text = manifest.replace("\x00", "")
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."
+
+
+def _strip_extended_prefix(path: Path) -> Path:
+    text = str(path)
+    if text.startswith(_EXTENDED_UNC_PREFIX):
+        return Path("\\\\" + text[len(_EXTENDED_UNC_PREFIX) :])
+    if text.startswith(_EXTENDED_PATH_PREFIX):
+        return Path(text[len(_EXTENDED_PATH_PREFIX) :])
+    return path
+
+
+def canonical_path(path: Path) -> Path:
+    """Resolve ``path`` and strip Windows ``\\\\?\\`` extended prefixes."""
+    return _strip_extended_prefix(path.resolve())
+
+
+def _norm_parts(path: Path) -> tuple[str, ...]:
+    if os.name == "nt":
+        return tuple(os.path.normcase(part) for part in path.parts)
+    return path.parts
+
+
+def _is_parts_contained(path: Path, root: Path) -> bool:
+    """True when ``path`` is ``root`` or a descendant, using path components."""
+    path_parts = _norm_parts(path)
+    root_parts = _norm_parts(root)
+    if len(path_parts) < len(root_parts):
+        return False
+    return path_parts[: len(root_parts)] == root_parts
+
+
+def posix_relative_to(path: Path, root: Path) -> str:
+    """Return a POSIX relative path using components, not string prefixes."""
+    extra = path.parts[len(root.parts) :]
+    if not extra:
+        return "."
+    return Path(*extra).as_posix()
+
+
+def resolve_contained_path(untrusted: str, allowed_root: Path) -> Path:
+    """Resolve an untrusted relative path and require it stay in ``allowed_root``.
+
+    Performs lexical rejection (absolute, drive, UNC, ``..``) and a final
+    resolved containment check via path components / ``relative_to`` semantics.
+    Does not use string ``startswith``. Raises ``PathContainmentError``.
+    """
+    if not isinstance(untrusted, str):
+        raise PathContainmentError("lexical", "")
+    if "\x00" in untrusted:
+        raise PathContainmentError("lexical", untrusted)
+    if untrusted.strip() == "":
+        raise PathContainmentError("empty", untrusted)
+
+    raw = untrusted.replace("\\", "/")
+    if untrusted.startswith("\\\\") or raw.startswith("//"):
+        raise PathContainmentError("unc", untrusted)
+    if _DRIVE_PREFIX_RE.match(untrusted) or _DRIVE_PREFIX_RE.match(raw.lstrip("/")):
+        raise PathContainmentError("drive", untrusted)
+
+    if raw.startswith("/") or Path(untrusted).is_absolute():
+        raise PathContainmentError("absolute", untrusted)
+
+    parts: list[str] = []
+    for part in Path(raw).parts:
+        if part in ("/", "\\"):
+            continue
+        if part == "..":
+            raise PathContainmentError("dotdot", untrusted)
+        if part in ("", "."):
+            continue
+        parts.append(part)
+
+    allowed = canonical_path(allowed_root)
+    lexical = allowed.joinpath(*parts) if parts else allowed
+    if not _is_parts_contained(lexical, allowed):
+        raise PathContainmentError("lexical", untrusted)
+
+    try:
+        resolved = canonical_path(lexical)
+    except (OSError, RuntimeError) as exc:
+        raise PathContainmentError("unresolved", untrusted) from exc
+
+    if not _is_parts_contained(resolved, allowed):
+        raise PathContainmentError("escape", untrusted)
+
+    return resolved
+
+
+def contained_posix_relative(untrusted: str, allowed_root: Path) -> str:
+    """Return the canonical repo-relative POSIX path after containment."""
+    resolved = resolve_contained_path(untrusted, allowed_root)
+    return posix_relative_to(resolved, canonical_path(allowed_root))
 
 
 # =============================================================================
