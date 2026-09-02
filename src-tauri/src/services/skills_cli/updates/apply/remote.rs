@@ -8,12 +8,12 @@ use std::sync::atomic::AtomicBool;
 use chrono::Utc;
 use uuid::Uuid;
 
-use crate::db::DbPool;
-use crate::db::{
+use crate::db::repos::skills_cli_updates_repo::{
     self, insert_update_operation, list_pending_update_operations, transition_update_operation,
     transition_update_operation_in_transaction, upsert_update_state_in_transaction,
-    NewSkillsCliUpdateOperation, SkillsCliUpdateStateRow as PersistedSkill,
 };
+use crate::db::DbPool;
+use crate::db::{NewSkillsCliUpdateOperation, SkillsCliUpdateStateRow as PersistedSkill};
 use crate::paths::remote_join;
 use crate::services::central_mutation::{
     acquire_target_mutation_guard, DEFAULT_CENTRAL_MUTATION_TIMEOUT,
@@ -80,7 +80,7 @@ pub(super) async fn apply_updates_remote(
         if !topology_blockers(skill).is_empty() {
             return Err(SkillsCliError::UpdateTopologyConflict);
         }
-        let state = db::get_update_state(pool, &selection.skill_name)
+        let state = skills_cli_updates_repo::get_update_state(pool, &selection.skill_name)
             .await
             .map_err(map_db_error)?
             .ok_or(SkillsCliError::UpdateStale)?;
@@ -306,7 +306,7 @@ pub(super) async fn apply_updates_remote(
     let now = Utc::now().to_rfc3339();
     let mut transaction = pool.begin().await.map_err(map_db_error)?;
     for selection in &request.selections {
-        let mut row = db::get_update_state(pool, &selection.skill_name)
+        let mut row = skills_cli_updates_repo::get_update_state(pool, &selection.skill_name)
             .await
             .map_err(map_db_error)?
             .ok_or(SkillsCliError::UpdateMigration)?;
@@ -386,7 +386,7 @@ pub(super) async fn recover_one_remote(
     cancel: Option<&AtomicBool>,
 ) -> Result<SkillsCliApplyRecoveryResult, SkillsCliError> {
     check_cancel(cancel)?;
-    let row = db::get_update_operation(pool, operation_id)
+    let row = skills_cli_updates_repo::get_update_operation(pool, operation_id)
         .await
         .map_err(map_db_error)?
         .ok_or(SkillsCliError::UpdateRecoveryRequired)?;
@@ -535,7 +535,7 @@ async fn finalize_new_baseline_remote(
     let now = Utc::now().to_rfc3339();
     let mut transaction = pool.begin().await.map_err(map_db_error)?;
     for item in &manifest.selections {
-        let mut row = db::get_update_state(pool, &item.skill_name)
+        let mut row = skills_cli_updates_repo::get_update_state(pool, &item.skill_name)
             .await
             .map_err(map_db_error)?
             .unwrap_or(PersistedSkill {

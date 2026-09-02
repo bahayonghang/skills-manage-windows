@@ -3,7 +3,11 @@
 //! the [`InstallTransport`] hooks; adding a new operation means writing this
 //! orchestration once, not once per transport.
 
-use crate::db::{self, DbPool};
+use crate::db::repos::agents_repo;
+use crate::db::repos::fs_db_operations_repo;
+use crate::db::repos::installations_repo;
+use crate::db::repos::observations_repo;
+use crate::db::DbPool;
 
 use super::error::InstallationError;
 use super::native;
@@ -46,10 +50,10 @@ pub(crate) async fn install_skill_under_guard(
         return Err(InstallationError::CentralAgentTarget);
     }
 
-    let agent = db::get_agent_by_id(pool, agent_id)
+    let agent = agents_repo::get_agent_by_id(pool, agent_id)
         .await?
         .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
-    let central = db::get_agent_by_id(pool, "central")
+    let central = agents_repo::get_agent_by_id(pool, "central")
         .await?
         .ok_or(InstallationError::CentralAgentMissing)?;
 
@@ -138,10 +142,10 @@ pub(crate) async fn uninstall_skill_under_guard(
             .await;
     }
 
-    let agent = db::get_agent_by_id(pool, agent_id)
+    let agent = agents_repo::get_agent_by_id(pool, agent_id)
         .await?
         .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
-    let central = db::get_agent_by_id(pool, "central")
+    let central = agents_repo::get_agent_by_id(pool, "central")
         .await?
         .ok_or(InstallationError::CentralAgentMissing)?;
 
@@ -155,14 +159,14 @@ pub(crate) async fn uninstall_skill_under_guard(
     // the matching scanner observation row is deleted too, so the
     // unused-skills report does not keep showing a stale platform entry
     // until the next scan (R4/D2).
-    let installed_path = db::get_skill_installations(pool, skill_id)
+    let installed_path = installations_repo::get_skill_installations(pool, skill_id)
         .await?
         .into_iter()
         .find(|record| record.agent_id == agent_id)
         .map(|record| record.installed_path);
 
     let observation_row_ids = if let Some(installed_path) = installed_path.as_deref() {
-        db::get_agent_skill_observations(pool, agent_id)
+        observations_repo::get_agent_skill_observations(pool, agent_id)
             .await?
             .into_iter()
             .filter(|observation| {
@@ -178,8 +182,13 @@ pub(crate) async fn uninstall_skill_under_guard(
     };
 
     transport.remove_install(pool, &agent, skill_id).await?;
-    db::delete_skill_installation_with_observations(pool, skill_id, agent_id, &observation_row_ids)
-        .await?;
+    installations_repo::delete_skill_installation_with_observations(
+        pool,
+        skill_id,
+        agent_id,
+        &observation_row_ids,
+    )
+    .await?;
     Ok(())
 }
 
@@ -188,7 +197,7 @@ pub(crate) async fn reject_pending_recovery(
     target: &crate::targets::ActiveTarget,
     skill_id: &str,
 ) -> Result<(), InstallationError> {
-    let pending = db::list_pending_fs_db_operations(pool, target.id()).await?;
+    let pending = fs_db_operations_repo::list_pending_fs_db_operations(pool, target.id()).await?;
     if pending
         .iter()
         .any(|operation| operation.skill_id == skill_id)

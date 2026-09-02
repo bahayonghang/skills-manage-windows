@@ -4,7 +4,10 @@ use chrono::Utc;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::db::{self, DbPool, Skill, SkillRepositoryAssignment, SkillUpdateState};
+use crate::db::repos::repositories_repo;
+use crate::db::repos::skills_repo;
+use crate::db::repos::update_states_repo;
+use crate::db::{DbPool, Skill, SkillRepositoryAssignment, SkillUpdateState};
 use crate::services::github_import::{self, GitHubRepoRef, GitHubRepoSnapshot};
 
 use super::super::error::CentralUpdatesError;
@@ -24,9 +27,9 @@ pub(crate) async fn load_selected_central_skills(
     skill_ids: Option<&[String]>,
 ) -> Result<Vec<Skill>, CentralUpdatesError> {
     if let Some(skill_ids) = skill_ids {
-        return Ok(db::get_central_skills_by_ids(pool, skill_ids).await?);
+        return Ok(skills_repo::get_central_skills_by_ids(pool, skill_ids).await?);
     }
-    Ok(db::get_central_skills(pool).await?)
+    Ok(skills_repo::get_central_skills(pool).await?)
 }
 
 pub(crate) async fn prepare_skill_updates(
@@ -40,9 +43,10 @@ pub(crate) async fn prepare_skill_updates(
         .iter()
         .map(|skill| skill.id.clone())
         .collect::<Vec<_>>();
-    let mut assignments = db::get_skill_repository_assignments_for_skills(pool, &skill_ids).await?;
-    let unknown_repository = db::get_local_unknown_repository(pool).await?;
-    let previous_states = db::get_skill_update_states_for_skills(pool, &skill_ids)
+    let mut assignments =
+        repositories_repo::get_skill_repository_assignments_for_skills(pool, &skill_ids).await?;
+    let unknown_repository = repositories_repo::get_local_unknown_repository(pool).await?;
+    let previous_states = update_states_repo::get_skill_update_states_for_skills(pool, &skill_ids)
         .await?
         .into_iter()
         .map(|state| (state.skill_id.clone(), state))

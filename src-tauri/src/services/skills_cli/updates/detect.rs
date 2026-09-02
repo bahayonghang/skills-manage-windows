@@ -6,10 +6,12 @@ use std::sync::atomic::AtomicBool;
 
 use chrono::Utc;
 
-use crate::db::DbPool;
-use crate::db::{
+use crate::db::repos::skills_cli_updates_repo::{
     self, list_pending_update_operations, list_update_repositories, list_update_states,
     upsert_update_repository_in_transaction, upsert_update_state_in_transaction,
+};
+use crate::db::DbPool;
+use crate::db::{
     SkillsCliUpdateOperationRow, SkillsCliUpdateRepositoryRow as PersistedRepository,
     SkillsCliUpdateStateRow as PersistedSkill,
 };
@@ -439,7 +441,7 @@ async fn verify_update_baseline_from_snapshot(
             continue;
         };
         let local = digests.get(name).cloned();
-        let existing = db::get_update_state(pool, name)
+        let existing = skills_cli_updates_repo::get_update_state(pool, name)
             .await
             .map_err(map_db_error)?;
         let Some(existing) = existing else {

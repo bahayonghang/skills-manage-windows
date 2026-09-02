@@ -4,6 +4,7 @@ pub mod commands;
 pub mod db;
 pub mod fs_util;
 mod hashing;
+mod http_identity;
 #[cfg(feature = "ipc-codegen")]
 pub mod ipc_codegen;
 pub mod ipc_error;

@@ -4,7 +4,9 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::db::repos::agents_repo;
 use crate::db::{self, DbPool};
+
 use crate::targets::{remote_join, ConnectedRemoteTarget, RemotePathInfo};
 
 use super::centralize::{ensure_centralized, ensure_replaceable_target};
@@ -282,10 +284,10 @@ pub(crate) async fn install_central_skill_to_remote_project_outcome_impl(
     project_path: &str,
     method: &str,
 ) -> Result<InstallOutcome, InstallationError> {
-    let agent = db::get_agent_by_id(pool, agent_id)
+    let agent = agents_repo::get_agent_by_id(pool, agent_id)
         .await?
         .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
-    let central = db::get_agent_by_id(pool, "central")
+    let central = agents_repo::get_agent_by_id(pool, "central")
         .await?
         .ok_or(InstallationError::CentralAgentMissing)?;
     let canonical_dir = remote_join(&central.global_skills_dir, skill_id);
@@ -349,10 +351,10 @@ pub(crate) async fn install_central_skill_to_project_outcome_impl(
 ) -> Result<InstallOutcome, InstallationError> {
     ensure_project_dir(project_path).await?;
 
-    let agent = db::get_agent_by_id(pool, agent_id)
+    let agent = agents_repo::get_agent_by_id(pool, agent_id)
         .await?
         .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
-    let central = db::get_agent_by_id(pool, "central")
+    let central = agents_repo::get_agent_by_id(pool, "central")
         .await?
         .ok_or(InstallationError::CentralAgentMissing)?;
     let canonical_dir = PathBuf::from(&central.global_skills_dir).join(skill_id);

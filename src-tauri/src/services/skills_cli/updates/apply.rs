@@ -16,12 +16,12 @@ mod remote;
 use recover::{recover_one, recover_pending_at};
 use remote::{apply_updates_remote, recover_one_remote};
 
-use crate::db::DbPool;
-use crate::db::{
+use crate::db::repos::skills_cli_updates_repo::{
     self, insert_update_operation, transition_update_operation,
     transition_update_operation_in_transaction, upsert_update_state_in_transaction,
-    NewSkillsCliUpdateOperation,
 };
+use crate::db::DbPool;
+use crate::db::NewSkillsCliUpdateOperation;
 use crate::fs_util::run_blocking_fs_with;
 use crate::services::central_mutation::{
     acquire_central_mutation_guard_at, acquire_target_mutation_guard,
@@ -176,7 +176,7 @@ pub(crate) async fn apply_updates_at(
         if !topology_blockers(skill).is_empty() {
             return Err(SkillsCliError::UpdateTopologyConflict);
         }
-        let state = db::get_update_state(context.pool, &selection.skill_name)
+        let state = skills_cli_updates_repo::get_update_state(context.pool, &selection.skill_name)
             .await
             .map_err(map_db_error)?
             .ok_or(SkillsCliError::UpdateStale)?;
@@ -417,10 +417,11 @@ pub(crate) async fn apply_updates_at(
     let now = Utc::now().to_rfc3339();
     let mut transaction = context.pool.begin().await.map_err(map_db_error)?;
     for selection in &request.selections {
-        let mut row = db::get_update_state(context.pool, &selection.skill_name)
-            .await
-            .map_err(map_db_error)?
-            .ok_or(SkillsCliError::UpdateMigration)?;
+        let mut row =
+            skills_cli_updates_repo::get_update_state(context.pool, &selection.skill_name)
+                .await
+                .map_err(map_db_error)?
+                .ok_or(SkillsCliError::UpdateMigration)?;
         row.installed_revision_sha = Some(selection.expected_pending_revision.clone());
         row.installed_upstream_digest = Some(selection.expected_pending_digest.clone());
         row.installed_local_digest = Some(selection.expected_pending_digest.clone());

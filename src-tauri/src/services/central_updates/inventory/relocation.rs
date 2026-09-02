@@ -156,12 +156,13 @@ pub(super) async fn resolve_regular_mode_relocations(
             continue;
         };
 
-        let occupied_by = crate::db::get_skill_id_for_repository_source_path(
-            pool,
-            &item.repository_id,
-            &new_path,
-        )
-        .await?;
+        let occupied_by =
+            crate::db::repos::repository_members_repo::get_skill_id_for_repository_source_path(
+                pool,
+                &item.repository_id,
+                &new_path,
+            )
+            .await?;
         if occupied_by.is_some_and(|owner| owner != item.skill_id) {
             failed_repositories.push(source_missing_failure(
                 &item.repository_id,

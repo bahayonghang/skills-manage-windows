@@ -47,6 +47,9 @@ src/test/contracts/i18nLocales.test.ts
 src/test/contracts/frontendArchitectureContract.test.ts
   update-check owner, lib/store 不 import pages, Tauri event allowlist,
   已删死模块, `@/types` barrel no-growth（排除 `src/test/**` 与 `src/types/**`）
+src/test/contracts/rustBoundaryContract.test.ts
+  services 不引用 commands；central_updates/skills_cli/installation 走 db::repos；
+  历史宽 facade 函数调用 no-growth（388，不是审计文件数 87）
 
 src-tauri/src/services/central_updates/inventory/tests.rs
   all-scope classification + unsupported persistence/reload + invalid source_path

@@ -84,7 +84,7 @@ pub(super) async fn create_remote_preview_workspace(
     let output = connection
         .run_script(
             &script,
-            &[archive_url.as_str(), crate::commands::APP_USER_AGENT],
+            &[archive_url.as_str(), crate::http_identity::APP_USER_AGENT],
         )
         .await
         .map_err(|e| GithubImportError::Remote(e.to_string()))?;

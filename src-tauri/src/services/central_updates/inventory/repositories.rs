@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use crate::db::{self, DbPool, SkillRepository, SkillUpdateState};
+use crate::db::repos::repositories_repo;
+use crate::db::{DbPool, SkillRepository, SkillUpdateState};
 use crate::services::central_updates::{
     CentralRemoteAddedSkill, CentralUpdatesError, PreparedSkillUpdate,
 };
@@ -106,7 +107,9 @@ pub(crate) async fn load_syncable_github_repositories(
 ) -> Result<Vec<(SkillRepository, GitHubRepoRef)>, CentralUpdatesError> {
     let mut repositories = Vec::new();
     for repository_id in repository_ids {
-        let Some(repository) = db::get_skill_repository_by_id(pool, repository_id).await? else {
+        let Some(repository) =
+            repositories_repo::get_skill_repository_by_id(pool, repository_id).await?
+        else {
             continue;
         };
         if repository.is_unknown || repository.source_type != "github" {

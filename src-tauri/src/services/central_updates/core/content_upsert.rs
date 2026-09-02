@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
-use crate::db::{self, DbPool, Skill, SkillUpdateState};
+use crate::db::repos::skills_repo;
+use crate::db::{DbPool, Skill, SkillUpdateState};
 use crate::services::github_import::{GitHubRepoRef, GitHubRepoSnapshot, RemoteSkillCandidate};
 use crate::targets::ActiveTarget;
 
@@ -41,7 +42,7 @@ pub(crate) async fn journaled_central_content_upsert_with_fs(
     fs: &CentralFs,
     input: JournaledCentralContentUpsert<'_>,
 ) -> Result<SkillUpdateState, CentralUpdatesError> {
-    let existing = db::get_skill_by_id(pool, &input.skill.id).await?;
+    let existing = skills_repo::get_skill_by_id(pool, &input.skill.id).await?;
     let local_hash = fs
         .hash_directories(std::slice::from_ref(&input.target_dir))
         .await?
@@ -364,7 +365,7 @@ mod tests {
             },
         );
         let manifest_json = serde_json::to_string(&manifest).unwrap();
-        crate::db::insert_fs_db_operation(
+        crate::db::repos::fs_db_operations_repo::insert_fs_db_operation(
             pool,
             crate::db::NewFsDbOperation {
                 id: &operation_id,
@@ -463,7 +464,7 @@ mod tests {
             assert!(scripts.contains("printf 'FINALIZED\\n'"));
             assert!(!scripts.contains("escape"));
 
-            let stored = crate::db::get_skill_by_id(&pool, "safe-skill")
+            let stored = crate::db::repos::skills_repo::get_skill_by_id(&pool, "safe-skill")
                 .await
                 .expect("skill query")
                 .expect("skill row");
@@ -477,18 +478,24 @@ mod tests {
                 "/home/tester/.skillsmanage/skills/safe-skill/SKILL.md"
             );
             assert!(!stored.file_path.contains('\\'));
-            let assignment = crate::db::get_skill_repository_assignment(&pool, "safe-skill")
-                .await
-                .expect("repository assignment");
+            let assignment = crate::db::repos::repositories_repo::get_skill_repository_assignment(
+                &pool,
+                "safe-skill",
+            )
+            .await
+            .expect("repository assignment");
             assert_eq!(assignment.repository.owner.as_deref(), Some("owner"));
             assert_eq!(assignment.repository.repo.as_deref(), Some("repo"));
             assert_eq!(assignment.repository.branch.as_deref(), Some("main"));
             assert_eq!(assignment.source_path.as_deref(), Some("skills/safe-skill"));
             assert!(!assignment.is_source_unknown);
-            let provenance = crate::db::get_skill_repository_provenance(&pool, "safe-skill")
-                .await
-                .expect("provenance query")
-                .expect("provenance row");
+            let provenance = crate::db::repos::repositories_repo::get_skill_repository_provenance(
+                &pool,
+                "safe-skill",
+            )
+            .await
+            .expect("provenance query")
+            .expect("provenance row");
             assert_eq!(
                 provenance.0.as_deref(),
                 Some("0123456789abcdef0123456789abcdef01234567")
@@ -525,10 +532,11 @@ mod tests {
                 journaled_central_content_upsert_with_fs(&pool, &fs, input(&snapshot)).await;
 
             assert!(state.is_ok(), "{state:?}");
-            let row = crate::db::get_fs_db_operation(&pool, &operation_id)
-                .await
-                .unwrap()
-                .unwrap();
+            let row =
+                crate::db::repos::fs_db_operations_repo::get_fs_db_operation(&pool, &operation_id)
+                    .await
+                    .unwrap()
+                    .unwrap();
             assert_eq!(row.phase, "prepared");
             assert_eq!(row.updated_at, "2000-01-01T00:00:00Z");
             assert!(row.last_error_code.is_none());
@@ -560,10 +568,11 @@ mod tests {
                 error.error().stable_error_code(),
                 "central_operation.remote_fingerprint_protocol"
             );
-            let row = crate::db::get_fs_db_operation(&pool, &operation_id)
-                .await
-                .unwrap()
-                .unwrap();
+            let row =
+                crate::db::repos::fs_db_operations_repo::get_fs_db_operation(&pool, &operation_id)
+                    .await
+                    .unwrap()
+                    .unwrap();
             assert_eq!(row.target_id, fs.target_id());
             assert_eq!(row.target_kind, fs.target_kind());
             assert_eq!(row.phase, "prepared");
@@ -609,7 +618,7 @@ mod tests {
             std::fs::read(target_dir.join("references/guide.md")).unwrap(),
             b"# guide\n"
         );
-        let stored = crate::db::get_skill_by_id(&pool, "safe-skill")
+        let stored = crate::db::repos::skills_repo::get_skill_by_id(&pool, "safe-skill")
             .await
             .unwrap()
             .unwrap();
@@ -653,7 +662,7 @@ mod tests {
         std::fs::write(target_dir.join("SKILL.md"), b"---\nname: old\n---\n").unwrap();
         std::fs::write(target_dir.join("old-only.txt"), b"keep").unwrap();
         let persisted_uid = "uid-persisted-overwrite";
-        crate::db::upsert_skill(
+        crate::db::repos::skills_repo::upsert_skill(
             &pool,
             &Skill {
                 id: "safe-skill".to_string(),
@@ -682,7 +691,7 @@ mod tests {
         .await
         .expect("overwrite upsert");
 
-        let stored = crate::db::get_skill_by_id(&pool, "safe-skill")
+        let stored = crate::db::repos::skills_repo::get_skill_by_id(&pool, "safe-skill")
             .await
             .unwrap()
             .unwrap();

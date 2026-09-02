@@ -252,7 +252,7 @@ async fn load_platform(
     pool: &DbPool,
     skillport_agent_id: &str,
 ) -> Result<PlacementPlatform, SkillsCliError> {
-    let agents = crate::db::get_all_agents(pool)
+    let agents = crate::db::repos::agents_repo::get_all_agents(pool)
         .await
         .map_err(|error| SkillsCliError::Io {
             context: "read platforms",

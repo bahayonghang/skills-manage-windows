@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use crate::db::repos::update_inventory_repo;
 use crate::db::{self, DbPool, SkillUpdateInventoryEntry};
 use crate::services::central_updates::CentralUpdatesError;
 
@@ -131,7 +132,7 @@ pub(super) async fn persist_refresh_inventory(
 
     validate_inventory_entry_keys(&entries)?;
 
-    db::replace_skill_update_inventory(pool, &run, &entries).await?;
+    update_inventory_repo::replace_skill_update_inventory(pool, &run, &entries).await?;
     Ok(())
 }
 
@@ -332,7 +333,10 @@ pub(super) async fn prune_applied_inventory_entries(
     ids.extend(result.deleted_skill_ids.clone());
     ids.extend(result.imported_skill_ids.clone());
     if !ids.is_empty() {
-        let _ =
-            db::delete_skill_update_inventory_entries_for_skills(pool, &normalize_ids(ids)).await;
+        let _ = update_inventory_repo::delete_skill_update_inventory_entries_for_skills(
+            pool,
+            &normalize_ids(ids),
+        )
+        .await;
     }
 }

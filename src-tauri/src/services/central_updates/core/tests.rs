@@ -3,6 +3,7 @@ use super::state::{
     find_remote_skill_candidate, is_fresh_update_available_state, reused_or_prepared_local_hash,
 };
 use super::*;
+use crate::db;
 use crate::db::SkillRepository;
 use crate::services::central_updates::fs::{
     collect_remote_skill_files, ensure_remote_skill_manifest, RemoteSkillFile,

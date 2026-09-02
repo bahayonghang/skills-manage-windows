@@ -5,6 +5,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use chrono::Utc;
 use tracing::Instrument;
 
+use crate::db::repos::fs_db_operations_repo;
+use crate::db::repos::installations_repo;
+use crate::db::repos::repositories_repo;
 use crate::db::{self, DbPool, Skill, SkillUpdateState};
 use crate::services::central_operation::OperationPhase;
 #[cfg(test)]
@@ -184,9 +187,13 @@ pub(crate) async fn update_skills_batch(
             )));
             continue;
         }
-        if let Err(error) =
-            db::transition_fs_db_operation(pool, &update.operation_id, "prepared", "fs_staged")
-                .await
+        if let Err(error) = fs_db_operations_repo::transition_fs_db_operation(
+            pool,
+            &update.operation_id,
+            "prepared",
+            "fs_staged",
+        )
+        .await
         {
             results[update.index] = Some(Err(CentralUpdateItemError::new(
                 CentralUpdateFailurePhase::Stage,
@@ -315,7 +322,7 @@ async fn commit_staged_update(
         ));
     }
     let apply_result = async {
-        db::transition_fs_db_operation_in_transaction(
+        fs_db_operations_repo::transition_fs_db_operation_in_transaction(
             &mut transaction,
             &update.operation_id,
             "fs_staged",
@@ -329,7 +336,7 @@ async fn commit_staged_update(
             &update.plan.remote,
         )
         .await?;
-        db::transition_fs_db_operation_in_transaction(
+        fs_db_operations_repo::transition_fs_db_operation_in_transaction(
             &mut transaction,
             &update.operation_id,
             "fs_swapped",
@@ -369,16 +376,17 @@ async fn commit_staged_update(
     let commit_result = transaction.commit().await;
 
     if let Err(error) = commit_result {
-        let commit_is_visible = db::get_fs_db_operation(pool, &update.operation_id)
-            .await
-            .map_err(|error| {
-                phased_item_error(
-                    update.index,
-                    CentralUpdateFailurePhase::DatabaseCommit,
-                    error.into(),
-                )
-            })?
-            .is_some_and(|row| row.phase == "db_committed");
+        let commit_is_visible =
+            fs_db_operations_repo::get_fs_db_operation(pool, &update.operation_id)
+                .await
+                .map_err(|error| {
+                    phased_item_error(
+                        update.index,
+                        CentralUpdateFailurePhase::DatabaseCommit,
+                        error.into(),
+                    )
+                })?
+                .is_some_and(|row| row.phase == "db_committed");
         if !commit_is_visible {
             let error = rollback_staged_after_db_failure(
                 pool,
@@ -413,9 +421,13 @@ async fn commit_staged_update(
                 error,
             ));
         }
-        if let Err(error) =
-            db::transition_fs_db_operation(pool, &update.operation_id, "db_committed", "completed")
-                .await
+        if let Err(error) = fs_db_operations_repo::transition_fs_db_operation(
+            pool,
+            &update.operation_id,
+            "db_committed",
+            "completed",
+        )
+        .await
         {
             return Err(phased_item_error(
                 update.index,
@@ -432,7 +444,7 @@ async fn commit_staged_update(
             )),
         })
     } else {
-        if let Err(error) = db::transition_fs_db_operation(
+        if let Err(error) = fs_db_operations_repo::transition_fs_db_operation(
             pool,
             &update.operation_id,
             "db_committed",
@@ -477,8 +489,13 @@ async fn rollback_staged_after_db_failure(
         }
         return rollback_error;
     }
-    if let Err(transition_error) =
-        db::transition_fs_db_operation(pool, operation_id, "fs_staged", "rolled_back").await
+    if let Err(transition_error) = fs_db_operations_repo::transition_fs_db_operation(
+        pool,
+        operation_id,
+        "fs_staged",
+        "rolled_back",
+    )
+    .await
     {
         return transition_error.into();
     }
@@ -504,8 +521,13 @@ async fn settle_failed_stage(
         }
         return rollback_error;
     }
-    if let Err(transition_error) =
-        db::transition_fs_db_operation(pool, operation_id, "prepared", "rolled_back").await
+    if let Err(transition_error) = fs_db_operations_repo::transition_fs_db_operation(
+        pool,
+        operation_id,
+        "prepared",
+        "rolled_back",
+    )
+    .await
     {
         return transition_error.into();
     }
@@ -572,7 +594,7 @@ async fn refresh_and_finalize_copies(
                         CentralUpdateFailurePhase::ResultFinalization,
                         error,
                     ))
-                } else if let Err(error) = db::transition_fs_db_operation(
+                } else if let Err(error) = fs_db_operations_repo::transition_fs_db_operation(
                     pool,
                     &update.operation_id,
                     "copies_pending",
@@ -622,7 +644,7 @@ async fn persist_updated_skill_in_transaction(
         fs_created_at: None,
         fs_updated_at: None,
     };
-    db::upsert_skill_with_github_repository_in_transaction(
+    repositories_repo::upsert_skill_with_github_repository_in_transaction(
         transaction,
         &updated_skill,
         &remote.source.repo.owner,
@@ -666,7 +688,7 @@ async fn insert_update_operation(
         &crate::services::central_operation::OperationManifest::Update(manifest.clone()),
     )
     .map_err(|error| CentralUpdatesError::Json(error.to_string()))?;
-    db::insert_fs_db_operation(
+    fs_db_operations_repo::insert_fs_db_operation(
         pool,
         db::NewFsDbOperation {
             id: operation_id,
@@ -696,7 +718,13 @@ async fn persist_update_manifest(
         &crate::services::central_operation::OperationManifest::Update(manifest.clone()),
     )
     .map_err(|error| CentralUpdatesError::Json(error.to_string()))?;
-    db::update_fs_db_operation_manifest(pool, operation_id, phase, &manifest_json).await?;
+    fs_db_operations_repo::update_fs_db_operation_manifest(
+        pool,
+        operation_id,
+        phase,
+        &manifest_json,
+    )
+    .await?;
     Ok(())
 }
 
@@ -711,7 +739,7 @@ async fn record_update_error(
         CentralUpdatesError::Remote(_) => ("update_remote", "Remote update failed".to_string()),
         _ => ("update_failed", "Central update failed".to_string()),
     };
-    db::record_fs_db_operation_error(pool, operation_id, code, &message).await?;
+    fs_db_operations_repo::record_fs_db_operation_error(pool, operation_id, code, &message).await?;
     Ok(())
 }
 
@@ -720,7 +748,7 @@ async fn copy_refresh_requests(
     skill_id: &str,
     source_dir: &Path,
 ) -> Result<Vec<CopyRefreshRequest>, CentralUpdatesError> {
-    let installations = db::get_skill_installations(pool, skill_id).await?;
+    let installations = installations_repo::get_skill_installations(pool, skill_id).await?;
     let mut seen_targets = HashSet::new();
     Ok(installations
         .into_iter()

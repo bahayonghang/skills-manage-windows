@@ -4,6 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::db::repos::skills_repo;
 use crate::db::{self, DbPool};
 
 use super::error::InstallationError;
@@ -23,7 +24,7 @@ pub(crate) async fn ensure_centralized(
     skill_id: &str,
     canonical_dir: &Path,
 ) -> Result<(), InstallationError> {
-    let skill = db::get_skill_by_id(pool, skill_id)
+    let skill = skills_repo::get_skill_by_id(pool, skill_id)
         .await?
         .ok_or_else(|| InstallationError::SkillNotFound(skill_id.to_string()))?;
 
@@ -71,7 +72,7 @@ async fn persist_central_skill_row(
         .join("SKILL.md")
         .to_string_lossy()
         .into_owned();
-    db::upsert_skill(pool, &skill).await?;
+    skills_repo::upsert_skill(pool, &skill).await?;
     Ok(())
 }
 

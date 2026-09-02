@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use crate::db::repos::fs_db_operations_repo;
 use crate::db::{self, DbPool};
 use crate::services::central_operation::{CentralOperationError, OperationPhase, MANIFEST_VERSION};
 use crate::services::central_updates::error::CentralUpdatesError;
@@ -21,7 +22,7 @@ pub(crate) async fn recover_pending_update_operations(
     )
     .await?;
 
-    for row in db::list_pending_fs_db_operations(pool, fs.target_id()).await? {
+    for row in fs_db_operations_repo::list_pending_fs_db_operations(pool, fs.target_id()).await? {
         if row.operation_kind != "central_update" {
             continue;
         }
@@ -36,7 +37,7 @@ pub(super) async fn recover_selected_pending_update_operations(
     skill_ids: &[String],
 ) -> Result<HashMap<String, CentralUpdateItemError>, CentralUpdatesError> {
     let selected = skill_ids.iter().map(String::as_str).collect::<HashSet<_>>();
-    let rows = db::list_pending_fs_db_operations(pool, fs.target_id()).await?;
+    let rows = fs_db_operations_repo::list_pending_fs_db_operations(pool, fs.target_id()).await?;
     let mut failures = HashMap::new();
     for row in rows {
         if !selected.contains(row.skill_id.as_str()) {
@@ -115,15 +116,33 @@ pub(crate) async fn recover_pending_update_operation(
                 record_update_error(pool, &row.id, &error).await?;
                 return Err(error);
             }
-            db::transition_fs_db_operation(pool, &row.id, phase.as_str(), "rolled_back").await?;
+            fs_db_operations_repo::transition_fs_db_operation(
+                pool,
+                &row.id,
+                phase.as_str(),
+                "rolled_back",
+            )
+            .await?;
         }
         OperationPhase::DbCommitted => {
             if manifest.copies.iter().all(|copy| copy.completed) {
                 fs.finalize_operation_update(&manifest).await?;
-                db::transition_fs_db_operation(pool, &row.id, "db_committed", "completed").await?;
+                fs_db_operations_repo::transition_fs_db_operation(
+                    pool,
+                    &row.id,
+                    "db_committed",
+                    "completed",
+                )
+                .await?;
                 return Ok(());
             }
-            db::transition_fs_db_operation(pool, &row.id, "db_committed", "copies_pending").await?;
+            fs_db_operations_repo::transition_fs_db_operation(
+                pool,
+                &row.id,
+                "db_committed",
+                "copies_pending",
+            )
+            .await?;
             recover_copy_projections(pool, fs, &row.id, &mut manifest).await?;
         }
         OperationPhase::CopiesPending => {
@@ -140,7 +159,7 @@ async fn recover_copy_projections(
     operation_id: &str,
     manifest: &mut crate::services::central_operation::UpdateManifest,
 ) -> Result<(), CentralUpdatesError> {
-    let skill_id = db::get_fs_db_operation(pool, operation_id)
+    let skill_id = fs_db_operations_repo::get_fs_db_operation(pool, operation_id)
         .await?
         .ok_or(sqlx::Error::RowNotFound)?
         .skill_id;
@@ -174,6 +193,12 @@ async fn recover_copy_projections(
         return Err(error);
     }
     fs.finalize_operation_update(manifest).await?;
-    db::transition_fs_db_operation(pool, operation_id, "copies_pending", "completed").await?;
+    fs_db_operations_repo::transition_fs_db_operation(
+        pool,
+        operation_id,
+        "copies_pending",
+        "completed",
+    )
+    .await?;
     Ok(())
 }

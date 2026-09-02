@@ -63,7 +63,7 @@ async fn record_github_pat_migration_failure(
 pub(crate) fn github_client() -> Result<reqwest::Client, GithubImportError> {
     match GITHUB_SHARED_CLIENT.get_or_init(|| {
         let builder = reqwest::Client::builder()
-            .user_agent(crate::commands::APP_USER_AGENT)
+            .user_agent(crate::http_identity::APP_USER_AGENT)
             .connect_timeout(GITHUB_CONNECT_TIMEOUT)
             .timeout(GITHUB_REQUEST_TIMEOUT)
             .redirect(reqwest::redirect::Policy::none());
