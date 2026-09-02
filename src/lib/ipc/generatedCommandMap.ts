@@ -287,6 +287,9 @@ export const GENERATED_REVIEWED_IPC_ERROR_CODES = [
   "skills_cli.update_unsupported",
   "startup.rebuild_unavailable",
   "storage.unavailable",
+  "usage.remote_permission",
+  "usage.remote_protocol",
+  "usage.remote_transport",
 ] as const;
 
 export type AiApiKeyState = AiApiKeyState_Serialize | AiApiKeyState_Deserialize;

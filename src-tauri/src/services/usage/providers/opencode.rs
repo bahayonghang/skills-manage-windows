@@ -43,7 +43,7 @@ impl OpenCodeProvider {
     ) -> Result<(ProviderFileCache, Vec<SkillCall>), UsageError> {
         let backend = scope.fs_backend();
         let db_path = Self::db_path(scope);
-        if !backend.exists(&db_path).await {
+        if !backend.exists(&db_path).await? {
             return Ok((cache, vec![]));
         }
 
@@ -152,7 +152,7 @@ impl UsageProvider for OpenCodeProvider {
         SOURCE
     }
 
-    async fn available(&self, scope: &Scope) -> bool {
+    async fn available(&self, scope: &Scope) -> Result<bool, UsageError> {
         let backend = scope.fs_backend();
         backend.exists(&Self::db_path(scope)).await
     }

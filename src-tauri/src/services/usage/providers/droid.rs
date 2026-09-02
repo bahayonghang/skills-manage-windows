@@ -65,7 +65,7 @@ impl UsageProvider for DroidProvider {
         SOURCE
     }
 
-    async fn available(&self, scope: &Scope) -> bool {
+    async fn available(&self, scope: &Scope) -> Result<bool, UsageError> {
         let backend = scope.fs_backend();
         backend.exists(&Self::sessions_dir(scope)).await
     }
@@ -127,7 +127,7 @@ fn scan_local(
 async fn collect_remote(scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
     let backend = scope.fs_backend();
     let sessions_dir = DroidProvider::sessions_dir(scope);
-    if !backend.exists(&sessions_dir).await {
+    if !backend.exists(&sessions_dir).await? {
         return Ok(vec![]);
     }
 

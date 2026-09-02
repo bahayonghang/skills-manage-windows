@@ -21,7 +21,7 @@ pub mod providers;
 mod unused;
 
 pub use enrichment::UsageSkillMatchStatus;
-pub use error::UsageError;
+pub use error::{UsageError, UsageRemoteKind};
 pub use file_cache::ProviderFileCache;
 pub use unused::build_unused_report;
 
@@ -200,12 +200,14 @@ pub trait UsageProvider: Send + Sync {
     fn display_name(&self) -> &'static str;
 
     /// 该 scope 下数据源是否存在。例如 Claude Code 检查
-    /// `~/.claude/history.jsonl` 是否存在。Stub provider 永远返回 false。
-    async fn available(&self, scope: &Scope) -> bool;
+    /// `~/.claude/history.jsonl` 是否存在。Stub provider 永远返回
+    /// `Ok(false)`。远程 probe 失败必须上抛，不得伪装成 missing。
+    async fn available(&self, scope: &Scope) -> Result<bool, UsageError>;
 
-    /// 解析日志、返回归一化调用列表。失败时返回 Err 让编排器记录到
-    /// 健康表的 `available=false` 但不影响其他 provider；空目录返回
-    /// `Ok(vec![])` 而非 Err。
+    /// 解析日志、返回归一化调用列表。本地可容错 parse/source failure 返回
+    /// Err 让编排器记 available=false；空目录返回 `Ok(vec![])`。远程
+    /// transport/protocol/permission failure 是 target-fatal，编排器在
+    /// 落库前中止。
     async fn collect(&self, scope: &Scope) -> Result<Vec<SkillCall>, UsageError>;
 
     /// 增量收集：`cache` 是从 `skill_call_file_cache` 载入的按文件指纹缓存；
@@ -228,6 +230,19 @@ pub trait UsageProvider: Send + Sync {
 /// 5 分钟缓存 TTL。低于这个阈值的扫描请求会被跳过，除非 force=true。
 pub const CACHE_TTL_MS: i64 = 5 * 60 * 1000;
 
+enum ProviderCollectResult {
+    Ready {
+        id: &'static str,
+        display_name: &'static str,
+        available: bool,
+        calls: Vec<SkillCall>,
+    },
+    TargetFatal {
+        provider_id: &'static str,
+        error: UsageError,
+    },
+}
+
 /// `usage_refresh` 的返回包，前端用于展示扫描结果摘要。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -244,8 +259,10 @@ pub struct RefreshSummary {
 
 /// 编排扫描：5 分钟缓存判定 → 并发跑全部 provider → 事务原子替换落库。
 ///
-/// `force=true` 跳过缓存。失败的 provider 不会让整个 refresh 出错，只会
-/// 在 `skill_call_providers` 里被标 available=false。
+/// `force=true` 跳过缓存。本地可容错 provider failure 不会让整个 refresh
+/// 出错，只会在 `skill_call_providers` 里被标 available=false。任一
+/// target-fatal 远程错误在 enrichment 与 `replace_calls_for_target` 之前
+/// 返回 Err，该 target 的缓存保持刷新前状态。
 pub async fn refresh(
     pool: &DbPool,
     scope: &Scope,
@@ -283,17 +300,56 @@ async fn refresh_with_providers(
     let futures = providers.iter().map(|p| {
         let target_id = target_id.clone();
         async move {
-            let avail = p.available(scope).await;
-            if !avail {
-                // 数据源整体消失 → 清空缓存行，避免目录复活时拿陈旧指纹对错号。
-                if local_scan
-                    && db::delete_file_cache_for_provider(pool, &target_id, p.id())
-                        .await
-                        .is_err()
-                {
-                    tracing::warn!(provider = p.id(), "usage file cache cleanup failed");
+            match p.available(scope).await {
+                Ok(false) => {
+                    // 数据源整体消失 → 仅本地清空缓存行，避免目录复活时拿陈旧指纹对错号。
+                    if local_scan
+                        && db::delete_file_cache_for_provider(pool, &target_id, p.id())
+                            .await
+                            .is_err()
+                    {
+                        tracing::warn!(
+                            target_id = %target_id,
+                            provider = p.id(),
+                            "usage file cache cleanup failed"
+                        );
+                    }
+                    return ProviderCollectResult::Ready {
+                        id: p.id(),
+                        display_name: p.display_name(),
+                        available: false,
+                        calls: Vec::new(),
+                    };
                 }
-                return (p.id(), p.display_name(), false, Vec::new());
+                Err(error) if error.is_target_fatal() => {
+                    tracing::warn!(
+                        target_id = %target_id,
+                        provider = p.id(),
+                        code = error.stable_code(),
+                        retryable = error.retryable(),
+                        "usage provider availability failed"
+                    );
+                    return ProviderCollectResult::TargetFatal {
+                        provider_id: p.id(),
+                        error,
+                    };
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        target_id = %target_id,
+                        provider = p.id(),
+                        code = error.stable_code(),
+                        retryable = error.retryable(),
+                        "usage provider availability failed"
+                    );
+                    return ProviderCollectResult::Ready {
+                        id: p.id(),
+                        display_name: p.display_name(),
+                        available: false,
+                        calls: Vec::new(),
+                    };
+                }
+                Ok(true) => {}
             }
             let collected = if local_scan {
                 incremental::collect_local_incremental(pool, &target_id, p.as_ref(), scope).await
@@ -301,27 +357,87 @@ async fn refresh_with_providers(
                 p.collect(scope).await
             };
             match collected {
-                Ok(calls) => (p.id(), p.display_name(), true, calls),
-                Err(_error) => {
-                    tracing::warn!(provider = p.id(), "usage provider collect failed");
-                    (p.id(), p.display_name(), false, Vec::new())
+                Ok(calls) => ProviderCollectResult::Ready {
+                    id: p.id(),
+                    display_name: p.display_name(),
+                    available: true,
+                    calls,
+                },
+                Err(error) if error.is_target_fatal() => {
+                    tracing::warn!(
+                        target_id = %target_id,
+                        provider = p.id(),
+                        code = error.stable_code(),
+                        retryable = error.retryable(),
+                        "usage provider collect failed"
+                    );
+                    ProviderCollectResult::TargetFatal {
+                        provider_id: p.id(),
+                        error,
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        target_id = %target_id,
+                        provider = p.id(),
+                        code = error.stable_code(),
+                        retryable = error.retryable(),
+                        "usage provider collect failed"
+                    );
+                    ProviderCollectResult::Ready {
+                        id: p.id(),
+                        display_name: p.display_name(),
+                        available: false,
+                        calls: Vec::new(),
+                    }
                 }
             }
         }
     });
     let outcomes = join_all(futures).await;
+    let mut ready = Vec::with_capacity(outcomes.len());
+    let mut fatal = None;
+    for outcome in outcomes {
+        match outcome {
+            ProviderCollectResult::TargetFatal { provider_id, error } => {
+                if fatal.is_none() {
+                    tracing::warn!(
+                        target_id = %target_id,
+                        provider = provider_id,
+                        code = error.stable_code(),
+                        retryable = error.retryable(),
+                        "usage refresh aborted"
+                    );
+                    fatal = Some(error);
+                }
+            }
+            ready_outcome @ ProviderCollectResult::Ready { .. } => ready.push(ready_outcome),
+        }
+    }
+    if let Some(error) = fatal {
+        return Err(error);
+    }
 
-    // 3) 平展为落库形态
+    // 3) 平展为落库形态。此处已确认没有 target-fatal remote error。
     let mut all_calls: Vec<NewSkillCall> = Vec::new();
-    let mut provider_outcomes: Vec<ProviderScanOutcome> = Vec::with_capacity(outcomes.len());
+    let mut provider_outcomes: Vec<ProviderScanOutcome> = Vec::with_capacity(ready.len());
     let mut providers_available = 0i64;
-    for (id, name, available, calls) in outcomes {
+    for outcome in ready {
+        let ProviderCollectResult::Ready {
+            id,
+            display_name,
+            available,
+            calls,
+        } = outcome
+        else {
+            unreachable!("target-fatal outcomes already returned");
+        };
         if available {
             providers_available += 1;
         }
         provider_outcomes.push(ProviderScanOutcome {
             provider_id: id.to_string(),
-            display_name: name.to_string(),
+            display_name: display_name.to_string(),
             available,
             call_count: calls.len() as i64,
         });

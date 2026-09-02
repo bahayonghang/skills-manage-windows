@@ -13,8 +13,8 @@ impl UsageProvider for KiroProvider {
     fn display_name(&self) -> &'static str {
         "Kiro"
     }
-    async fn available(&self, _scope: &Scope) -> bool {
-        false
+    async fn available(&self, _scope: &Scope) -> Result<bool, UsageError> {
+        Ok(false)
     }
     async fn collect(&self, _scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
         Ok(vec![])

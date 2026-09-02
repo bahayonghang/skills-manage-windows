@@ -246,16 +246,28 @@ fn spawn_background_usage_scan(app: &tauri::AppHandle, pool: crate::db::DbPool, 
     });
 }
 
+fn usage_error_to_ipc(error: usage::UsageError) -> IpcError {
+    if error.is_target_fatal() {
+        IpcError::new(
+            error.stable_code(),
+            error.public_message(),
+            error.retryable(),
+        )
+    } else {
+        IpcError::from_display(error)
+    }
+}
+
 async fn usage_refresh_impl(
     app: &tauri::AppHandle,
     state: &State<'_, AppState>,
     force: bool,
     target: ActiveUsageTarget,
-) -> Result<UsageRefreshResult, String> {
+) -> Result<UsageRefreshResult, IpcError> {
     if target.is_remote && !force {
         if let Some(last_scan_ms) = crate::db::get_last_scan_ms(&state.db, &target.target_id)
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(|e| IpcError::from(e.to_string()))?
         {
             let now_ms = Utc::now().timestamp_millis();
             if now_ms - last_scan_ms < usage::CACHE_TTL_MS {
@@ -273,7 +285,8 @@ async fn usage_refresh_impl(
                     false,
                     None,
                 )
-                .await;
+                .await
+                .map_err(IpcError::from);
             }
         }
     }
@@ -284,7 +297,7 @@ async fn usage_refresh_impl(
                 if let Some(last_scan_ms) =
                     crate::db::get_last_scan_ms(&state.db, &target.target_id)
                         .await
-                        .map_err(|e| e.to_string())?
+                        .map_err(|e| IpcError::from(e.to_string()))?
                 {
                     let now_ms = Utc::now().timestamp_millis();
                     if should_background_rescan(force, Some(last_scan_ms), now_ms) {
@@ -309,13 +322,14 @@ async fn usage_refresh_impl(
                             true,
                             None,
                         )
-                        .await;
+                        .await
+                        .map_err(IpcError::from);
                     }
                 }
             }
             let summary = usage::refresh(&state.db, &Scope::Local, force)
                 .await
-                .map_err(|e| e.to_string())?;
+                .map_err(usage_error_to_ipc)?;
             build_refresh_page(
                 state,
                 &target.target_id,
@@ -326,6 +340,7 @@ async fn usage_refresh_impl(
                 None,
             )
             .await
+            .map_err(IpcError::from)
         }
         remote @ (ActiveTarget::Ssh(_) | ActiveTarget::Wsl(_)) => {
             let remote_home = remote.remote_home().unwrap_or("/").to_string();
@@ -338,7 +353,7 @@ async fn usage_refresh_impl(
                     };
                     let summary = usage::refresh(&state.db, &scope, force)
                         .await
-                        .map_err(|e| e.to_string())?;
+                        .map_err(usage_error_to_ipc)?;
                     build_refresh_page(
                         state,
                         &target.target_id,
@@ -349,6 +364,7 @@ async fn usage_refresh_impl(
                         None,
                     )
                     .await
+                    .map_err(IpcError::from)
                 }
                 Err(_error) => {
                     tracing::warn!(
@@ -356,7 +372,7 @@ async fn usage_refresh_impl(
                     );
                     let last_scan_ms = crate::db::get_last_scan_ms(&state.db, &target.target_id)
                         .await
-                        .map_err(|e| e.to_string())?;
+                        .map_err(|e| IpcError::from(e.to_string()))?;
                     build_refresh_page(
                         state,
                         &target.target_id,
@@ -367,6 +383,7 @@ async fn usage_refresh_impl(
                         Some("Remote usage refresh failed.".to_string()),
                     )
                     .await
+                    .map_err(IpcError::from)
                 }
             }
         }

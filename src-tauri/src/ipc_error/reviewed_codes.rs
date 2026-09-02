@@ -138,6 +138,9 @@ pub const REVIEWED_IPC_ERROR_CODES: &[&str] = &[
     "skills_cli.update_unsupported",
     "startup.rebuild_unavailable",
     "storage.unavailable",
+    "usage.remote_permission",
+    "usage.remote_protocol",
+    "usage.remote_transport",
 ];
 
 pub fn is_reviewed_ipc_code(code: &str) -> bool {
@@ -184,6 +187,13 @@ pub(super) fn direct_public_message(code: &str) -> Option<&'static str> {
         "resource.not_found" => Some("The requested resource was not found."),
         "runtime.desktop_required" => Some("This operation requires the Tauri desktop runtime."),
         "storage.unavailable" => Some("Storage is unavailable."),
+        "usage.remote_permission" => Some("Remote usage refresh failed because access was denied."),
+        "usage.remote_protocol" => {
+            Some("Remote usage refresh failed because the target protocol is invalid.")
+        }
+        "usage.remote_transport" => {
+            Some("Remote usage refresh failed because the target is unavailable.")
+        }
         _ => None,
     }
 }

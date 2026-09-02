@@ -125,3 +125,80 @@ fn skills_cli_contract_codes_keep_reviewed_public_messages() {
         assert!(!serde_json::to_string(&error).unwrap().contains("secret"));
     }
 }
+
+#[test]
+fn usage_remote_fatal_errors_keep_reviewed_redacted_payloads() {
+    use crate::services::usage::UsageError;
+    use crate::targets::TargetsError;
+
+    let seeds = [
+        r"/home/alice/.ssh/id_ed25519",
+        "ssh -i private.pem host -- find /home/alice",
+        "stderr: Permission denied for /var/secret.log",
+        "alice@prod.example.invalid",
+    ];
+    let fixtures = [
+        UsageError::from_remote(TargetsError::ProcessTimedOut {
+            transport: "SSH",
+            class: "probe",
+            timeout_ms: 5_000,
+        }),
+        UsageError::from_remote(TargetsError::RemoteInspectFailed {
+            path: seeds[0].to_string(),
+            detail: format!("{}\n{}\n{}", seeds[1], seeds[2], seeds[3]),
+        }),
+        UsageError::from_remote(TargetsError::RemoteStdoutNotUtf8(
+            String::from_utf8(vec![0xff]).unwrap_err(),
+        )),
+    ];
+    let expected = [
+        (
+            "usage.remote_transport",
+            "Remote usage refresh failed because the target is unavailable.",
+            true,
+        ),
+        (
+            "usage.remote_permission",
+            "Remote usage refresh failed because access was denied.",
+            false,
+        ),
+        (
+            "usage.remote_protocol",
+            "Remote usage refresh failed because the target protocol is invalid.",
+            false,
+        ),
+    ];
+    for (error, (code, message, retryable)) in fixtures.into_iter().zip(expected) {
+        assert_eq!(error.stable_code(), code);
+        assert_eq!(error.public_message(), message);
+        assert_eq!(error.retryable(), retryable);
+        let ipc = IpcError::new(
+            error.stable_code(),
+            error.public_message(),
+            error.retryable(),
+        );
+        assert_eq!(ipc.code, code);
+        assert_eq!(ipc.message, message);
+        assert_eq!(ipc.retryable, retryable);
+        let serialized = serde_json::to_string(&ipc).expect("serialize");
+        for seed in seeds {
+            assert!(!error.to_string().contains(seed), "Display leaked {seed}");
+            assert!(
+                !serialized.contains(seed),
+                "IPC leaked {seed}: {serialized}"
+            );
+            assert!(!ipc.message.contains(seed));
+        }
+        let miswired = IpcError::from(format!(
+            "{} {} {} {} {}",
+            error, seeds[0], seeds[1], seeds[2], seeds[3]
+        ));
+        let miswired_json = serde_json::to_string(&miswired).expect("serialize");
+        for seed in seeds {
+            assert!(
+                !miswired_json.contains(seed),
+                "legacy IPC leaked {seed}: {miswired_json}"
+            );
+        }
+    }
+}

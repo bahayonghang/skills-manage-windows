@@ -66,6 +66,15 @@ transaction.
   pass `None`. Platform pages must not subscribe to `usageStore`.
 - `source` is optional but, when present, must filter overview, recent, detail
   summary, project distribution, and detail heatmap consistently.
+- A target-fatal remote transport, protocol, or permission error aborts
+  `refresh_with_providers` before enrichment and `replace_calls_for_target`.
+  That target's calls, provider health, usage metadata, scan state, and file
+  cache stay as they were. A transport-confirmed empty collection may still
+  commit a clear. Local provider parse/source failure stays provider-unavailable,
+  not target-fatal.
+- Refresh warnings and IPC errors may include only a target-safe id, provider
+  id, stable code, and retryable. They must not include remote path, command,
+  raw stdout/stderr, host diagnostic, or `TargetsError::to_string()`.
 - The unused report reads usage facts from the always-local usage pool and inventory
   facts from the already-resolved active-target skills pool. `target_id` scopes calls,
   metadata, and pending recovery; the report must not re-resolve ambient target state.
@@ -90,6 +99,8 @@ transaction.
 | provider collect fails | provider unavailable; other provider facts persist |
 | metadata insert violates CHECK | entire target replacement rolls back |
 | remote target unreachable | do not replace cache; command returns last complete cache when present |
+| remote exists/walk/list is transport, protocol, or permission `Err` | target-fatal; no cache replacement |
+| remote exists/walk/list is confirmed missing or `Ok([])` | success; empty collection may clear that target |
 | timestamp cannot be parsed | omit it from heatmap; never create a 1970 bucket |
 | platform observation is read-only or plugin-owned | include it with row metadata; renderer disables unlink |
 | same agent has user and plugin observations for one normalized name | return both `installs`; do not duplicate or discard facts in the repository layer |
@@ -110,6 +121,8 @@ transaction.
   would create a false navigation target and is forbidden.
 - Bad: use `skill_installations` alone for platform entries; loose native directories
   and plugin ownership/read-only facts would disappear.
+- Bad: map remote walk/list/exists `Err` to empty success and call
+  `replace_calls_for_target`; that deletes the last complete cache.
 
 ## 6. Tests Required
 
@@ -126,6 +139,13 @@ transaction.
   observations preserved in one normalized entry.
 - Skill usage stats: empty list, prefetch zeros, optional cutoff vs none, target
   isolation, and `last_used_ms`.
+- Remote refresh failure: Fake SSH/WSL three-state exists/walk/list; target-fatal
+  preserves every cache table; confirmed empty commits; one target's failure
+  does not mutate another; tracing/IPC omit path, command, and streams.
+- AC7 tracing capture is a default-parallelism gate. Install a thread-local
+  subscriber (`tracing::subscriber::set_default`) for the whole current-thread
+  `block_on(refresh...)`. `Instrument::with_subscriber` does not propagate into
+  `async_trait` / `join_all` boxes; an isolated-only capture is not evidence.
 
 ## 7. Wrong vs Correct
 

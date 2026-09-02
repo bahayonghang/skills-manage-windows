@@ -15,6 +15,7 @@
 //!   一次 SSH round trip 拿全列表，避免每个目录单独 list。
 
 use std::collections::HashMap;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -36,9 +37,9 @@ pub struct FsEntry {
 
 #[async_trait]
 pub trait FsBackend: Send + Sync {
-    /// 路径存在性探测。失败时返回 false（不向上抛 Err，让 provider 行为
-    /// 与 std::fs::Path::exists 一致）。
-    async fn exists(&self, path: &str) -> bool;
+    /// 路径存在性探测。确认 missing 为 `Ok(false)`；transport / protocol /
+    /// permission failure 为 `Err`。不得把远程失败伪装成不存在。
+    async fn exists(&self, path: &str) -> Result<bool, UsageError>;
 
     /// 整个文件读成 UTF-8 字符串。读取失败或编码错误返回 Err。
     async fn read_to_string(&self, path: &str) -> Result<String, UsageError>;
@@ -90,8 +91,12 @@ pub struct LocalFsBackend;
 
 #[async_trait]
 impl FsBackend for LocalFsBackend {
-    async fn exists(&self, path: &str) -> bool {
-        Path::new(path).exists()
+    async fn exists(&self, path: &str) -> Result<bool, UsageError> {
+        match std::fs::metadata(path) {
+            Ok(_) => Ok(true),
+            Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
+            Err(error) => Err(UsageError::io("local exists", error)),
+        }
     }
 
     async fn read_to_string(&self, path: &str) -> Result<String, UsageError> {
@@ -202,8 +207,11 @@ impl RemoteFsBackend {
 
 #[async_trait]
 impl FsBackend for RemoteFsBackend {
-    async fn exists(&self, path: &str) -> bool {
-        self.target.exists(path).await.unwrap_or(false)
+    async fn exists(&self, path: &str) -> Result<bool, UsageError> {
+        self.target
+            .exists(path)
+            .await
+            .map_err(UsageError::from_remote)
     }
 
     async fn read_to_string(&self, path: &str) -> Result<String, UsageError> {
@@ -211,9 +219,9 @@ impl FsBackend for RemoteFsBackend {
             .target
             .read_file(path)
             .await
-            .map_err(|e| UsageError::Remote(e.to_string()))?;
+            .map_err(UsageError::from_remote)?;
         String::from_utf8(bytes)
-            .map_err(|e| UsageError::Parse(format!("remote utf8 {}: {}", path, e)))
+            .map_err(|_| UsageError::Parse("Remote log content is not valid UTF-8.".to_string()))
     }
 
     async fn read_many_to_strings(
@@ -231,19 +239,25 @@ impl FsBackend for RemoteFsBackend {
                 .target
                 .run_command(&script)
                 .await
-                .map_err(|e| UsageError::Remote(e.to_string()))?;
+                .map_err(UsageError::from_remote)?;
             content_by_path.extend(parse_batch_read_output(&stdout));
         }
         Ok(content_by_path)
     }
 
     async fn walk_jsonl(&self, root: &str) -> Result<Vec<String>, UsageError> {
-        // `find` 在大多数 *nix 都有；返回每行一个绝对路径
-        let cmd = format!(
-            "find {} -type f -name '*.jsonl' 2>/dev/null",
-            shell_quote(root)
-        );
-        let stdout = self.target.run_command(&cmd).await.unwrap_or_default();
+        if !self.exists(root).await? {
+            return Ok(Vec::new());
+        }
+        // Confirmed-present root: do not swallow stderr. Empty stdout is a
+        // legal zero-entry success; any transport/protocol/permission failure
+        // stays an error.
+        let cmd = format!("find {} -type f -name '*.jsonl'", shell_quote(root));
+        let stdout = self
+            .target
+            .run_command(&cmd)
+            .await
+            .map_err(UsageError::from_remote)?;
         Ok(stdout
             .lines()
             .filter(|l| !l.trim().is_empty())
@@ -252,7 +266,14 @@ impl FsBackend for RemoteFsBackend {
     }
 
     async fn list_entries(&self, path: &str) -> Result<Vec<FsEntry>, UsageError> {
-        let entries = self.target.list_dir(path).await.unwrap_or_default();
+        if !self.exists(path).await? {
+            return Ok(Vec::new());
+        }
+        let entries = self
+            .target
+            .list_dir(path)
+            .await
+            .map_err(UsageError::from_remote)?;
         Ok(entries
             .into_iter()
             .map(|e| FsEntry {
@@ -267,7 +288,7 @@ impl FsBackend for RemoteFsBackend {
             .target
             .read_file(path)
             .await
-            .map_err(|e| UsageError::Remote(e.to_string()))?;
+            .map_err(UsageError::from_remote)?;
         let dir = tempfile::TempDir::new().map_err(|e| UsageError::io("tempdir", e))?;
         let basename = Path::new(path)
             .file_name()
@@ -337,9 +358,193 @@ fn encode_batch_read_output(entries: &[(String, String)]) -> String {
 }
 
 #[cfg(test)]
+pub(crate) mod test_fixtures {
+    use std::sync::Arc;
+
+    use super::RemoteFsBackend;
+    use crate::services::usage::Scope;
+    use crate::targets::{
+        ConnectedRemoteTarget, ConnectedSshTarget, ConnectedWslTarget, RemoteTargetConfig,
+        SshAuthMethod, WslTargetConfig,
+    };
+    use crate::test_support::FakeRunner;
+
+    pub(crate) fn ssh_target() -> RemoteTargetConfig {
+        RemoteTargetConfig {
+            id: "ssh-usage-test".to_string(),
+            label: "SSH usage test".to_string(),
+            host: "example.invalid".to_string(),
+            username: "alice".to_string(),
+            port: 22,
+            auth_method: SshAuthMethod::Key,
+            key_path: "~/.ssh/id_ed25519".to_string(),
+            credential_key: None,
+            protected_password: None,
+            password: None,
+            remote_home: "/home/alice".to_string(),
+            remote_os: "Linux".to_string(),
+            symlink_enabled: true,
+        }
+    }
+
+    pub(crate) fn wsl_target() -> WslTargetConfig {
+        WslTargetConfig {
+            id: "wsl-usage-test".to_string(),
+            label: "WSL usage test".to_string(),
+            distribution: "Ubuntu-24.04".to_string(),
+            remote_home: "/home/alice".to_string(),
+            remote_os: "Linux".to_string(),
+            symlink_enabled: true,
+        }
+    }
+
+    pub(crate) fn ssh_backend(runner: Arc<FakeRunner>) -> RemoteFsBackend {
+        RemoteFsBackend::new(Arc::new(ConnectedRemoteTarget::Ssh(
+            ConnectedSshTarget::for_tests_with_runner(ssh_target(), runner),
+        )))
+    }
+
+    pub(crate) fn wsl_backend(runner: Arc<FakeRunner>) -> RemoteFsBackend {
+        RemoteFsBackend::new(Arc::new(ConnectedRemoteTarget::Wsl(
+            ConnectedWslTarget::for_tests_with_runner(wsl_target(), runner),
+        )))
+    }
+
+    pub(crate) fn ssh_scope(runner: Arc<FakeRunner>, target_id: &str) -> Scope {
+        let mut target = ssh_target();
+        target.id = target_id.to_string();
+        Scope::Remote {
+            target_id: target_id.to_string(),
+            remote_home: target.remote_home.clone(),
+            connection: Arc::new(ConnectedRemoteTarget::Ssh(
+                ConnectedSshTarget::for_tests_with_runner(target, runner),
+            )),
+        }
+    }
+
+    pub(crate) fn wsl_scope(runner: Arc<FakeRunner>, target_id: &str) -> Scope {
+        let mut target = wsl_target();
+        target.id = target_id.to_string();
+        Scope::Remote {
+            target_id: target_id.to_string(),
+            remote_home: target.remote_home.clone(),
+            connection: Arc::new(ConnectedRemoteTarget::Wsl(
+                ConnectedWslTarget::for_tests_with_runner(target, runner),
+            )),
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
+    use crate::targets::RunnerPhase;
+    use crate::test_support::FakeRunner;
+    use std::sync::Arc;
     use tempfile::TempDir;
+
+    const PATH_SEED: &str = "/home/alice/.codex/sessions";
+    const STDERR_SEED: &str = "Permission denied: /home/alice/.ssh/id_ed25519";
+    const COMMAND_SEED: &str = "find /home/alice/.codex -name '*.jsonl'";
+    const HOST_SEED: &str = "alice@prod.example.invalid";
+
+    fn adversarial_detail() -> String {
+        format!("{STDERR_SEED}\n{COMMAND_SEED}\n{HOST_SEED}")
+    }
+
+    fn assert_no_remote_diagnostics(error: &UsageError) {
+        let public = error.to_string();
+        for seed in [PATH_SEED, STDERR_SEED, COMMAND_SEED, HOST_SEED] {
+            assert!(!public.contains(seed), "leaked {seed}: {public}");
+        }
+        assert!(error.is_target_fatal());
+    }
+
+    async fn assert_exists_three_state(backend: &RemoteFsBackend, runner: &FakeRunner) {
+        runner.push_output(0, "", "");
+        assert!(backend.exists(PATH_SEED).await.unwrap());
+
+        runner.push_output(1, "", "");
+        assert!(!backend.exists(PATH_SEED).await.unwrap());
+
+        runner.push_timeout();
+        let transport = backend.exists(PATH_SEED).await.unwrap_err();
+        assert_eq!(transport.stable_code(), "usage.remote_transport");
+        assert!(transport.retryable());
+        assert_no_remote_diagnostics(&transport);
+
+        runner.push_output(2, "", &adversarial_detail());
+        let permission = backend.exists(PATH_SEED).await.unwrap_err();
+        assert_eq!(permission.stable_code(), "usage.remote_permission");
+        assert!(!permission.retryable());
+        assert_no_remote_diagnostics(&permission);
+    }
+
+    async fn assert_walk_and_list_three_state(backend: &RemoteFsBackend, runner: &FakeRunner) {
+        runner.push_output(1, "", "");
+        assert!(backend.walk_jsonl(PATH_SEED).await.unwrap().is_empty());
+
+        runner.push_output(0, "", "");
+        runner.push_success("");
+        assert!(backend.walk_jsonl(PATH_SEED).await.unwrap().is_empty());
+
+        runner.push_output(0, "", "");
+        runner.push_success("/home/alice/.codex/sessions/a.jsonl\n");
+        let found = backend.walk_jsonl(PATH_SEED).await.unwrap();
+        assert_eq!(found, vec!["/home/alice/.codex/sessions/a.jsonl"]);
+
+        runner.push_error(RunnerPhase::Start, "connection refused");
+        let walk_transport = backend.walk_jsonl(PATH_SEED).await.unwrap_err();
+        assert_eq!(walk_transport.stable_code(), "usage.remote_transport");
+        assert_no_remote_diagnostics(&walk_transport);
+
+        runner.push_output(0, "", "");
+        runner.push_output(1, "", &adversarial_detail());
+        let walk_permission = backend.walk_jsonl(PATH_SEED).await.unwrap_err();
+        assert_eq!(walk_permission.stable_code(), "usage.remote_permission");
+        assert_no_remote_diagnostics(&walk_permission);
+
+        runner.push_output(0, "", "");
+        runner.push_output_bytes(0, &[0xff, 0xfe], b"");
+        let walk_protocol = backend.walk_jsonl(PATH_SEED).await.unwrap_err();
+        assert_eq!(walk_protocol.stable_code(), "usage.remote_protocol");
+        assert!(!walk_protocol.retryable());
+        assert_no_remote_diagnostics(&walk_protocol);
+
+        runner.push_output(1, "", "");
+        assert!(backend.list_entries(PATH_SEED).await.unwrap().is_empty());
+
+        runner.push_output(0, "", "");
+        runner.push_success("");
+        assert!(backend.list_entries(PATH_SEED).await.unwrap().is_empty());
+
+        runner.push_error(RunnerPhase::Start, "broken pipe");
+        let list_transport = backend.list_entries(PATH_SEED).await.unwrap_err();
+        assert_eq!(list_transport.stable_code(), "usage.remote_transport");
+        assert_no_remote_diagnostics(&list_transport);
+
+        runner.push_output(0, "", "");
+        runner.push_output(13, "", &adversarial_detail());
+        let list_permission = backend.list_entries(PATH_SEED).await.unwrap_err();
+        assert_eq!(list_permission.stable_code(), "usage.remote_permission");
+        assert_no_remote_diagnostics(&list_permission);
+    }
+
+    #[tokio::test]
+    async fn fake_ssh_exists_walk_and_list_use_three_state_results() {
+        let runner = Arc::new(FakeRunner::new());
+        let backend = test_fixtures::ssh_backend(runner.clone());
+        assert_exists_three_state(&backend, &runner).await;
+        assert_walk_and_list_three_state(&backend, &runner).await;
+    }
+
+    #[tokio::test]
+    async fn fake_wsl_exists_walk_and_list_use_three_state_results() {
+        let runner = Arc::new(FakeRunner::new());
+        let backend = test_fixtures::wsl_backend(runner.clone());
+        assert_exists_three_state(&backend, &runner).await;
+        assert_walk_and_list_three_state(&backend, &runner).await;
+    }
 
     #[tokio::test]
     async fn local_backend_round_trips_basic_io() {
@@ -351,8 +556,8 @@ mod tests {
         std::fs::write(&f2, "world").unwrap();
 
         let backend = LocalFsBackend;
-        assert!(backend.exists(f1.to_str().unwrap()).await);
-        assert!(!backend.exists("/totally/nonexistent").await);
+        assert!(backend.exists(f1.to_str().unwrap()).await.unwrap());
+        assert!(!backend.exists("/totally/nonexistent").await.unwrap());
 
         let body = backend.read_to_string(f1.to_str().unwrap()).await.unwrap();
         assert_eq!(body, "hello");

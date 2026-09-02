@@ -178,6 +178,12 @@ function canonicalMessage(code: string): string | null {
       return "A portability job is already running.";
     case "startup.rebuild_unavailable":
       return "Database rebuild is not available.";
+    case "usage.remote_permission":
+      return "Remote usage refresh failed because access was denied.";
+    case "usage.remote_protocol":
+      return "Remote usage refresh failed because the target protocol is invalid.";
+    case "usage.remote_transport":
+      return "Remote usage refresh failed because the target is unavailable.";
     case "central_operation.delete_restore_collision":
       return "Central recovery evidence conflicts with the current files. Review and resolve the pending operation in Operation Logs.";
     case "central_skills.delete_failed":
