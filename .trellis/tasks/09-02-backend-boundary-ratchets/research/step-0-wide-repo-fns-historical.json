@@ -1,0 +1,5541 @@
+{
+  "count": 388,
+  "byFile": {
+    "src-tauri/src/central_migration.rs": [
+      {
+        "file": "src-tauri/src/central_migration.rs",
+        "line": 91,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/central_migration.rs",
+        "line": 117,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/central_migration.rs",
+        "line": 132,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/central_migration.rs",
+        "line": 144,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/central_migration.rs",
+        "line": 285,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/cli_api/mod.rs": [
+      {
+        "file": "src-tauri/src/cli_api/mod.rs",
+        "line": 252,
+        "name": "get_skill_installations",
+        "owner": "installations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/cli_api/mod.rs",
+        "line": 423,
+        "name": "get_central_skills",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/cli_api/mod.rs",
+        "line": 547,
+        "name": "get_all_agents",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/commands/agents/mod.rs": [
+      {
+        "file": "src-tauri/src/commands/agents/mod.rs",
+        "line": 87,
+        "name": "get_all_agents",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/agents/mod.rs",
+        "line": 165,
+        "name": "get_all_agents",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/agents/mod.rs",
+        "line": 170,
+        "name": "get_all_agents",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/agents/mod.rs",
+        "line": 177,
+        "name": "get_all_agents",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/agents/mod.rs",
+        "line": 182,
+        "name": "update_agent_detected",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/agents/mod.rs",
+        "line": 217,
+        "name": "get_all_agents",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/agents/mod.rs",
+        "line": 227,
+        "name": "update_agent_detected",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/agents/mod.rs",
+        "line": 295,
+        "name": "insert_custom_agent",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/agents/mod.rs",
+        "line": 299,
+        "name": "get_agent_by_id",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/agents/mod.rs",
+        "line": 332,
+        "name": "update_custom_agent",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/agents/mod.rs",
+        "line": 354,
+        "name": "delete_custom_agent",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/agents/mod.rs",
+        "line": 365,
+        "name": "update_agent_enabled",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/commands/bootstrap.rs": [
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 122,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 129,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 143,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 167,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 171,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 193,
+        "name": "get_skill_counts_by_agent",
+        "owner": "installations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 248,
+        "name": "get_all_agents",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 251,
+        "name": "get_collection_count",
+        "owner": "collections_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 304,
+        "name": "get_skill_repositories_with_stats",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 307,
+        "name": "count_central_readiness_inputs",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 343,
+        "name": "upsert_skill",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 362,
+        "name": "upsert_skill_installation",
+        "owner": "installations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 375,
+        "name": "create_collection",
+        "owner": "collections_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 378,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 379,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 401,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 404,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 415,
+        "name": "upsert_skill",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 454,
+        "name": "create_skill_tag",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 455,
+        "name": "assign_skill_tags",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 466,
+        "name": "create_or_update_skill_repository",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 479,
+        "name": "assign_skills_to_repository",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 488,
+        "name": "upsert_skill_installation",
+        "owner": "installations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 520,
+        "name": "create_skill_tag",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 521,
+        "name": "assign_skill_tags",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 532,
+        "name": "create_or_update_skill_repository",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 545,
+        "name": "assign_skills_to_repository",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/bootstrap.rs",
+        "line": 555,
+        "name": "upsert_skill_installation",
+        "owner": "installations_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/commands/central_metadata.rs": [
+      {
+        "file": "src-tauri/src/commands/central_metadata.rs",
+        "line": 38,
+        "name": "get_skill_repositories_with_stats",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/central_metadata.rs",
+        "line": 88,
+        "name": "create_or_update_skill_repository",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/central_metadata.rs",
+        "line": 140,
+        "name": "assign_skills_to_repository",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/central_metadata.rs",
+        "line": 182,
+        "name": "set_skill_repository_pinned",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/central_metadata.rs",
+        "line": 199,
+        "name": "get_skill_tags",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/central_metadata.rs",
+        "line": 215,
+        "name": "list_central_top_tags",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/central_metadata.rs",
+        "line": 252,
+        "name": "create_skill_tag",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/central_metadata.rs",
+        "line": 291,
+        "name": "assign_skill_tags",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/central_metadata.rs",
+        "line": 332,
+        "name": "unassign_skill_tags",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/central_metadata.rs",
+        "line": 349,
+        "name": "get_pending_ai_tag_reviews",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/central_metadata.rs",
+        "line": 388,
+        "name": "accept_ai_tag_reviews",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/central_metadata.rs",
+        "line": 423,
+        "name": "skip_ai_tag_reviews",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/commands/collections.rs": [
+      {
+        "file": "src-tauri/src/commands/collections.rs",
+        "line": 44,
+        "name": "create_collection",
+        "owner": "collections_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/collections.rs",
+        "line": 51,
+        "name": "get_all_collections",
+        "owner": "collections_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/collections.rs",
+        "line": 57,
+        "name": "get_collection_by_id",
+        "owner": "collections_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/collections.rs",
+        "line": 70,
+        "name": "get_collection_skills",
+        "owner": "collections_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/collections.rs",
+        "line": 92,
+        "name": "add_skill_to_collection",
+        "owner": "collections_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/collections.rs",
+        "line": 105,
+        "name": "remove_skill_from_collection",
+        "owner": "collections_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/collections.rs",
+        "line": 114,
+        "name": "delete_collection",
+        "owner": "collections_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/collections.rs",
+        "line": 132,
+        "name": "update_collection",
+        "owner": "collections_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/collections.rs",
+        "line": 136,
+        "name": "get_collection_by_id",
+        "owner": "collections_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/collections.rs",
+        "line": 154,
+        "name": "get_collection_skills",
+        "owner": "collections_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/commands/collections/export_import.rs": [
+      {
+        "file": "src-tauri/src/commands/collections/export_import.rs",
+        "line": 29,
+        "name": "get_collection_skills",
+        "owner": "collections_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/collections/export_import.rs",
+        "line": 62,
+        "name": "create_collection",
+        "owner": "collections_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/collections/export_import.rs",
+        "line": 69,
+        "name": "get_skill_by_id",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/collections/export_import.rs",
+        "line": 70,
+        "name": "add_skill_to_collection",
+        "owner": "collections_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/commands/linker.rs": [
+      {
+        "file": "src-tauri/src/commands/linker.rs",
+        "line": 542,
+        "name": "list_operation_logs",
+        "owner": "operation_logs_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/linker.rs",
+        "line": 581,
+        "name": "list_operation_logs",
+        "owner": "operation_logs_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/commands/logs.rs": [
+      {
+        "file": "src-tauri/src/commands/logs.rs",
+        "line": 61,
+        "name": "list_operation_logs",
+        "owner": "operation_logs_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/logs.rs",
+        "line": 77,
+        "name": "get_operation_log",
+        "owner": "operation_logs_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/logs.rs",
+        "line": 103,
+        "name": "clear_operation_logs",
+        "owner": "operation_logs_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/logs.rs",
+        "line": 123,
+        "name": "export_operation_logs_json",
+        "owner": "operation_logs_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/logs.rs",
+        "line": 286,
+        "name": "list_daily_operation_counts",
+        "owner": "operation_logs_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/commands/saved_views.rs": [
+      {
+        "file": "src-tauri/src/commands/saved_views.rs",
+        "line": 45,
+        "name": "list_saved_views",
+        "owner": "saved_views_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/saved_views.rs",
+        "line": 59,
+        "name": "create_saved_view",
+        "owner": "saved_views_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/saved_views.rs",
+        "line": 88,
+        "name": "update_saved_view",
+        "owner": "saved_views_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/saved_views.rs",
+        "line": 103,
+        "name": "get_saved_view",
+        "owner": "saved_views_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/saved_views.rs",
+        "line": 110,
+        "name": "delete_saved_view",
+        "owner": "saved_views_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/saved_views.rs",
+        "line": 116,
+        "name": "reorder_saved_views",
+        "owner": "saved_views_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/saved_views.rs",
+        "line": 559,
+        "name": "get_saved_view",
+        "owner": "saved_views_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/saved_views.rs",
+        "line": 560,
+        "name": "get_saved_view",
+        "owner": "saved_views_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/saved_views.rs",
+        "line": 627,
+        "name": "list_operation_logs",
+        "owner": "operation_logs_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/commands/scanner.rs": [
+      {
+        "file": "src-tauri/src/commands/scanner.rs",
+        "line": 88,
+        "name": "set_setting_best_effort",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/scanner.rs",
+        "line": 102,
+        "name": "set_setting_best_effort",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/scanner.rs",
+        "line": 104,
+        "name": "set_setting_best_effort",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/scanner.rs",
+        "line": 106,
+        "name": "set_setting_best_effort",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/commands/settings.rs": [
+      {
+        "file": "src-tauri/src/commands/settings.rs",
+        "line": 71,
+        "name": "get_scan_directories",
+        "owner": "scan_dirs_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/settings.rs",
+        "line": 97,
+        "name": "add_scan_directory",
+        "owner": "scan_dirs_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/settings.rs",
+        "line": 112,
+        "name": "remove_scan_directory",
+        "owner": "scan_dirs_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/settings.rs",
+        "line": 123,
+        "name": "toggle_scan_directory",
+        "owner": "scan_dirs_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/settings.rs",
+        "line": 133,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/settings.rs",
+        "line": 144,
+        "name": "get_settings",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/settings.rs",
+        "line": 152,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/settings.rs",
+        "line": 165,
+        "name": "set_settings",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/commands/skill_update_inventory.rs": [
+      {
+        "file": "src-tauri/src/commands/skill_update_inventory.rs",
+        "line": 614,
+        "name": "list_operation_logs",
+        "owner": "operation_logs_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/skill_update_inventory.rs",
+        "line": 674,
+        "name": "list_operation_logs",
+        "owner": "operation_logs_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/skill_update_inventory.rs",
+        "line": 715,
+        "name": "list_operation_logs",
+        "owner": "operation_logs_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/commands/tag_groups.rs": [
+      {
+        "file": "src-tauri/src/commands/tag_groups.rs",
+        "line": 38,
+        "name": "list_tag_groups",
+        "owner": "tag_groups_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/tag_groups.rs",
+        "line": 49,
+        "name": "create_tag_group",
+        "owner": "tag_groups_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/tag_groups.rs",
+        "line": 71,
+        "name": "update_tag_group",
+        "owner": "tag_groups_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/tag_groups.rs",
+        "line": 84,
+        "name": "get_tag_group",
+        "owner": "tag_groups_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/tag_groups.rs",
+        "line": 91,
+        "name": "delete_tag_group",
+        "owner": "tag_groups_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/tag_groups.rs",
+        "line": 97,
+        "name": "reorder_tag_groups",
+        "owner": "tag_groups_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/tag_groups.rs",
+        "line": 107,
+        "name": "set_tag_group",
+        "owner": "tag_groups_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/tag_groups.rs",
+        "line": 440,
+        "name": "create_skill_tag",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/tag_groups.rs",
+        "line": 450,
+        "name": "get_skill_tag_by_id",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/tag_groups.rs",
+        "line": 484,
+        "name": "create_skill_tag",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/tag_groups.rs",
+        "line": 490,
+        "name": "get_skill_tag_by_id",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/tag_groups.rs",
+        "line": 501,
+        "name": "create_skill_tag",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/tag_groups.rs",
+        "line": 508,
+        "name": "get_skill_tag_by_id",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/commands/tag_groups.rs",
+        "line": 522,
+        "name": "create_skill_tag",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/commands/usage.rs": [
+      {
+        "file": "src-tauri/src/commands/usage.rs",
+        "line": 268,
+        "name": "get_last_scan_ms",
+        "owner": "usage_repo",
+        "kind": "crate-path"
+      },
+      {
+        "file": "src-tauri/src/commands/usage.rs",
+        "line": 298,
+        "name": "get_last_scan_ms",
+        "owner": "usage_repo",
+        "kind": "crate-path"
+      },
+      {
+        "file": "src-tauri/src/commands/usage.rs",
+        "line": 373,
+        "name": "get_last_scan_ms",
+        "owner": "usage_repo",
+        "kind": "crate-path"
+      },
+      {
+        "file": "src-tauri/src/commands/usage.rs",
+        "line": 522,
+        "name": "list_skill_counts_since",
+        "owner": "usage_repo",
+        "kind": "crate-path"
+      },
+      {
+        "file": "src-tauri/src/commands/usage.rs",
+        "line": 586,
+        "name": "list_skill_usage_stats",
+        "owner": "usage_stats_repo",
+        "kind": "crate-path"
+      }
+    ],
+    "src-tauri/src/observability/operation.rs": [
+      {
+        "file": "src-tauri/src/observability/operation.rs",
+        "line": 523,
+        "name": "mark_started_operation_logs_interrupted",
+        "owner": "operation_logs_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/observability/operation.rs",
+        "line": 730,
+        "name": "insert_operation_log_with_id",
+        "owner": "operation_logs_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/observability/operation.rs",
+        "line": 754,
+        "name": "insert_operation_log_with_id",
+        "owner": "operation_logs_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/observability/operation.rs",
+        "line": 759,
+        "name": "update_operation_log",
+        "owner": "operation_logs_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/observability/operation.rs",
+        "line": 761,
+        "name": "insert_operation_log_with_id",
+        "owner": "operation_logs_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/operation_log.rs": [
+      {
+        "file": "src-tauri/src/operation_log.rs",
+        "line": 260,
+        "name": "insert_operation_log",
+        "owner": "operation_logs_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/operation_log.rs",
+        "line": 425,
+        "name": "list_operation_logs",
+        "owner": "operation_logs_repo",
+        "kind": "crate-path"
+      },
+      {
+        "file": "src-tauri/src/operation_log.rs",
+        "line": 467,
+        "name": "list_operation_logs",
+        "owner": "operation_logs_repo",
+        "kind": "crate-path"
+      }
+    ],
+    "src-tauri/src/services/ai_provider/claude.rs": [
+      {
+        "file": "src-tauri/src/services/ai_provider/claude.rs",
+        "line": 394,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/claude.rs",
+        "line": 397,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/claude.rs",
+        "line": 400,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/claude.rs",
+        "line": 403,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/claude.rs",
+        "line": 422,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/claude.rs",
+        "line": 425,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/claude.rs",
+        "line": 428,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/claude.rs",
+        "line": 435,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/ai_provider/config.rs": [
+      {
+        "file": "src-tauri/src/services/ai_provider/config.rs",
+        "line": 108,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/config.rs",
+        "line": 111,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/config.rs",
+        "line": 114,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/config.rs",
+        "line": 132,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/config.rs",
+        "line": 135,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/config.rs",
+        "line": 138,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/config.rs",
+        "line": 141,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/config.rs",
+        "line": 148,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/config.rs",
+        "line": 165,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/config.rs",
+        "line": 182,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/config.rs",
+        "line": 185,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/ai_provider/secret.rs": [
+      {
+        "file": "src-tauri/src/services/ai_provider/secret.rs",
+        "line": 135,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/secret.rs",
+        "line": 141,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/secret.rs",
+        "line": 146,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/secret.rs",
+        "line": 153,
+        "name": "delete_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/secret.rs",
+        "line": 507,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/secret.rs",
+        "line": 523,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/secret.rs",
+        "line": 529,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/secret.rs",
+        "line": 544,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/secret.rs",
+        "line": 563,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/secret.rs",
+        "line": 570,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/secret.rs",
+        "line": 583,
+        "name": "list_operation_logs",
+        "owner": "operation_logs_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/secret.rs",
+        "line": 612,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/secret.rs",
+        "line": 639,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_provider/secret.rs",
+        "line": 733,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/ai_tagging/mod.rs": [
+      {
+        "file": "src-tauri/src/services/ai_tagging/mod.rs",
+        "line": 227,
+        "name": "get_skill_tags",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_tagging/mod.rs",
+        "line": 296,
+        "name": "get_skill_by_id",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_tagging/mod.rs",
+        "line": 363,
+        "name": "replace_skill_ai_tags",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/ai_tagging/mod.rs",
+        "line": 394,
+        "name": "replace_pending_ai_tag_reviews",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/central_operation/force_abandon.rs": [
+      {
+        "file": "src-tauri/src/services/central_operation/force_abandon.rs",
+        "line": 43,
+        "name": "transition_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/force_abandon.rs",
+        "line": 52,
+        "name": "list_pending_fs_db_operations",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/force_abandon.rs",
+        "line": 232,
+        "name": "insert_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/force_abandon.rs",
+        "line": 329,
+        "name": "insert_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/force_abandon.rs",
+        "line": 363,
+        "name": "get_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/force_abandon.rs",
+        "line": 405,
+        "name": "insert_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/central_operation/reconcile.rs": [
+      {
+        "file": "src-tauri/src/services/central_operation/reconcile.rs",
+        "line": 65,
+        "name": "transition_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/reconcile.rs",
+        "line": 74,
+        "name": "get_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/reconcile.rs",
+        "line": 119,
+        "name": "get_skill_by_id",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/reconcile.rs",
+        "line": 123,
+        "name": "get_skill_installations",
+        "owner": "installations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/reconcile.rs",
+        "line": 365,
+        "name": "insert_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/reconcile.rs",
+        "line": 396,
+        "name": "get_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/reconcile.rs",
+        "line": 407,
+        "name": "get_skill_by_id",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/reconcile.rs",
+        "line": 437,
+        "name": "insert_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/reconcile.rs",
+        "line": 464,
+        "name": "get_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/central_operation/recovery.rs": [
+      {
+        "file": "src-tauri/src/services/central_operation/recovery.rs",
+        "line": 21,
+        "name": "list_pending_fs_db_operations",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/recovery.rs",
+        "line": 51,
+        "name": "list_pending_fs_db_operations",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/recovery.rs",
+        "line": 83,
+        "name": "record_fs_db_operation_error",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/recovery.rs",
+        "line": 102,
+        "name": "list_pending_fs_db_operations",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/recovery.rs",
+        "line": 157,
+        "name": "transition_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/recovery.rs",
+        "line": 161,
+        "name": "record_fs_db_operation_error",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/recovery.rs",
+        "line": 178,
+        "name": "get_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/recovery.rs",
+        "line": 207,
+        "name": "record_fs_db_operation_error",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/recovery.rs",
+        "line": 234,
+        "name": "record_fs_db_operation_error",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/recovery.rs",
+        "line": 258,
+        "name": "transition_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/recovery.rs",
+        "line": 272,
+        "name": "transition_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/recovery.rs",
+        "line": 368,
+        "name": "insert_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/recovery.rs",
+        "line": 393,
+        "name": "export_operation_logs_json",
+        "owner": "operation_logs_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/recovery.rs",
+        "line": 420,
+        "name": "insert_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/recovery.rs",
+        "line": 477,
+        "name": "insert_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/recovery.rs",
+        "line": 499,
+        "name": "get_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/recovery.rs",
+        "line": 537,
+        "name": "insert_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_operation/recovery.rs",
+        "line": 561,
+        "name": "get_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/central_skills/delete.rs": [
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 156,
+        "name": "insert_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 181,
+        "name": "record_fs_db_operation_error",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 247,
+        "name": "list_pending_fs_db_operations",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 273,
+        "name": "get_skill_by_id",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 280,
+        "name": "get_agent_by_id",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 287,
+        "name": "get_all_agents",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 289,
+        "name": "get_skill_installations",
+        "owner": "installations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 371,
+        "name": "get_skill_by_id",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 378,
+        "name": "get_agent_by_id",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 386,
+        "name": "get_skill_installations",
+        "owner": "installations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 402,
+        "name": "get_all_agents",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 466,
+        "name": "transition_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 467,
+        "name": "commit_delete_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 474,
+        "name": "transition_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 498,
+        "name": "get_skill_by_id",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 505,
+        "name": "get_agent_by_id",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 512,
+        "name": "get_all_agents",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 514,
+        "name": "get_skill_installations",
+        "owner": "installations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 593,
+        "name": "get_skill_by_id",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 600,
+        "name": "get_agent_by_id",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 608,
+        "name": "get_skill_installations",
+        "owner": "installations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 665,
+        "name": "transition_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 666,
+        "name": "commit_delete_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete.rs",
+        "line": 671,
+        "name": "transition_fs_db_operation",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/central_skills/delete/batch.rs": [
+      {
+        "file": "src-tauri/src/services/central_skills/delete/batch.rs",
+        "line": 76,
+        "name": "list_pending_fs_db_operations",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/central_skills/delete/repository.rs": [
+      {
+        "file": "src-tauri/src/services/central_skills/delete/repository.rs",
+        "line": 23,
+        "name": "get_skill_repository_by_id",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete/repository.rs",
+        "line": 30,
+        "name": "get_central_skill_ids_by_repository",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete/repository.rs",
+        "line": 128,
+        "name": "delete_empty_skill_repository",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete/repository.rs",
+        "line": 130,
+        "name": "prune_empty_skill_repositories",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete/repository.rs",
+        "line": 131,
+        "name": "get_skill_repository_by_id",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete/repository.rs",
+        "line": 159,
+        "name": "delete_empty_skill_repository",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete/repository.rs",
+        "line": 161,
+        "name": "prune_empty_skill_repositories",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete/repository.rs",
+        "line": 162,
+        "name": "get_skill_repository_by_id",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/central_skills/delete/reset.rs": [
+      {
+        "file": "src-tauri/src/services/central_skills/delete/reset.rs",
+        "line": 189,
+        "name": "get_skill_installations_for_skills",
+        "owner": "installations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete/reset.rs",
+        "line": 225,
+        "name": "clear_all_skill_update_inventory",
+        "owner": "update_inventory_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/delete/reset.rs",
+        "line": 226,
+        "name": "clear_pending_additions",
+        "owner": "pending_additions_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/central_skills/files.rs": [
+      {
+        "file": "src-tauri/src/services/central_skills/files.rs",
+        "line": 57,
+        "name": "get_skill_by_id",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/central_skills/query.rs": [
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 21,
+        "name": "get_agent_skill_observations",
+        "owner": "observations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 55,
+        "name": "get_skill_by_id",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 59,
+        "name": "get_skill_installations",
+        "owner": "installations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 64,
+        "name": "get_skill_collections",
+        "owner": "collections_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 69,
+        "name": "get_skill_repository_assignment",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 74,
+        "name": "get_skill_tags_for_skill",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 76,
+        "name": "get_skills_for_agent",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 145,
+        "name": "get_skill_by_id",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 151,
+        "name": "get_skill_installations",
+        "owner": "installations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 152,
+        "name": "get_skill_collections",
+        "owner": "collections_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 153,
+        "name": "get_skill_repository_assignment",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 154,
+        "name": "get_skill_tags_for_skill",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 191,
+        "name": "get_skills_for_agent",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 197,
+        "name": "get_central_skills",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 198,
+        "name": "get_all_agents",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 224,
+        "name": "get_skill_installations_for_skills",
+        "owner": "installations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 226,
+        "name": "get_skill_repository_assignments_for_skills",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 227,
+        "name": "get_skill_tags_for_skills",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 228,
+        "name": "get_local_unknown_repository",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 276,
+        "name": "get_skill_by_uid",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 282,
+        "name": "get_skill_by_id",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 289,
+        "name": "get_central_skills_by_exact_name",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 327,
+        "name": "get_all_agents",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 329,
+        "name": "get_central_skills_page",
+        "owner": "central_skills_page_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 532,
+        "name": "get_all_agents",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/central_skills/query.rs",
+        "line": 534,
+        "name": "get_central_skills",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/central_store_location/mod.rs": [
+      {
+        "file": "src-tauri/src/services/central_store_location/mod.rs",
+        "line": 219,
+        "name": "get_agent_by_id",
+        "owner": "agents_repo",
+        "kind": "crate-path"
+      }
+    ],
+    "src-tauri/src/services/github_import/import.rs": [
+      {
+        "file": "src-tauri/src/services/github_import/import.rs",
+        "line": 574,
+        "name": "get_skill_by_id",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/github_import/import.rs",
+        "line": 684,
+        "name": "get_agent_by_id",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/github_import/import.rs",
+        "line": 710,
+        "name": "get_skills_by_ids",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/github_import/pat.rs": [
+      {
+        "file": "src-tauri/src/services/github_import/pat.rs",
+        "line": 85,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/github_import/pat.rs",
+        "line": 93,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/github_import/pat.rs",
+        "line": 99,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/github_import/pat.rs",
+        "line": 108,
+        "name": "delete_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/github_import/remote.rs": [
+      {
+        "file": "src-tauri/src/services/github_import/remote.rs",
+        "line": 352,
+        "name": "get_agent_by_id",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/local_archive_import/import.rs": [
+      {
+        "file": "src-tauri/src/services/local_archive_import/import.rs",
+        "line": 196,
+        "name": "upsert_skill",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/local_archive_import/import.rs",
+        "line": 236,
+        "name": "get_skill_by_id",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/local_archive_import/import.rs",
+        "line": 367,
+        "name": "get_agent_by_id",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/local_archive_import/preview.rs": [
+      {
+        "file": "src-tauri/src/services/local_archive_import/preview.rs",
+        "line": 111,
+        "name": "get_skill_by_id",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/local_archive_import/preview.rs",
+        "line": 201,
+        "name": "upsert_skill",
+        "owner": "skills_repo",
+        "kind": "crate-path"
+      }
+    ],
+    "src-tauri/src/services/marketplace/mod.rs": [
+      {
+        "file": "src-tauri/src/services/marketplace/mod.rs",
+        "line": 739,
+        "name": "get_agent_by_id",
+        "owner": "agents_repo",
+        "kind": "crate-path"
+      }
+    ],
+    "src-tauri/src/services/obsidian/import.rs": [
+      {
+        "file": "src-tauri/src/services/obsidian/import.rs",
+        "line": 100,
+        "name": "upsert_skill",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/obsidian/import.rs",
+        "line": 116,
+        "name": "get_agent_by_id",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/obsidian/import.rs",
+        "line": 194,
+        "name": "upsert_skill",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/obsidian/import.rs",
+        "line": 208,
+        "name": "upsert_skill_installation",
+        "owner": "installations_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/portable_state/export.rs": [
+      {
+        "file": "src-tauri/src/services/portable_state/export.rs",
+        "line": 36,
+        "name": "get_central_skills",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/portable_state/export.rs",
+        "line": 42,
+        "name": "get_skill_repository_assignments_for_skills",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/portable_state/export.rs",
+        "line": 43,
+        "name": "get_skill_tags_for_skills",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/portable_state/export.rs",
+        "line": 44,
+        "name": "get_local_unknown_repository",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/portable_state/import.rs": [
+      {
+        "file": "src-tauri/src/services/portable_state/import.rs",
+        "line": 377,
+        "name": "get_skills_by_ids",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/portable_state/import.rs",
+        "line": 387,
+        "name": "get_skills_by_uids",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/portable_state/import.rs",
+        "line": 507,
+        "name": "create_skill_tag",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/portable_state/import.rs",
+        "line": 521,
+        "name": "assign_skill_tags",
+        "owner": "tags_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/portable_state/preview.rs": [
+      {
+        "file": "src-tauri/src/services/portable_state/preview.rs",
+        "line": 58,
+        "name": "get_skills_by_ids",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/portable_state/preview.rs",
+        "line": 67,
+        "name": "get_skills_by_uids",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/projects/crud.rs": [
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 154,
+        "name": "get_project_by_path",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 158,
+        "name": "get_project_by_path",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 159,
+        "name": "update_project_path",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 173,
+        "name": "insert_project",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 179,
+        "name": "list_projects",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 183,
+        "name": "list_project_skill_installations",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 202,
+        "name": "get_project_by_id",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 205,
+        "name": "update_project_name",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 213,
+        "name": "get_project_by_id",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 216,
+        "name": "update_project_pinned",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 229,
+        "name": "get_project_by_id",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 233,
+        "name": "list_project_skill_installations",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 234,
+        "name": "get_all_agents",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 288,
+        "name": "get_project_by_id",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 293,
+        "name": "list_project_skill_installations",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 324,
+        "name": "delete_project",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 335,
+        "name": "get_all_agents",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 407,
+        "name": "get_project_by_id",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 420,
+        "name": "get_agent_by_id",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 427,
+        "name": "get_skill_by_id",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 500,
+        "name": "upsert_project_skill_installation",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 544,
+        "name": "get_project_skill_installation",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 552,
+        "name": "delete_project_skill_installation",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/crud.rs",
+        "line": 556,
+        "name": "upsert_project_skill_installation",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/projects/scan.rs": [
+      {
+        "file": "src-tauri/src/services/projects/scan.rs",
+        "line": 180,
+        "name": "get_project_by_id",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/scan.rs",
+        "line": 184,
+        "name": "get_all_agents",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/scan.rs",
+        "line": 193,
+        "name": "delete_stale_project_skill_installations",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/scan.rs",
+        "line": 195,
+        "name": "update_project_last_scanned",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/scan.rs",
+        "line": 228,
+        "name": "persist_project_skill_scan",
+        "owner": "projects_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/projects/scan.rs",
+        "line": 250,
+        "name": "get_skills_by_ids",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/scanner/mod.rs": [
+      {
+        "file": "src-tauri/src/services/scanner/mod.rs",
+        "line": 313,
+        "name": "get_all_agents",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/scanner/mod.rs",
+        "line": 314,
+        "name": "get_scan_directories",
+        "owner": "scan_dirs_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/scanner/mod.rs",
+        "line": 543,
+        "name": "get_all_agents",
+        "owner": "agents_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/scanner/persistence.rs": [
+      {
+        "file": "src-tauri/src/services/scanner/persistence.rs",
+        "line": 334,
+        "name": "prune_empty_skill_repositories_in_transaction",
+        "owner": "repositories_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/usage/incremental.rs": [
+      {
+        "file": "src-tauri/src/services/usage/incremental.rs",
+        "line": 23,
+        "name": "list_file_cache_rows",
+        "owner": "usage_file_cache_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/incremental.rs",
+        "line": 38,
+        "name": "delete_file_cache_rows",
+        "owner": "usage_file_cache_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/incremental.rs",
+        "line": 57,
+        "name": "upsert_file_cache_rows",
+        "owner": "usage_file_cache_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/usage/mod.rs": [
+      {
+        "file": "src-tauri/src/services/usage/mod.rs",
+        "line": 285,
+        "name": "get_last_scan_ms",
+        "owner": "usage_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/mod.rs",
+        "line": 307,
+        "name": "delete_file_cache_for_provider",
+        "owner": "usage_file_cache_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/mod.rs",
+        "line": 468,
+        "name": "list_usage_skill_candidates",
+        "owner": "usage_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/mod.rs",
+        "line": 494,
+        "name": "replace_calls_for_target",
+        "owner": "usage_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/mod.rs",
+        "line": 520,
+        "name": "get_usage_kpis",
+        "owner": "usage_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/mod.rs",
+        "line": 521,
+        "name": "list_top_skills",
+        "owner": "usage_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/mod.rs",
+        "line": 522,
+        "name": "list_usage_metadata",
+        "owner": "usage_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/mod.rs",
+        "line": 529,
+        "name": "list_timestamps_since",
+        "owner": "usage_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/mod.rs",
+        "line": 530,
+        "name": "get_last_scan_ms",
+        "owner": "usage_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/mod.rs",
+        "line": 574,
+        "name": "list_recent_calls",
+        "owner": "usage_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/mod.rs",
+        "line": 575,
+        "name": "list_usage_metadata",
+        "owner": "usage_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/mod.rs",
+        "line": 606,
+        "name": "get_skill_detail_summary",
+        "owner": "usage_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/mod.rs",
+        "line": 609,
+        "name": "get_usage_metadata_for_skill",
+        "owner": "usage_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/mod.rs",
+        "line": 635,
+        "name": "list_skill_project_counts",
+        "owner": "usage_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/mod.rs",
+        "line": 648,
+        "name": "list_skill_timestamps_since",
+        "owner": "usage_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/mod.rs",
+        "line": 682,
+        "name": "get_usage_metadata_for_skill",
+        "owner": "usage_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/mod.rs",
+        "line": 687,
+        "name": "list_usage_skill_candidates",
+        "owner": "usage_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/mod.rs",
+        "line": 738,
+        "name": "list_provider_rows",
+        "owner": "usage_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/services/usage/unused.rs": [
+      {
+        "file": "src-tauri/src/services/usage/unused.rs",
+        "line": 22,
+        "name": "get_central_skills",
+        "owner": "skills_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/unused.rs",
+        "line": 24,
+        "name": "list_resolved_call_aggregates",
+        "owner": "usage_unused_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/unused.rs",
+        "line": 33,
+        "name": "list_pending_fs_db_operations",
+        "owner": "fs_db_operations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/unused.rs",
+        "line": 39,
+        "name": "get_skill_installations_for_skills",
+        "owner": "installations_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/unused.rs",
+        "line": 83,
+        "name": "list_platform_skill_observations",
+        "owner": "usage_unused_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/unused.rs",
+        "line": 85,
+        "name": "list_normalized_call_aggregates",
+        "owner": "usage_unused_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/services/usage/unused.rs",
+        "line": 91,
+        "name": "list_usage_metadata",
+        "owner": "usage_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/targets/commands.rs": [
+      {
+        "file": "src-tauri/src/targets/commands.rs",
+        "line": 345,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/targets/config.rs": [
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 68,
+        "name": "get_settings",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 129,
+        "name": "set_settings",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 155,
+        "name": "get_settings",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 180,
+        "name": "set_settings",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 212,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 416,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 419,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 422,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 432,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 439,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 482,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 485,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 488,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 498,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 518,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 524,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 540,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 543,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 557,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 564,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 571,
+        "name": "get_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 581,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 602,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 612,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 640,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 672,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 722,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/config.rs",
+        "line": 737,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      }
+    ],
+    "src-tauri/src/targets/persist.rs": [
+      {
+        "file": "src-tauri/src/targets/persist.rs",
+        "line": 256,
+        "name": "get_settings",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/persist.rs",
+        "line": 375,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      },
+      {
+        "file": "src-tauri/src/targets/persist.rs",
+        "line": 387,
+        "name": "set_setting",
+        "owner": "settings_repo",
+        "kind": "db-module"
+      }
+    ]
+  },
+  "hits": [
+    {
+      "file": "src-tauri/src/central_migration.rs",
+      "line": 91,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/central_migration.rs",
+      "line": 117,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/central_migration.rs",
+      "line": 132,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/central_migration.rs",
+      "line": 144,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/central_migration.rs",
+      "line": 285,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/cli_api/mod.rs",
+      "line": 252,
+      "name": "get_skill_installations",
+      "owner": "installations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/cli_api/mod.rs",
+      "line": 423,
+      "name": "get_central_skills",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/cli_api/mod.rs",
+      "line": 547,
+      "name": "get_all_agents",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/agents/mod.rs",
+      "line": 87,
+      "name": "get_all_agents",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/agents/mod.rs",
+      "line": 165,
+      "name": "get_all_agents",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/agents/mod.rs",
+      "line": 170,
+      "name": "get_all_agents",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/agents/mod.rs",
+      "line": 177,
+      "name": "get_all_agents",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/agents/mod.rs",
+      "line": 182,
+      "name": "update_agent_detected",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/agents/mod.rs",
+      "line": 217,
+      "name": "get_all_agents",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/agents/mod.rs",
+      "line": 227,
+      "name": "update_agent_detected",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/agents/mod.rs",
+      "line": 295,
+      "name": "insert_custom_agent",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/agents/mod.rs",
+      "line": 299,
+      "name": "get_agent_by_id",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/agents/mod.rs",
+      "line": 332,
+      "name": "update_custom_agent",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/agents/mod.rs",
+      "line": 354,
+      "name": "delete_custom_agent",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/agents/mod.rs",
+      "line": 365,
+      "name": "update_agent_enabled",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 122,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 129,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 143,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 167,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 171,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 193,
+      "name": "get_skill_counts_by_agent",
+      "owner": "installations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 248,
+      "name": "get_all_agents",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 251,
+      "name": "get_collection_count",
+      "owner": "collections_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 304,
+      "name": "get_skill_repositories_with_stats",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 307,
+      "name": "count_central_readiness_inputs",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 343,
+      "name": "upsert_skill",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 362,
+      "name": "upsert_skill_installation",
+      "owner": "installations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 375,
+      "name": "create_collection",
+      "owner": "collections_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 378,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 379,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 401,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 404,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 415,
+      "name": "upsert_skill",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 454,
+      "name": "create_skill_tag",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 455,
+      "name": "assign_skill_tags",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 466,
+      "name": "create_or_update_skill_repository",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 479,
+      "name": "assign_skills_to_repository",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 488,
+      "name": "upsert_skill_installation",
+      "owner": "installations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 520,
+      "name": "create_skill_tag",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 521,
+      "name": "assign_skill_tags",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 532,
+      "name": "create_or_update_skill_repository",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 545,
+      "name": "assign_skills_to_repository",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/bootstrap.rs",
+      "line": 555,
+      "name": "upsert_skill_installation",
+      "owner": "installations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/central_metadata.rs",
+      "line": 38,
+      "name": "get_skill_repositories_with_stats",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/central_metadata.rs",
+      "line": 88,
+      "name": "create_or_update_skill_repository",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/central_metadata.rs",
+      "line": 140,
+      "name": "assign_skills_to_repository",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/central_metadata.rs",
+      "line": 182,
+      "name": "set_skill_repository_pinned",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/central_metadata.rs",
+      "line": 199,
+      "name": "get_skill_tags",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/central_metadata.rs",
+      "line": 215,
+      "name": "list_central_top_tags",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/central_metadata.rs",
+      "line": 252,
+      "name": "create_skill_tag",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/central_metadata.rs",
+      "line": 291,
+      "name": "assign_skill_tags",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/central_metadata.rs",
+      "line": 332,
+      "name": "unassign_skill_tags",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/central_metadata.rs",
+      "line": 349,
+      "name": "get_pending_ai_tag_reviews",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/central_metadata.rs",
+      "line": 388,
+      "name": "accept_ai_tag_reviews",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/central_metadata.rs",
+      "line": 423,
+      "name": "skip_ai_tag_reviews",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/collections.rs",
+      "line": 44,
+      "name": "create_collection",
+      "owner": "collections_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/collections.rs",
+      "line": 51,
+      "name": "get_all_collections",
+      "owner": "collections_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/collections.rs",
+      "line": 57,
+      "name": "get_collection_by_id",
+      "owner": "collections_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/collections.rs",
+      "line": 70,
+      "name": "get_collection_skills",
+      "owner": "collections_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/collections.rs",
+      "line": 92,
+      "name": "add_skill_to_collection",
+      "owner": "collections_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/collections.rs",
+      "line": 105,
+      "name": "remove_skill_from_collection",
+      "owner": "collections_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/collections.rs",
+      "line": 114,
+      "name": "delete_collection",
+      "owner": "collections_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/collections.rs",
+      "line": 132,
+      "name": "update_collection",
+      "owner": "collections_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/collections.rs",
+      "line": 136,
+      "name": "get_collection_by_id",
+      "owner": "collections_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/collections.rs",
+      "line": 154,
+      "name": "get_collection_skills",
+      "owner": "collections_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/collections/export_import.rs",
+      "line": 29,
+      "name": "get_collection_skills",
+      "owner": "collections_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/collections/export_import.rs",
+      "line": 62,
+      "name": "create_collection",
+      "owner": "collections_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/collections/export_import.rs",
+      "line": 69,
+      "name": "get_skill_by_id",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/collections/export_import.rs",
+      "line": 70,
+      "name": "add_skill_to_collection",
+      "owner": "collections_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/linker.rs",
+      "line": 542,
+      "name": "list_operation_logs",
+      "owner": "operation_logs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/linker.rs",
+      "line": 581,
+      "name": "list_operation_logs",
+      "owner": "operation_logs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/logs.rs",
+      "line": 61,
+      "name": "list_operation_logs",
+      "owner": "operation_logs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/logs.rs",
+      "line": 77,
+      "name": "get_operation_log",
+      "owner": "operation_logs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/logs.rs",
+      "line": 103,
+      "name": "clear_operation_logs",
+      "owner": "operation_logs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/logs.rs",
+      "line": 123,
+      "name": "export_operation_logs_json",
+      "owner": "operation_logs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/logs.rs",
+      "line": 286,
+      "name": "list_daily_operation_counts",
+      "owner": "operation_logs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/saved_views.rs",
+      "line": 45,
+      "name": "list_saved_views",
+      "owner": "saved_views_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/saved_views.rs",
+      "line": 59,
+      "name": "create_saved_view",
+      "owner": "saved_views_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/saved_views.rs",
+      "line": 88,
+      "name": "update_saved_view",
+      "owner": "saved_views_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/saved_views.rs",
+      "line": 103,
+      "name": "get_saved_view",
+      "owner": "saved_views_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/saved_views.rs",
+      "line": 110,
+      "name": "delete_saved_view",
+      "owner": "saved_views_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/saved_views.rs",
+      "line": 116,
+      "name": "reorder_saved_views",
+      "owner": "saved_views_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/saved_views.rs",
+      "line": 559,
+      "name": "get_saved_view",
+      "owner": "saved_views_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/saved_views.rs",
+      "line": 560,
+      "name": "get_saved_view",
+      "owner": "saved_views_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/saved_views.rs",
+      "line": 627,
+      "name": "list_operation_logs",
+      "owner": "operation_logs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/scanner.rs",
+      "line": 88,
+      "name": "set_setting_best_effort",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/scanner.rs",
+      "line": 102,
+      "name": "set_setting_best_effort",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/scanner.rs",
+      "line": 104,
+      "name": "set_setting_best_effort",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/scanner.rs",
+      "line": 106,
+      "name": "set_setting_best_effort",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/settings.rs",
+      "line": 71,
+      "name": "get_scan_directories",
+      "owner": "scan_dirs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/settings.rs",
+      "line": 97,
+      "name": "add_scan_directory",
+      "owner": "scan_dirs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/settings.rs",
+      "line": 112,
+      "name": "remove_scan_directory",
+      "owner": "scan_dirs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/settings.rs",
+      "line": 123,
+      "name": "toggle_scan_directory",
+      "owner": "scan_dirs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/settings.rs",
+      "line": 133,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/settings.rs",
+      "line": 144,
+      "name": "get_settings",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/settings.rs",
+      "line": 152,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/settings.rs",
+      "line": 165,
+      "name": "set_settings",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/skill_update_inventory.rs",
+      "line": 614,
+      "name": "list_operation_logs",
+      "owner": "operation_logs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/skill_update_inventory.rs",
+      "line": 674,
+      "name": "list_operation_logs",
+      "owner": "operation_logs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/skill_update_inventory.rs",
+      "line": 715,
+      "name": "list_operation_logs",
+      "owner": "operation_logs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/tag_groups.rs",
+      "line": 38,
+      "name": "list_tag_groups",
+      "owner": "tag_groups_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/tag_groups.rs",
+      "line": 49,
+      "name": "create_tag_group",
+      "owner": "tag_groups_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/tag_groups.rs",
+      "line": 71,
+      "name": "update_tag_group",
+      "owner": "tag_groups_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/tag_groups.rs",
+      "line": 84,
+      "name": "get_tag_group",
+      "owner": "tag_groups_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/tag_groups.rs",
+      "line": 91,
+      "name": "delete_tag_group",
+      "owner": "tag_groups_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/tag_groups.rs",
+      "line": 97,
+      "name": "reorder_tag_groups",
+      "owner": "tag_groups_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/tag_groups.rs",
+      "line": 107,
+      "name": "set_tag_group",
+      "owner": "tag_groups_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/tag_groups.rs",
+      "line": 440,
+      "name": "create_skill_tag",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/tag_groups.rs",
+      "line": 450,
+      "name": "get_skill_tag_by_id",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/tag_groups.rs",
+      "line": 484,
+      "name": "create_skill_tag",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/tag_groups.rs",
+      "line": 490,
+      "name": "get_skill_tag_by_id",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/tag_groups.rs",
+      "line": 501,
+      "name": "create_skill_tag",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/tag_groups.rs",
+      "line": 508,
+      "name": "get_skill_tag_by_id",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/tag_groups.rs",
+      "line": 522,
+      "name": "create_skill_tag",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/commands/usage.rs",
+      "line": 268,
+      "name": "get_last_scan_ms",
+      "owner": "usage_repo",
+      "kind": "crate-path"
+    },
+    {
+      "file": "src-tauri/src/commands/usage.rs",
+      "line": 298,
+      "name": "get_last_scan_ms",
+      "owner": "usage_repo",
+      "kind": "crate-path"
+    },
+    {
+      "file": "src-tauri/src/commands/usage.rs",
+      "line": 373,
+      "name": "get_last_scan_ms",
+      "owner": "usage_repo",
+      "kind": "crate-path"
+    },
+    {
+      "file": "src-tauri/src/commands/usage.rs",
+      "line": 522,
+      "name": "list_skill_counts_since",
+      "owner": "usage_repo",
+      "kind": "crate-path"
+    },
+    {
+      "file": "src-tauri/src/commands/usage.rs",
+      "line": 586,
+      "name": "list_skill_usage_stats",
+      "owner": "usage_stats_repo",
+      "kind": "crate-path"
+    },
+    {
+      "file": "src-tauri/src/observability/operation.rs",
+      "line": 523,
+      "name": "mark_started_operation_logs_interrupted",
+      "owner": "operation_logs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/observability/operation.rs",
+      "line": 730,
+      "name": "insert_operation_log_with_id",
+      "owner": "operation_logs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/observability/operation.rs",
+      "line": 754,
+      "name": "insert_operation_log_with_id",
+      "owner": "operation_logs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/observability/operation.rs",
+      "line": 759,
+      "name": "update_operation_log",
+      "owner": "operation_logs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/observability/operation.rs",
+      "line": 761,
+      "name": "insert_operation_log_with_id",
+      "owner": "operation_logs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/operation_log.rs",
+      "line": 260,
+      "name": "insert_operation_log",
+      "owner": "operation_logs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/operation_log.rs",
+      "line": 425,
+      "name": "list_operation_logs",
+      "owner": "operation_logs_repo",
+      "kind": "crate-path"
+    },
+    {
+      "file": "src-tauri/src/operation_log.rs",
+      "line": 467,
+      "name": "list_operation_logs",
+      "owner": "operation_logs_repo",
+      "kind": "crate-path"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/claude.rs",
+      "line": 394,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/claude.rs",
+      "line": 397,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/claude.rs",
+      "line": 400,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/claude.rs",
+      "line": 403,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/claude.rs",
+      "line": 422,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/claude.rs",
+      "line": 425,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/claude.rs",
+      "line": 428,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/claude.rs",
+      "line": 435,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/config.rs",
+      "line": 108,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/config.rs",
+      "line": 111,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/config.rs",
+      "line": 114,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/config.rs",
+      "line": 132,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/config.rs",
+      "line": 135,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/config.rs",
+      "line": 138,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/config.rs",
+      "line": 141,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/config.rs",
+      "line": 148,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/config.rs",
+      "line": 165,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/config.rs",
+      "line": 182,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/config.rs",
+      "line": 185,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/secret.rs",
+      "line": 135,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/secret.rs",
+      "line": 141,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/secret.rs",
+      "line": 146,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/secret.rs",
+      "line": 153,
+      "name": "delete_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/secret.rs",
+      "line": 507,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/secret.rs",
+      "line": 523,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/secret.rs",
+      "line": 529,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/secret.rs",
+      "line": 544,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/secret.rs",
+      "line": 563,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/secret.rs",
+      "line": 570,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/secret.rs",
+      "line": 583,
+      "name": "list_operation_logs",
+      "owner": "operation_logs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/secret.rs",
+      "line": 612,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/secret.rs",
+      "line": 639,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/secret.rs",
+      "line": 733,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_tagging/mod.rs",
+      "line": 227,
+      "name": "get_skill_tags",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_tagging/mod.rs",
+      "line": 296,
+      "name": "get_skill_by_id",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_tagging/mod.rs",
+      "line": 363,
+      "name": "replace_skill_ai_tags",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/ai_tagging/mod.rs",
+      "line": 394,
+      "name": "replace_pending_ai_tag_reviews",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/force_abandon.rs",
+      "line": 43,
+      "name": "transition_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/force_abandon.rs",
+      "line": 52,
+      "name": "list_pending_fs_db_operations",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/force_abandon.rs",
+      "line": 232,
+      "name": "insert_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/force_abandon.rs",
+      "line": 329,
+      "name": "insert_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/force_abandon.rs",
+      "line": 363,
+      "name": "get_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/force_abandon.rs",
+      "line": 405,
+      "name": "insert_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/reconcile.rs",
+      "line": 65,
+      "name": "transition_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/reconcile.rs",
+      "line": 74,
+      "name": "get_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/reconcile.rs",
+      "line": 119,
+      "name": "get_skill_by_id",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/reconcile.rs",
+      "line": 123,
+      "name": "get_skill_installations",
+      "owner": "installations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/reconcile.rs",
+      "line": 365,
+      "name": "insert_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/reconcile.rs",
+      "line": 396,
+      "name": "get_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/reconcile.rs",
+      "line": 407,
+      "name": "get_skill_by_id",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/reconcile.rs",
+      "line": 437,
+      "name": "insert_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/reconcile.rs",
+      "line": 464,
+      "name": "get_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/recovery.rs",
+      "line": 21,
+      "name": "list_pending_fs_db_operations",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/recovery.rs",
+      "line": 51,
+      "name": "list_pending_fs_db_operations",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/recovery.rs",
+      "line": 83,
+      "name": "record_fs_db_operation_error",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/recovery.rs",
+      "line": 102,
+      "name": "list_pending_fs_db_operations",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/recovery.rs",
+      "line": 157,
+      "name": "transition_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/recovery.rs",
+      "line": 161,
+      "name": "record_fs_db_operation_error",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/recovery.rs",
+      "line": 178,
+      "name": "get_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/recovery.rs",
+      "line": 207,
+      "name": "record_fs_db_operation_error",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/recovery.rs",
+      "line": 234,
+      "name": "record_fs_db_operation_error",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/recovery.rs",
+      "line": 258,
+      "name": "transition_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/recovery.rs",
+      "line": 272,
+      "name": "transition_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/recovery.rs",
+      "line": 368,
+      "name": "insert_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/recovery.rs",
+      "line": 393,
+      "name": "export_operation_logs_json",
+      "owner": "operation_logs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/recovery.rs",
+      "line": 420,
+      "name": "insert_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/recovery.rs",
+      "line": 477,
+      "name": "insert_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/recovery.rs",
+      "line": 499,
+      "name": "get_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/recovery.rs",
+      "line": 537,
+      "name": "insert_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_operation/recovery.rs",
+      "line": 561,
+      "name": "get_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 156,
+      "name": "insert_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 181,
+      "name": "record_fs_db_operation_error",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 247,
+      "name": "list_pending_fs_db_operations",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 273,
+      "name": "get_skill_by_id",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 280,
+      "name": "get_agent_by_id",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 287,
+      "name": "get_all_agents",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 289,
+      "name": "get_skill_installations",
+      "owner": "installations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 371,
+      "name": "get_skill_by_id",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 378,
+      "name": "get_agent_by_id",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 386,
+      "name": "get_skill_installations",
+      "owner": "installations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 402,
+      "name": "get_all_agents",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 466,
+      "name": "transition_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 467,
+      "name": "commit_delete_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 474,
+      "name": "transition_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 498,
+      "name": "get_skill_by_id",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 505,
+      "name": "get_agent_by_id",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 512,
+      "name": "get_all_agents",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 514,
+      "name": "get_skill_installations",
+      "owner": "installations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 593,
+      "name": "get_skill_by_id",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 600,
+      "name": "get_agent_by_id",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 608,
+      "name": "get_skill_installations",
+      "owner": "installations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 665,
+      "name": "transition_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 666,
+      "name": "commit_delete_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete.rs",
+      "line": 671,
+      "name": "transition_fs_db_operation",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete/batch.rs",
+      "line": 76,
+      "name": "list_pending_fs_db_operations",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete/repository.rs",
+      "line": 23,
+      "name": "get_skill_repository_by_id",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete/repository.rs",
+      "line": 30,
+      "name": "get_central_skill_ids_by_repository",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete/repository.rs",
+      "line": 128,
+      "name": "delete_empty_skill_repository",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete/repository.rs",
+      "line": 130,
+      "name": "prune_empty_skill_repositories",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete/repository.rs",
+      "line": 131,
+      "name": "get_skill_repository_by_id",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete/repository.rs",
+      "line": 159,
+      "name": "delete_empty_skill_repository",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete/repository.rs",
+      "line": 161,
+      "name": "prune_empty_skill_repositories",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete/repository.rs",
+      "line": 162,
+      "name": "get_skill_repository_by_id",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete/reset.rs",
+      "line": 189,
+      "name": "get_skill_installations_for_skills",
+      "owner": "installations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete/reset.rs",
+      "line": 225,
+      "name": "clear_all_skill_update_inventory",
+      "owner": "update_inventory_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/delete/reset.rs",
+      "line": 226,
+      "name": "clear_pending_additions",
+      "owner": "pending_additions_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/files.rs",
+      "line": 57,
+      "name": "get_skill_by_id",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 21,
+      "name": "get_agent_skill_observations",
+      "owner": "observations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 55,
+      "name": "get_skill_by_id",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 59,
+      "name": "get_skill_installations",
+      "owner": "installations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 64,
+      "name": "get_skill_collections",
+      "owner": "collections_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 69,
+      "name": "get_skill_repository_assignment",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 74,
+      "name": "get_skill_tags_for_skill",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 76,
+      "name": "get_skills_for_agent",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 145,
+      "name": "get_skill_by_id",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 151,
+      "name": "get_skill_installations",
+      "owner": "installations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 152,
+      "name": "get_skill_collections",
+      "owner": "collections_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 153,
+      "name": "get_skill_repository_assignment",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 154,
+      "name": "get_skill_tags_for_skill",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 191,
+      "name": "get_skills_for_agent",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 197,
+      "name": "get_central_skills",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 198,
+      "name": "get_all_agents",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 224,
+      "name": "get_skill_installations_for_skills",
+      "owner": "installations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 226,
+      "name": "get_skill_repository_assignments_for_skills",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 227,
+      "name": "get_skill_tags_for_skills",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 228,
+      "name": "get_local_unknown_repository",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 276,
+      "name": "get_skill_by_uid",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 282,
+      "name": "get_skill_by_id",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 289,
+      "name": "get_central_skills_by_exact_name",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 327,
+      "name": "get_all_agents",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 329,
+      "name": "get_central_skills_page",
+      "owner": "central_skills_page_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 532,
+      "name": "get_all_agents",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_skills/query.rs",
+      "line": 534,
+      "name": "get_central_skills",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/central_store_location/mod.rs",
+      "line": 219,
+      "name": "get_agent_by_id",
+      "owner": "agents_repo",
+      "kind": "crate-path"
+    },
+    {
+      "file": "src-tauri/src/services/github_import/import.rs",
+      "line": 574,
+      "name": "get_skill_by_id",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/github_import/import.rs",
+      "line": 684,
+      "name": "get_agent_by_id",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/github_import/import.rs",
+      "line": 710,
+      "name": "get_skills_by_ids",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/github_import/pat.rs",
+      "line": 85,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/github_import/pat.rs",
+      "line": 93,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/github_import/pat.rs",
+      "line": 99,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/github_import/pat.rs",
+      "line": 108,
+      "name": "delete_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/github_import/remote.rs",
+      "line": 352,
+      "name": "get_agent_by_id",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/local_archive_import/import.rs",
+      "line": 196,
+      "name": "upsert_skill",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/local_archive_import/import.rs",
+      "line": 236,
+      "name": "get_skill_by_id",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/local_archive_import/import.rs",
+      "line": 367,
+      "name": "get_agent_by_id",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/local_archive_import/preview.rs",
+      "line": 111,
+      "name": "get_skill_by_id",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/local_archive_import/preview.rs",
+      "line": 201,
+      "name": "upsert_skill",
+      "owner": "skills_repo",
+      "kind": "crate-path"
+    },
+    {
+      "file": "src-tauri/src/services/marketplace/mod.rs",
+      "line": 739,
+      "name": "get_agent_by_id",
+      "owner": "agents_repo",
+      "kind": "crate-path"
+    },
+    {
+      "file": "src-tauri/src/services/obsidian/import.rs",
+      "line": 100,
+      "name": "upsert_skill",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/obsidian/import.rs",
+      "line": 116,
+      "name": "get_agent_by_id",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/obsidian/import.rs",
+      "line": 194,
+      "name": "upsert_skill",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/obsidian/import.rs",
+      "line": 208,
+      "name": "upsert_skill_installation",
+      "owner": "installations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/portable_state/export.rs",
+      "line": 36,
+      "name": "get_central_skills",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/portable_state/export.rs",
+      "line": 42,
+      "name": "get_skill_repository_assignments_for_skills",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/portable_state/export.rs",
+      "line": 43,
+      "name": "get_skill_tags_for_skills",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/portable_state/export.rs",
+      "line": 44,
+      "name": "get_local_unknown_repository",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/portable_state/import.rs",
+      "line": 377,
+      "name": "get_skills_by_ids",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/portable_state/import.rs",
+      "line": 387,
+      "name": "get_skills_by_uids",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/portable_state/import.rs",
+      "line": 507,
+      "name": "create_skill_tag",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/portable_state/import.rs",
+      "line": 521,
+      "name": "assign_skill_tags",
+      "owner": "tags_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/portable_state/preview.rs",
+      "line": 58,
+      "name": "get_skills_by_ids",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/portable_state/preview.rs",
+      "line": 67,
+      "name": "get_skills_by_uids",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 154,
+      "name": "get_project_by_path",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 158,
+      "name": "get_project_by_path",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 159,
+      "name": "update_project_path",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 173,
+      "name": "insert_project",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 179,
+      "name": "list_projects",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 183,
+      "name": "list_project_skill_installations",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 202,
+      "name": "get_project_by_id",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 205,
+      "name": "update_project_name",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 213,
+      "name": "get_project_by_id",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 216,
+      "name": "update_project_pinned",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 229,
+      "name": "get_project_by_id",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 233,
+      "name": "list_project_skill_installations",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 234,
+      "name": "get_all_agents",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 288,
+      "name": "get_project_by_id",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 293,
+      "name": "list_project_skill_installations",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 324,
+      "name": "delete_project",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 335,
+      "name": "get_all_agents",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 407,
+      "name": "get_project_by_id",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 420,
+      "name": "get_agent_by_id",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 427,
+      "name": "get_skill_by_id",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 500,
+      "name": "upsert_project_skill_installation",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 544,
+      "name": "get_project_skill_installation",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 552,
+      "name": "delete_project_skill_installation",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/crud.rs",
+      "line": 556,
+      "name": "upsert_project_skill_installation",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/scan.rs",
+      "line": 180,
+      "name": "get_project_by_id",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/scan.rs",
+      "line": 184,
+      "name": "get_all_agents",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/scan.rs",
+      "line": 193,
+      "name": "delete_stale_project_skill_installations",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/scan.rs",
+      "line": 195,
+      "name": "update_project_last_scanned",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/scan.rs",
+      "line": 228,
+      "name": "persist_project_skill_scan",
+      "owner": "projects_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/projects/scan.rs",
+      "line": 250,
+      "name": "get_skills_by_ids",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/scanner/mod.rs",
+      "line": 313,
+      "name": "get_all_agents",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/scanner/mod.rs",
+      "line": 314,
+      "name": "get_scan_directories",
+      "owner": "scan_dirs_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/scanner/mod.rs",
+      "line": 543,
+      "name": "get_all_agents",
+      "owner": "agents_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/scanner/persistence.rs",
+      "line": 334,
+      "name": "prune_empty_skill_repositories_in_transaction",
+      "owner": "repositories_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/incremental.rs",
+      "line": 23,
+      "name": "list_file_cache_rows",
+      "owner": "usage_file_cache_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/incremental.rs",
+      "line": 38,
+      "name": "delete_file_cache_rows",
+      "owner": "usage_file_cache_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/incremental.rs",
+      "line": 57,
+      "name": "upsert_file_cache_rows",
+      "owner": "usage_file_cache_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/mod.rs",
+      "line": 285,
+      "name": "get_last_scan_ms",
+      "owner": "usage_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/mod.rs",
+      "line": 307,
+      "name": "delete_file_cache_for_provider",
+      "owner": "usage_file_cache_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/mod.rs",
+      "line": 468,
+      "name": "list_usage_skill_candidates",
+      "owner": "usage_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/mod.rs",
+      "line": 494,
+      "name": "replace_calls_for_target",
+      "owner": "usage_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/mod.rs",
+      "line": 520,
+      "name": "get_usage_kpis",
+      "owner": "usage_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/mod.rs",
+      "line": 521,
+      "name": "list_top_skills",
+      "owner": "usage_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/mod.rs",
+      "line": 522,
+      "name": "list_usage_metadata",
+      "owner": "usage_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/mod.rs",
+      "line": 529,
+      "name": "list_timestamps_since",
+      "owner": "usage_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/mod.rs",
+      "line": 530,
+      "name": "get_last_scan_ms",
+      "owner": "usage_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/mod.rs",
+      "line": 574,
+      "name": "list_recent_calls",
+      "owner": "usage_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/mod.rs",
+      "line": 575,
+      "name": "list_usage_metadata",
+      "owner": "usage_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/mod.rs",
+      "line": 606,
+      "name": "get_skill_detail_summary",
+      "owner": "usage_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/mod.rs",
+      "line": 609,
+      "name": "get_usage_metadata_for_skill",
+      "owner": "usage_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/mod.rs",
+      "line": 635,
+      "name": "list_skill_project_counts",
+      "owner": "usage_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/mod.rs",
+      "line": 648,
+      "name": "list_skill_timestamps_since",
+      "owner": "usage_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/mod.rs",
+      "line": 682,
+      "name": "get_usage_metadata_for_skill",
+      "owner": "usage_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/mod.rs",
+      "line": 687,
+      "name": "list_usage_skill_candidates",
+      "owner": "usage_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/mod.rs",
+      "line": 738,
+      "name": "list_provider_rows",
+      "owner": "usage_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/unused.rs",
+      "line": 22,
+      "name": "get_central_skills",
+      "owner": "skills_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/unused.rs",
+      "line": 24,
+      "name": "list_resolved_call_aggregates",
+      "owner": "usage_unused_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/unused.rs",
+      "line": 33,
+      "name": "list_pending_fs_db_operations",
+      "owner": "fs_db_operations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/unused.rs",
+      "line": 39,
+      "name": "get_skill_installations_for_skills",
+      "owner": "installations_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/unused.rs",
+      "line": 83,
+      "name": "list_platform_skill_observations",
+      "owner": "usage_unused_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/unused.rs",
+      "line": 85,
+      "name": "list_normalized_call_aggregates",
+      "owner": "usage_unused_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/services/usage/unused.rs",
+      "line": 91,
+      "name": "list_usage_metadata",
+      "owner": "usage_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/commands.rs",
+      "line": 345,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 68,
+      "name": "get_settings",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 129,
+      "name": "set_settings",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 155,
+      "name": "get_settings",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 180,
+      "name": "set_settings",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 212,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 416,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 419,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 422,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 432,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 439,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 482,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 485,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 488,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 498,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 518,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 524,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 540,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 543,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 557,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 564,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 571,
+      "name": "get_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 581,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 602,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 612,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 640,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 672,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 722,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/config.rs",
+      "line": 737,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/persist.rs",
+      "line": 256,
+      "name": "get_settings",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/persist.rs",
+      "line": 375,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    },
+    {
+      "file": "src-tauri/src/targets/persist.rs",
+      "line": 387,
+      "name": "set_setting",
+      "owner": "settings_repo",
+      "kind": "db-module"
+    }
+  ]
+}

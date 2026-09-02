@@ -1,0 +1,36 @@
+{
+  "scanRoots": {
+    "servicesCommands": "src-tauri/src/services",
+    "wideRepoFns": "src-tauri/src",
+    "repoFunctionOwners": "src-tauri/src/db/repos/*_repo.rs"
+  },
+  "exclusions": {
+    "testFileAllowlist": {
+      "directorySegments": [
+        "tests"
+      ],
+      "exactBasenames": [
+        "tests.rs"
+      ],
+      "basenameSuffixes": [
+        "_tests.rs"
+      ],
+      "basenamePrefixes": [
+        "test_"
+      ]
+    },
+    "commentsAndStringLiterals": true,
+    "cfgTestInlineModules": "not-stripped; inline tests in production files count as production unless the file is allowlisted",
+    "dbModuleAlias": "unqualified db::<repo_fn> counts even without a local use crate::db::{self}, because child modules inherit the alias via use super::*",
+    "facadeAndOwners": [
+      "src-tauri/src/db/mod.rs",
+      "src-tauri/src/db/repos/**"
+    ]
+  },
+  "migrationTrees": [
+    "src-tauri/src/services/central_updates",
+    "src-tauri/src/services/skills_cli",
+    "src-tauri/src/services/installation"
+  ],
+  "repoFunctionCount": 195
+}
