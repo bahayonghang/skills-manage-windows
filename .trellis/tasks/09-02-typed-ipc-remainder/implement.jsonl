@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "扩展现有唯一 IPC 适配层"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "对齐 Rust registry 与 TypeScript contract"}
