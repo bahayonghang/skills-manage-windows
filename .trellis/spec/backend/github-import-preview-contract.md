@@ -667,8 +667,10 @@ pub(crate) fn repo_file_relative_to_source(
   install the complete root tree and remove stale local files.
 - Copy installations refresh from the repaired Central directory through the
   existing batched copy path.
-- SSH/WSL direct GitHub import keeps its existing recursive `cp -a` behavior;
-  local snapshot import and Central updates must produce the same file scope.
+- Local and SSH/WSL GitHub import final apply both go through
+  `journaled_central_content_upsert_with_fs` → `update_skills_batch`. They must
+  produce the same file scope as Central updates. Preview workspace acquisition
+  and cleanup stay outside that seam.
 
 ### 4. Validation Matrix
 

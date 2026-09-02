@@ -342,7 +342,9 @@ fn summary(row: FsDbOperationRow) -> PendingOperationSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::central_operation::{DeleteManifest, ManagedPath, OperationKind};
+    use crate::services::central_operation::{
+        DeleteManifest, ManagedPath, OperationKind, UpdateManifest,
+    };
 
     #[tokio::test]
     async fn pending_summary_never_exposes_manifest_paths() {
@@ -501,5 +503,87 @@ mod tests {
                 .phase,
             "rolled_back"
         );
+    }
+
+    #[tokio::test]
+    async fn local_startup_recovery_leaves_ssh_and_wsl_update_rows_pending() {
+        let temp = tempfile::tempdir().unwrap();
+        let pool = db::open_database(&temp.path().join("db.sqlite"))
+            .await
+            .unwrap();
+        for (operation_id, target_id, target_kind, skill_id) in [
+            ("op-ssh-pending-update", "ssh-pending", "ssh", "ssh-skill"),
+            ("op-wsl-pending-update", "wsl-pending", "wsl", "wsl-skill"),
+        ] {
+            let manifest = OperationManifest::Update(UpdateManifest {
+                version: MANIFEST_VERSION,
+                operation_id: operation_id.to_string(),
+                target: format!("/home/tester/.skillsmanage/skills/{skill_id}"),
+                staging: format!(
+                    "/home/tester/.skillsmanage/skills/.skillport-update-staging-{operation_id}"
+                ),
+                backup: format!(
+                    "/home/tester/.skillsmanage/skills/.skillport-update-backup-{operation_id}"
+                ),
+                marker: format!(
+                    "/home/tester/.skillsmanage/skills/.skillport-operation-marker-{operation_id}"
+                ),
+                had_target: false,
+                old_fingerprint: None,
+                new_fingerprint: "sha256:pending".to_string(),
+                copies: Vec::new(),
+            });
+            let json = serde_json::to_string(&manifest).unwrap();
+            db::insert_fs_db_operation(
+                &pool,
+                db::NewFsDbOperation {
+                    id: operation_id,
+                    batch_id: None,
+                    target_id,
+                    target_kind,
+                    operation_kind: OperationKind::CentralUpdate.as_str(),
+                    skill_id,
+                    manifest_version: MANIFEST_VERSION,
+                    manifest_json: &json,
+                    old_fingerprint: None,
+                    new_fingerprint: Some("sha256:pending"),
+                },
+            )
+            .await
+            .unwrap();
+        }
+
+        let pending = recover_pending_operations(&pool, &ActiveTarget::Local)
+            .await
+            .unwrap();
+        assert!(pending.is_empty());
+        for operation_id in ["op-ssh-pending-update", "op-wsl-pending-update"] {
+            let row = db::get_fs_db_operation(&pool, operation_id)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(row.phase, "prepared");
+            assert!(row.completed_at.is_none());
+        }
+
+        let ssh_target = ActiveTarget::Ssh(Box::new(crate::targets::RemoteTargetConfig {
+            id: "ssh-pending".to_string(),
+            label: "Pending SSH".to_string(),
+            host: "does-not-resolve.invalid".to_string(),
+            username: "tester".to_string(),
+            port: 22,
+            auth_method: crate::targets::SshAuthMethod::Key,
+            key_path: "~/.ssh/id_ed25519".to_string(),
+            credential_key: None,
+            protected_password: None,
+            password: None,
+            remote_home: "/home/tester".to_string(),
+            remote_os: "linux".to_string(),
+            symlink_enabled: true,
+        }));
+        let ssh_pending = list_pending_operations(&pool, &ssh_target).await.unwrap();
+        assert_eq!(ssh_pending.len(), 1);
+        assert_eq!(ssh_pending[0].operation_id, "op-ssh-pending-update");
+        assert_eq!(ssh_pending[0].phase, "prepared");
     }
 }

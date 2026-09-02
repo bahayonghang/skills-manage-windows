@@ -52,6 +52,12 @@ pub(crate) async fn transition_fs_db_operation_in_transaction(
     expected_phase: &str,
     next_phase: &str,
 ) -> Result<(), sqlx::Error>;
+
+pub(crate) async fn journaled_central_content_upsert_with_fs(
+    pool: &DbPool,
+    fs: &CentralFs,
+    input: JournaledCentralContentUpsert<'_>,
+) -> Result<SkillUpdateState, CentralUpdatesError>;
 ```
 
 Migration 3 adds:
@@ -83,7 +89,8 @@ Delete may use `fs_staged -> db_committed` because its backup rename is the dest
 - The business DB mutation and `db_committed` phase transition share one SQLite transaction. A visible `db_committed` row is the commit point; commit-unknown handling reads the row before deciding rollback or roll-forward.
 - Delete renames Central/native installation paths to operation-scoped sibling backups, deletes only the `skills` parent in the DB transaction, and relies on FK cascade for the seven owned relations. Retained copy installations are not moved or deleted.
 - Update and GitHub-backed content upsert keep `update_skills_batch` as the only production orchestrator. They stage new contents, swap canonical data, and commit skill/repository state with the marker; update may then refresh copied installations as a derived projection.
-- A first content upsert uses `OperationKind::CentralUpdate` plus `UpdateManifest(had_target=false)`. It does not introduce a parallel journal kind or schema. Candidate validation and snapshot acquisition finish before the target lock; final apply acquires that lock, recovers pending rows, and commits the skill row, repository membership, commit/digest provenance, and `db_committed` transition in one SQLite transaction.
+- Local GitHub import (`import_single_staged_skill`) and remote GitHub import (`import_github_repo_skills_remote_from_workspace`) final apply must call `journaled_central_content_upsert_with_fs` → `update_skills_batch`. Preview workspace acquisition and cleanup stay outside this seam. Production must not retain a parallel FS→DB apply (`backup_existing_skill_dir`, `restore_or_cleanup_target_dir`, `drop_existing_backup`, or `remote_import_skill_script` target/backup swap).
+- A first content upsert uses `OperationKind::CentralUpdate` plus `UpdateManifest(had_target=false)`. Overwrite uses `had_target=true` and keeps the persisted `uid`. It does not introduce a parallel journal kind or schema. Candidate validation and snapshot acquisition finish before the target lock; final apply acquires that lock, recovers pending rows, and commits the skill row, repository membership, commit/digest provenance, and `db_committed` transition in one SQLite transaction.
 - Copy refresh failure leaves `copies_pending`; it does not roll back committed canonical state. Recovery retries only incomplete projections, then finalizes backup and transitions to `completed`.
 - Cancellation may prevent an operation before its destructive phase. After durable staging begins, the operation must synchronously settle or retain recoverable journal state; it must not be returned as an unjournaled cancellation.
 - Every Central delete/update/recovery acquires the same target-derived cross-process lease. Under that lease, a new batch mutation recovers only pending rows for the selected skills before proceeding; startup recovery and explicit Retry remain full-target and fail-fast. There is no unlocked fallback.
@@ -104,6 +111,9 @@ Delete may use `fs_staged -> db_committed` because its backup rename is the dest
 | Target ID/kind differs from resolved context | Reject; do not connect or mutate another target |
 | Invalid phase shortcut or stale expected phase | Repository returns `sqlx::Error`; no row update |
 | Marker/fingerprint mismatch or occupied restore target | Typed recovery collision; preserve row and artifacts |
+| GitHub import writes backup/swap/DB outside `update_skills_batch` | Contract violation; do not ship |
+| GitHub overwrite deletes the backup before the DB upsert | Forbidden; a later DB failure would lose old content |
+| Local import ignores restore/remove/rename/join errors | Forbidden; journal, rollback, and finalize failures must propagate |
 | DB apply fails before commit | Roll back SQLite, restore old FS state, transition to `rolled_back` |
 | First content upsert DB apply fails after swap | Remove the new target, keep Marketplace installed cache false, transition to `rolled_back` |
 | Commit returns error but `db_committed` is visible | Roll forward; never restore old canonical data |
@@ -122,6 +132,7 @@ Delete may use `fs_staged -> db_committed` because its backup rename is the dest
 - **Good**: an update swaps canonical files, commits skill metadata plus `db_committed`, fails one copy, remains `copies_pending`, and later retries only that copy before cleanup.
 - **Good**: a process dies after delete backups are staged; startup or next mutation restores all old paths and marks the operation `rolled_back`.
 - **Base**: a Local operation with no copies reaches `completed`; repeated recovery finds no pending row and performs no filesystem work.
+- **Bad**: GitHub remote overwrite publishes the new directory, deletes `skillport-backup-*`, then upserts SQLite; a DB failure leaves no recoverable old tree.
 - **Bad**: delete the directory first and then call `db::delete_skill`; a DB failure loses user data.
 - **Bad**: log `error = %error` when the source may contain a path or remote diagnostic; log the stable error code and persist `redacted_message()` instead.
 - **Bad**: ignore marker cleanup, rollback, journal, or finalize errors with `let _ =`; the caller would report a false terminal state.
@@ -137,6 +148,7 @@ Delete may use `fs_staged -> db_committed` because its backup rename is the dest
 - Delete DB/marker/rename/remote failures prove rollback propagation, retained copies, FK cascade, symlink/native/copy semantics, and idempotent retry.
 - Update normal/force/mirror use one Saga; 33 remote writes remain three chunks and copy refresh remains chunks of 32.
 - A multi-file first content upsert preserves identical `SKILL.md`, references, scripts, and assets payloads across Local, Fake SSH, and Fake WSL, with `had_target=false` and per-skill commit/digest provenance.
+- GitHub import production sources contain `journaled_central_content_upsert_with_fs` and do not contain `backup_existing_skill_dir`, `restore_or_cleanup_target_dir`, or `remote_import_skill_script`. Overwrite restore keeps uid; first-upsert DB failure removes the new target and leaves no skill row. Commit-unknown injection covers visible `db_committed` roll-forward and invisible rollback. Same-target import contends with delete/update/install; different targets do not.
 - SSH and WSL FakeRunner tests assert complete supervised scripts, marker/fingerprint protocol, rollback/finalize idempotence, and redacted errors. Real WSL smoke stays ignored unless `SKILLPORT_TEST_WSL_DISTRO` is set.
 - Frontend tests cover loading, empty, pending, retry success/failure, offline target, target-switch latest-wins, cached-log availability, and narrow-screen no-overlap.
 - Force-delete tests cover the yao-meta shape (duplicate gone platform paths, Central present, drifted fingerprint), backup/marker rejection, non-`prepared` rejection, and reviewed `delete_restore_collision` / `force_delete_blocked` IPC codes with no path leak.
@@ -165,4 +177,21 @@ transition_fs_db_operation(pool, &row.id, "db_committed", "completed").await?;
 
 The correct sequence makes both commit order and recovery state durable; every failure remains observable and retryable.
 
-> Source task: `07-24-fs-db-operation-journal` (2026-07-27)
+### Wrong (GitHub import parallel apply)
+
+```rust
+backup_existing_skill_dir(&target_dir)?;
+write_snapshot_files(&target_dir, snapshot)?;
+drop_existing_backup(&backup_dir)?;
+upsert_skill_with_github_repository(pool, &skill, repo).await?;
+```
+
+### Correct (GitHub import unique orchestrator)
+
+```rust
+journaled_central_content_upsert_with_fs(pool, fs, JournaledCentralContentUpsert { .. }).await?;
+```
+
+The journaled seam owns lock, `prepared` durability, swap, the skill/repository/provenance transaction, and rollback. Import code must not delete a backup before that transaction commits.
+
+> Source task: `07-24-fs-db-operation-journal` (2026-07-27); GitHub import unique orchestrator: `09-02-github-import-fs-db-atomicity` (2026-09-02)

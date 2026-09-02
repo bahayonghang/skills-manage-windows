@@ -129,9 +129,14 @@ async fn import_from_preview_snapshot(
             .await
         }
         PreviewSnapshotStorage::Remote(workspace) => {
+            let connection = Arc::new(
+                connect_remote_target(active_target)
+                    .await
+                    .map_err(|e| GithubImportError::Remote(e.to_string()))?,
+            );
             import_github_repo_skills_remote_from_workspace(
                 pool,
-                active_target,
+                connection,
                 &snapshot.repo,
                 snapshot.source_path.as_deref(),
                 workspace,

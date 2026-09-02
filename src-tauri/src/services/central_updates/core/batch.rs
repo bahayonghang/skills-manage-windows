@@ -29,6 +29,9 @@ pub(crate) struct SkillUpdatePlan {
     pub(crate) skill: Skill,
     pub(crate) remote: RemoteSkillContent,
     pub(crate) refresh_copies: bool,
+    /// First GitHub-backed content upserts must observe `had_target=false`.
+    /// Regular Central updates always keep this false.
+    pub(crate) first_upsert: bool,
 }
 
 #[derive(Debug)]
@@ -264,6 +267,11 @@ async fn prepare_update(
                 .collect(),
         )
         .await?;
+    if plan.first_upsert && manifest.had_target {
+        return Err(CentralUpdatesError::FirstUpsertTargetExists(
+            plan.remote.target_dir.to_string_lossy().into_owned(),
+        ));
+    }
     insert_update_operation(pool, fs, &plan, batch_id, &operation_id, &manifest).await?;
     Ok(PreparedUpdate {
         index,
@@ -354,7 +362,13 @@ async fn commit_staged_update(
         ));
     }
 
-    if let Err(error) = transaction.commit().await {
+    #[cfg(test)]
+    let commit_result =
+        commit_fault::commit_or_inject_outcome(pool, fs, &update, transaction).await?;
+    #[cfg(not(test))]
+    let commit_result = transaction.commit().await;
+
+    if let Err(error) = commit_result {
         let commit_is_visible = db::get_fs_db_operation(pool, &update.operation_id)
             .await
             .map_err(|error| {
@@ -724,6 +738,9 @@ async fn copy_refresh_requests(
         })
         .collect())
 }
+
+#[cfg(test)]
+mod commit_fault;
 
 #[cfg(test)]
 #[path = "batch_tests.rs"]

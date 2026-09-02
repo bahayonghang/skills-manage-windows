@@ -101,6 +101,9 @@ pub enum CentralUpdatesError {
     #[error("Skill '{0}' target directory has no parent.")]
     TargetDirNoParent(String),
 
+    #[error("Target directory '{0}' already exists.")]
+    FirstUpsertTargetExists(String),
+
     #[error("Skill '{skill_id}' target directory '{target_dir}' has no parent.")]
     RemoteTargetDirNoParent {
         skill_id: String,

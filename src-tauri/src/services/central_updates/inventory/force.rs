@@ -87,6 +87,7 @@ pub(crate) async fn force_update_central_skills_impl(
             skill: skill.clone(),
             remote: remote.clone(),
             refresh_copies: request.refresh_copy_installations,
+            first_upsert: false,
         })
         .collect();
     for ((skill, _, before), outcome) in pending_updates
@@ -212,6 +213,7 @@ pub(crate) async fn force_mirror_central_repositories_impl(
             skill: skill.clone(),
             remote: remote.clone(),
             refresh_copies: true,
+            first_upsert: false,
         })
         .collect();
     for ((skill, _, before), outcome) in pending_overwrites

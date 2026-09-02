@@ -32,7 +32,10 @@ pub(crate) use batch::{
     recover_pending_update_operation, recover_pending_update_operations, update_skills_batch,
     SkillUpdatePlan,
 };
-pub(crate) use content_upsert::{journaled_central_content_upsert, JournaledCentralContentUpsert};
+pub(crate) use content_upsert::{
+    journaled_central_content_upsert, journaled_central_content_upsert_with_fs,
+    JournaledCentralContentUpsert,
+};
 #[allow(unused_imports)]
 pub(crate) use state::repository_url;
 pub(crate) use state::{
@@ -300,6 +303,7 @@ pub(crate) async fn update_central_skills_impl(
             skill: prepared.skill.clone(),
             remote: remote.clone(),
             refresh_copies: true,
+            first_upsert: false,
         })
         .collect();
     let update_outcomes = update_skills_batch(pool, fs, plans, Some(cancel)).await;

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::db::{DbPool, Skill, SkillUpdateState};
+use crate::db::{self, DbPool, Skill, SkillUpdateState};
 use crate::services::github_import::{GitHubRepoRef, GitHubRepoSnapshot, RemoteSkillCandidate};
 use crate::targets::ActiveTarget;
 
@@ -36,11 +36,12 @@ pub(crate) async fn journaled_central_content_upsert(
     journaled_central_content_upsert_with_fs(pool, &fs, input).await
 }
 
-async fn journaled_central_content_upsert_with_fs(
+pub(crate) async fn journaled_central_content_upsert_with_fs(
     pool: &DbPool,
     fs: &CentralFs,
     input: JournaledCentralContentUpsert<'_>,
 ) -> Result<SkillUpdateState, CentralUpdatesError> {
+    let existing = db::get_skill_by_id(pool, &input.skill.id).await?;
     let local_hash = fs
         .hash_directories(std::slice::from_ref(&input.target_dir))
         .await?
@@ -50,7 +51,7 @@ async fn journaled_central_content_upsert_with_fs(
                 "Central content upsert could not observe the target directory.".to_string(),
             )
         })?;
-    let plan = content_upsert_plan(input, local_hash)?;
+    let plan = content_upsert_plan(input, local_hash, existing)?;
     let skill_id = plan.skill.id.clone();
     let mut outcomes = update_skills_batch(pool, fs, vec![plan], None).await;
     let outcome = outcomes.pop().ok_or_else(|| {
@@ -64,10 +65,27 @@ async fn journaled_central_content_upsert_with_fs(
 fn content_upsert_plan(
     input: JournaledCentralContentUpsert<'_>,
     local_hash: String,
+    existing: Option<Skill>,
 ) -> Result<SkillUpdatePlan, CentralUpdatesError> {
+    let target_skill_id = input
+        .target_dir
+        .file_name()
+        .map(|name| name.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_default();
+    if target_skill_id != input.skill.id {
+        return Err(CentralUpdatesError::Batch(
+            "Central content upsert target identity does not match the skill id.".to_string(),
+        ));
+    }
     let files = collect_remote_skill_files(input.snapshot, &input.candidate.source_path)?;
     ensure_remote_skill_manifest(&files)?;
     let remote_hash = hash_remote_files(input.snapshot, &files)?;
+    let existing_central = existing.filter(|skill| skill.is_central);
+    let first_upsert = existing_central.is_none();
+    let mut skill = input.skill;
+    if let Some(existing) = existing_central {
+        skill.uid = existing.uid;
+    }
     let source_path = input.candidate.source_path.clone();
     let remote = RemoteSkillContent {
         source: GitHubUpdateSource {
@@ -83,9 +101,10 @@ fn content_upsert_plan(
         content_digest: input.content_digest,
     };
     Ok(SkillUpdatePlan {
-        skill: input.skill,
+        skill,
         remote,
         refresh_copies: false,
+        first_upsert,
     })
 }
 
@@ -527,7 +546,8 @@ mod tests {
         for (runner, fs) in fake_remote_filesystems(files) {
             let pool = crate::test_support::mem_pool().await;
             let operation_id = insert_pending_delete(&pool, &fs, "safe-skill").await;
-            let plan = content_upsert_plan(input(&snapshot), "local-before".to_string()).unwrap();
+            let plan =
+                content_upsert_plan(input(&snapshot), "local-before".to_string(), None).unwrap();
 
             let outcomes = update_skills_batch(&pool, &fs, vec![plan], None).await;
 
@@ -554,5 +574,145 @@ mod tests {
             assert!(runner.stage_archive.lock().unwrap().is_none());
             assert!(!runner.swapped.load(Ordering::SeqCst));
         }
+    }
+
+    fn local_input<'a>(
+        snapshot: &'a GitHubRepoSnapshot,
+        target_dir: PathBuf,
+        uid: &str,
+    ) -> JournaledCentralContentUpsert<'a> {
+        let mut value = input(snapshot);
+        value.skill.uid = uid.to_string();
+        value.skill.file_path = target_dir.join("SKILL.md").to_string_lossy().into_owned();
+        value.skill.canonical_path = Some(target_dir.to_string_lossy().into_owned());
+        value.target_dir = target_dir;
+        value
+    }
+
+    #[tokio::test]
+    async fn local_first_upsert_uses_had_target_false_and_creates_uid_once() {
+        let pool = crate::test_support::mem_pool().await;
+        let temp = tempfile::TempDir::new().unwrap();
+        let target_dir = temp.path().join("safe-skill");
+        let snapshot = snapshot();
+        let created_uid = "uid-first-local";
+        let state = journaled_central_content_upsert(
+            &pool,
+            &ActiveTarget::Local,
+            local_input(&snapshot, target_dir.clone(), created_uid),
+        )
+        .await
+        .expect("first upsert");
+        assert_eq!(state.skill_id, "safe-skill");
+        assert!(target_dir.join("SKILL.md").is_file());
+        assert_eq!(
+            std::fs::read(target_dir.join("references/guide.md")).unwrap(),
+            b"# guide\n"
+        );
+        let stored = crate::db::get_skill_by_id(&pool, "safe-skill")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored.uid, created_uid);
+        let journal = sqlx::query(
+            "SELECT operation_kind, phase, manifest_json, old_fingerprint, new_fingerprint
+             FROM fs_db_operations WHERE skill_id = 'safe-skill'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        use sqlx::Row;
+        assert_eq!(journal.get::<String, _>("operation_kind"), "central_update");
+        assert_eq!(journal.get::<String, _>("phase"), "completed");
+        let manifest: serde_json::Value =
+            serde_json::from_str(&journal.get::<String, _>("manifest_json")).unwrap();
+        assert_eq!(manifest["payload"]["hadTarget"], false);
+        assert!(manifest["payload"]["target"]
+            .as_str()
+            .unwrap()
+            .ends_with("safe-skill"));
+        assert!(manifest["payload"]["marker"]
+            .as_str()
+            .unwrap()
+            .contains("operation-marker"));
+        assert!(journal
+            .get::<Option<String>, _>("old_fingerprint")
+            .is_none());
+        assert!(journal
+            .get::<Option<String>, _>("new_fingerprint")
+            .unwrap()
+            .starts_with("sha256"));
+    }
+
+    #[tokio::test]
+    async fn local_overwrite_preserves_uid_and_uses_had_target_true() {
+        let pool = crate::test_support::mem_pool().await;
+        let temp = tempfile::TempDir::new().unwrap();
+        let target_dir = temp.path().join("safe-skill");
+        std::fs::create_dir_all(&target_dir).unwrap();
+        std::fs::write(target_dir.join("SKILL.md"), b"---\nname: old\n---\n").unwrap();
+        std::fs::write(target_dir.join("old-only.txt"), b"keep").unwrap();
+        let persisted_uid = "uid-persisted-overwrite";
+        crate::db::upsert_skill(
+            &pool,
+            &Skill {
+                id: "safe-skill".to_string(),
+                uid: persisted_uid.to_string(),
+                name: "old".to_string(),
+                description: None,
+                file_path: target_dir.join("SKILL.md").to_string_lossy().into_owned(),
+                canonical_path: Some(target_dir.to_string_lossy().into_owned()),
+                is_central: true,
+                source: Some("local".to_string()),
+                content: None,
+                scanned_at: chrono::Utc::now().to_rfc3339(),
+                fs_created_at: None,
+                fs_updated_at: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let snapshot = snapshot();
+        journaled_central_content_upsert(
+            &pool,
+            &ActiveTarget::Local,
+            local_input(&snapshot, target_dir.clone(), "uid-must-not-win"),
+        )
+        .await
+        .expect("overwrite upsert");
+
+        let stored = crate::db::get_skill_by_id(&pool, "safe-skill")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored.uid, persisted_uid);
+        assert!(!target_dir.join("old-only.txt").exists());
+        assert_eq!(
+            std::fs::read(target_dir.join("scripts/run.ps1")).unwrap(),
+            b"Write-Output safe\n"
+        );
+        let manifest: serde_json::Value = serde_json::from_str(
+            &sqlx::query_scalar::<_, String>(
+                "SELECT manifest_json FROM fs_db_operations
+                 WHERE skill_id = 'safe-skill' ORDER BY created_at DESC, rowid DESC LIMIT 1",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(manifest["payload"]["hadTarget"], true);
+        assert!(manifest["payload"]["oldFingerprint"].as_str().is_some());
+        assert!(manifest["payload"]["newFingerprint"].as_str().is_some());
+    }
+
+    #[tokio::test]
+    async fn mismatched_target_identity_creates_no_journal_row() {
+        let snapshot = snapshot();
+        let mut value = input(&snapshot);
+        value.skill.id = "other-skill".to_string();
+        let error = content_upsert_plan(value, "hash".to_string(), None).unwrap_err();
+        assert!(matches!(error, CentralUpdatesError::Batch(_)));
     }
 }

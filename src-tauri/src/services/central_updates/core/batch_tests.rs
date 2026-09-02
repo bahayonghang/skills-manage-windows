@@ -1,3 +1,4 @@
+use super::commit_fault::{set_commit_outcome_fault, CommitOutcomeFault};
 use super::*;
 use crate::services::central_updates::fs::RemoteSkillFile;
 use crate::services::central_updates::types::GitHubUpdateSource;
@@ -52,6 +53,7 @@ fn update_plan(target_dir: std::path::PathBuf) -> SkillUpdatePlan {
             content_digest: None,
         },
         refresh_copies: false,
+        first_upsert: false,
     }
 }
 
@@ -640,4 +642,141 @@ async fn journal_error_marker_failure_is_never_best_effort() {
         .unwrap();
     assert_eq!(row.phase, "prepared");
     assert!(row.last_error_code.is_none());
+}
+
+#[tokio::test]
+async fn first_upsert_db_apply_failure_removes_new_target_and_leaves_no_skill_row() {
+    let pool = crate::test_support::mem_pool().await;
+    let temp = tempfile::TempDir::new().unwrap();
+    let target = temp.path().join("first-upsert-fail");
+    sqlx::query(
+        "CREATE TRIGGER fail_first_upsert BEFORE INSERT ON skills
+             WHEN NEW.id = 'first-upsert-fail'
+             BEGIN SELECT RAISE(FAIL, 'forced first upsert failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let mut plan = named_update_plan("first-upsert-fail", target.clone());
+    plan.first_upsert = true;
+
+    let outcomes = update_skills_batch(&pool, &CentralFs::Local, vec![plan], None).await;
+
+    assert_eq!(
+        outcomes[0].result.as_ref().unwrap_err().phase,
+        CentralUpdateFailurePhase::DatabaseCommit
+    );
+    assert!(!target.exists());
+    assert!(db::get_skill_by_id(&pool, "first-upsert-fail")
+        .await
+        .unwrap()
+        .is_none());
+    let assignment_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM skill_repository_members WHERE skill_id = 'first-upsert-fail'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(assignment_count, 0);
+    let phase = sqlx::query_scalar::<_, String>(
+        "SELECT phase FROM fs_db_operations WHERE skill_id = 'first-upsert-fail'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(phase, "rolled_back");
+}
+
+#[tokio::test]
+async fn first_upsert_refuses_existing_target_before_journal_insert() {
+    let pool = crate::test_support::mem_pool().await;
+    let temp = tempfile::TempDir::new().unwrap();
+    let target = temp.path().join("occupied-first");
+    std::fs::create_dir_all(&target).unwrap();
+    std::fs::write(target.join("SKILL.md"), b"occupied").unwrap();
+    let mut plan = named_update_plan("occupied-first", target.clone());
+    plan.first_upsert = true;
+
+    let outcomes = update_skills_batch(&pool, &CentralFs::Local, vec![plan], None).await;
+
+    assert_eq!(
+        outcomes[0].result.as_ref().unwrap_err().phase,
+        CentralUpdateFailurePhase::Prepare
+    );
+    assert!(matches!(
+        outcomes[0].result.as_ref().unwrap_err().error(),
+        CentralUpdatesError::FirstUpsertTargetExists(_)
+    ));
+    assert_eq!(std::fs::read(target.join("SKILL.md")).unwrap(), b"occupied");
+    let journal_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM fs_db_operations WHERE skill_id = 'occupied-first'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(journal_count, 0);
+}
+
+#[tokio::test]
+async fn commit_unknown_with_visible_db_committed_rolls_forward() {
+    let pool = crate::test_support::mem_pool().await;
+    let temp = tempfile::TempDir::new().unwrap();
+    let target = temp.path().join("commit-visible");
+    std::fs::create_dir_all(&target).unwrap();
+    std::fs::write(target.join("SKILL.md"), b"old").unwrap();
+    let plan = named_update_plan("commit-visible", target.clone());
+    set_commit_outcome_fault(Some(CommitOutcomeFault::VisibleAfterCommit));
+
+    let outcomes = update_skills_batch(&pool, &CentralFs::Local, vec![plan], None).await;
+    set_commit_outcome_fault(None);
+
+    assert!(outcomes[0].result.is_ok(), "{:?}", outcomes[0].result);
+    assert_eq!(
+        std::fs::read(target.join("SKILL.md")).unwrap(),
+        b"new commit-visible"
+    );
+    let stored = db::get_skill_by_id(&pool, "commit-visible")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.name, "New commit-visible");
+    let phase = sqlx::query_scalar::<_, String>(
+        "SELECT phase FROM fs_db_operations WHERE skill_id = 'commit-visible'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(phase, "completed");
+}
+
+#[tokio::test]
+async fn commit_unknown_without_visible_db_committed_rolls_back() {
+    let pool = crate::test_support::mem_pool().await;
+    let temp = tempfile::TempDir::new().unwrap();
+    let target = temp.path().join("commit-invisible");
+    std::fs::create_dir_all(&target).unwrap();
+    std::fs::write(target.join("SKILL.md"), b"old").unwrap();
+    let plan = named_update_plan("commit-invisible", target.clone());
+    set_commit_outcome_fault(Some(CommitOutcomeFault::InvisibleWithoutCommit));
+
+    let outcomes = update_skills_batch(&pool, &CentralFs::Local, vec![plan], None).await;
+    set_commit_outcome_fault(None);
+
+    assert_eq!(
+        outcomes[0].result.as_ref().unwrap_err().phase,
+        CentralUpdateFailurePhase::DatabaseCommit
+    );
+    assert_eq!(std::fs::read(target.join("SKILL.md")).unwrap(), b"old");
+    assert!(db::get_skill_by_id(&pool, "commit-invisible")
+        .await
+        .unwrap()
+        .is_none());
+    let phase = sqlx::query_scalar::<_, String>(
+        "SELECT phase FROM fs_db_operations WHERE skill_id = 'commit-invisible'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(phase, "rolled_back");
 }
