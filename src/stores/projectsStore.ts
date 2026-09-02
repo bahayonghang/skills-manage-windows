@@ -1,7 +1,6 @@
 import { create } from "zustand";
-import { UnlistenFn } from "@tauri-apps/api/event";
 
-import { invoke, listen, isTauriRuntime } from "@/lib/ipc";
+import { invoke, listen, isTauriRuntime, type UnlistenFn } from "@/lib/ipc";
 import type {
   Project,
   ProjectScannedPayload,

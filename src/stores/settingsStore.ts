@@ -5,12 +5,9 @@ import {
   DEFAULT_UPDATE_CHECK_MODE,
   normalizeUpdateCheckMode,
   type UpdateCheckMode,
-} from "@/pages/centralUpdateCheckMode";
-import {
-  GitHubPatState,
-  GitHubPatTestResult,
-  ScanDirectory,
-} from "@/types";
+} from "@/lib/updateCheckMode";
+import type { ScanDirectory } from "@/types";
+import type { GitHubPatState, GitHubPatTestResult } from "@/types/credentials";
 import {
   type AiConnectionTestResult,
   type AiSaveStatus,
@@ -20,6 +17,9 @@ import {
   createAiSettingsSlice,
 } from "./settingsStore.aiSlice";
 
+export {
+  AI_BROWSER_FIXTURE_TEST_CODE,
+} from "./settingsStore.aiSlice";
 export type { AiConnectionTestResult, AiSaveStatus, AiSettings };
 
 interface SettingsState extends AiSettingsSlice {

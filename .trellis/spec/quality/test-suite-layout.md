@@ -44,6 +44,9 @@ src/test/lib/backendError.test.ts
 src/test/runtime/ipc.test.ts
 src/test/contracts/i18nLocales.test.ts
   code preservation + recorder + bilingual rendering/parity
+src/test/contracts/frontendArchitectureContract.test.ts
+  update-check owner, lib/store 不 import pages, Tauri event allowlist,
+  已删死模块, `@/types` barrel no-growth（排除 `src/test/**` 与 `src/types/**`）
 
 src-tauri/src/services/central_updates/inventory/tests.rs
   all-scope classification + unsupported persistence/reload + invalid source_path

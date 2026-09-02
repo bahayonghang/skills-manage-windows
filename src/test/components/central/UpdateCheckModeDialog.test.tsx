@@ -3,7 +3,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
 import { UpdateCheckModeDialog } from "@/components/central/UpdateCheckModeDialog";
-import type { UpdateCheckMode } from "@/pages/centralUpdateCheckMode";
+import type { UpdateCheckMode } from "@/lib/updateCheckMode";
 
 function renderDialog(overrides: Partial<ComponentProps<typeof UpdateCheckModeDialog>> = {}) {
   const onOpenChange = vi.fn();

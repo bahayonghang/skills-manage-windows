@@ -4,7 +4,7 @@ import type {
   SkillRefreshScope,
   SkillRefreshScopeKind,
 } from "@/types/skillUpdateInventory";
-import { normalizeUpdateCheckMode } from "@/pages/centralUpdateCheckMode";
+import { normalizeUpdateCheckMode } from "@/lib/updateCheckMode";
 
 export function normalizeRefreshContext(
   context?: Partial<SkillRefreshContext> | null,

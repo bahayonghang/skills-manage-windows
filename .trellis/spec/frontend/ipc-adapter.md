@@ -4,7 +4,9 @@
 
 ## 约定 1：`@/lib/ipc` 是唯一 IPC 入口
 
-**What**：所有前端代码只从 `@/lib/ipc`（目录 `src/lib/ipc/`，`index.ts` re-export）import IPC 能力：`invoke` / `invokeRaw` / `listen` / `isTauriRuntime` / `registerIpcFailureRecorder` / `showMainWindowWhenReady` / fixture API。禁止直接 import `@tauri-apps/api/core` 或 `@tauri-apps/api/event`（adapter 内部除外）。
+**What**：所有前端代码只从 `@/lib/ipc`（目录 `src/lib/ipc/`，`index.ts` re-export）import IPC 能力：`invoke` / `invokeRaw` / `listen` / `UnlistenFn` / `isTauriRuntime` / `registerIpcFailureRecorder` / `showMainWindowWhenReady` / fixture API。禁止直接 import `@tauri-apps/api/core` 或 `@tauri-apps/api/event`。
+
+生产源码扫描 `@tauri-apps/api/event` 的匹配集合必须**精确等于** `src/lib/ipc/invoke.ts`（范围 `src/**/*.{ts,tsx}`，排除 `src/test/**`）。不得把 invariant 写成“生产为 0”——adapter 必须直连 Tauri。`UnlistenFn` 由 `invoke.ts` 再经 `index.ts` 公开；adapter 外的生产文件只从 `@/lib/ipc` 取该类型。`src/test/contracts/frontendArchitectureContract.test.ts` 锁定此 allowlist。
 
 **例外（仅此一个）**：`src/lib/runtimeLogger.ts` 使用 `invokeRaw` 落盘前端运行时日志 —— 它是 failure recorder 本体，走 `invoke` 会在自身失败时递归记录。新代码不得再增加 `invokeRaw` 调用方。
 
@@ -13,9 +15,10 @@
 ```ts
 // ❌ Wrong：绕过 adapter 直连 Tauri
 import { invoke } from "@tauri-apps/api/core";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 
-// ✅ Correct：统一入口（浏览器演示态自动路由 fixture）
-import { invoke, listen } from "@/lib/ipc";
+// ✅ Correct：统一入口（浏览器演示态自动路由 fixture；类型也走 adapter）
+import { invoke, listen, type UnlistenFn } from "@/lib/ipc";
 ```
 
 ## 约定 2：命令按名类型化（双 overload + 覆盖率 ratchet）
@@ -135,6 +138,7 @@ command map 计算，不在本规范复制快照。
 - Fixture tests use `ipcFixtureError(code, message)` for expected backend failures.
 - Coverage derives typed/untyped/frontend/generated/backend-only membership from authoritative sources and asserts parity.
 - Run `pnpm ipc:codegen:check` twice after generation to prove determinism.
+- `frontendArchitectureContract.test.ts` asserts the production `@tauri-apps/api/event` match set equals `src/lib/ipc/invoke.ts`.
 
 ### 7. Wrong vs Correct
 

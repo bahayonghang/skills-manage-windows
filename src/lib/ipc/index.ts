@@ -8,6 +8,7 @@ export {
   invokeRaw,
   listen,
   registerIpcFailureRecorder,
+  type UnlistenFn,
 } from "./invoke";
 export {
   clearIpcFixturesForTest,

@@ -37,7 +37,7 @@ import type {
   AiSaveStatus,
   AiSettings,
 } from "@/stores/settingsStore";
-import type { UpdateCheckMode } from "@/pages/centralUpdateCheckMode";
+import type { UpdateCheckMode } from "@/lib/updateCheckMode";
 
 type Message = { type: "success" | "error"; text: string; detail?: string | null };
 type CatppuccinVarMap = Record<CatppuccinAccent, string>;

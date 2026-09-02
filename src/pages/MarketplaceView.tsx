@@ -20,7 +20,8 @@ import {
   type MarketplaceTabId,
   useMarketplaceViewModel,
 } from "@/pages/marketplaceViewModel";
-import type { GitHubSkillImportSelection, SkillWithLinks } from "@/types";
+import type { GitHubSkillImportSelection } from "@/types/githubImport";
+import type { SkillWithLinks } from "@/types";
 import { useImportIntentBindings } from "@/stores/importIntentStore";
 
 export function MarketplaceView() {
@@ -167,14 +168,8 @@ export function MarketplaceView() {
       if (!isTauriRuntime()) {
         setPreviewStatus({
           kind: "browser-fallback",
-          title:
-            lang === "zh"
-              ? "浏览器模式下暂不支持预览"
-              : "Preview unavailable in browser mode",
-          detail:
-            lang === "zh"
-              ? "请在桌面应用中打开此流程，以浏览并安装仓库里的技能。"
-              : "Open this flow in the desktop app to browse and install repository skills.",
+          title: t("marketplace.previewUnavailableTitle"),
+          detail: t("marketplace.previewUnavailableDetail"),
         });
         return;
       }

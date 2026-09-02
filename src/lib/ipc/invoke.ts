@@ -11,6 +11,8 @@ import { normalizeIpcRejection, sanitizeIpcFailureArgs } from "./errors";
 import { dispatchIpcFixture } from "./fixtures";
 import { isTauriRuntime } from "./runtime";
 
+export type { UnlistenFn };
+
 type IpcFailureRecorder = (
   command: string,
   args: unknown,

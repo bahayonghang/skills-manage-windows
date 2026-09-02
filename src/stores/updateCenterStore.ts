@@ -18,7 +18,7 @@ import type {
   SkillUpdateInventory,
 } from "@/types/skillUpdateInventory";
 import { normalizeRefreshContext } from "@/lib/updateCenterRefreshScope";
-import { normalizeUpdateCheckMode } from "@/pages/centralUpdateCheckMode";
+import { normalizeUpdateCheckMode } from "@/lib/updateCheckMode";
 
 export interface SkillInventoryFlags {
   /** inventory.updatable 中含此 skill_id（远端有新版本可拉取）。 */
