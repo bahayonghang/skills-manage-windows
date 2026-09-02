@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/quality/test-suite-layout.md", "reason": "放置跨平台路径回归测试"}
+{"file": ".trellis/spec/backend/path-policy.md", "reason": "containment must use resolved paths not string prefixes"}

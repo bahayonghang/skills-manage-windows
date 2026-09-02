@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/path-policy.md", "reason": "复用仓库路径 containment 安全原则"}
+{"file": ".trellis/spec/quality/test-suite-layout.md", "reason": "place focused Python path-security tests"}
