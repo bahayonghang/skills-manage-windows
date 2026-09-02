@@ -44,6 +44,11 @@ export interface CentralSkillsState {
   portabilityJob: SkillportStatePortabilityJob;
   aiTaggingAvailable: boolean;
   isLoading: boolean;
+  /**
+   * True after at least one successful list load, including an empty array.
+   * Array length must not be used as a substitute for this fact.
+   */
+  hasLoaded: boolean;
   /** 已有列表数据时的后台重取中（保留旧内容，不触发整页加载空态）。 */
   isRefreshingList: boolean;
   isInstalling: boolean;

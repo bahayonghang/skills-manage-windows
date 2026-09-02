@@ -188,6 +188,7 @@ describe("centralSkillsStore", () => {
       togglingAgentId: null,
       requiresCentralReload: false,
       error: null,
+      hasLoaded: false,
     });
     vi.clearAllMocks();
   });
@@ -217,6 +218,7 @@ describe("centralSkillsStore", () => {
     expect(state.togglingAgentId).toBeNull();
     expect(state.requiresCentralReload).toBe(false);
     expect(state.error).toBeNull();
+    expect(state.hasLoaded).toBe(false);
   });
 
   // ── loadCentralSkills ─────────────────────────────────────────────────────
@@ -265,6 +267,7 @@ describe("centralSkillsStore", () => {
     expect(state.isLoading).toBe(false);
     expect(state.error).toBeNull();
     expect(state.requiresCentralReload).toBe(false);
+    expect(state.hasLoaded).toBe(true);
   });
 
   it("clears requiresCentralReload after a successful loadCentralSkills", async () => {
@@ -294,6 +297,33 @@ describe("centralSkillsStore", () => {
     const state = useCentralSkillsStore.getState();
     expect(state.error).toBe("DB error");
     expect(state.isLoading).toBe(false);
+    expect(state.hasLoaded).toBe(false);
+  });
+
+  it("treats a successful empty Central list as loaded, not never-loaded", async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce({ configured: false });
+
+    await useCentralSkillsStore.getState().loadCentralSkills();
+
+    const state = useCentralSkillsStore.getState();
+    expect(state.skills).toEqual([]);
+    expect(state.hasLoaded).toBe(true);
+    expect(state.isLoading).toBe(false);
+    expect(state.error).toBeNull();
+  });
+
+  it("resetForTargetChange clears the Central loaded fact", () => {
+    useCentralSkillsStore.setState({ hasLoaded: true, skills: mockSkills });
+    useCentralSkillsStore.getState().resetForTargetChange();
+    expect(useCentralSkillsStore.getState().hasLoaded).toBe(false);
+    expect(useCentralSkillsStore.getState().skills).toEqual([]);
   });
 
   it("rethrows on failure when throwOnError is true and still writes store error", async () => {
@@ -425,6 +455,7 @@ describe("centralSkillsStore", () => {
       ])
     );
     expect(state.aiTagReviews).toEqual([]);
+    expect(state.hasLoaded).toBe(true);
 
     isTauriSpy.mockRestore();
   });

@@ -53,6 +53,16 @@ interface CollectionState {
   currentDetail: CollectionDetail | null;
   isLoading: boolean;
   isLoadingDetail: boolean;
+  /**
+   * True after at least one successful list load, including an empty array.
+   * Array length must not be used as a substitute for this fact.
+   */
+  hasLoaded: boolean;
+  /**
+   * Collection id currently owning in-flight or latest detail request.
+   * Mutations refresh only when this still matches the mutated collection.
+   */
+  detailTargetId: string | null;
   error: string | null;
 
   // Actions
@@ -69,6 +79,9 @@ interface CollectionState {
   refreshCounts: () => Promise<void>;
 }
 
+/** Monotonic owner for loadCollectionDetail writes. Module-level so overlapping awaits share one counter. */
+let detailRequestId = 0;
+
 // ─── Store ────────────────────────────────────────────────────────────────────
 
 export const useCollectionStore = create<CollectionState>((set, get) => ({
@@ -76,6 +89,8 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
   currentDetail: null,
   isLoading: false,
   isLoadingDetail: false,
+  hasLoaded: false,
+  detailTargetId: null,
   error: null,
 
   /**
@@ -84,13 +99,17 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
   loadCollections: async () => {
     set({ isLoading: true, error: null });
     if (!isTauriRuntime()) {
-      set({ collections: BROWSER_FIXTURE_COLLECTIONS, isLoading: false });
+      set({
+        collections: BROWSER_FIXTURE_COLLECTIONS,
+        isLoading: false,
+        hasLoaded: true,
+      });
       usePlatformStore.getState().setCollectionCount(BROWSER_FIXTURE_COLLECTIONS.length);
       return;
     }
     try {
       const collections = await invoke<Collection[]>("get_collections");
-      set({ collections: collections ?? [], isLoading: false });
+      set({ collections: collections ?? [], isLoading: false, hasLoaded: true });
       usePlatformStore.getState().setCollectionCount(collections?.length ?? 0);
     } catch (err) {
       set({ error: String(err), isLoading: false });
@@ -106,7 +125,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
       const collection = await invoke<Collection>("create_collection", { name, description });
       // Refresh collections list.
       const collections = await invoke<Collection[]>("get_collections");
-      set({ collections: collections ?? [] });
+      set({ collections: collections ?? [], hasLoaded: true });
       usePlatformStore.getState().setCollectionCount(collections?.length ?? 0);
       return collection;
     } catch (err) {
@@ -128,7 +147,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
       });
       // Refresh collections list.
       const collections = await invoke<Collection[]>("get_collections");
-      set({ collections: collections ?? [] });
+      set({ collections: collections ?? [], hasLoaded: true });
       usePlatformStore.getState().setCollectionCount(collections?.length ?? 0);
       // Also update currentDetail if it's for this collection.
       const { currentDetail } = get();
@@ -158,7 +177,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
       await invoke("delete_collection", { collectionId: id });
       // Refresh collections list.
       const collections = await invoke<Collection[]>("get_collections");
-      set({ collections: collections ?? [] });
+      set({ collections: collections ?? [], hasLoaded: true });
       usePlatformStore.getState().setCollectionCount(collections?.length ?? 0);
       // Clear currentDetail if it was for this collection.
       const { currentDetail } = get();
@@ -173,21 +192,38 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
 
   /**
    * Load a collection's detail (including member skills).
+   * Only the current request (matching both request id and target id) may write
+   * currentDetail, detail error, or finish isLoadingDetail.
    */
   loadCollectionDetail: async (id: string) => {
-    set({ isLoadingDetail: true, error: null });
+    set({ detailTargetId: id, isLoadingDetail: true, error: null });
+    const requestId = ++detailRequestId;
+    const isCurrentRequest = () =>
+      requestId === detailRequestId && get().detailTargetId === id;
+
     if (!isTauriRuntime()) {
-      set({
-        currentDetail: id === BROWSER_FIXTURE_COLLECTION_DETAIL.id ? BROWSER_FIXTURE_COLLECTION_DETAIL : null,
-        isLoadingDetail: false,
-      });
+      if (isCurrentRequest()) {
+        set({
+          currentDetail:
+            id === BROWSER_FIXTURE_COLLECTION_DETAIL.id
+              ? BROWSER_FIXTURE_COLLECTION_DETAIL
+              : null,
+          isLoadingDetail: false,
+        });
+      }
       return;
     }
     try {
-      const detail = await invoke<CollectionDetail>("get_collection_detail", { collectionId: id });
-      set({ currentDetail: detail, isLoadingDetail: false });
+      const detail = await invoke<CollectionDetail>("get_collection_detail", {
+        collectionId: id,
+      });
+      if (isCurrentRequest()) {
+        set({ currentDetail: detail, isLoadingDetail: false });
+      }
     } catch (err) {
-      set({ error: String(err), isLoadingDetail: false });
+      if (isCurrentRequest()) {
+        set({ error: String(err), isLoadingDetail: false });
+      }
     }
   },
 
@@ -198,9 +234,9 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
     set({ error: null });
     try {
       await invoke("add_skill_to_collection", { collectionId, skillId });
-      // Reload the detail to get the updated skill list.
-      const detail = await invoke<CollectionDetail>("get_collection_detail", { collectionId });
-      set({ currentDetail: detail });
+      if (get().detailTargetId === collectionId) {
+        await get().loadCollectionDetail(collectionId);
+      }
     } catch (err) {
       set({ error: String(err) });
       throw err;
@@ -214,9 +250,9 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
     set({ error: null });
     try {
       await invoke("remove_skill_from_collection", { collectionId, skillId });
-      // Reload the detail to get the updated skill list.
-      const detail = await invoke<CollectionDetail>("get_collection_detail", { collectionId });
-      set({ currentDetail: detail });
+      if (get().detailTargetId === collectionId) {
+        await get().loadCollectionDetail(collectionId);
+      }
     } catch (err) {
       set({ error: String(err) });
       throw err;
@@ -261,7 +297,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
       const collection = await invoke("import_collection", { json });
       // Refresh collections list.
       const collections = await invoke<Collection[]>("get_collections");
-      set({ collections: collections ?? [] });
+      set({ collections: collections ?? [], hasLoaded: true });
       usePlatformStore.getState().setCollectionCount(collections?.length ?? 0);
       return collection;
     } catch (err) {
@@ -272,13 +308,13 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
 
   refreshCounts: async () => {
     if (!isTauriRuntime()) {
-      set({ collections: BROWSER_FIXTURE_COLLECTIONS });
+      set({ collections: BROWSER_FIXTURE_COLLECTIONS, hasLoaded: true });
       usePlatformStore.getState().setCollectionCount(BROWSER_FIXTURE_COLLECTIONS.length);
       return;
     }
     try {
       const collections = await invoke<Collection[]>("get_collections");
-      set({ collections: collections ?? [] });
+      set({ collections: collections ?? [], hasLoaded: true });
       usePlatformStore.getState().setCollectionCount(collections?.length ?? 0);
     } catch (err) {
       set({ error: String(err) });

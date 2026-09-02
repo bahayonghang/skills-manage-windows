@@ -113,6 +113,8 @@ function buildCollectionStoreState(overrides = {}) {
     currentDetail: mockCollectionDetail,
     isLoading: false,
     isLoadingDetail: false,
+    hasLoaded: true,
+    detailTargetId: "col-1",
     error: null,
     loadCollections: vi.fn(),
     createCollection: vi.fn(),

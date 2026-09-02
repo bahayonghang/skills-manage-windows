@@ -74,6 +74,7 @@ export function createCentralListSlice({ set, get, getGeneration }: CentralStore
           aiTaggingAvailable: !!aiApiKeyState?.configured,
           isLoading: false,
           isRefreshingList: false,
+          hasLoaded: true,
           requiresCentralReload: false,
         });
       }

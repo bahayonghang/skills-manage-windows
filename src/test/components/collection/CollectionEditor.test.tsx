@@ -23,6 +23,8 @@ function buildStoreState(overrides = {}) {
     currentDetail: null,
     isLoading: false,
     isLoadingDetail: false,
+    hasLoaded: false,
+    detailTargetId: null,
     error: null,
     createCollection: mockCreateCollection,
     updateCollection: mockUpdateCollection,

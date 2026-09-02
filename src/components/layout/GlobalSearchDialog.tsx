@@ -18,11 +18,13 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { Button } from "@/components/ui/button";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useCollectionStore } from "@/stores/collectionStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useHotkey } from "@/hooks/useHotkey";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
+import { formatBackendError } from "@/lib/backendError";
 import { DEFAULT_PLATFORM_CATEGORY_VISIBILITY } from "@/lib/platformVisibility";
 import {
   getPlatformTargetGroups,
@@ -55,6 +57,84 @@ type SearchItem = {
   onSelect: () => void;
 };
 
+type ListSourceStatus = "loading" | "error" | "empty" | "ready";
+
+type VisibleGroup = {
+  key: SearchItem["groupKey"];
+  heading: string;
+  items: SearchItem[];
+  status?: ListSourceStatus;
+  error?: string | null;
+  onRetry?: () => void;
+};
+
+function listSourceStatus(params: {
+  hasLoaded: boolean;
+  isLoading: boolean;
+  error: string | null;
+  totalCount: number;
+}): ListSourceStatus {
+  if (!params.hasLoaded) {
+    if (params.error && !params.isLoading) {
+      return "error";
+    }
+    return "loading";
+  }
+  if (params.totalCount === 0) {
+    return "empty";
+  }
+  return "ready";
+}
+
+function SearchSourceStatus({
+  status,
+  error,
+  onRetry,
+}: {
+  status: ListSourceStatus;
+  error: string | null;
+  onRetry: () => void;
+}) {
+  const { t } = useTranslation();
+
+  switch (status) {
+    case "loading":
+      return (
+        <div
+          role="status"
+          className="px-2 py-3 text-center text-sm text-muted-foreground"
+        >
+          {t("globalSearch.loading")}
+        </div>
+      );
+    case "error":
+      return (
+        <div role="alert" className="space-y-2 px-2 py-3">
+          <p className="text-sm text-destructive-text">
+            {t("globalSearch.loadError", {
+              error: formatBackendError(error, t),
+            })}
+          </p>
+          <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+            {t("globalSearch.retry")}
+          </Button>
+        </div>
+      );
+    case "empty":
+      return (
+        <p className="px-2 py-3 text-center text-sm text-muted-foreground">
+          {t("globalSearch.empty")}
+        </p>
+      );
+    case "ready":
+      return null;
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
+}
+
 export function GlobalSearchDialog({
   open,
   onOpenChange,
@@ -63,9 +143,18 @@ export function GlobalSearchDialog({
   const navigate = useNavigate();
   const { t } = useTranslation();
 
-  // Data sources
   const centralSkills = useCentralSkillsStore((s) => s.skills);
+  const centralHasLoaded = useCentralSkillsStore((s) => s.hasLoaded);
+  const centralLoading = useCentralSkillsStore((s) => s.isLoading);
+  const centralError = useCentralSkillsStore((s) => s.error);
+  const loadCentralSkills = useCentralSkillsStore((s) => s.loadCentralSkills);
+
   const collections = useCollectionStore((s) => s.collections);
+  const collectionsHasLoaded = useCollectionStore((s) => s.hasLoaded);
+  const collectionsLoading = useCollectionStore((s) => s.isLoading);
+  const collectionsError = useCollectionStore((s) => s.error);
+  const loadCollections = useCollectionStore((s) => s.loadCollections);
+
   const agents = usePlatformStore((s) => s.agents);
   const categoryVisibility =
     usePlatformStore((s) => s.categoryVisibility) ??
@@ -78,6 +167,13 @@ export function GlobalSearchDialog({
   );
 
   const close = useCallback(() => onOpenChange(false), [onOpenChange]);
+  const retryCollections = useCallback(() => {
+    void loadCollections();
+  }, [loadCollections]);
+  const retryCentral = useCallback(() => {
+    void loadCentralSkills();
+  }, [loadCentralSkills]);
+
   const groupMeta = useMemo(
     () => [
       {
@@ -109,6 +205,33 @@ export function GlobalSearchDialog({
       setQuery("");
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const collectionsState = useCollectionStore.getState();
+    if (!collectionsState.hasLoaded && !collectionsState.isLoading) {
+      void collectionsState.loadCollections();
+    }
+    const centralState = useCentralSkillsStore.getState();
+    if (!centralState.hasLoaded && !centralState.isLoading) {
+      void centralState.loadCentralSkills();
+    }
+  }, [open]);
+
+  const centralStatus = listSourceStatus({
+    hasLoaded: centralHasLoaded,
+    isLoading: centralLoading,
+    error: centralError,
+    totalCount: centralSkills.length,
+  });
+  const collectionsStatus = listSourceStatus({
+    hasLoaded: collectionsHasLoaded,
+    isLoading: collectionsLoading,
+    error: collectionsError,
+    totalCount: collections.length,
+  });
 
   // Build flat search items
   const items = useMemo<SearchItem[]>(() => {
@@ -155,7 +278,9 @@ export function GlobalSearchDialog({
         descriptionText: (col.description ?? "").toLowerCase(),
         onSelect: () => {
           close();
-          navigate(`/collection/${col.id}`);
+          navigate("/collections", {
+            state: { collectionContext: { collectionId: col.id } },
+          });
         },
       });
     }
@@ -263,46 +388,108 @@ export function GlobalSearchDialog({
   const visibleGroups = useMemo(() => {
     if (!open) return [];
 
-    if (!normalizedQuery) {
-      return groupMeta
-        .map((group) => ({
+    const rankedItems = (groupKey: SearchItem["groupKey"], limit: number) => {
+      if (!normalizedQuery) {
+        return items
+          .filter((item) => item.groupKey === groupKey)
+          .slice(0, limit);
+      }
+
+      return items
+        .map((item) => ({
+          item,
+          score: scoreSearchMatch(
+            normalizedQuery,
+            item.labelText,
+            item.descriptionText,
+            item.searchText,
+          ),
+        }))
+        .filter((entry) => Number.isFinite(entry.score))
+        .sort((left, right) => {
+          if (left.score !== right.score) {
+            return left.score - right.score;
+          }
+          return left.item.label.localeCompare(right.item.label);
+        })
+        .slice(0, 50)
+        .map((entry) => entry.item)
+        .filter((item) => item.groupKey === groupKey);
+    };
+
+    const groups: VisibleGroup[] = [];
+
+    for (const group of groupMeta) {
+      const groupItems = rankedItems(group.key, group.initialLimit);
+
+      if (group.key === "central") {
+        const showStatus =
+          centralStatus === "loading" ||
+          centralStatus === "error" ||
+          centralStatus === "empty";
+        if (!showStatus && groupItems.length === 0) {
+          continue;
+        }
+        groups.push({
           key: group.key,
           heading: group.label,
-          items: items
-            .filter((item) => item.groupKey === group.key)
-            .slice(0, group.initialLimit),
-        }))
-        .filter((group) => group.items.length > 0);
+          items: centralStatus === "ready" ? groupItems : [],
+          status: centralStatus,
+          error: centralError,
+          onRetry: retryCentral,
+        });
+        continue;
+      }
+
+      if (group.key === "collections") {
+        const showStatus =
+          collectionsStatus === "loading" ||
+          collectionsStatus === "error" ||
+          collectionsStatus === "empty";
+        if (!showStatus && groupItems.length === 0) {
+          continue;
+        }
+        groups.push({
+          key: group.key,
+          heading: group.label,
+          items: collectionsStatus === "ready" ? groupItems : [],
+          status: collectionsStatus,
+          error: collectionsError,
+          onRetry: retryCollections,
+        });
+        continue;
+      }
+
+      if (groupItems.length > 0) {
+        groups.push({
+          key: group.key,
+          heading: group.label,
+          items: groupItems,
+        });
+      }
     }
 
-    const matchedItems = items
-      .map((item) => ({
-        item,
-        score: scoreSearchMatch(
-          normalizedQuery,
-          item.labelText,
-          item.descriptionText,
-          item.searchText,
-        ),
-      }))
-      .filter((entry) => Number.isFinite(entry.score))
-      .sort((left, right) => {
-        if (left.score !== right.score) {
-          return left.score - right.score;
-        }
-        return left.item.label.localeCompare(right.item.label);
-      })
-      .slice(0, 50)
-      .map((entry) => entry.item);
+    return groups;
+  }, [
+    groupMeta,
+    items,
+    normalizedQuery,
+    open,
+    centralStatus,
+    centralError,
+    retryCentral,
+    collectionsStatus,
+    collectionsError,
+    retryCollections,
+  ]);
 
-    return groupMeta
-      .map((group) => ({
-        key: group.key,
-        heading: group.label,
-        items: matchedItems.filter((item) => item.groupKey === group.key),
-      }))
-      .filter((group) => group.items.length > 0);
-  }, [groupMeta, items, normalizedQuery, open]);
+  const hideNoResults =
+    centralStatus === "loading" ||
+    centralStatus === "error" ||
+    centralStatus === "empty" ||
+    collectionsStatus === "loading" ||
+    collectionsStatus === "error" ||
+    collectionsStatus === "empty";
 
   // Cmd+K shortcut (also registered here so the dialog self-toggles)
   useHotkey("mod+k", () => onOpenChange(!open));
@@ -323,9 +510,18 @@ export function GlobalSearchDialog({
           onValueChange={setQuery}
         />
         <CommandList>
-          <CommandEmpty>{t("globalSearch.noResults")}</CommandEmpty>
+          {!hideNoResults && (
+            <CommandEmpty>{t("globalSearch.noResults")}</CommandEmpty>
+          )}
           {visibleGroups.map((group) => (
             <CommandGroup key={group.key} heading={group.heading}>
+              {group.status && group.onRetry ? (
+                <SearchSourceStatus
+                  status={group.status}
+                  error={group.error ?? null}
+                  onRetry={group.onRetry}
+                />
+              ) : null}
               {group.items.map((item) => (
                 <CommandItem
                   key={item.id}

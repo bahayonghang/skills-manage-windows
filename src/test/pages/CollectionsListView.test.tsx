@@ -191,6 +191,8 @@ function buildCollectionStoreState(overrides: Record<string, unknown> = {}) {
     currentDetail: mockDetailCol1,
     isLoading: false,
     isLoadingDetail: false,
+    hasLoaded: true,
+    detailTargetId: null,
     error: null,
     loadCollections: mockLoadCollections,
     createCollection: vi.fn(),
@@ -329,6 +331,22 @@ describe("CollectionsListView", () => {
     renderList();
     // loadCollectionDetail should have been called for the first collection.
     expect(mockLoadCollectionDetail).toHaveBeenCalledWith("col-1");
+  });
+
+  it("selects the collection from search navigation state on first render", () => {
+    renderList(
+      {
+        pathname: "/collections",
+        state: { collectionContext: { collectionId: "col-2" } },
+      },
+      { currentDetail: mockDetailCol2 },
+    );
+
+    expect(mockLoadCollectionDetail).toHaveBeenCalledWith("col-2");
+    expect(mockLoadCollectionDetail).not.toHaveBeenCalledWith("col-1");
+    expect(screen.getByRole("button", { name: "Backend" })).toHaveClass(
+      "bg-primary/15",
+    );
   });
 
   it("requires a second confirmation click before removing a skill from the selected collection", async () => {

@@ -79,5 +79,52 @@ file plus `.trellis/spec/backend/unknown-source-reset.md`.
 - Partial `failed[]`: keep the dialog open; render `skill_id` +
   `formatBackendError(error_code)` for each item. Count-only toast is not
   enough.
-- Follow-up `refreshCounts` / inventory reload failures must use their own
-  toast key, not `resetUnknownSourceError`.
+## Scenario: Collection 搜索列表与详情门控
+
+### 1. Scope / Trigger
+
+全局搜索打开时加载 collections/Central 列表，以及 `loadCollectionDetail` / mutation 后续刷新写入详情。
+
+### 2. Signatures
+
+- List stores expose `hasLoaded` (successful load including `[]`) separately from `isLoading` and `error`.
+- `loadCollectionDetail(id)` owns `detailTargetId` plus a monotonic request id.
+
+### 3. Contracts
+
+- Dialog open calls existing loaders only when `!hasLoaded && !isLoading`.
+- Empty successful arrays are loaded-empty, not never-loaded. Load errors must not render as “no results”.
+- Collection search navigates to `/collections` with `location.state.collectionContext.collectionId`. Do not add `/collection/:id`.
+- Only the current detail request may write `currentDetail`, detail error, or clear `isLoadingDetail`.
+- Mutation refresh uses that same loader and must not start if `detailTargetId` already changed.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+| --- | --- |
+| Source never loaded | Call loader once on dialog open |
+| Source loaded empty | Do not reload just because the array is empty |
+| Source load fails | Localized error + retry; not empty-results |
+| Detail A then B, B returns first | `currentDetail` is B; A success/failure is discarded |
+| Mutation A then user selects B | Do not refresh A; do not steal B's request ownership |
+
+### 5. Good / Base / Bad Cases
+
+- Good: search hit selects a collection via existing `/collections` state.
+- Base: reopen after loaded-empty does not refetch.
+- Bad: `/collection/:id` or using `items.length === 0` as never-loaded.
+
+### 6. Tests Required
+
+- MemoryRouter asserts `/collections` + `collectionId` state.
+- Deferred A/B detail promises for stale success, stale failure, and loading ownership.
+- Mutation vs switch concurrency.
+- en/zh `globalSearch.loading|loadError|empty|retry` key parity.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+`navigate(\`/collection/${id}\`)` and `if (collections.length === 0) loadCollections()`.
+
+#### Correct
+`navigate("/collections", { state: { collectionContext: { collectionId: id } } })` and `if (!hasLoaded && !isLoading) loadCollections()`.
