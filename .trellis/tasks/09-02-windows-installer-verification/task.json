@@ -1,0 +1,29 @@
+{
+  "id": "windows-installer-verification",
+  "name": "windows-installer-verification",
+  "title": "Windows 安装器验证矩阵",
+  "description": "补齐 NSIS/MSI 安装启动卸载与包内主程序签名验证，并收敛发布超时。",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-09-02",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "09-02-engineering-audit-remediation",
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "audit_severity": "medium",
+    "estimated_effort": "M"
+  }
+}
