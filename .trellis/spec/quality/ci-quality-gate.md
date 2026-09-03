@@ -172,9 +172,17 @@ universal, Linux x64, and optional Linux arm64 release matrix.
   replace inner exe bytes, or claim REL-001/REL-002 fixed. The 2026-09-02
   rehearsal and 2026-09-03 fail-closed scope decision are in the
   `windows-release-signing` Trellis research notes.
-- The Windows install/launch/uninstall smoke is an aggregate prerequisite. A
-  real previous-to-candidate updater smoke remains guarded and deferred until a
-  separately approved non-public staging feed and rollback plan exist.
+- The Windows install/launch/uninstall smoke is an aggregate prerequisite. It
+  runs two isolated matrix cases (`nsis`, `msi`) via
+  `scripts/release/windows-installer-smoke.ps1` with unique install roots,
+  `timeout-minutes` on `release-context` (15) and `windows-install-smoke` (20),
+  and per-process deadlines plus process-tree kill. Installed-exe Authenticode
+  follows `windows-signing.json` (`valid` vs `not-configured`/`NotSigned`) and
+  does not prove inner-exe-before-bundle signing. `release-context` must pin
+  Node 26 and Rust 1.98.0 from `package.json#engines.node` and
+  `rust-toolchain.toml` before resolver use. A real previous-to-candidate
+  updater smoke remains guarded and deferred until a separately approved
+  non-public staging feed and rollback plan exist.
 
 Package job guards must remain:
 
