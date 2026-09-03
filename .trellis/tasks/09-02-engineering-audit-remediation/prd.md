@@ -19,11 +19,11 @@
 |---|---|---:|---|---|---|
 | BE-CORR-001 | Critical | M | `src-tauri/src/services/github_import/remote.rs:426,484,544` | **fixed**：远程/本地覆盖走 journaled apply，DB 失败可恢复 backup | `github-import-fs-db-atomicity` |
 | SEC-002 | High | S | `.trellis/scripts/common/task_store.py:296-347,419-437` | **fixed**：`resolve_contained_path` 拒绝穿越 `.trellis/tasks` | `trellis-path-security` |
-| REL-002 | High | S/M | `.github/workflows/release-desktop.yml:97-168` | **open (fail-closed)**：2026-09-03 用户选范围 1，不改 workflow；updater 密钥/OIDC 未收窄 | `windows-release-signing` |
+| REL-002 | High | S/M | `.github/workflows/release-desktop.yml:97-168` | **wontfix（contract-evidenced）**：R1 未过，用户拒绝范围内全部 workflow 实现；updater 密钥/OIDC 未收窄；残留风险仍在。见 `research/rel-001-002-wontfix-contract-2026-09-03.md`。**不是 fixed** | `windows-release-signing` |
 | FE-CORR-001 | High | S | `src/components/layout/GlobalSearchDialog.tsx:142-159`; `src/App.tsx:119-123` | **fixed**：搜索命中导航 `/collections` | `collection-search-correctness` |
 | BE-CORR-004 | High | S | `src-tauri/src/services/usage/fs_backend.rs:240`; `services/usage/mod.rs:301`; `db/repos/usage_repo.rs:131` | **fixed**：`exists` 返回 `Result`；target-fatal 先于空替换 | `usage-refresh-failure-integrity` |
 | SEC-001 | High | M | `.trellis/scripts/common/task_context.py:77-85`; `.codex/hooks/inject-subagent-context.py:242-248,428-443,605-622` | **fixed**：manifest 路径 containment；gitignore 钩子 fail-closed | `trellis-path-security` |
-| REL-001 | High | M | `.github/workflows/release-desktop.yml:156-246,316-336` | **open (fail-closed)**：CLI 2.11.4 无法证明 bundler 消费 Authenticode 前任 digest；用户选范围 1，不改 workflow | `windows-release-signing` |
+| REL-001 | High | M | `.github/workflows/release-desktop.yml:156-246,316-336` | **wontfix（contract-evidenced）**：CLI 2.11.4 无法证明 bundler 消费 Authenticode 前任 digest；用户拒绝包内替换/自制 bundler；残留风险仍在。见 `research/rel-001-002-wontfix-contract-2026-09-03.md`。**不是 fixed** | `windows-release-signing` |
 | FE-CORR-002 | High | M | `src/stores/collectionStore.ts:177-203`; `src/pages/CollectionsListView.tsx:181-186` | **fixed**：详情 latest-wins / 单调选择 | `collection-search-correctness` |
 | BE-CORR-002 | High | M | `src-tauri/src/services/github_import/import.rs:604,666-684` | **fixed**：journaled upsert；恢复失败可观察 | `github-import-fs-db-atomicity` |
 | BE-CONC-001 | High | M | `src-tauri/src/services/github_import/remote.rs:321,396` | **fixed**：远程导入持有共享 target mutation guard | `github-import-fs-db-atomicity` |
@@ -58,10 +58,10 @@
 ## Acceptance Criteria
 
 - [x] AC1（R1）：12 个 child 均有可测试 PRD、design、implement 与真实 implement/check context；ledger 每个 ID 可追溯到一个 child R 和一个 child AC。
-- [ ] AC2（R2, R3）：Critical/High finding 逐项具备失败回归、实现边界与恢复/回滚验证；不得以现有 1521 个测试代替缺失的故障注入。 **blocked**：REL-001/REL-002 仍为 open (fail-closed)，用户拒绝 wontfix 与 workflow 改动。
+- [x] AC2（R2, R3）：产品修复的 Critical/High 均有失败回归。REL-001/REL-002 **不是产品修复**：以 R1 FAIL + 用户拒绝选项 2/3 作为 contract-evidenced `wontfix`（`research/rel-001-002-wontfix-contract-2026-09-03.md`）；未改签名顺序、未放宽 validator。
 - [x] AC3（R1, R4）：Medium/Low finding 均由对应 child 闭环；QUAL-002 的真实 runner 生命周期仍 UNVERIFIED，不把 REL-001 标成 fixed。
-- [x] AC4（R2）：12 个 child 已归档后，父任务运行 `just ci`（exit 0）、`just audit`（exit 0, currentness unverified）、`pnpm docs:gen:check`（exit 0）与 ledger 复核（见 `research/integration-2026-09-03.md`）。未启动父任务、未派发父级 trellis-check 子代理。
-- [x] AC5（R5）：`research/integration-2026-09-03.md` 列出 passed / open / failed / skipped / missing evidence；真实 Windows/provider/remote 不得由 fixture 推断。
+- [x] AC4（R2）：12 个 child 已归档后，父任务运行 `just ci`、`just audit`、`pnpm docs:gen:check`；扫描复跑与 REL 收口见 `research/`。独立 trellis-check 在 REL contract 后为 PASS。
+- [x] AC5（R5）：`research/integration-2026-09-03.md` 与 `research/rel-001-002-wontfix-contract-2026-09-03.md` 列出 passed / wontfix / failed / skipped / missing evidence；真实 Windows/provider/remote 不得由 fixture 推断；不得把 REL-001 标成 fixed。
 
 ## Out Of Scope
 
