@@ -42,9 +42,10 @@
 | ARCH-003 | Medium | L | `src-tauri/src/db/mod.rs:7-58`; 87 个非测试直接 import | **fixed（渐进）**：三领域宽函数调用 174→0；历史债务 388 no-growth；未全库清零 | `backend-boundary-ratchets` |
 | FE-I18N-001 | Low | S | `src/stores/settingsStore.aiSlice.ts:467-472`; `src/pages/MarketplaceView.tsx:167-177` | **fixed**：AI/Marketplace browser fixture 文案走 `settings.aiTestBrowserUnavailable` 与 `marketplace.previewUnavailable*` | `frontend-boundary-cleanup` |
 | TOOL-004 | Low | S | `.agents/skills/trellis-spec-bootstarp/SKILL.md:2-8` 与正确拼写副本 | **fixed**：旧拼写副本移除/不可发现 | `subagent-runtime-resilience` |
+| QUAL-SIZE-001 | Medium | S | `src-tauri/src/services/central_updates/core/batch.rs` | **fixed**：从 807 行拆出 `batch/commit_fault.rs`；当前 `batch.rs` 775 行（预算 800） | `github-import-fs-db-atomicity` |
 | REL-003 | Low | S | `.github/workflows/release-desktop.yml:46,288,326` | **fixed**：`release-context` `timeout-minutes: 15`；`windows-install-smoke` `timeout-minutes: 20`；resolver/`run()` 与 smoke helper 均有 deadline | `windows-installer-verification` |
 | REL-004 | Low | S | `.github/workflows/release-desktop.yml:46-88`; `scripts/release/release-context.mjs:63` | **fixed**：Node 26 setup+assert 先于第一次 `release-context.mjs`；Rust 1.98.0 setup+assert 先于完整 resolver | `windows-installer-verification` |
-| ARCH-004 | Low | M | `src/types/index.ts:1`；生产 importer 基线待按 child 约定命令重测 | **fixed（no-growth）**：Step 0 基线 199，实现后 194；未全量拆 barrel | `frontend-boundary-cleanup` |
+| ARCH-004 | Low | M | `src/types/index.ts:1`；生产 importer 基线待按 child 约定命令重测 | **fixed（no-growth）**：基线 199，复跑 191；未全量拆 barrel | `frontend-boundary-cleanup` |
 
 ## Requirements
 
