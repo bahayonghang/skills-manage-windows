@@ -22,18 +22,22 @@
 
 ## Acceptance Criteria
 
-- [ ] AC1（R1）：任务 `research/` 中记录实际 `node --version`、`pnpm --version`、本地 Tauri CLI 版本、`build --help` 摘要和锁文件解析结果。
-- [ ] AC2（R1）：无生产凭据 rehearsal 产出可复算证据，证明 bundler 读取的应用 exe 与 Authenticode 前置步骤输出的是同一路径且 digest 相同。
-- [ ] AC3（R2）：当 CLI 不提供可证明的分段语义时，研究门禁以非零结果停止，`.github/workflows/release-desktop.yml` 保持未修改。
-- [ ] AC4（R3）：解析后的 workflow contract 证明六个阶段严格按 R3 顺序出现，且任一前置阶段失败都会阻止后续阶段。
-- [ ] AC5（R3）：受控 Windows rehearsal 对 NSIS 包内 `skillport.exe` 给出有效 Authenticode 证据。
-- [ ] AC6（R3）：受控 Windows rehearsal 对 MSI 包内 `skillport.exe` 给出有效 Authenticode 证据。
-- [ ] AC7（R4）：静态契约证明 updater 私钥和密码只出现在最终 NSIS updater 签名步骤的 `env`。
-- [ ] AC8（R5）：静态契约证明普通构建步骤和不执行 Authenticode 的 job 没有 `id-token: write`。
-- [ ] AC9（R6）：测试证明任一签名后资产字节变化都会使既有 checksum/metadata 验证失败并要求重新生成。
-- [ ] AC10（R7）：release artifact contract 证明最终资产集合、名称、版本关联与现有 aggregate/publish 输入兼容。
-- [ ] AC11（R8）：本地测试结果把真实证书、正式发布和真实安装器包内签名明确报告为 `UNVERIFIED`，不以 fixture 代替。
-- [ ] AC12（R1, R2, R3, R4, R5, R6, R7）：定向 release contract 测试、`pnpm typecheck` 与最终 `just ci` 通过。
+- [x] AC1（R1）：任务 `research/` 中记录实际 `node --version`、`pnpm --version`、本地 Tauri CLI 版本、`build --help` 摘要和锁文件解析结果。
+- [ ] AC2（R1）：无生产凭据 rehearsal 产出可复算证据，证明 bundler 读取的应用 exe 与 Authenticode 前置步骤输出的是同一路径且 digest 相同。 **FAIL** — 见 `research/tauri-windows-bundle-phase-evidence.md`（`patch_binary`；包内 digest 未证明）。
+- [x] AC3（R2）：当 CLI 不提供可证明的分段语义时，研究门禁以非零结果停止，`.github/workflows/release-desktop.yml` 保持未修改。 2026-09-03 用户确认范围 1。
+- [ ] AC4（R3）：解析后的 workflow contract 证明六个阶段严格按 R3 顺序出现，且任一前置阶段失败都会阻止后续阶段。 **N/A** — R1 未通过，未改 workflow。
+- [ ] AC5（R3）：受控 Windows rehearsal 对 NSIS 包内 `skillport.exe` 给出有效 Authenticode 证据。 **UNVERIFIED / N/A**
+- [ ] AC6（R3）：受控 Windows rehearsal 对 MSI 包内 `skillport.exe` 给出有效 Authenticode 证据。 **UNVERIFIED / N/A**
+- [ ] AC7（R4）：静态契约证明 updater 私钥和密码只出现在最终 NSIS updater 签名步骤的 `env`。 **N/A** — 未授权 REL-002 工作流改动。
+- [ ] AC8（R5）：静态契约证明普通构建步骤和不执行 Authenticode 的 job 没有 `id-token: write`。 **N/A**
+- [ ] AC9（R6）：测试证明任一签名后资产字节变化都会使既有 checksum/metadata 验证失败并要求重新生成。 **N/A**
+- [ ] AC10（R7）：release artifact contract 证明最终资产集合、名称、版本关联与现有 aggregate/publish 输入兼容。 **N/A** — 资产契约未改。
+- [x] AC11（R8）：本地测试结果把真实证书、正式发布和真实安装器包内签名明确报告为 `UNVERIFIED`，不以 fixture 代替。
+- [ ] AC12（R1, R2, R3, R4, R5, R6, R7）：定向 release contract 测试、`pnpm typecheck` 与最终 `just ci` 通过。 **N/A** — 无产品/工作流 diff；不把未改动的 `just ci` 当成 REL-001 证据。
+
+## Scope Decision (2026-09-03)
+
+用户选择范围 **1**：fail closed，不修改 `.github/workflows/release-desktop.yml`，REL-001 与 REL-002 在父任务 ledger 保持 **open**。不实施范围 2（只收 REL-002）或范围 3（自制 bundler / 包内替换 exe）。本子任务以 R2/AC3 收口，不宣称 finding 已修复。
 
 ## Out of Scope
 

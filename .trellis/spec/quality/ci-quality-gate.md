@@ -164,6 +164,14 @@ universal, Linux x64, and optional Linux arm64 release matrix.
   NSIS, and MSI before generating the Tauri updater `.sig` over the final NSIS
   bytes. Rehearsal may report `authenticode=not-configured`; publish requires
   valid timestamped Authenticode and separately valid updater verification.
+- Do not edit `.github/workflows/release-desktop.yml` to insert
+  Authenticode-before-bundle unless a pinned `@tauri-apps/cli` rehearsal proves
+  the bundler copies the signed predecessor **digest**. CLI 2.11.4 `tauri bundle`
+  runs in-process `patch_binary` before NSIS `File`. Path identity is not digest
+  identity. Fail closed: leave the workflow unchanged rather than invent flags,
+  replace inner exe bytes, or claim REL-001/REL-002 fixed. The 2026-09-02
+  rehearsal and 2026-09-03 fail-closed scope decision are in the
+  `windows-release-signing` Trellis research notes.
 - The Windows install/launch/uninstall smoke is an aggregate prerequisite. A
   real previous-to-candidate updater smoke remains guarded and deferred until a
   separately approved non-public staging feed and rollback plan exist.

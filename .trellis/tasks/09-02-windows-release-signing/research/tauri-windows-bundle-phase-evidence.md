@@ -250,6 +250,10 @@ Missing proof (do not fill with guessed flags):
 
 **Workflow edits are not authorized.** Desired R3 order `compile → Authenticode app exe → bundle` is a contract goal, not something this rehearsal uniquely proved the installed CLI can execute as two digest-identical steps.
 
+## User scope decision (2026-09-03)
+
+Option **1** (stay fail-closed): no workflow edits; REL-001 and REL-002 remain open on the parent ledger. Options 2 and 3 were not taken. Record: `user-scope-decision-2026-09-03.md`.
+
 ## Caveats / Not Found
 
 - `--dry-run`: not printed; not run.
