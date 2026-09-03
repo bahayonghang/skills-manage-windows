@@ -2328,9 +2328,7 @@ metadata:
             .expect("read central")
             .filter_map(Result::ok)
             .map(|entry| entry.file_name().to_string_lossy().into_owned())
-            .filter(|name| {
-                name.starts_with(".skillport-import-") || name.starts_with(".skillport-backup-")
-            })
+            .filter(|name| name.starts_with(".skillport-"))
             .collect::<Vec<_>>();
         assert!(
             leaked_staging.is_empty(),
@@ -2438,6 +2436,7 @@ metadata:
             Some("existing description")
         );
         assert_eq!(db_skill.source.as_deref(), Some("local"));
+        assert_eq!(db_skill.uid, format!("{}-uid", candidate.skill_id));
 
         let repository_id = db::github_repository_id(&repo.owner, &repo.repo, &repo.branch);
         let imported_repo_rows: i64 =
@@ -2455,9 +2454,7 @@ metadata:
             .expect("read central")
             .filter_map(Result::ok)
             .map(|entry| entry.file_name().to_string_lossy().into_owned())
-            .filter(|name| {
-                name.starts_with(".skillport-import-") || name.starts_with(".skillport-backup-")
-            })
+            .filter(|name| name.starts_with(".skillport-"))
             .collect::<Vec<_>>();
         assert!(
             leaked_staging.is_empty(),
@@ -3088,12 +3085,23 @@ metadata:
     }
 
     #[test]
-    fn remote_import_script_uses_remote_copy_and_move_not_streamed_cat() {
-        let script = remote_import_skill_script();
+    fn remote_import_apply_uses_journaled_central_content_upsert() {
+        let source = include_str!("remote.rs");
+        assert!(source.contains("import_single_staged_skill"));
+        assert!(source.contains("CentralFs::Remote"));
+        assert!(!source.contains("remote_import_skill_script"));
+        assert!(!source.contains("skillport-backup-$$"));
+        assert!(!source.contains("upsert_skill_with_github_repository"));
+    }
 
-        assert!(script.contains("cp -a"));
-        assert!(script.contains("mv \"$stage_dir\" \"$target_dir\""));
-        assert!(!script.contains("cat >"));
+    #[test]
+    fn local_import_apply_uses_journaled_central_content_upsert() {
+        let source = include_str!("import.rs");
+        assert!(source.contains("journaled_central_content_upsert_with_fs"));
+        assert!(!source.contains("backup_existing_skill_dir"));
+        assert!(!source.contains("restore_or_cleanup_target_dir"));
+        assert!(!source.contains("drop_existing_backup"));
+        assert!(!source.contains("upsert_skill_with_github_repository"));
     }
 
     #[test]
@@ -3315,6 +3323,40 @@ metadata:
             .await
             .expect("assignment");
         assert_eq!(assignment.source_path.as_deref(), Some("."));
+
+        let stored = db::get_skill_by_id(&pool, "huashu-design")
+            .await
+            .expect("skill query")
+            .expect("imported skill");
+        assert!(!stored.uid.is_empty());
+        let phase = sqlx::query_scalar::<_, String>(
+            "SELECT phase FROM fs_db_operations WHERE skill_id = 'huashu-design'",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("journal phase");
+        assert_eq!(phase, "completed");
+        let kind = sqlx::query_scalar::<_, String>(
+            "SELECT operation_kind FROM fs_db_operations WHERE skill_id = 'huashu-design'",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("journal kind");
+        assert_eq!(kind, "central_update");
+        let manifest: serde_json::Value = serde_json::from_str(
+            &sqlx::query_scalar::<_, String>(
+                "SELECT manifest_json FROM fs_db_operations WHERE skill_id = 'huashu-design'",
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("journal manifest"),
+        )
+        .expect("manifest json");
+        assert_eq!(manifest["payload"]["hadTarget"], false);
+        assert!(manifest["payload"]["marker"]
+            .as_str()
+            .unwrap()
+            .contains("operation-marker"));
     }
 
     #[tokio::test]

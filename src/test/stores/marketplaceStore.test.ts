@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 vi.mock("@/lib/ipc", () => ({
   invoke: vi.fn(),
@@ -10,7 +10,7 @@ import { invoke, listen, isTauriRuntime } from "@/lib/ipc";
 
 import { useMarketplaceStore } from "@/stores/marketplaceStore";
 
-const mockInvoke = vi.mocked(invoke);
+const mockInvoke = vi.mocked(invoke) as unknown as Mock;
 const mockListen = vi.mocked(listen);
 const mockIsTauriRuntime = vi.mocked(isTauriRuntime);
 

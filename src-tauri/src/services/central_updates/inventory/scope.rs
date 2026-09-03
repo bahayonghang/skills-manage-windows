@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 
-use crate::db::{self, DbPool};
+use crate::db::repos::observations_repo;
+use crate::db::repos::skills_repo;
+use crate::db::DbPool;
+
 use crate::services::central_updates::CentralUpdatesError;
 
 use super::{SkillRefreshScope, SkillRefreshScopeKind};
@@ -80,7 +83,7 @@ pub(crate) async fn central_skill_ids_for_agents(
         return Ok(Vec::new());
     }
 
-    let central_skill_ids = db::get_central_skills(pool)
+    let central_skill_ids = skills_repo::get_central_skills(pool)
         .await?
         .into_iter()
         .map(|skill| skill.id)
@@ -88,7 +91,7 @@ pub(crate) async fn central_skill_ids_for_agents(
     let mut ids = HashSet::new();
 
     for agent_id in agent_ids {
-        for observation in db::get_agent_skill_observations(pool, agent_id).await? {
+        for observation in observations_repo::get_agent_skill_observations(pool, agent_id).await? {
             if central_skill_ids.contains(&observation.skill_id) {
                 ids.insert(observation.skill_id);
             }

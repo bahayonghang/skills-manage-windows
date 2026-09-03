@@ -3,12 +3,19 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
+type ExecOptions = {
+  timeoutMs?: number;
+  maxBuffer?: number;
+};
+
+type ExecFn = (command: string, args: string[], cwd: string, options?: ExecOptions) => string;
+
 type ReleaseContextHelpers = {
   parseReleaseTag: (tag: string) => { tag: string; version: string };
   resolveReleaseTag: (args: {
     tag: string;
     cwd: string;
-    exec: (command: string, args: string[], cwd: string) => string;
+    exec?: ExecFn;
   }) => { tag: string; version: string; sha: string };
   validateVersionSet: (versions: {
     tag: string;
@@ -19,13 +26,24 @@ type ReleaseContextHelpers = {
   resolveRehearsalRef: (args: {
     sha: string;
     cwd: string;
-    exec: (command: string, args: string[], cwd: string) => string;
+    exec?: ExecFn;
   }) => { sha: string };
+  run: ExecFn;
+  RESOLVER_SUBPROCESS_TIMEOUT_MS: number;
+  RESOLVER_OUTPUT_CAP_BYTES: number;
 };
 
 // @ts-expect-error The release context helper is an ESM Node script outside the TS source tree.
 const releaseContextModule = await import("../../../scripts/release/release-context.mjs");
-const { parseReleaseTag, resolveReleaseTag, resolveRehearsalRef, validateVersionSet } = releaseContextModule as ReleaseContextHelpers;
+const {
+  parseReleaseTag,
+  resolveReleaseTag,
+  resolveRehearsalRef,
+  validateVersionSet,
+  run,
+  RESOLVER_SUBPROCESS_TIMEOUT_MS,
+  RESOLVER_OUTPUT_CAP_BYTES,
+} = releaseContextModule as ReleaseContextHelpers;
 
 describe("release context", () => {
   it("accepts explicit semver tags and derives the version", () => {
@@ -78,5 +96,21 @@ describe("release context", () => {
       exec: (_command, args) => args[0] === "rev-parse" ? sha : "",
     })).toEqual({ sha });
     expect(() => resolveRehearsalRef({ sha: "main", cwd: "repo", exec: () => "" })).toThrow(/40-character/);
+  });
+
+  it("bounds resolver subprocesses and maps timeout without waiting for the job", () => {
+    expect(RESOLVER_SUBPROCESS_TIMEOUT_MS).toBe(120_000);
+    expect(RESOLVER_OUTPUT_CAP_BYTES).toBe(1_048_576);
+    const started = Date.now();
+    expect(() =>
+      run(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"], process.cwd(), { timeoutMs: 400 }),
+    ).toThrow(/release-context: .+ timed out after 400ms\./);
+    expect(Date.now() - started).toBeLessThan(10_000);
+  }, 15_000);
+
+  it("maps oversized resolver output to a staged error", () => {
+    expect(() =>
+      run(process.execPath, ["-e", "process.stdout.write('x'.repeat(65536))"], process.cwd(), { maxBuffer: 1024 }),
+    ).toThrow(/release-context: .+ output exceeded 1024 bytes\./);
   });
 });

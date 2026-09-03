@@ -1,6 +1,5 @@
 import { create } from "zustand";
-import { invoke, isTauriRuntime } from "@/lib/ipc";
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import { invoke, isTauriRuntime, type UnlistenFn } from "@/lib/ipc";
 import { DirectoryTreeEntry, ProjectUsingSkill, SkillDetail, SkillDetailRequest } from "@/types";
 import { parseBackendError } from "@/lib/backendError";
 import {
@@ -276,7 +275,7 @@ export const useSkillDetailStore = create<SkillDetailState>((set, get) => ({
       return;
     }
     try {
-      const explanation = await invoke<string | null>("get_skill_explanation", { skillId, lang });
+      const explanation = await invoke("get_skill_explanation", { skillId, lang });
       if (requestId !== activeExplanationRequestId) return;
       set({
         explanation,
@@ -470,7 +469,7 @@ export const useSkillDetailStore = create<SkillDetailState>((set, get) => ({
       return;
     }
     try {
-      const result = await invoke<string>("explain_skill", { content });
+      const result = await invoke("explain_skill", { content });
       set({ fileExplanation: result, fileIsExplaining: false });
     } catch (err) {
       const parsed = parseBackendError(err);
@@ -508,7 +507,7 @@ export const useSkillDetailStore = create<SkillDetailState>((set, get) => ({
     }
     set({ isLoadingProjectsUsingSkill: true });
     try {
-      const rows = await invoke<ProjectUsingSkill[]>("list_projects_using_skill", {
+      const rows = await invoke("list_projects_using_skill", {
         skillId,
       });
       set({ projectsUsingSkill: rows, isLoadingProjectsUsingSkill: false });

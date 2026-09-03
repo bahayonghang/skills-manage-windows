@@ -1,5 +1,4 @@
 import { invoke, isTauriRuntime } from "@/lib/ipc";
-import type { SkillsShFileEntry, SkillsShSkill } from "@/types";
 import type { MarketplaceState, MarketplaceStoreContext } from "./marketplaceStore.types";
 
 const DESKTOP_ONLY_ERROR =
@@ -40,7 +39,7 @@ export function createMarketplaceSkillsShSlice({
       }
 
       try {
-        const results = await invoke<SkillsShSkill[]>("search_skills_sh", {
+        const results = await invoke("search_skills_sh", {
           query: normalizedQuery,
           limit: 30,
         });
@@ -64,14 +63,14 @@ export function createMarketplaceSkillsShSlice({
       if (!isTauriRuntime()) {
         throw new Error(DESKTOP_ONLY_ERROR);
       }
-      return invoke<string>("resolve_skills_sh_url", { source, skillId });
+      return invoke("resolve_skills_sh_url", { source, skillId });
     },
 
     browseSkillsShDirectory: async (source: string, skillId: string) => {
       if (!isTauriRuntime()) {
         throw new Error(DESKTOP_ONLY_ERROR);
       }
-      return invoke<SkillsShFileEntry[]>("browse_skills_sh_directory", {
+      return invoke("browse_skills_sh_directory", {
         source,
         skillId,
       });
@@ -81,7 +80,7 @@ export function createMarketplaceSkillsShSlice({
       if (!isTauriRuntime()) {
         throw new Error(DESKTOP_ONLY_ERROR);
       }
-      return invoke<string>("read_skills_sh_file", { source, filePath });
+      return invoke("read_skills_sh_file", { source, filePath });
     },
 
     installFromSkillsSh: async (source: string, skillId: string) => {

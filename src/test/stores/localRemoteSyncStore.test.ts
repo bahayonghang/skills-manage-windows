@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 vi.mock("@/lib/ipc", () => ({
   invoke: vi.fn(),
@@ -8,6 +8,8 @@ vi.mock("@/lib/ipc", () => ({
 import { invoke } from "@/lib/ipc";
 import { useLocalRemoteSyncStore } from "@/stores/localRemoteSyncStore";
 import type { LocalRemoteSyncPreview } from "@/types";
+
+const mockedInvoke = invoke as unknown as Mock;
 
 const preview: LocalRemoteSyncPreview = {
   targetId: "ssh-1",
@@ -44,7 +46,7 @@ describe("localRemoteSyncStore", () => {
   });
 
   it("previews sync through the backend command and stores the preview", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce(preview);
+    mockedInvoke.mockResolvedValueOnce(preview);
 
     await useLocalRemoteSyncStore.getState().previewSync({ targetId: "ssh-1" });
 
@@ -56,7 +58,7 @@ describe("localRemoteSyncStore", () => {
   });
 
   it("stores preview errors and clears loading state", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce("connection failed");
+    mockedInvoke.mockRejectedValueOnce("connection failed");
 
     await expect(
       useLocalRemoteSyncStore.getState().previewSync({ targetId: "ssh-1" })
@@ -75,7 +77,7 @@ describe("localRemoteSyncStore", () => {
       skippedSkills: [],
       failed: [],
     };
-    vi.mocked(invoke).mockResolvedValueOnce(result);
+    mockedInvoke.mockResolvedValueOnce(result);
 
     await useLocalRemoteSyncStore.getState().applySync({ targetId: "ssh-1" });
 

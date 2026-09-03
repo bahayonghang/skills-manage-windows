@@ -2,6 +2,7 @@
 
 ## Guidelines
 
+- [Backend Layer Boundaries](./layer-boundaries.md)
 - [Central Skill Tags](./central-skill-tags.md)
 - [SQL-Backed Central Skill Pagination](./central-skills-pagination.md)
 - [Best-Effort 写入约定](./best-effort-writes.md)

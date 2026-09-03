@@ -12,12 +12,21 @@ Provides:
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
 
+from . import subprocess_supervision as _procsup
+from .config import get_hooks
+from .log import Colors, colored
 from .paths import get_repo_root, get_tasks_dir
+from .subprocess_supervision import (
+    DEFAULT_STREAM_CAP_BYTES,
+    format_process_diagnostic,
+    run_bounded_process,
+)
 
 
 # =============================================================================
@@ -247,42 +256,28 @@ def run_task_hooks(event: str, task_json_path: Path, repo_root: Path) -> None:
         task_json_path: Absolute path to the task's task.json.
         repo_root: Repository root for cwd and config lookup.
     """
-    import os
-    import subprocess
-
-    from .config import get_hooks
-    from .log import Colors, colored
-
     commands = get_hooks(event, repo_root)
     if not commands:
         return
 
     env = {**os.environ, "TASK_JSON_PATH": str(task_json_path)}
 
-    for cmd in commands:
-        try:
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                cwd=repo_root,
-                env=env,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
-            if result.returncode != 0:
-                print(
-                    colored(f"[WARN] Hook failed ({event}): {cmd}", Colors.YELLOW),
-                    file=sys.stderr,
-                )
-                if result.stderr.strip():
-                    print(f"  {result.stderr.strip()}", file=sys.stderr)
-        except Exception as e:
+    for _cmd in commands:
+        result = run_bounded_process(
+            _cmd,
+            cwd=repo_root,
+            env=env,
+            timeout_seconds=_procsup.HOOK_TIMEOUT_SECONDS,
+            max_stdout_bytes=DEFAULT_STREAM_CAP_BYTES,
+            max_stderr_bytes=DEFAULT_STREAM_CAP_BYTES,
+            shell=True,
+        )
+        if result.timed_out or result.returncode not in (0,):
             print(
-                colored(f"[WARN] Hook error ({event}): {cmd} — {e}", Colors.YELLOW),
+                colored(f"[WARN] Hook failed ({event})", Colors.YELLOW),
                 file=sys.stderr,
             )
+            print(format_process_diagnostic(result, label=event), file=sys.stderr)
 
 
 # =============================================================================

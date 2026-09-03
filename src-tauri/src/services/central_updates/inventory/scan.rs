@@ -1,7 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-use crate::db::{self, Agent, AgentSkillObservation, DbPool, SkillInstallation};
+use crate::db::repos::agents_repo;
+use crate::db::repos::observations_repo;
+use crate::db::repos::skills_repo;
+use crate::db::{Agent, AgentSkillObservation, DbPool, SkillInstallation};
 use crate::services::central_updates::CentralUpdatesError;
 
 use super::{DeletedPlatformCopyGroup, PlatformDuplicateGroup};
@@ -17,7 +20,7 @@ pub(crate) async fn scan_platform_duplicate_skills_with_pool(
      * 步骤3：同 skill_id 分组，分 writable / plugin readonly
      *        只保留两类都存在的组
      */
-    let agents = db::get_all_agents(pool).await?;
+    let agents = agents_repo::get_all_agents(pool).await?;
     let target_agent_ids: HashSet<String> = match agent_ids {
         Some(ids) => ids.into_iter().collect(),
         None => agents.iter().map(|a| a.id.clone()).collect(),
@@ -28,7 +31,7 @@ pub(crate) async fn scan_platform_duplicate_skills_with_pool(
         if !target_agent_ids.contains(&agent.id) {
             continue;
         }
-        let observations = db::get_agent_skill_observations(pool, &agent.id).await?;
+        let observations = observations_repo::get_agent_skill_observations(pool, &agent.id).await?;
         groups.extend(group_platform_duplicate_skills(&agent.id, &observations));
     }
     // 稳定排序，便于前端展示
@@ -118,7 +121,7 @@ pub(crate) async fn scan_deleted_platform_copies_with_ownership(
     cli_ownership: Option<&crate::services::skills_cli::CliLockOwnership>,
     universal_skills_dir: &std::path::Path,
 ) -> Result<Vec<DeletedPlatformCopyGroup>, CentralUpdatesError> {
-    let agents = db::get_all_agents(pool).await?;
+    let agents = agents_repo::get_all_agents(pool).await?;
     let target_agent_ids: HashSet<String> = match agent_ids {
         Some(ids) => ids.into_iter().collect(),
         None => agents
@@ -127,7 +130,7 @@ pub(crate) async fn scan_deleted_platform_copies_with_ownership(
             .map(|agent| agent.id.clone())
             .collect(),
     };
-    let central_skill_ids = db::get_central_skills(pool)
+    let central_skill_ids = skills_repo::get_central_skills(pool)
         .await?
         .into_iter()
         .map(|skill| skill.id)
@@ -154,7 +157,7 @@ pub(crate) async fn scan_deleted_platform_copies_with_ownership(
             continue;
         }
 
-        let observations = db::get_agent_skill_observations(pool, &agent.id).await?;
+        let observations = observations_repo::get_agent_skill_observations(pool, &agent.id).await?;
         for obs in observations {
             if !is_deleted_observation_candidate(&obs, &central_skill_ids) {
                 continue;
@@ -345,7 +348,7 @@ async fn deleted_installation_skill_name(
     pool: &DbPool,
     skill_id: &str,
 ) -> Result<String, CentralUpdatesError> {
-    Ok(db::get_skill_by_id(pool, skill_id)
+    Ok(skills_repo::get_skill_by_id(pool, skill_id)
         .await?
         .map(|skill| skill.name)
         .unwrap_or_else(|| skill_id.to_string()))

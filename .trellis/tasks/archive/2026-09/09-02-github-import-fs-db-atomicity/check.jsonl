@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/test-support.md", "reason": "指导故障注入与隔离测试"}
+{"file": ".trellis/spec/backend/fs-db-operation-journal.md", "reason": "phase graph and journal uniqueness for review"}
+{"file": ".trellis/spec/backend/transactional-mutations.md", "reason": "commit-unknown roll-forward vs rollback"}
+{"file": ".trellis/spec/backend/central-mutation-lock.md", "reason": "same-target mutex vs different-target parallelism"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "IPC and log redaction assertions"}

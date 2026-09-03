@@ -5,6 +5,9 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::db::repos::agents_repo;
+use crate::db::repos::installations_repo;
+use crate::db::repos::observations_repo;
 use crate::db::{self, AgentSkillObservation, DbPool};
 
 use super::centralize::{ensure_centralized, ensure_replaceable_target};
@@ -144,7 +147,7 @@ pub(crate) async fn remove_install_local(
 ) -> Result<(), InstallationError> {
     let install_path = PathBuf::from(&agent.global_skills_dir).join(skill_id);
 
-    let installations = db::get_skill_installations(pool, skill_id).await?;
+    let installations = installations_repo::get_skill_installations(pool, skill_id).await?;
     let record = installations
         .iter()
         .find(|record| record.agent_id == agent.id);
@@ -284,10 +287,10 @@ pub(crate) async fn uninstall_observation_from_agent_impl(
     agent_id: &str,
     row_id: &str,
 ) -> Result<(), InstallationError> {
-    let agent = db::get_agent_by_id(pool, agent_id)
+    let agent = agents_repo::get_agent_by_id(pool, agent_id)
         .await?
         .ok_or_else(|| InstallationError::AgentNotFound(agent_id.to_string()))?;
-    let central = db::get_agent_by_id(pool, "central")
+    let central = agents_repo::get_agent_by_id(pool, "central")
         .await?
         .ok_or(InstallationError::CentralAgentMissing)?;
 
@@ -300,7 +303,7 @@ pub(crate) async fn uninstall_observation_from_agent_impl(
         });
     }
 
-    let observation = db::get_agent_skill_observation_by_row_id(pool, row_id)
+    let observation = observations_repo::get_agent_skill_observation_by_row_id(pool, row_id)
         .await?
         .ok_or_else(|| InstallationError::ObservationRowNotFound(row_id.to_string()))?;
     ensure_user_observation(&observation, skill_id, agent_id)?;
@@ -316,7 +319,7 @@ pub(crate) async fn uninstall_observation_from_agent_impl(
         remove_install_path(&install_path_for_remove, &link_type, true)
     })
     .await?;
-    db::delete_skill_installation_with_observations(
+    installations_repo::delete_skill_installation_with_observations(
         pool,
         skill_id,
         agent_id,

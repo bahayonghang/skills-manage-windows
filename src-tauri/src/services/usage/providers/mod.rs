@@ -59,4 +59,17 @@ mod tests {
             ]
         );
     }
+
+    #[tokio::test]
+    async fn stubs_report_confirmed_unavailable() {
+        for provider in all_providers()
+            .into_iter()
+            .filter(|provider| matches!(provider.id(), "antigravity" | "kiro" | "zed"))
+        {
+            assert!(!provider
+                .available(&crate::services::usage::Scope::Local)
+                .await
+                .unwrap());
+        }
+    }
 }

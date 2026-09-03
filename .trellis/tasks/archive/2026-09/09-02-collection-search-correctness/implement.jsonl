@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/async-error-feedback.md", "reason": "区分加载失败和空结果"}
+{"file": ".trellis/spec/frontend/async-ui-test-stability.md", "reason": "设计乱序请求稳定回归"}

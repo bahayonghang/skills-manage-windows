@@ -4,7 +4,9 @@
 
 ## 约定 1：`@/lib/ipc` 是唯一 IPC 入口
 
-**What**：所有前端代码只从 `@/lib/ipc`（目录 `src/lib/ipc/`，`index.ts` re-export）import IPC 能力：`invoke` / `invokeRaw` / `listen` / `isTauriRuntime` / `registerIpcFailureRecorder` / `showMainWindowWhenReady` / fixture API。禁止直接 import `@tauri-apps/api/core` 或 `@tauri-apps/api/event`（adapter 内部除外）。
+**What**：所有前端代码只从 `@/lib/ipc`（目录 `src/lib/ipc/`，`index.ts` re-export）import IPC 能力：`invoke` / `invokeRaw` / `listen` / `UnlistenFn` / `isTauriRuntime` / `registerIpcFailureRecorder` / `showMainWindowWhenReady` / fixture API。禁止直接 import `@tauri-apps/api/core` 或 `@tauri-apps/api/event`。
+
+生产源码扫描 `@tauri-apps/api/event` 的匹配集合必须**精确等于** `src/lib/ipc/invoke.ts`（范围 `src/**/*.{ts,tsx}`，排除 `src/test/**`）。不得把 invariant 写成“生产为 0”——adapter 必须直连 Tauri。`UnlistenFn` 由 `invoke.ts` 再经 `index.ts` 公开；adapter 外的生产文件只从 `@/lib/ipc` 取该类型。`src/test/contracts/frontendArchitectureContract.test.ts` 锁定此 allowlist。
 
 **例外（仅此一个）**：`src/lib/runtimeLogger.ts` 使用 `invokeRaw` 落盘前端运行时日志 —— 它是 failure recorder 本体，走 `invoke` 会在自身失败时递归记录。新代码不得再增加 `invokeRaw` 调用方。
 
@@ -13,24 +15,26 @@
 ```ts
 // ❌ Wrong：绕过 adapter 直连 Tauri
 import { invoke } from "@tauri-apps/api/core";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 
-// ✅ Correct：统一入口（浏览器演示态自动路由 fixture）
-import { invoke, listen } from "@/lib/ipc";
+// ✅ Correct：统一入口（浏览器演示态自动路由 fixture；类型也走 adapter）
+import { invoke, listen, type UnlistenFn } from "@/lib/ipc";
 ```
 
-## 约定 2：命令按名类型化（双 overload + 覆盖率 ratchet）
+## 约定 2：命令按名类型化（无 untyped 回退）
 
-**What**：`src/lib/ipc/commandMap.ts` 的 `IPC_COMMANDS` 按命令名登记 args/result 类型（`command<Args, Result>()` 幻影值模式，单一来源同时供类型推导与运行时枚举）。`invoke` 双 overload：命令 ∈ map → 按名推导，无需写泛型；未类型化命令走 `invoke<T>(command, args?)` 兼容 overload。
+**What**：`src/lib/ipc/commandMap.ts` 的 `IPC_COMMANDS` 由 generated map ∪ handwritten map 组成（`command<Args, Result>()` 幻影值）。`invoke` / `invokeRaw` 只接受 `keyof IpcCommandMap`：命令名、args、result 均按名推导。禁止生产 string/generic fallback，也禁止 `UNTYPED_IPC_COMMANDS` 允许清单。
 
-**新增 IPC 命令的操作**：优先在 `IPC_COMMANDS` 加一行类型化条目；确有理由暂缓时登记进 `UNTYPED_IPC_COMMANDS` 允许清单。`src/test/contracts/ipcCommandCoverage.test.ts` 强制：全仓 invoke 字面量 ∈ map ∪ 清单、清单零僵尸条目、命令类型化后必须离开清单（只减不增）、map ≥ 40。
+**新增 IPC 命令的操作**：在 `ipc_registry.rs::__skillport_generated_commands` 登记既有 Rust command path，给实际 boundary DTO 补最小 `specta::Type`，运行 `pnpm ipc:codegen`。不得手写平行 schema，不得恢复 string overload。`src/test/contracts/ipcCommandCoverage.test.ts` 强制：全仓 invoke 字面量 ∈ generated ∪ handwritten、两 map 无重叠、runtime−frontend 精确等于 backend-only、generated args/result 不含 `unknown`、map ≥ 40。
 
 **Wrong vs Correct**：
 
 ```ts
-// ❌ Wrong：已入 map 的命令还写显式泛型（掩盖类型漂移）
+// ❌ Wrong：显式泛型或任意 string 掩盖漂移
 const skills = await invoke<ScannedSkill[]>("get_skills_by_agent", { agentId });
+await invoke("not_a_real_command" as string, {});
 
-// ✅ Correct：按名推导（map 中 get_skills_by_agent 已定义返回类型）
+// ✅ Correct：按名推导
 const skills = await invoke("get_skills_by_agent", { agentId });
 ```
 
@@ -84,8 +88,8 @@ normalizeIpcRejection(error: unknown): Error
 failureRecorder(command, sanitizedArgs, normalizedError): void
 ```
 
-typed、generated、untyped 与 backend-only command 的当前数量由 `ipcCommandCoverage.test.ts` 从 registry 和
-command map 计算，不在本规范复制快照。
+typed、generated 与 backend-only command 的当前数量由 `ipcCommandCoverage.test.ts` 从 registry 和
+command map 计算，不在本规范复制快照。生产路径不再有 untyped allowlist。
 
 ### 3. Contracts
 
@@ -135,6 +139,7 @@ command map 计算，不在本规范复制快照。
 - Fixture tests use `ipcFixtureError(code, message)` for expected backend failures.
 - Coverage derives typed/untyped/frontend/generated/backend-only membership from authoritative sources and asserts parity.
 - Run `pnpm ipc:codegen:check` twice after generation to prove determinism.
+- `frontendArchitectureContract.test.ts` asserts the production `@tauri-apps/api/event` match set equals `src/lib/ipc/invoke.ts`.
 
 ### 7. Wrong vs Correct
 

@@ -40,27 +40,35 @@ function enableTauriRuntime() {
   });
 }
 
-// 编译期断言（永不执行）：双 overload 的类型行为
+// 编译期断言（永不执行）：typed-only invoke 拒绝错误 name/参数/返回类型
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B
   ? 1
   : 2
   ? true
   : false;
 
-const _typeAssertions = () => {
-  // 已类型化命令（无上下文类型）：按名推导返回 Promise<SkillDetail>
+function compileTimeTypedUsage() {
   const detail = invoke("get_skill_detail", { skillId: "s1" });
   const detailIsTyped: Equal<typeof detail, Promise<SkillDetail>> = true;
-  // 未类型化命令：落到兼容 overload，无上下文类型时为 Promise<unknown>
-  const untyped = invoke("not_in_map_command");
-  const untypedIsUnknown: Equal<typeof untyped, Promise<unknown>> = true;
-  // 存量显式泛型写法在命令入 map 后仍兼容（落到第二 overload）
-  const legacy: Promise<string> = invoke<string>("get_skill_detail", {
-    anything: true,
-  });
-  return { detail, untyped, legacy, detailIsTyped, untypedIsUnknown };
-};
-void _typeAssertions;
+
+  // @ts-expect-error wrong command name
+  void invoke("not_in_map_command");
+
+  // @ts-expect-error missing args
+  void invoke("get_skill_detail");
+
+  // @ts-expect-error extra args
+  void invoke("get_obsidian_vaults", { extra: true });
+
+  // @ts-expect-error wrong arg type
+  void invoke("get_skill_detail", { skillId: 1 });
+
+  // @ts-expect-error wrong result assignment
+  const wrongResult: Promise<number> = invoke("get_obsidian_vaults");
+
+  return { detail, detailIsTyped, wrongResult };
+}
+void compileTimeTypedUsage;
 
 describe("ipc adapter", () => {
   beforeEach(() => {
@@ -107,12 +115,12 @@ describe("ipc adapter", () => {
       mockTauriInvoke.mockRejectedValueOnce(error);
 
       await expect(
-        invoke("dangerous_command", { token: "secret" }),
+        invoke("get_skill_detail", { skillId: "secret" }),
       ).rejects.toThrow("Backend failed");
 
       expect(recorder).toHaveBeenCalledWith(
-        "dangerous_command",
-        { token: "[REDACTED]" },
+        "get_skill_detail",
+        { skillId: "[REDACTED]" },
         expect.objectContaining({
           code: "storage.unavailable",
           message: "Backend failed",
@@ -133,12 +141,12 @@ describe("ipc adapter", () => {
         details: seed,
       });
 
-      await expect(invoke("dangerous_command")).rejects.toThrow(
+      await expect(invoke("get_obsidian_vaults")).rejects.toThrow(
         "GitHub repository archive redirect was rejected.",
       );
 
       expect(recorder).toHaveBeenCalledWith(
-        "dangerous_command",
+        "get_obsidian_vaults",
         undefined,
         expect.objectContaining({
           code: "github_import.archive_redirect_rejected",
@@ -185,7 +193,7 @@ describe("ipc adapter", () => {
       });
       mockTauriInvoke.mockRejectedValueOnce(rejection);
 
-      const error = await invoke("dangerous_command").catch((value) => value);
+      const error = await invoke("get_obsidian_vaults").catch((value) => value);
 
       expect(error).toBe(rejection);
     });
@@ -198,7 +206,7 @@ describe("ipc adapter", () => {
         retryable: false,
       });
 
-      const error = (await invoke("dangerous_command").catch(
+      const error = (await invoke("get_obsidian_vaults").catch(
         (value) => value,
       )) as IpcInvokeError;
 
@@ -227,7 +235,7 @@ describe("ipc adapter", () => {
         correlationId,
       });
 
-      const correlated = (await invoke("dangerous_command").catch(
+      const correlated = (await invoke("get_obsidian_vaults").catch(
         (value) => value,
       )) as IpcInvokeError;
       expect(correlated.correlationId).toBe(correlationId);
@@ -238,7 +246,7 @@ describe("ipc adapter", () => {
         retryable: false,
         correlationId: "C:\\Users\\alice\\private.log",
       });
-      const rejected = (await invoke("dangerous_command").catch(
+      const rejected = (await invoke("get_obsidian_vaults").catch(
         (value) => value,
       )) as IpcInvokeError;
       expect(rejected.code).toBe("internal.unexpected");
@@ -280,7 +288,7 @@ describe("ipc adapter", () => {
       enableTauriRuntime();
       mockTauriInvoke.mockRejectedValueOnce(rejection);
 
-      const error = (await invoke("dangerous_command").catch(
+      const error = (await invoke("get_obsidian_vaults").catch(
         (value) => value,
       )) as IpcInvokeError;
 
@@ -293,7 +301,7 @@ describe("ipc adapter", () => {
       enableTauriRuntime();
       mockTauriInvoke.mockRejectedValueOnce({ raw: "transport detail" });
 
-      await expect(invoke("dangerous_command")).rejects.toThrow(
+      await expect(invoke("get_obsidian_vaults")).rejects.toThrow(
         "The operation failed. See runtime logs for details.",
       );
     });
@@ -306,16 +314,16 @@ describe("ipc adapter", () => {
         "failed at C:\\Users\\alice\\skill.md token=ghp_secret",
       );
 
-      const error = await invoke("dangerous_command", {
-        password: "hunter2",
-        path: "C:\\Users\\alice\\skill.md",
+      const error = await invoke("get_skill_detail", {
+        skillId: "hunter2",
+        agentId: "C:\\Users\\alice\\skill.md",
       }).catch((value) => value);
 
       expect(String(error)).not.toContain("alice");
       expect(String(error)).not.toContain("ghp_secret");
       expect(recorder).toHaveBeenCalledWith(
-        "dangerous_command",
-        { password: "[REDACTED]", path: "[REDACTED]" },
+        "get_skill_detail",
+        { skillId: "[REDACTED]", agentId: "[REDACTED]" },
         error,
       );
     });
@@ -341,9 +349,8 @@ describe("ipc adapter", () => {
       registerIpcFailureRecorder(recorder);
       mockTauriInvoke.mockRejectedValueOnce(seed);
 
-      const error = await invoke("dangerous_command", {
-        value: seed,
-        nested: { content: seed },
+      const error = await invoke("get_skill_detail", {
+        skillId: seed,
       }).catch((value) => value);
       const recorded = JSON.stringify(recorder.mock.calls);
 
@@ -406,7 +413,8 @@ describe("ipc adapter", () => {
       }));
 
       await expect(
-        invoke<{ echoed: unknown }>("legacy_command", { a: 1 }),
+        // @ts-expect-error untyped fixture command name
+        invoke("legacy_command", { a: 1 }),
       ).resolves.toEqual({ echoed: { a: 1 } });
     });
 
@@ -415,13 +423,19 @@ describe("ipc adapter", () => {
         throw new Error("fixture boom");
       });
 
-      await expect(invoke("boom_command")).rejects.toThrow(
+      await expect(
+        // @ts-expect-error untyped fixture command name
+        invoke("boom_command"),
+      ).rejects.toThrow(
         "The operation failed. See runtime logs for details.",
       );
     });
 
     it("rejects with IpcFixtureMissingError for unregistered commands", async () => {
-      await expect(invoke("nowhere_command")).rejects.toThrow(
+      await expect(
+        // @ts-expect-error untyped fixture command name
+        invoke("nowhere_command"),
+      ).rejects.toThrow(
         'no browser fixture registered for command "nowhere_command"',
       );
     });

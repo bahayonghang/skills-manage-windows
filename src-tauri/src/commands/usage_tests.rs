@@ -154,6 +154,40 @@ async fn usage_refresh_failure_keeps_one_row_and_boundary_correlation() {
 }
 
 #[tokio::test]
+async fn usage_refresh_remote_fatal_operation_log_is_redacted() {
+    let pool = crate::test_support::mem_pool().await;
+    let state = test_app_state(pool.clone());
+    let definition = usage_refresh_definition();
+    let path_seed = "/home/alice/.ssh/id_ed25519";
+    let command_seed = "ssh -i private.pem host -- find /home/alice";
+    let error = super::usage_error_to_ipc(crate::services::usage::UsageError::from_remote(
+        crate::targets::TargetsError::RemoteInspectFailed {
+            path: path_seed.to_string(),
+            detail: format!("{command_seed}\nstderr: secret-host-diagnostic"),
+        },
+    ));
+    crate::observability::run_operation(
+        &state,
+        definition,
+        OperationContext::new(OperationTarget::new(OperationTargetKind::Ssh, "ssh-prod")),
+        |_| SafeOperationResult::succeeded("Usage refresh completed."),
+        || async { Err::<(), _>(usage_refresh_failure(definition, error.clone())) },
+    )
+    .await
+    .unwrap_err();
+
+    let page = db::list_operation_logs(&pool, OperationLogFilter::default())
+        .await
+        .unwrap();
+    assert_eq!(page.total, 1);
+    let serialized = serde_json::to_string(&page.entries[0]).unwrap();
+    assert!(serialized.contains("usage.remote_permission"));
+    assert!(!serialized.contains(path_seed));
+    assert!(!serialized.contains(command_seed));
+    assert!(!serialized.contains("secret-host-diagnostic"));
+}
+
+#[tokio::test]
 async fn usage_refresh_partial_details_are_safe_counts_and_static_modes() {
     let pool = crate::test_support::mem_pool().await;
     let state = test_app_state(pool.clone());

@@ -1,6 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::db::{self, DbPool};
+use crate::db::repos::observations_repo;
+use crate::db::repos::pending_additions_repo;
+use crate::db::repos::repositories_repo;
+use crate::db::DbPool;
 use crate::services::central_skills::{self, BatchDeleteCentralSkillRequest};
 use crate::services::central_updates::{
     keep_remote_missing_central_skills_impl, normalize_repo_path,
@@ -85,7 +88,7 @@ pub(crate) async fn apply_skip_addition_step(
                 continue;
             }
         };
-        match db::upsert_skill_repository_sync_skip(
+        match repositories_repo::upsert_skill_repository_sync_skip(
             pool,
             &request.repository_id,
             &source_path,
@@ -96,8 +99,12 @@ pub(crate) async fn apply_skip_addition_step(
         {
             Ok(saved) => {
                 // pending_additions 已落 skip，删除 pending 行
-                let _ = db::delete_pending_addition(pool, &saved.repository_id, &saved.source_path)
-                    .await;
+                let _ = pending_additions_repo::delete_pending_addition(
+                    pool,
+                    &saved.repository_id,
+                    &saved.source_path,
+                )
+                .await;
                 result
                     .skipped_additions
                     .push(format!("{}::{}", saved.repository_id, saved.source_path));
@@ -127,8 +134,12 @@ pub(crate) async fn apply_unskip_addition_step(
                 continue;
             }
         };
-        match db::delete_skill_repository_sync_skip(pool, &request.repository_id, &source_path)
-            .await
+        match repositories_repo::delete_skill_repository_sync_skip(
+            pool,
+            &request.repository_id,
+            &source_path,
+        )
+        .await
         {
             Ok(_) => result
                 .unskipped_additions
@@ -156,16 +167,17 @@ pub(crate) async fn apply_remove_platform_duplicates_step(
             ));
             continue;
         }
-        let observations = match db::get_agent_skill_observations(pool, &removal.agent_id).await {
-            Ok(rows) => rows,
-            Err(_error) => {
-                result.failures.push(SkillUpdateApplyFailure::new(
-                    "remove_platform_duplicate",
-                    format!("{}::{}", removal.agent_id, removal.skill_id),
-                ));
-                continue;
-            }
-        };
+        let observations =
+            match observations_repo::get_agent_skill_observations(pool, &removal.agent_id).await {
+                Ok(rows) => rows,
+                Err(_error) => {
+                    result.failures.push(SkillUpdateApplyFailure::new(
+                        "remove_platform_duplicate",
+                        format!("{}::{}", removal.agent_id, removal.skill_id),
+                    ));
+                    continue;
+                }
+            };
         let obs_by_path = observations
             .into_iter()
             .filter(|o| o.skill_id == removal.skill_id)

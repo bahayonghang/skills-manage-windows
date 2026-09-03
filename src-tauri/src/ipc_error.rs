@@ -220,6 +220,7 @@ fn retryable_for_code(code: &str) -> bool {
             | "skills_cli.update_stale"
             | "skills_cli.update_rate_limited"
             | "skills_cli.update_recovery_required"
+            | "usage.remote_transport"
     )
 }
 
@@ -520,6 +521,15 @@ fn legacy_code_message(code: &str) -> Option<&'static str> {
             Some("The Skills CLI update database is not available.")
         }
         "startup.rebuild_unavailable" => Some("Database rebuild is not available."),
+        "usage.remote_permission" => {
+            Some("Remote usage refresh failed because access was denied.")
+        }
+        "usage.remote_protocol" => {
+            Some("Remote usage refresh failed because the target protocol is invalid.")
+        }
+        "usage.remote_transport" => {
+            Some("Remote usage refresh failed because the target is unavailable.")
+        }
         _ => None,
     }
 }

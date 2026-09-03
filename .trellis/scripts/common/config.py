@@ -302,10 +302,14 @@ def get_default_workflow(repo_root: Path | None = None) -> str | None:
 DEFAULT_CONTEXT_INJECTION_MAX_FILE_BYTES = 32768
 DEFAULT_CONTEXT_INJECTION_MAX_ARTIFACT_BYTES = 65536
 DEFAULT_CONTEXT_INJECTION_MAX_TOTAL_BYTES = 131072
+CONTEXT_INJECTION_MAX_FILES = 32
+CONTEXT_INJECTION_MAX_JSONL_LINES = 64
+DEFAULT_CONTEXT_INJECTION_MAX_FILES = CONTEXT_INJECTION_MAX_FILES
+DEFAULT_CONTEXT_INJECTION_MAX_JSONL_LINES = CONTEXT_INJECTION_MAX_JSONL_LINES
 
 
 def get_context_injection_limits(repo_root: Path | None = None) -> dict[str, int]:
-    """Return sub-agent context injection byte limits.
+    """Return sub-agent context injection byte and count limits.
 
     Reads the ``context_injection:`` section of ``.trellis/config.yaml``:
 
@@ -314,9 +318,12 @@ def get_context_injection_limits(repo_root: Path | None = None) -> dict[str, int
           max_artifact_bytes: 65536
           max_total_bytes: 131072
 
-    ``0`` disables the corresponding limit. Missing keys use their default;
-    invalid (non-int or negative) values fall back to the default for that
-    key with a stderr warning.
+    ``0`` disables the corresponding *byte* limit. Missing keys use their
+    default; invalid (non-int or negative) values fall back to the default
+    for that key with a stderr warning.
+
+    File-count and JSONL line-count caps are internal constants. They are
+    always returned and are not user-configurable keys.
     """
     defaults = {
         "max_file_bytes": DEFAULT_CONTEXT_INJECTION_MAX_FILE_BYTES,
@@ -326,32 +333,32 @@ def get_context_injection_limits(repo_root: Path | None = None) -> dict[str, int
 
     config = _load_config(repo_root)
     section = config.get("context_injection")
-    if not isinstance(section, dict):
-        return defaults
-
     result = dict(defaults)
-    for key, default_value in defaults.items():
-        if key not in section:
-            continue
-        raw = section[key]
-        try:
-            value = int(raw)
-        except (TypeError, ValueError):
-            print(
-                f"[WARN] invalid context_injection.{key} value: {raw!r}; "
-                f"using default {default_value}",
-                file=sys.stderr,
-            )
-            continue
-        if value < 0:
-            print(
-                f"[WARN] invalid context_injection.{key} value: {raw!r}; "
-                f"using default {default_value}",
-                file=sys.stderr,
-            )
-            continue
-        result[key] = value
+    if isinstance(section, dict):
+        for key, default_value in defaults.items():
+            if key not in section:
+                continue
+            raw = section[key]
+            try:
+                value = int(raw)
+            except (TypeError, ValueError):
+                print(
+                    f"[WARN] invalid context_injection.{key} value: {raw!r}; "
+                    f"using default {default_value}",
+                    file=sys.stderr,
+                )
+                continue
+            if value < 0:
+                print(
+                    f"[WARN] invalid context_injection.{key} value: {raw!r}; "
+                    f"using default {default_value}",
+                    file=sys.stderr,
+                )
+                continue
+            result[key] = value
 
+    result["max_files"] = CONTEXT_INJECTION_MAX_FILES
+    result["max_jsonl_lines"] = CONTEXT_INJECTION_MAX_JSONL_LINES
     return result
 
 

@@ -32,11 +32,6 @@ interface UpdateLike {
   downloadAndInstall: (onEvent?: (event: DownloadEventLike) => void) => Promise<void>;
 }
 
-interface AppRuntimeInfo {
-  platform: "windows" | "macos" | "linux" | "other";
-  windowsUpdaterSupported: boolean;
-}
-
 interface AppUpdateState {
   status: AppUpdateStatus;
   currentVersion: string;
@@ -68,7 +63,7 @@ async function isWindowsUpdaterSupported(): Promise<boolean> {
     return false;
   }
 
-  const runtimeInfo = await invoke<AppRuntimeInfo>("get_app_runtime_info");
+  const runtimeInfo = await invoke("get_app_runtime_info");
   return runtimeInfo.windowsUpdaterSupported;
 }
 

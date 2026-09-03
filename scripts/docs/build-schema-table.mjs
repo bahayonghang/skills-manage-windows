@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // scripts/docs/build-schema-table.mjs
 //
-// 扫描 src-tauri/src/db/schema/*.rs 中的 CREATE TABLE / CREATE INDEX 语句，
-// 抽取表名 / 字段 / 类型 / 默认值 / 主键 / 索引，
-// 生成 docs/architecture/_generated/data-model.md。
+// 扫描 src-tauri/src/db/schema/*.rs 中按源码顺序出现的 schema DDL，
+// 归并 CREATE TABLE / ALTER TABLE ADD COLUMN / CREATE [UNIQUE] INDEX / DROP INDEX
+// 得到每张表的最终列与索引，生成 docs/architecture/_generated/data-model.md。
 // 在 docs:gen 中调用，配合改 schema 后一并刷新文档。
 
 import { readdirSync, readFileSync } from 'node:fs'
@@ -17,11 +17,79 @@ const schemaDir = join(repoRoot, 'src-tauri', 'src', 'db', 'schema')
 const outDir = join(repoRoot, 'docs', 'architecture', '_generated')
 const outFile = join(outDir, 'data-model.md')
 
-const TABLE_RE = /CREATE TABLE IF NOT EXISTS\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([\s\S]*?)\)\s*"/g
-const INDEX_RE = /CREATE INDEX IF NOT EXISTS\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+ON\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]+)\)/g
+const IDENT = '[A-Za-z_][A-Za-z0-9_]*'
 
 function shortPath(absolute, rootDir = repoRoot) {
   return relative(rootDir, absolute).split(sep).join('/')
+}
+
+function lineNumberAt(text, index) {
+  let line = 1
+  for (let i = 0; i < index; i++) {
+    if (text[i] === '\n') line++
+  }
+  return line
+}
+
+function extractRustStrings(text) {
+  const strings = []
+  let i = 0
+  while (i < text.length) {
+    const ch = text[i]
+    const next = text[i + 1]
+    if (ch === '/' && next === '/') {
+      const newline = text.indexOf('\n', i)
+      if (newline < 0) break
+      i = newline + 1
+      continue
+    }
+    if (ch === '/' && next === '*') {
+      const end = text.indexOf('*/', i + 2)
+      if (end < 0) break
+      i = end + 2
+      continue
+    }
+    if (ch === '"') {
+      const start = i
+      i += 1
+      let value = ''
+      while (i < text.length) {
+        if (text[i] === '\\' && i + 1 < text.length) {
+          const escaped = text[i + 1]
+          switch (escaped) {
+            case 'n':
+              value += '\n'
+              break
+            case 'r':
+              value += '\r'
+              break
+            case 't':
+              value += '\t'
+              break
+            case '"':
+            case '\\':
+              value += escaped
+              break
+            default:
+              value += escaped
+              break
+          }
+          i += 2
+          continue
+        }
+        if (text[i] === '"') {
+          strings.push({ value, line: lineNumberAt(text, start) })
+          i += 1
+          break
+        }
+        value += text[i]
+        i += 1
+      }
+      continue
+    }
+    i += 1
+  }
+  return strings
 }
 
 function parseColumns(body) {
@@ -83,31 +151,170 @@ function extractDefault(text) {
   return m[1].trim()
 }
 
-function parseFile(filePath, rootDir = repoRoot) {
+function normalizeSql(value) {
+  return value.trim().replace(/;\s*$/, '')
+}
+
+function ddlKind(sql) {
+  const upper = sql.replace(/\s+/g, ' ')
+  if (/^CREATE UNIQUE INDEX\b/i.test(upper)) return 'CREATE UNIQUE INDEX'
+  if (/^CREATE INDEX\b/i.test(upper)) return 'CREATE INDEX'
+  if (/^CREATE TABLE\b/i.test(upper)) return 'CREATE TABLE'
+  if (/^ALTER TABLE\b/i.test(upper)) return 'ALTER TABLE'
+  if (/^DROP INDEX\b/i.test(upper)) return 'DROP INDEX'
+  return null
+}
+
+function unsupportedDdl(kind, loc) {
+  return new Error(`[build-schema-table] unsupported ${kind} in ${loc}`)
+}
+
+function conflictDdl(kind, loc, detail) {
+  return new Error(`[build-schema-table] conflicting ${kind} in ${loc}: ${detail}`)
+}
+
+function parseCreateTable(sql) {
+  const matched = sql.match(
+    new RegExp(`^CREATE TABLE IF NOT EXISTS\\s+(${IDENT})\\s*\\(([\\s\\S]*)\\)\\s*$`, 'i')
+  )
+  if (!matched) return null
+  return { name: matched[1], cols: parseColumns(matched[2]) }
+}
+
+function parseAlterAddColumn(sql) {
+  const matched = sql.match(
+    new RegExp(`^ALTER TABLE\\s+(${IDENT})\\s+ADD COLUMN\\s+([\\s\\S]+)$`, 'i')
+  )
+  if (!matched) return null
+  const cols = parseColumns(matched[2])
+  if (cols.length !== 1 || !cols[0].name) return null
+  return { table: matched[1], column: cols[0] }
+}
+
+function parseCreateIndex(sql) {
+  const matched = sql.match(
+    new RegExp(
+      `^CREATE\\s+(UNIQUE\\s+)?INDEX IF NOT EXISTS\\s+(${IDENT})\\s+ON\\s+(${IDENT})\\s*\\(([\\s\\S]*)\\)\\s*$`,
+      'i'
+    )
+  )
+  if (!matched) return null
+  return {
+    unique: Boolean(matched[1]),
+    name: matched[2],
+    table: matched[3],
+    columns: matched[4]
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean),
+  }
+}
+
+function parseDropIndex(sql) {
+  const matched = sql.match(new RegExp(`^DROP INDEX IF EXISTS\\s+(${IDENT})\\s*$`, 'i'))
+  if (!matched) return null
+  return { name: matched[1] }
+}
+
+function addIndex(tablesByName, indexesByName, index, loc, kind) {
+  const table = tablesByName.get(index.table)
+  if (!table) {
+    throw new Error(`[build-schema-table] ${kind} in ${loc} references unknown table ${index.table}`)
+  }
+  if (indexesByName.has(index.name)) {
+    throw conflictDdl(kind, loc, `index '${index.name}' already defined`)
+  }
+  const record = { name: index.name, columns: index.columns, unique: index.unique }
+  indexesByName.set(index.name, { table: index.table, record })
+  table.indexOrder.push(index.name)
+}
+
+function dropIndex(tablesByName, indexesByName, name) {
+  const existing = indexesByName.get(name)
+  if (!existing) return
+  const table = tablesByName.get(existing.table)
+  if (table) {
+    table.indexOrder = table.indexOrder.filter((indexName) => indexName !== name)
+  }
+  indexesByName.delete(name)
+}
+
+export function parseFile(filePath, rootDir = repoRoot) {
   const text = readFileSync(filePath, 'utf8')
-  const tables = []
-  let m
-  while ((m = TABLE_RE.exec(text)) !== null) {
-    tables.push({ name: m[1], cols: parseColumns(m[2]), indexes: [] })
+  const source = shortPath(filePath, rootDir)
+  const tablesByName = new Map()
+  const tableOrder = []
+  const indexesByName = new Map()
+
+  for (const stmt of extractRustStrings(text)) {
+    const sql = normalizeSql(stmt.value)
+    const kind = ddlKind(sql)
+    if (!kind) continue
+    const loc = `${source}:${stmt.line}`
+
+    switch (kind) {
+      case 'CREATE TABLE': {
+        const parsed = parseCreateTable(sql)
+        if (!parsed) throw unsupportedDdl(kind, loc)
+        if (tablesByName.has(parsed.name)) {
+          throw conflictDdl(kind, loc, `table '${parsed.name}' already defined`)
+        }
+        tablesByName.set(parsed.name, { cols: parsed.cols, indexOrder: [] })
+        tableOrder.push(parsed.name)
+        break
+      }
+      case 'ALTER TABLE': {
+        const parsed = parseAlterAddColumn(sql)
+        if (!parsed) throw unsupportedDdl(kind, loc)
+        const table = tablesByName.get(parsed.table)
+        if (!table) {
+          throw new Error(
+            `[build-schema-table] ${kind} in ${loc} references unknown table ${parsed.table}`
+          )
+        }
+        // CREATE TABLE is canonical for columns it already declared; ALTER ADD
+        // only fills gaps so old-DB ensure_column strings cannot weaken new-DB DDL.
+        if (!table.cols.some((col) => col.name === parsed.column.name)) {
+          table.cols.push(parsed.column)
+        }
+        break
+      }
+      case 'CREATE INDEX':
+      case 'CREATE UNIQUE INDEX': {
+        const parsed = parseCreateIndex(sql)
+        if (!parsed) throw unsupportedDdl(kind, loc)
+        addIndex(tablesByName, indexesByName, parsed, loc, kind)
+        break
+      }
+      case 'DROP INDEX': {
+        const parsed = parseDropIndex(sql)
+        if (!parsed) throw unsupportedDdl(kind, loc)
+        dropIndex(tablesByName, indexesByName, parsed.name)
+        break
+      }
+      default: {
+        const _exhaustive = kind
+        throw unsupportedDdl(_exhaustive, loc)
+      }
+    }
   }
-  INDEX_RE.lastIndex = 0
-  let idx
-  while ((idx = INDEX_RE.exec(text)) !== null) {
-    const target = tables.find((t) => t.name === idx[2])
-    if (!target) continue
-    target.indexes.push({
-      name: idx[1],
-      columns: idx[3].split(',').map((s) => s.trim()),
-    })
-  }
-  return { source: shortPath(filePath, rootDir), tables }
+
+  const tables = tableOrder.map((name) => {
+    const table = tablesByName.get(name)
+    return {
+      name,
+      cols: table.cols,
+      indexes: table.indexOrder.map((indexName) => indexesByName.get(indexName).record),
+    }
+  })
+  return { source, tables }
 }
 
 function escapePipe(text) {
   return String(text || '').replace(/\|/g, '\\|')
 }
 
-function render(modules) {
+export function render(modules) {
   const totalTables = modules.reduce((acc, m) => acc + m.tables.length, 0)
   const out = []
   out.push('<!-- AUTOGENERATED — do not edit by hand. -->')
@@ -134,7 +341,9 @@ function render(modules) {
       if (table.indexes.length) {
         out.push('Indexes:')
         for (const ix of table.indexes) {
-          out.push(`- \`${ix.name}\` on \`(${ix.columns.join(', ')})\``)
+          out.push(
+            `- \`${ix.name}\` on \`(${ix.columns.join(', ')})\` ${ix.unique ? 'unique' : 'non-unique'}`
+          )
         }
         out.push('')
       }

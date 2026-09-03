@@ -230,7 +230,7 @@ async fn prepare_ai_tagging_context(
     }
     let client = {
         let builder = Client::builder()
-            .user_agent(crate::commands::APP_USER_AGENT)
+            .user_agent(crate::http_identity::APP_USER_AGENT)
             .connect_timeout(ai_provider::AI_CONNECT_TIMEOUT)
             .timeout(ai_provider::AI_REQUEST_TIMEOUT);
         #[cfg(test)]

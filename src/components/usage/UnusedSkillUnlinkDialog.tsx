@@ -92,14 +92,6 @@ export function UnusedSkillUnlinkDialog({
     setDialogError(null);
   }, [open]);
 
-  // 部分失败：把勾选重置为仅失败项，成功项随报告刷新自然从列表消失。
-  useEffect(() => {
-    if (!results) return;
-    setSelectedKeys(
-      new Set(results.filter((result) => !result.ok).map(resultKey)),
-    );
-  }, [results]);
-
   const selectedCount = enabledKeys.filter((key) =>
     selectedKeys.has(key),
   ).length;
@@ -146,6 +138,11 @@ export function UnusedSkillUnlinkDialog({
       setResults(nextResults);
       if (nextResults.every((result) => result.ok)) {
         onOpenChange(false);
+      } else {
+        // 部分失败：同一次提交内把勾选重置为仅失败项，避免错误先于计数更新。
+        setSelectedKeys(
+          new Set(nextResults.filter((result) => !result.ok).map(resultKey)),
+        );
       }
     } catch (error) {
       setDialogError(

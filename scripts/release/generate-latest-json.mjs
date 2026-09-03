@@ -42,22 +42,30 @@ export function parseArgs(argv) {
   return args;
 }
 
+export function findAsset(assetDir, pattern, label) {
+  const files = fs.readdirSync(assetDir).filter((file) => pattern.test(file));
+  files.sort();
+  if (files.length === 0) {
+    throw new Error(`${label} not found in ${assetDir}.`);
+  }
+  if (files.length > 1) {
+    throw new Error(
+      `${label} matched ${files.length} files in ${assetDir}: ${files.join(", ")}.`,
+    );
+  }
+  return path.join(assetDir, files[0]);
+}
+
 export function readSignature(assetPath) {
   const sigPath = `${assetPath}.sig`;
   if (!fs.existsSync(sigPath)) {
     throw new Error(`Updater signature not found: ${sigPath}`);
   }
-  return fs.readFileSync(sigPath, "utf8").trim();
-}
-
-export function findAsset(assetDir, pattern, label) {
-  const files = fs.readdirSync(assetDir).filter((file) => pattern.test(file));
-  files.sort();
-  const asset = files.at(-1);
-  if (!asset) {
-    throw new Error(`${label} not found in ${assetDir}.`);
+  const signature = fs.readFileSync(sigPath, "utf8").trim();
+  if (!signature) {
+    throw new Error(`Updater signature is empty: ${sigPath}`);
   }
-  return path.join(assetDir, asset);
+  return signature;
 }
 
 export function buildLatestMetadata(args) {

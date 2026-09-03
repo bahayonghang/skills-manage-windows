@@ -164,9 +164,25 @@ universal, Linux x64, and optional Linux arm64 release matrix.
   NSIS, and MSI before generating the Tauri updater `.sig` over the final NSIS
   bytes. Rehearsal may report `authenticode=not-configured`; publish requires
   valid timestamped Authenticode and separately valid updater verification.
-- The Windows install/launch/uninstall smoke is an aggregate prerequisite. A
-  real previous-to-candidate updater smoke remains guarded and deferred until a
-  separately approved non-public staging feed and rollback plan exist.
+- Do not edit `.github/workflows/release-desktop.yml` to insert
+  Authenticode-before-bundle unless a pinned `@tauri-apps/cli` rehearsal proves
+  the bundler copies the signed predecessor **digest**. CLI 2.11.4 `tauri bundle`
+  runs in-process `patch_binary` before NSIS `File`. Path identity is not digest
+  identity. Fail closed: leave the workflow unchanged rather than invent flags,
+  replace inner exe bytes, or claim REL-001/REL-002 fixed. The 2026-09-02
+  rehearsal and 2026-09-03 fail-closed scope decision are in the
+  `windows-release-signing` Trellis research notes.
+- The Windows install/launch/uninstall smoke is an aggregate prerequisite. It
+  runs two isolated matrix cases (`nsis`, `msi`) via
+  `scripts/release/windows-installer-smoke.ps1` with unique install roots,
+  `timeout-minutes` on `release-context` (15) and `windows-install-smoke` (20),
+  and per-process deadlines plus process-tree kill. Installed-exe Authenticode
+  follows `windows-signing.json` (`valid` vs `not-configured`/`NotSigned`) and
+  does not prove inner-exe-before-bundle signing. `release-context` must pin
+  Node 26 and Rust 1.98.0 from `package.json#engines.node` and
+  `rust-toolchain.toml` before resolver use. A real previous-to-candidate
+  updater smoke remains guarded and deferred until a separately approved
+  non-public staging feed and rollback plan exist.
 
 Package job guards must remain:
 
@@ -329,6 +345,9 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
   - Assert frozen tag checkout, required-job DAG, optional artifact rules, draft
     ordering, least privilege, final tag recheck, sole public transition,
     metadata/checksum failures, and updater signature tamper cases.
+  - `generate-latest-json.mjs` rejects missing/empty `.sig` and zero or duplicate
+    NSIS assets before writing `latest.json`; `prepare-release-body.mjs` covers
+    exact notes, series `major.minor.md`, and fallback.
 - `cargo test --manifest-path src-tauri/Cargo.toml --bin release-signature-verifier --locked`
   - A runtime-compatible wrapped minisign fixture passes; changed installer,
     signature, and public key fail.
@@ -450,7 +469,7 @@ cargo metadata bins     -> skillport, skillport-cli, release-signature-verifier
 | --- | --- |
 | Rust arg/Serde field rename without artifact | byte check |
 | generated name absent from runtime/caller | parity test |
-| allowlist grows or overlaps typed map | count/overlap test |
+| untyped string overload or generated/handwritten overlap | coverage/typecheck |
 | artifact contains runtime import/callable invoke/unknown | artifact contract test |
 | raw string command rejection returns | fallibility boundary test |
 | Specta output narrower than the Rust/SQLx persisted field | typecheck or persisted-value compatibility test |
@@ -463,7 +482,7 @@ cargo metadata bins     -> skillport, skillport-cli, release-signature-verifier
 - Good: regenerate once, check twice, commit Rust source and deterministic artifact together.
 - Good: a persisted status enum derives SQLx/Serde/Specta from one Rust definition and all historical
   text values decode to the generated TypeScript union.
-- Base: remaining 47 commands stay explicitly allowlisted.
+- Base: every frontend-invoked command is in the generated or handwritten typed map; `invoke` has no string overload.
 - Bad: hand-edit generated output, use a Specta-only type override over `String`, float RC
   dependencies, parse names as proof of result types, or add a feature-gated bin to the application package.
 

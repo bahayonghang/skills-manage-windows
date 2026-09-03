@@ -167,6 +167,7 @@ impl std::str::FromStr for LinkType {
 
 // ─── Skill / Installation / Observation ──────────────────────────────────────
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Skill {
     pub id: String,
@@ -262,11 +263,14 @@ pub struct SkillRepository {
     pub last_synced_at: Option<String>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillRepositoryWithStats {
     #[serde(flatten)]
     pub repository: SkillRepository,
+    #[cfg_attr(feature = "ipc-codegen", specta(type = i32))]
     pub skill_count: i64,
+    #[cfg_attr(feature = "ipc-codegen", specta(type = i32))]
     pub unknown_skill_count: i64,
 }
 
@@ -370,6 +374,7 @@ pub struct SkillUpdateState {
 
 // ─── Tags ────────────────────────────────────────────────────────────────────
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct SkillTag {
     pub id: String,
@@ -405,6 +410,7 @@ pub struct SkillTagLink {
     pub added_at: String,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillAiTagReview {
     pub skill_id: String,
@@ -428,8 +434,10 @@ pub struct PendingAiTagReviewInput {
 
 // ─── Scan Directory ──────────────────────────────────────────────────────────
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct ScanDirectory {
+    #[cfg_attr(feature = "ipc-codegen", specta(type = i32))]
     pub id: i64,
     pub path: String,
     pub label: Option<String>,

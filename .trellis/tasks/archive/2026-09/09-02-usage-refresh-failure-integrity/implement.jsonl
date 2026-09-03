@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/skill-usage-analytics.md", "reason": "保持 usage 数据所有权与刷新语义"}
+{"file": ".trellis/spec/backend/transport-seam.md", "reason": "建立可测试的远程失败边界"}
+{"file": ".trellis/spec/backend/redaction-policy.md", "reason": "IPC and logs must not leak remote paths or stderr"}

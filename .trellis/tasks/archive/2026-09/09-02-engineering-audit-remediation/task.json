@@ -1,0 +1,42 @@
+{
+  "id": "engineering-audit-remediation",
+  "name": "engineering-audit-remediation",
+  "title": "工程级审计整改总纲",
+  "description": "承接 2026-09-02 whole-project 工程审计，统一管理高风险修复、独立子任务和最终集成复核。",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P0",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-09-02",
+  "completedAt": "2026-09-03",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "09-02-trellis-path-security",
+    "09-02-windows-release-signing",
+    "09-02-collection-search-correctness",
+    "09-02-windows-installer-verification",
+    "09-02-subagent-runtime-resilience",
+    "09-02-generated-schema-evidence",
+    "09-02-dependency-audit-observability",
+    "09-02-frontend-boundary-cleanup",
+    "09-02-backend-boundary-ratchets",
+    "09-02-typed-ipc-remainder",
+    "09-02-github-import-fs-db-atomicity",
+    "09-02-usage-refresh-failure-integrity"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "audit_severity": "critical",
+    "estimated_effort": "L"
+  }
+}

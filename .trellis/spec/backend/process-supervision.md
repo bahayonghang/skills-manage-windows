@@ -48,6 +48,11 @@ ceiling. Stderr remains capped at 1 MiB.
 - Windows spawn 隐藏控制台：`ProcessTreeGuard::prepare` 调用 `hide_child_window`（`CREATE_NO_WINDOW`）。SSH/WSL `base_command` 已设置时同值幂等。自动化必须断言 prepare 之后的 `Command`（Debug 或记录 flags）含 `0x08000000`，且 `ProcessRunner::run` 走 prepare；禁止只断言 `hidden_child_creation_flags() == CREATE_NO_WINDOW`。孙进程窗口不作为自动化绿灯的唯一证据。
 - Unix command spawn 前进入新 process group；取消和 guard Drop 对负 pgid 发强制终止，直接 child 始终 reap。`kill_on_drop` 只是直接 child 后备，不等价于 process-tree 清理。
 - 正常非零退出继续由 SSH/WSL transport 分类。错误、日志与 operation details 不包含 command、host、username、stdin/stdout/stderr 或 askpass 环境。
+- Trellis Python hooks 与 Linear CLI 不得调用无界 `subprocess.run`。唯一入口是
+  `.trellis/scripts/common/subprocess_supervision.py::run_bounded_process`：固定
+  deadline、有界 stdout/stderr、timeout 标志、Windows Job Object / 进程树清理。
+  用户可见诊断截断且不得包含环境、凭据或未截断子进程输出。POSIX process-group
+  清理在未跑 POSIX runner 时标 `missing evidence`。
 
 ## 4. Validation & Error Matrix
 

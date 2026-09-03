@@ -1,11 +1,9 @@
 /**
  * IPC 命令覆盖率 ratchet：全仓 invoke/invokeRaw 字面量必须登记在
- * IPC_COMMANDS（类型化）或 UNTYPED_IPC_COMMANDS（存量允许清单）之一。
+ * IPC_COMMANDS（generated ∪ handwritten typed map）。
  *
- * - 新增命令：优先加进 commandMap.ts 的 IPC_COMMANDS；确有理由暂缓类型化
- *   时才登记到 UNTYPED_IPC_COMMANDS。
- * - 命令类型化后必须同时从 UNTYPED_IPC_COMMANDS 移除（只减不增）。
- * - 清单里不允许留没有任何调用点的僵尸条目。
+ * - 新增命令：加入 generated registry 或 handwritten map，禁止任意 string invoke。
+ * - runtime 与 frontend 的差集必须精确等于 backend-only allowlist。
  *
  * 扫描范围：src/**\/*.{ts,tsx}，排除 src/test/（测试自身）与 src/lib/ipc/
  * （adapter 内部文档注释会自引用示例命令名）。
@@ -17,7 +15,6 @@ import { describe, expect, it } from "vitest";
 import {
   HANDWRITTEN_IPC_COMMAND_NAMES,
   TYPED_IPC_COMMAND_NAMES,
-  UNTYPED_IPC_COMMANDS,
 } from "@/lib/ipc";
 import { GENERATED_IPC_COMMAND_NAMES } from "@/lib/ipc/generatedCommandMap";
 
@@ -33,8 +30,6 @@ const BACKEND_ONLY_COMMANDS = [
   "get_central_skills_page",
   "read_skill_content",
   "suggest_skill_tags",
-  "sync_registry",
-  "sync_registry_with_options",
 ] as const;
 
 function collectSourceFiles(dir: string, out: string[] = []): string[] {
@@ -175,27 +170,12 @@ function collectUnnamedIpcBoundaries(root = TAURI_COMMAND_ROOT): string[] {
 describe("ipc command coverage ratchet", () => {
   const invoked = scanInvokedCommands();
   const typed = new Set(TYPED_IPC_COMMAND_NAMES);
-  const allowlisted = new Set(UNTYPED_IPC_COMMANDS);
 
-  it("every invoked command literal is registered (typed map or allowlist)", () => {
+  it("every invoked command literal is in the typed map", () => {
     const unregistered = [...invoked.entries()]
-      .filter(([command]) => !typed.has(command) && !allowlisted.has(command))
+      .filter(([command]) => !typed.has(command))
       .map(([command, files]) => `${command} <- ${files[0]}`);
     expect(unregistered).toEqual([]);
-  });
-
-  it("typed commands are removed from the allowlist when they graduate", () => {
-    const overlap = UNTYPED_IPC_COMMANDS.filter((command) =>
-      typed.has(command),
-    );
-    expect(overlap).toEqual([]);
-  });
-
-  it("the allowlist carries no zombie entries without call sites", () => {
-    const zombies = UNTYPED_IPC_COMMANDS.filter(
-      (command) => !invoked.has(command),
-    );
-    expect(zombies).toEqual([]);
   });
 
   it("keeps the typed map at or above the design floor (40 commands)", () => {
@@ -203,10 +183,7 @@ describe("ipc command coverage ratchet", () => {
   });
 
   it("keeps every frontend command in exactly one adapter registry", () => {
-    const frontendRegistered = [
-      ...TYPED_IPC_COMMAND_NAMES,
-      ...UNTYPED_IPC_COMMANDS,
-    ];
+    const frontendRegistered = [...TYPED_IPC_COMMAND_NAMES];
     expect(new Set(frontendRegistered).size).toBe(frontendRegistered.length);
     expect(
       [...invoked.keys()].filter(
@@ -265,10 +242,7 @@ describe("ipc command coverage ratchet", () => {
     const runtime = collectRegistryCommands("__skillport_runtime_commands");
     const runtimeSet = new Set(runtime);
     const signatures = collectTauriCommandSignatures(TAURI_COMMAND_ROOT);
-    const frontend = new Set([
-      ...TYPED_IPC_COMMAND_NAMES,
-      ...UNTYPED_IPC_COMMANDS,
-    ]);
+    const frontend = new Set(TYPED_IPC_COMMAND_NAMES);
     expect(runtime.sort()).toEqual([...signatures.keys()].sort());
     expect([...frontend].filter((command) => !runtimeSet.has(command))).toEqual(
       [],

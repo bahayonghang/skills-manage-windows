@@ -7,7 +7,8 @@
 
 use std::collections::HashSet;
 
-use crate::db::{self, DbPool};
+use crate::db::repos::repositories_repo;
+use crate::db::DbPool;
 
 use super::super::error::CentralUpdatesError;
 use super::super::fs::CentralFs;
@@ -41,8 +42,9 @@ pub(crate) async fn retry_failed_repositories_impl(
 
     let mut legacy_member_skill_ids = HashSet::new();
     for repository_id in &repository_ids {
-        legacy_member_skill_ids
-            .extend(db::get_central_skill_ids_by_repository(pool, repository_id).await?);
+        legacy_member_skill_ids.extend(
+            repositories_repo::get_central_skill_ids_by_repository(pool, repository_id).await?,
+        );
     }
     let targets = RepositoryRetryTargets {
         repository_ids: repository_ids.iter().cloned().collect(),

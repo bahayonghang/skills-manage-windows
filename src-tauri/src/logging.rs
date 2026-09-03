@@ -156,12 +156,34 @@ pub struct RuntimeLogClearRequest {
     pub all: Option<bool>,
 }
 
+#[cfg(feature = "ipc-codegen")]
+#[allow(dead_code)]
+#[derive(serde::Deserialize, serde::Serialize, specta::Type)]
+#[serde(untagged)]
+enum FrontendRuntimeLogDetails {
+    Null,
+    Bool(bool),
+    Number(f64),
+    String(String),
+    Array(Vec<FrontendRuntimeLogDetails>),
+    Object(std::collections::BTreeMap<String, FrontendRuntimeLogDetails>),
+}
+
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FrontendRuntimeLogPayload {
+    #[serde(default)]
     pub level: Option<String>,
+    #[serde(default)]
     pub source: Option<String>,
+    #[serde(default)]
     pub message: Option<String>,
+    #[cfg_attr(
+        feature = "ipc-codegen",
+        specta(type = Option<FrontendRuntimeLogDetails>)
+    )]
+    #[serde(default)]
     pub details: Option<Value>,
     #[serde(default)]
     pub operation_id: Option<String>,

@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/process-supervision.md", "reason": "定义超时输出上限与进程树清理"}
+{"file": ".trellis/spec/backend/operation-observability.md", "reason": "保留有界且可诊断的运行证据"}

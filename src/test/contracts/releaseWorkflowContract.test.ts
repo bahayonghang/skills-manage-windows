@@ -4,7 +4,14 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
-type Step = { name?: string; run?: string; uses?: string; with?: Record<string, unknown> };
+type Step = {
+  name?: string;
+  run?: string;
+  uses?: string;
+  with?: Record<string, unknown>;
+  env?: Record<string, string>;
+  shell?: string;
+};
 type Job = {
   needs?: string | string[];
   if?: string;
@@ -13,6 +20,11 @@ type Job = {
   uses?: string;
   with?: Record<string, unknown>;
   steps?: Step[];
+  "timeout-minutes"?: number;
+  strategy?: {
+    "fail-fast"?: boolean;
+    matrix?: { installer?: string[] };
+  };
 };
 type WorkflowTrigger = {
   inputs?: Record<string, { required?: boolean; default?: string; type?: string }>;
@@ -32,6 +44,15 @@ const assetScriptSources = [
 const releaseContextSource = readFileSync("scripts/release/release-context.mjs", "utf8");
 const workflow = parse(source) as Workflow;
 const needs = (job: Job) => (Array.isArray(job.needs) ? job.needs : job.needs ? [job.needs] : []);
+const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as { engines?: { node?: string } };
+const rustToolchain = readFileSync("rust-toolchain.toml", "utf8");
+const expectedNodeEngine = packageJson.engines?.node ?? "";
+const expectedNodeMajor = expectedNodeEngine.replace(/\.x$/, "");
+const expectedRustChannel = /^channel\s*=\s*"([^"]+)"/m.exec(rustToolchain)?.[1] ?? "";
+
+function stepIndex(steps: Step[], predicate: (step: Step) => boolean) {
+  return steps.findIndex(predicate);
+}
 
 describe("release workflow contract", () => {
   it("starts from an explicit tag and validates the frozen SHA through reusable CI", () => {
@@ -150,5 +171,78 @@ describe("release workflow contract", () => {
       (step) => step.name === "Install Linux system deps",
     );
     expect(linuxDeps?.run).toContain("xdg-utils");
+  });
+
+  it("pins release-context toolchains by parsed step index before resolver use", () => {
+    expect(expectedNodeEngine).toMatch(/^\d+\.x$/);
+    expect(expectedRustChannel).toMatch(/^\d+\.\d+\.\d+$/);
+    const contextJob = workflow.jobs["release-context"];
+    const contextSteps = contextJob.steps ?? [];
+    const windowsSteps = workflow.jobs["build-windows"].steps ?? [];
+    const pinnedNode = windowsSteps.find((step) => step.uses?.startsWith("actions/setup-node@"));
+    const pinnedRust = windowsSteps.find((step) => step.uses?.startsWith("dtolnay/rust-toolchain@"));
+    expect(pinnedNode?.uses).toMatch(/^actions\/setup-node@[0-9a-f]{40}$/);
+    expect(pinnedRust?.uses).toMatch(/^dtolnay\/rust-toolchain@[0-9a-f]{40}$/);
+
+    const nodeSetup = stepIndex(contextSteps, (step) => step.uses?.startsWith("actions/setup-node@") ?? false);
+    const nodeAssert = stepIndex(
+      contextSteps,
+      (step) =>
+        typeof step.run === "string" &&
+        !step.run.includes("release-context.mjs") &&
+        (step.run.includes("node --version") || step.run.includes("process.versions.node")),
+    );
+    const firstResolver = stepIndex(contextSteps, (step) => step.run?.includes("release-context.mjs") ?? false);
+    const resolveOnly = stepIndex(
+      contextSteps,
+      (step) => (step.run?.includes("release-context.mjs") && step.run.includes("--resolve-only")) ?? false,
+    );
+    const rustSetup = stepIndex(contextSteps, (step) => step.uses?.startsWith("dtolnay/rust-toolchain@") ?? false);
+    const rustAssert = stepIndex(
+      contextSteps,
+      (step) =>
+        typeof step.run === "string" &&
+        !step.run.includes("release-context.mjs") &&
+        step.run.includes("rustc --version"),
+    );
+    const fullResolver = stepIndex(
+      contextSteps,
+      (step) => (step.run?.includes("release-context.mjs") && !step.run.includes("--resolve-only")) ?? false,
+    );
+
+    expect(nodeSetup).toBeGreaterThan(-1);
+    expect(nodeAssert).toBeGreaterThan(nodeSetup);
+    expect(firstResolver).toBeGreaterThan(nodeAssert);
+    expect(resolveOnly).toBe(firstResolver);
+    expect(rustSetup).toBeGreaterThan(resolveOnly);
+    expect(rustAssert).toBeGreaterThan(rustSetup);
+    expect(fullResolver).toBeGreaterThan(rustAssert);
+
+    expect(contextSteps[nodeSetup].uses).toBe(pinnedNode?.uses);
+    expect(contextSteps[nodeSetup].with?.["node-version"]).toBe(expectedNodeMajor);
+    expect(contextSteps[nodeAssert].run).toContain(expectedNodeEngine);
+    expect(contextSteps[rustSetup].uses).toBe(pinnedRust?.uses);
+    expect(contextSteps[rustSetup].with?.toolchain).toBe(expectedRustChannel);
+    expect(contextSteps[rustAssert].run).toContain(expectedRustChannel);
+    expect(contextJob["timeout-minutes"]).toBe(15);
+  });
+
+  it("bounds the Windows installer matrix and invokes the smoke helper", () => {
+    const smoke = workflow.jobs["windows-install-smoke"];
+    expect(smoke["timeout-minutes"]).toBe(20);
+    expect(smoke.strategy?.matrix?.installer).toEqual(["nsis", "msi"]);
+    expect(needs(workflow.jobs.aggregate)).toContain("windows-install-smoke");
+    const helper = (smoke.steps ?? []).find((step) => step.run?.includes("scripts/release/windows-installer-smoke.ps1"));
+    expect(helper).toBeDefined();
+    expect(helper?.env?.INSTALLER_KIND).toBe("${{ matrix.installer }}");
+    expect(helper?.run).toContain("-InstallerKind");
+    expect(helper?.run).toContain("-ArtifactPath");
+    expect(helper?.run).toContain("-ExpectedVersion");
+    expect(helper?.run).toContain("-InstallRoot");
+    expect(helper?.run).toContain("RUNNER_TEMP");
+    expect(helper?.run).toContain("-SigningStatePath");
+    expect(helper?.run).not.toContain("Start-Process -Wait");
+    expect(source).toContain('Expected exactly one final NSIS asset');
+    expect(source).toContain('Expected exactly one final MSI asset');
   });
 });

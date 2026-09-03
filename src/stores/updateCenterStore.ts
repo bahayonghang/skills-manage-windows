@@ -18,7 +18,7 @@ import type {
   SkillUpdateInventory,
 } from "@/types/skillUpdateInventory";
 import { normalizeRefreshContext } from "@/lib/updateCenterRefreshScope";
-import { normalizeUpdateCheckMode } from "@/pages/centralUpdateCheckMode";
+import { normalizeUpdateCheckMode } from "@/lib/updateCheckMode";
 
 export interface SkillInventoryFlags {
   /** inventory.updatable 中含此 skill_id（远端有新版本可拉取）。 */
@@ -161,6 +161,11 @@ interface UpdateCenterState {
   refreshContext: SkillRefreshContext;
   refreshMode: SkillRefreshMode;
   error: string | null;
+  /**
+   * Apply (or force) committed but inventory reload failed. The last write is
+   * real; the panel snapshot may be stale until the next successful load.
+   */
+  requiresInventoryReload: boolean;
   refresh(scope: SkillRefreshScope): Promise<SkillUpdateInventory | null>;
   retryRepositories(
     repositoryIds: string[],
@@ -233,6 +238,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
   refreshContext: { repositoryIds: [], skillIds: [], agentIds: [] },
   refreshMode: "sync",
   error: null,
+  requiresInventoryReload: false,
 
   async refresh(scope) {
     const operationId = createRefreshOperationId();
@@ -256,6 +262,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
           lastRefreshedAt: new Date().toISOString(),
           isRefreshing: false,
           refreshProgress: null,
+          requiresInventoryReload: false,
         });
         return inventory;
       }
@@ -283,6 +290,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
         inventory,
         lastRefreshedAt: new Date().toISOString(),
         isRefreshing: false,
+        requiresInventoryReload: false,
       });
       return inventory;
     } catch (err) {
@@ -358,19 +366,29 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
       globalThis.crypto?.randomUUID?.() ??
       `job-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     set({ isApplying: true, error: null });
+    let result: SkillUpdateApplyResult;
     try {
-      const result = isTauriRuntime()
-        ? await invoke<SkillUpdateApplyResult>("apply_skill_update_decisions", {
+      result = isTauriRuntime()
+        ? await invoke("apply_skill_update_decisions", {
             jobId,
             decisions,
           })
         : emptyApplyResult();
-      await get().loadInventory(scope);
-      set({ isApplying: false });
-      return result;
     } catch (err) {
       set({ error: String(err), isApplying: false });
       throw err;
+    }
+    try {
+      await get().loadInventory(scope);
+      set({ isApplying: false, requiresInventoryReload: false });
+      return result;
+    } catch (refreshErr) {
+      set({
+        error: String(refreshErr),
+        isApplying: false,
+        requiresInventoryReload: true,
+      });
+      throw refreshErr;
     }
   },
 
@@ -389,7 +407,7 @@ export const useUpdateCenterStore = create<UpdateCenterState>((set, get) => ({
     const inventory = await invoke("get_skill_update_inventory", {
       scope: scope ?? null,
     });
-    set({ inventory });
+    set({ inventory, requiresInventoryReload: false });
   },
 
   async scanDuplicates(agentIds) {

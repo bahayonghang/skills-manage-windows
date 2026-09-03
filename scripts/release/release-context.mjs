@@ -6,6 +6,8 @@ import { pathToFileURL } from "node:url";
 
 const SEMVER_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const COMMIT_SHA = /^[0-9a-f]{40}$/i;
+export const RESOLVER_SUBPROCESS_TIMEOUT_MS = 120_000;
+export const RESOLVER_OUTPUT_CAP_BYTES = 1_048_576;
 
 export function parseReleaseTag(tag) {
   const normalized = String(tag ?? "").trim();
@@ -30,8 +32,41 @@ export function validateVersionSet({ tag, packageVersion, tauriVersion, cargoVer
   return context;
 }
 
-function run(command, args, cwd) {
-  return execFileSync(command, args, { cwd, encoding: "utf8", windowsHide: true }).trim();
+function isTimeoutError(error) {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  return error.code === "ETIMEDOUT" || error.error?.code === "ETIMEDOUT";
+}
+
+function isMaxBufferError(error) {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const code = error.code ?? error.error?.code;
+  return code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" || code === "ENOBUFS";
+}
+
+export function run(command, args, cwd, options = {}) {
+  const timeoutMs = options.timeoutMs ?? RESOLVER_SUBPROCESS_TIMEOUT_MS;
+  const maxBuffer = options.maxBuffer ?? RESOLVER_OUTPUT_CAP_BYTES;
+  try {
+    return execFileSync(command, args, {
+      cwd,
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: timeoutMs,
+      maxBuffer,
+    }).trim();
+  } catch (error) {
+    if (isTimeoutError(error)) {
+      throw new Error(`release-context: ${command} timed out after ${timeoutMs}ms.`);
+    }
+    if (isMaxBufferError(error)) {
+      throw new Error(`release-context: ${command} output exceeded ${maxBuffer} bytes.`);
+    }
+    throw error;
+  }
 }
 
 export function resolveReleaseTag({ tag, cwd = process.cwd(), exec = run }) {

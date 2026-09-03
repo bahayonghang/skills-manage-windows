@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { Button } from "@/components/ui/button";
-import type { UpdateCheckMode } from "@/pages/centralUpdateCheckMode";
+import type { UpdateCheckMode } from "@/lib/updateCheckMode";
 import { cn } from "@/lib/utils";
 
 interface CentralUpdateCheckModeSettingsSectionProps {

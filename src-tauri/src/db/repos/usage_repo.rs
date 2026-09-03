@@ -716,4 +716,60 @@ mod tests {
                 .unwrap();
         assert_eq!(timestamps.len(), 3);
     }
+
+    #[tokio::test]
+    async fn empty_replacement_clears_one_target_and_leaves_the_other() {
+        let pool = mem_pool().await;
+        replace_calls_for_target(
+            &pool,
+            "local",
+            &[call("keep-local")],
+            &[ProviderScanOutcome {
+                provider_id: "codex".to_string(),
+                display_name: "Codex CLI".to_string(),
+                available: true,
+                call_count: 1,
+            }],
+            &[metadata("keep-local", "unmatched", None)],
+            10,
+        )
+        .await
+        .unwrap();
+        replace_calls_for_target(
+            &pool,
+            "ssh-prod",
+            &[call("clear-me")],
+            &[ProviderScanOutcome {
+                provider_id: "codex".to_string(),
+                display_name: "Codex CLI".to_string(),
+                available: true,
+                call_count: 1,
+            }],
+            &[metadata("clear-me", "unmatched", None)],
+            20,
+        )
+        .await
+        .unwrap();
+
+        replace_calls_for_target(&pool, "ssh-prod", &[], &[], &[], 30)
+            .await
+            .unwrap();
+
+        assert!(list_calls_for_target(&pool, "ssh-prod")
+            .await
+            .unwrap()
+            .is_empty());
+        assert!(list_usage_metadata(&pool, "ssh-prod")
+            .await
+            .unwrap()
+            .is_empty());
+        assert_eq!(get_last_scan_ms(&pool, "ssh-prod").await.unwrap(), Some(30));
+
+        let local_calls = list_calls_for_target(&pool, "local").await.unwrap();
+        assert_eq!(local_calls.len(), 1);
+        assert_eq!(local_calls[0].skill, "keep-local");
+        let local_metadata = list_usage_metadata(&pool, "local").await.unwrap();
+        assert_eq!(local_metadata.len(), 1);
+        assert_eq!(get_last_scan_ms(&pool, "local").await.unwrap(), Some(10));
+    }
 }

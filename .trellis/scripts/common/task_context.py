@@ -25,7 +25,19 @@ from .config import get_context_injection_limits
 from .git import branch_exists_locally
 from .io import read_json
 from .log import Colors, colored
-from .paths import DIR_ARCHIVE, DIR_TASKS, DIR_WORKFLOW, FILE_TASK_JSON, get_repo_root
+from .paths import (
+    DIR_ARCHIVE,
+    DIR_TASKS,
+    DIR_WORKFLOW,
+    FILE_TASK_JSON,
+    PathContainmentError,
+    canonical_path,
+    contained_posix_relative,
+    get_repo_root,
+    posix_relative_to,
+    resolve_contained_path,
+    truncate_manifest_for_diag,
+)
 from .task_utils import resolve_task_dir
 
 # Extensions that look like code rather than spec/research docs. Entries with
@@ -74,35 +86,42 @@ def cmd_add_context(args: argparse.Namespace) -> int:
         jsonl_name = f"{jsonl_name}.jsonl"
 
     jsonl_file = target_dir / jsonl_name
-    full_path = repo_root / path
+
+    try:
+        resolved = resolve_contained_path(path, repo_root)
+        stored_path = contained_posix_relative(path, repo_root)
+    except PathContainmentError as exc:
+        shown = truncate_manifest_for_diag(path)
+        print(colored(f"Error: context path not contained ({exc.kind}): {shown}", Colors.RED))
+        return 1
 
     entry_type = "file"
-    if full_path.is_dir():
+    if resolved.is_dir():
         entry_type = "directory"
-        if not path.endswith("/"):
-            path = f"{path}/"
-    elif not full_path.is_file():
-        print(colored(f"Error: Path not found: {path}", Colors.RED))
+        if not stored_path.endswith("/"):
+            stored_path = f"{stored_path}/"
+    elif not resolved.is_file():
+        print(colored(f"Error: Path not found: {truncate_manifest_for_diag(path)}", Colors.RED))
         return 1
 
     # Check if already exists
     if jsonl_file.is_file():
         content = jsonl_file.read_text(encoding="utf-8")
-        if f'"{path}"' in content:
-            print(colored(f"Warning: Entry already exists for {path}", Colors.YELLOW))
+        if f'"{stored_path}"' in content:
+            print(colored(f"Warning: Entry already exists for {stored_path}", Colors.YELLOW))
             return 0
 
     # Add entry
     entry: dict
     if entry_type == "directory":
-        entry = {"file": path, "type": "directory", "reason": reason}
+        entry = {"file": stored_path, "type": "directory", "reason": reason}
     else:
-        entry = {"file": path, "reason": reason}
+        entry = {"file": stored_path, "reason": reason}
 
     with jsonl_file.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
-    print(colored(f"Added {entry_type}: {path}", Colors.GREEN))
+    print(colored(f"Added {entry_type}: {stored_path}", Colors.GREEN))
     return 0
 
 
@@ -170,26 +189,33 @@ def _is_exempt_from_code_file_warning(file_path: str, task_rel: str) -> bool:
     return False
 
 
+def _contain_repo_file(file_path: str, repo_root: Path) -> Path | None:
+    """Resolve ``file_path`` only when it is contained in ``repo_root``."""
+    try:
+        return resolve_contained_path(file_path, repo_root)
+    except PathContainmentError:
+        return None
+
+
 def _resolve_context_entry_path(
     file_path: str, repo_root: Path, task_dir: Path | None
 ) -> Path | None:
     """Resolve a JSONL entry, binding archived self-references to the archive copy.
 
     Exact historical self-references are remapped only for archived tasks.
-    ``None`` means the remapped path traversed or resolved outside that archive.
+    ``None`` means the path traversed or resolved outside the allowed root.
     """
-    repo_path = repo_root / file_path
     if task_dir is None:
-        return repo_path
+        return _contain_repo_file(file_path, repo_root)
 
     try:
-        task_parts = task_dir.resolve().relative_to(repo_root.resolve()).parts
+        task_parts = canonical_path(task_dir).relative_to(canonical_path(repo_root)).parts
     except ValueError:
-        return repo_path
+        return _contain_repo_file(file_path, repo_root)
 
     archive_prefix = (DIR_WORKFLOW, DIR_TASKS, DIR_ARCHIVE)
     if len(task_parts) != 5 or task_parts[:3] != archive_prefix:
-        return repo_path
+        return _contain_repo_file(file_path, repo_root)
 
     year_month = task_parts[3]
     if (
@@ -198,7 +224,7 @@ def _resolve_context_entry_path(
         or not year_month[:4].isdigit()
         or not year_month[5:].isdigit()
     ):
-        return repo_path
+        return _contain_repo_file(file_path, repo_root)
 
     historical_root = f"{DIR_WORKFLOW}/{DIR_TASKS}/{task_dir.name}"
     posix_path = file_path.replace("\\", "/")
@@ -212,15 +238,19 @@ def _resolve_context_entry_path(
         if any(part in ("", ".", "..") for part in relative_parts):
             return None
     else:
-        return repo_path
+        return _contain_repo_file(file_path, repo_root)
 
     try:
-        archive_root = task_dir.resolve()
-        resolved_path = task_dir.joinpath(*relative_parts).resolve()
+        archive_root = canonical_path(task_dir)
+        resolved_path = canonical_path(task_dir.joinpath(*relative_parts))
         resolved_path.relative_to(archive_root)
     except (OSError, RuntimeError, ValueError):
         return None
-    return resolved_path
+    try:
+        rel = posix_relative_to(resolved_path, canonical_path(repo_root))
+        return resolve_contained_path(rel, repo_root)
+    except PathContainmentError:
+        return None
 
 
 def _validate_jsonl(jsonl_file: Path, repo_root: Path, task_dir: Path | None = None) -> int:

@@ -339,4 +339,22 @@ mod tests {
                 .await
                 .unwrap();
     }
+
+    #[tokio::test]
+    async fn same_target_file_lock_serializes_without_default_mutex() {
+        let temp = tempfile::tempdir().unwrap();
+        let lock = temp.path().join("same-target.lock");
+        let _holder =
+            acquire_central_mutation_guard_at(lock.clone(), "holder", Duration::from_secs(2))
+                .await
+                .unwrap();
+        let error =
+            acquire_central_mutation_guard_at(lock, "import or delete", Duration::from_millis(80))
+                .await
+                .unwrap_err();
+        assert!(
+            matches!(error, CentralMutationError::Timeout { .. }),
+            "same-target import/delete/update must serialize: {error:?}"
+        );
+    }
 }

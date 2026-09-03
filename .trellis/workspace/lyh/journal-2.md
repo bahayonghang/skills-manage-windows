@@ -1692,3 +1692,46 @@ SSH/WSL Platform leftover apply now validates paths, deletes unique POSIX paths 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 114: 风险导向测试覆盖第二轮
+
+**Date**: 2026-08-31
+**Task**: 风险导向测试覆盖第二轮
+**Branch**: `dev`
+
+### Summary
+
+按业务风险补齐迁根、adopt-into-Central、SSH/WSL 创建更新、分类安装刷新、PAT、latest.json 和 Update Center 的失败回归，并做最小生产修复。
+
+### Main Changes
+
+- Central 迁根改为四表事务与前缀安全改写
+- ensure_centralized 在 SKILL.md 残留时仍修复 is_central
+- SSH/WSL 创建更新失败回滚凭据、settings 与 cache
+- 分类/安装/Update Center 刷新失败标 reload-required
+- latest.json 生成时拒绝空签名与重复 NSIS
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `130ab3d10f5be9f1f0dc907ef6a00057200ef1e1` | (see git log) |
+| `b4265f7a` | (see git log) |
+| `ac3b9c61` | (see git log) |
+| `ab2e6c27` | (see git log) |
+| `f740aaf3` | (see git log) |
+| `53db6a54` | (see git log) |
+
+### Testing
+
+- [OK] 各模块聚焦过滤非零通过
+- [OK] just ci 通过：Vitest 2020 passed / Rust 1506 passed 7 ignored
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 按需开 PR 到 dev；连接测试 Ok 载荷脱敏与 AI 并发 flush 仍延期

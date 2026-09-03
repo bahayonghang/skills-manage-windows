@@ -39,10 +39,12 @@ from .paths import (
     DIR_TASKS,
     DIR_WORKFLOW,
     FILE_TASK_JSON,
+    PathContainmentError,
     generate_task_date_prefix,
     get_developer,
     get_repo_root,
     get_tasks_dir,
+    resolve_contained_path,
 )
 from .safe_commit import (
     print_gitignore_warning,
@@ -63,6 +65,9 @@ from .workflow_selection import DIR_WORKFLOWS, WORKFLOW_ID_RE
 # Helper Functions
 # =============================================================================
 
+_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
 def _slugify(title: str) -> str:
     """Convert title to slug (only works with ASCII)."""
     result = title.lower()
@@ -70,6 +75,48 @@ def _slugify(title: str) -> str:
     result = re.sub(r"-+", "-", result)
     result = result.strip("-")
     return result
+
+
+def _validate_slug(slug: str) -> str | None:
+    """Return an error message if slug is not a closed single path name.
+
+    Closed form: non-empty ASCII lowercase letters, digits, and single hyphens.
+    Rejects empty, ``.``, ``..``, separators, absolute, drive, and UNC values
+    before any task-directory write.
+    """
+    if not isinstance(slug, str) or slug == "":
+        return "slug must be a non-empty ASCII lowercase name with single hyphens"
+    if slug in (".", ".."):
+        return "slug cannot be '.' or '..'"
+    if "/" in slug or "\\" in slug:
+        return "slug cannot contain path separators"
+    if slug.startswith("\\\\") or slug.startswith("//"):
+        return "slug cannot be a UNC path"
+    if len(slug) >= 2 and slug[1] == ":" and slug[0].isalpha():
+        return "slug cannot contain a drive prefix"
+    if Path(slug).is_absolute():
+        return "slug cannot be an absolute path"
+    if not _SLUG_RE.fullmatch(slug):
+        return "slug must contain only ASCII lowercase letters, digits, and single hyphens"
+    return None
+
+
+def _closed_task_destination(dir_name: str, repo_root: Path) -> bool:
+    """True when ``dir_name`` resolves to a direct child of ``.trellis/tasks``."""
+    if not dir_name or dir_name in (".", "..", DIR_ARCHIVE):
+        return False
+    if "/" in dir_name or "\\" in dir_name:
+        return False
+    if Path(dir_name).parts != (dir_name,):
+        return False
+    rel_tasks = f"{DIR_WORKFLOW}/{DIR_TASKS}"
+    rel_task = f"{rel_tasks}/{dir_name}"
+    try:
+        resolved_tasks = resolve_contained_path(rel_tasks, repo_root)
+        resolved_task = resolve_contained_path(rel_task, repo_root)
+    except PathContainmentError:
+        return False
+    return resolved_task.parent == resolved_tasks and resolved_task.name != DIR_ARCHIVE
 
 
 def ensure_tasks_dir(repo_root: Path) -> Path:
@@ -221,6 +268,31 @@ def _default_prd_content(title: str, description: str | None = None) -> str:
 """
 
 
+def _resolve_create_base_branch(repo_root: Path, explicit: str | None) -> str:
+    """Resolve ``base_branch`` from local Git state before any task write."""
+    _, branch_out, _ = run_git(
+        ["branch", "--show-current"],
+        cwd=repo_root,
+        timeout=5,
+    )
+    current_branch = branch_out.strip() or "main"
+    if explicit:
+        return explicit
+    resolved_base_branch = resolve_default_branch(repo_root)
+    if resolved_base_branch:
+        return resolved_base_branch
+    print(
+        colored(
+            f"warning: could not resolve the repository's default branch "
+            f"(no remote configured, offline, etc.); stamping base_branch as "
+            f"the checked-out branch '{current_branch}'. Pass --base-branch to override.",
+            Colors.YELLOW,
+        ),
+        file=sys.stderr,
+    )
+    return current_branch
+
+
 # =============================================================================
 # Command: create
 # =============================================================================
@@ -288,25 +360,33 @@ def cmd_create(args: argparse.Namespace) -> int:
             print(colored("Error: No developer set. Run init_developer.py first or use --assignee", Colors.RED), file=sys.stderr)
             return 1
 
-    ensure_tasks_dir(repo_root)
-
     # Get current developer as creator
     creator = get_developer(repo_root) or assignee
 
-    # Generate slug if not provided
-    slug = args.slug or _slugify(args.title)
-    if not slug:
-        print(colored("Error: could not generate slug from title", Colors.RED), file=sys.stderr)
-        return 1
+    # Closed slug before ensure_tasks_dir / mkdir / writing artifacts.
+    explicit_slug = args.slug
+    if explicit_slug is not None:
+        slug = explicit_slug
+        slug_error = _validate_slug(slug)
+        if slug_error:
+            print(colored(f"Error: invalid --slug ({slug_error})", Colors.RED), file=sys.stderr)
+            return 1
+    else:
+        slug = _slugify(args.title)
+        if not slug:
+            print(colored("Error: could not generate slug from title", Colors.RED), file=sys.stderr)
+            return 1
+        slug_error = _validate_slug(slug)
+        if slug_error:
+            print(colored(f"Error: {slug_error}", Colors.RED), file=sys.stderr)
+            return 1
 
-    # Create task directory with MM-DD-slug format
-    tasks_dir = get_tasks_dir(repo_root)
     date_prefix = generate_task_date_prefix()
 
     # Guard against date-prefixed --slug (e.g. a full task dir name pasted in),
     # which would otherwise produce MM-DD-MM-DD-slug (issue #377). Only an
     # explicit --slug is guarded; title-derived slugs are left untouched.
-    if args.slug:
+    if explicit_slug:
         m = re.match(r"^(\d{2})-(\d{2})-(.+)$", slug)
         if m and 1 <= int(m.group(1)) <= 12 and 1 <= int(m.group(2)) <= 31:
             slug_prefix = f"{m.group(1)}-{m.group(2)}"
@@ -329,8 +409,23 @@ def cmd_create(args: argparse.Namespace) -> int:
                 )
                 print(f"Pass only the slug body, e.g. --slug {m.group(3)}", file=sys.stderr)
                 return 1
+        slug_error = _validate_slug(slug)
+        if slug_error:
+            print(colored(f"Error: invalid --slug ({slug_error})", Colors.RED), file=sys.stderr)
+            return 1
 
     dir_name = f"{date_prefix}-{slug}"
+    if not _closed_task_destination(dir_name, repo_root):
+        print(
+            colored("Error: task path is not a closed child of .trellis/tasks", Colors.RED),
+            file=sys.stderr,
+        )
+        return 1
+
+    explicit_base_branch: str | None = getattr(args, "base_branch", None)
+    base_branch = _resolve_create_base_branch(repo_root, explicit_base_branch)
+
+    tasks_dir = get_tasks_dir(repo_root)
     task_dir = tasks_dir / dir_name
     task_json_path = task_dir / FILE_TASK_JSON
 
@@ -341,39 +436,21 @@ def cmd_create(args: argparse.Namespace) -> int:
         print("Use a new slug if you intend to create a new task.", file=sys.stderr)
         return 1
 
+    ensure_tasks_dir(repo_root)
+
+    if not _closed_task_destination(dir_name, repo_root):
+        print(
+            colored("Error: task path is not a closed child of .trellis/tasks", Colors.RED),
+            file=sys.stderr,
+        )
+        return 1
+
     if task_dir.exists():
         print(colored(f"Warning: Task directory already exists: {dir_name}", Colors.YELLOW), file=sys.stderr)
     else:
         task_dir.mkdir(parents=True)
 
     today = datetime.now().strftime("%Y-%m-%d")
-
-    # Record the PR target branch. Prefer the repo's actual default branch
-    # (origin/HEAD) so creating a task from a feature branch doesn't
-    # mis-stamp that feature branch as the PR target (#399 item 1). Falls
-    # back to the checked-out branch when the default can't be resolved
-    # (no remote configured, offline, etc.) — the pre-existing behavior.
-    # --base-branch lets the caller override both when neither is correct.
-    _, branch_out, _ = run_git(["branch", "--show-current"], cwd=repo_root)
-    current_branch = branch_out.strip() or "main"
-    explicit_base_branch: str | None = getattr(args, "base_branch", None)
-    if explicit_base_branch:
-        base_branch = explicit_base_branch
-    else:
-        resolved_base_branch = resolve_default_branch(repo_root)
-        if resolved_base_branch:
-            base_branch = resolved_base_branch
-        else:
-            base_branch = current_branch
-            print(
-                colored(
-                    f"warning: could not resolve the repository's default branch "
-                    f"(no remote configured, offline, etc.); stamping base_branch as "
-                    f"the checked-out branch '{base_branch}'. Pass --base-branch to override.",
-                    Colors.YELLOW,
-                ),
-                file=sys.stderr,
-            )
 
     description = (args.description or "").strip()
     if not description.strip():

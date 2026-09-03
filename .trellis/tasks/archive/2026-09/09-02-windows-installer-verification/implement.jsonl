@@ -1,0 +1,2 @@
+{"file": "docs/agents/git-and-release.md", "reason": "遵守安装器与发布资产契约"}
+{"file": ".trellis/spec/backend/process-supervision.md", "reason": "复用有界进程等待与清理规范"}

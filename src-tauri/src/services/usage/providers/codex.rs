@@ -103,7 +103,7 @@ impl UsageProvider for CodexProvider {
         SOURCE
     }
 
-    async fn available(&self, scope: &Scope) -> bool {
+    async fn available(&self, scope: &Scope) -> Result<bool, UsageError> {
         let backend = scope.fs_backend();
         backend.exists(&Self::sessions_dir(scope)).await
     }
@@ -169,7 +169,7 @@ fn scan_local(
 async fn collect_remote(scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
     let backend = scope.fs_backend();
     let sessions_dir = CodexProvider::sessions_dir(scope);
-    if !backend.exists(&sessions_dir).await {
+    if !backend.exists(&sessions_dir).await? {
         return Ok(vec![]);
     }
 
@@ -356,9 +356,25 @@ mod tests {
         let dir = TempDir::new().unwrap();
         std::env::set_var("CODEX_HOME", dir.path());
         // 没创建 sessions 目录
-        let avail = block(CodexProvider.available(&Scope::Local));
+        let avail = block(CodexProvider.available(&Scope::Local)).unwrap();
         std::env::remove_var("CODEX_HOME");
         assert!(!avail);
+    }
+
+    #[test]
+    fn remote_available_propagates_transport_error() {
+        use crate::services::usage::fs_backend::test_fixtures;
+        use crate::targets::RunnerPhase;
+        use crate::test_support::FakeRunner;
+        use std::sync::Arc;
+
+        let runner = Arc::new(FakeRunner::new());
+        let scope = test_fixtures::wsl_scope(runner.clone(), "wsl-dev");
+        runner.push_error(RunnerPhase::Start, "wsl.exe missing");
+        let error = block(CodexProvider.available(&scope)).unwrap_err();
+        assert!(error.is_target_fatal());
+        assert_eq!(error.stable_code(), "usage.remote_transport");
+        assert!(!error.to_string().contains("wsl.exe missing"));
     }
 
     /// 无过滤参考实现（改动前的逐行 DOM 解析），用于锁定预过滤等价性。

@@ -1,12 +1,5 @@
 import { invoke, isTauriRuntime } from "@/lib/ipc";
 import {
-  AgentWithStatus,
-  SkillAiTagReview,
-  SkillRepositoryWithStats,
-  SkillTag,
-  SkillWithLinks,
-} from "@/types";
-import {
   createCentralBrowserFixtureState,
   indexUpdateStates,
 } from "./centralSkillsStore.shared";
@@ -16,7 +9,7 @@ type AiApiKeyState = { configured: boolean };
 
 async function loadAiApiKeyState(): Promise<AiApiKeyState | null> {
   try {
-    return (await invoke("get_ai_api_key_state")) ?? null;
+    return (await invoke("get_ai_api_key_state", { provider: null })) ?? null;
   } catch {
     return null;
   }
@@ -55,11 +48,11 @@ export function createCentralListSlice({ set, get, getGeneration }: CentralStore
     }
     try {
       const [skills, agents, repositories, tags, reviews, updateStates, aiApiKeyState] = await Promise.all([
-        invoke<SkillWithLinks[]>("get_central_skills"),
-        invoke<AgentWithStatus[]>("get_agents"),
-        invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
-        invoke<SkillTag[]>("get_skill_tags"),
-        invoke<SkillAiTagReview[]>("get_pending_ai_tag_reviews"),
+        invoke("get_central_skills"),
+        invoke("get_agents"),
+        invoke("get_skill_repositories"),
+        invoke("get_skill_tags"),
+        invoke("get_pending_ai_tag_reviews"),
         invoke("get_central_skill_update_states"),
         loadAiApiKeyState(),
       ]);
@@ -74,6 +67,8 @@ export function createCentralListSlice({ set, get, getGeneration }: CentralStore
           aiTaggingAvailable: !!aiApiKeyState?.configured,
           isLoading: false,
           isRefreshingList: false,
+          hasLoaded: true,
+          requiresCentralReload: false,
         });
       }
     } catch (err) {

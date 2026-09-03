@@ -11,7 +11,7 @@
 
 mod migrations;
 mod pool;
-mod repos;
+pub(crate) mod repos;
 mod schema;
 mod seed;
 pub(crate) mod sqlite_batch;

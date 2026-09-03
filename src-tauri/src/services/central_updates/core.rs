@@ -10,7 +10,10 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter};
 
-use crate::db::{self, DbPool, Skill, SkillUpdateState};
+use crate::db::repos::repositories_repo;
+use crate::db::repos::skills_repo;
+use crate::db::repos::update_states_repo;
+use crate::db::{DbPool, Skill, SkillUpdateState};
 
 use super::error::CentralUpdatesError;
 use super::fs::CentralFs;
@@ -32,7 +35,10 @@ pub(crate) use batch::{
     recover_pending_update_operation, recover_pending_update_operations, update_skills_batch,
     SkillUpdatePlan,
 };
-pub(crate) use content_upsert::{journaled_central_content_upsert, JournaledCentralContentUpsert};
+pub(crate) use content_upsert::{
+    journaled_central_content_upsert, journaled_central_content_upsert_with_fs,
+    JournaledCentralContentUpsert,
+};
 #[allow(unused_imports)]
 pub(crate) use state::repository_url;
 pub(crate) use state::{
@@ -44,7 +50,7 @@ pub(crate) use state::{
 pub(crate) async fn get_central_skill_update_states_impl(
     pool: &DbPool,
 ) -> Result<Vec<SkillUpdateState>, CentralUpdatesError> {
-    Ok(db::get_skill_update_states(pool).await?)
+    Ok(update_states_repo::get_skill_update_states(pool).await?)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -103,7 +109,7 @@ pub(crate) async fn check_central_skill_updates_impl(
                 error_state_from_assignment(skill, &prepared_skill.assignment, &error)
             }
         };
-        db::upsert_skill_update_state(pool, &state_result).await?;
+        update_states_repo::upsert_skill_update_state(pool, &state_result).await?;
         update_counters_for_state(&mut counters, &state_result);
         emit_update_progress(
             app,
@@ -199,7 +205,7 @@ pub(crate) async fn update_central_skills_impl(
         match load_remote_skill_content(&prepared_skill, &snapshots) {
             Ok(Some(remote)) if remote.remote_hash == remote.local_hash => {
                 let state_result = state_from_remote(skill, &remote, false);
-                db::upsert_skill_update_state(pool, &state_result).await?;
+                update_states_repo::upsert_skill_update_state(pool, &state_result).await?;
                 counters.completed += 1;
                 counters.skipped += 1;
                 skipped.push(CentralSkillUpdateSkip {
@@ -222,7 +228,7 @@ pub(crate) async fn update_central_skills_impl(
             Ok(None) => {
                 let state_result =
                     unsupported_state_from_assignment(skill, &prepared_skill.assignment, None);
-                db::upsert_skill_update_state(pool, &state_result).await?;
+                update_states_repo::upsert_skill_update_state(pool, &state_result).await?;
                 counters.completed += 1;
                 counters.skipped += 1;
                 skipped.push(CentralSkillUpdateSkip {
@@ -250,7 +256,7 @@ pub(crate) async fn update_central_skills_impl(
                     &prepared_skill.assignment,
                     &reason,
                 );
-                db::upsert_skill_update_state(pool, &state_result).await?;
+                update_states_repo::upsert_skill_update_state(pool, &state_result).await?;
                 counters.completed += 1;
                 counters.skipped += 1;
                 skipped.push(CentralSkillUpdateSkip {
@@ -273,7 +279,7 @@ pub(crate) async fn update_central_skills_impl(
                 let public_error = "This update item could not be applied.";
                 let state_result =
                     error_state_from_assignment(skill, &prepared_skill.assignment, public_error);
-                db::upsert_skill_update_state(pool, &state_result).await?;
+                update_states_repo::upsert_skill_update_state(pool, &state_result).await?;
                 counters.completed += 1;
                 counters.failed += 1;
                 failed.push(CentralSkillUpdateFailure::decision_apply_fallback(
@@ -300,6 +306,7 @@ pub(crate) async fn update_central_skills_impl(
             skill: prepared.skill.clone(),
             remote: remote.clone(),
             refresh_copies: true,
+            first_upsert: false,
         })
         .collect();
     let update_outcomes = update_skills_batch(pool, fs, plans, Some(cancel)).await;
@@ -307,7 +314,7 @@ pub(crate) async fn update_central_skills_impl(
         let skill = &prepared_skill.skill;
         match outcome.result {
             Ok(state_result) => {
-                db::upsert_skill_update_state(pool, &state_result).await?;
+                update_states_repo::upsert_skill_update_state(pool, &state_result).await?;
                 counters.completed += 1;
                 counters.succeeded += 1;
                 succeeded.push(skill.id.clone());
@@ -345,7 +352,7 @@ pub(crate) async fn update_central_skills_impl(
                 let public_error = error.error().public_update_message();
                 let state_result =
                     error_state_from_assignment(skill, &prepared_skill.assignment, public_error);
-                db::upsert_skill_update_state(pool, &state_result).await?;
+                update_states_repo::upsert_skill_update_state(pool, &state_result).await?;
                 counters.completed += 1;
                 counters.failed += 1;
                 failed.push(CentralSkillUpdateFailure::from_item_error(
@@ -401,14 +408,15 @@ pub(crate) async fn keep_remote_missing_central_skills_impl(
         .cloned()
         .collect::<Vec<_>>();
 
-    let states = db::get_skill_update_states_for_skills(pool, &unique_skill_ids).await?;
+    let states =
+        update_states_repo::get_skill_update_states_for_skills(pool, &unique_skill_ids).await?;
     let states_by_skill_id = states
         .into_iter()
         .map(|state| (state.skill_id.clone(), state))
         .collect::<HashMap<_, _>>();
 
     for skill_id in &unique_skill_ids {
-        let skill = db::get_skill_by_id(pool, skill_id)
+        let skill = skills_repo::get_skill_by_id(pool, skill_id)
             .await?
             .ok_or_else(|| CentralUpdatesError::SkillNotFound(skill_id.clone()))?;
         if !skill.is_central {
@@ -424,7 +432,7 @@ pub(crate) async fn keep_remote_missing_central_skills_impl(
     }
 
     for skill_id in &unique_skill_ids {
-        db::detach_skill_remote_source(pool, skill_id).await?;
+        repositories_repo::detach_skill_remote_source(pool, skill_id).await?;
     }
 
     Ok(unique_skill_ids)

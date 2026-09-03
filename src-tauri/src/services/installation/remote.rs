@@ -4,7 +4,10 @@
 //! `install.rs`; this module only implements the Remote arms of the
 //! [`super::transport::InstallTransport`] hooks.
 
+use crate::db::repos::installations_repo;
+use crate::db::repos::skills_repo;
 use crate::db::{self, DbPool};
+
 use crate::targets::{remote_join, ConnectedRemoteTarget};
 
 #[cfg(test)]
@@ -82,7 +85,7 @@ pub(crate) async fn ensure_remote_centralized(
         return Ok(());
     }
 
-    let skill = db::get_skill_by_id(pool, skill_id)
+    let skill = skills_repo::get_skill_by_id(pool, skill_id)
         .await?
         .ok_or_else(|| InstallationError::SkillNotFound(skill_id.to_string()))?;
     let source_dir = crate::targets::remote_parent(&skill.file_path)
@@ -105,7 +108,7 @@ pub(crate) async fn ensure_remote_centralized(
     updated.canonical_path = Some(canonical_dir.to_string());
     updated.is_central = true;
     updated.file_path = canonical_skill_md;
-    db::upsert_skill(pool, &updated).await?;
+    skills_repo::upsert_skill(pool, &updated).await?;
 
     Ok(())
 }
@@ -127,7 +130,7 @@ async fn mark_remote_skill_centralized(
     skill.canonical_path = Some(canonical_dir.to_string());
     skill.is_central = true;
     skill.file_path = canonical_skill_md.to_string();
-    Ok(db::upsert_skill(pool, &skill).await?)
+    Ok(skills_repo::upsert_skill(pool, &skill).await?)
 }
 
 async fn run_remote_central_install_script(
@@ -183,7 +186,7 @@ pub(crate) async fn place_install_remote(
         ResolvedMethod::Symlink => "symlink",
         ResolvedMethod::Copy | ResolvedMethod::Auto => "copy",
     };
-    let installations = db::get_skill_installations(pool, skill_id).await?;
+    let installations = installations_repo::get_skill_installations(pool, skill_id).await?;
     let installation = installations
         .iter()
         .find(|record| record.agent_id == agent.id);

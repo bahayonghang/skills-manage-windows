@@ -127,7 +127,7 @@ pub(crate) async fn preview_remove_global_at(
     if !is_valid_skill_token(skill_name) {
         return Err(SkillsCliError::SkillNotOwned);
     }
-    let agents = crate::db::get_all_agents(pool)
+    let agents = crate::db::repos::agents_repo::get_all_agents(pool)
         .await
         .map_err(|error| SkillsCliError::Io {
             context: "read platforms",
@@ -193,7 +193,7 @@ pub(crate) async fn remove_global_at(
     let skill_name = skill_name.to_string();
     #[cfg(test)]
     let injected = injected_fault();
-    let agents = crate::db::get_all_agents(pool)
+    let agents = crate::db::repos::agents_repo::get_all_agents(pool)
         .await
         .map_err(|error| SkillsCliError::Io {
             context: "read platforms",

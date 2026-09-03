@@ -251,3 +251,44 @@ async fn local_update_restore_and_finalize_are_idempotent() {
     fs.finalize_operation_update(&new_manifest).await.unwrap();
     assert_eq!(std::fs::read(target.join("SKILL.md")).unwrap(), b"new-two");
 }
+
+#[tokio::test]
+async fn tampered_staging_fails_closed_and_keeps_row_artifacts() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let target = temp.path().join("skill-a");
+    std::fs::create_dir_all(&target).unwrap();
+    std::fs::write(target.join("SKILL.md"), b"old").unwrap();
+    let fs = CentralFs::Local;
+    let write = write("skill-a", target.clone(), b"new");
+    let manifest = fs
+        .build_operation_update_manifest("collision-op", &write, Vec::new())
+        .await
+        .unwrap();
+    let pool = crate::test_support::mem_pool().await;
+    insert_row(&pool, "collision-op", "skill-a", &manifest).await;
+    db::transition_fs_db_operation(&pool, "collision-op", "prepared", "fs_staged")
+        .await
+        .unwrap();
+    fs.stage_operation_update(&manifest, &write).await.unwrap();
+    std::fs::write(
+        PathBuf::from(&manifest.staging).join("SKILL.md"),
+        b"tampered",
+    )
+    .unwrap();
+
+    let error = fs.swap_operation_update(&manifest).await.unwrap_err();
+    match error {
+        crate::services::central_updates::CentralUpdatesError::CentralOperation(
+            crate::services::central_operation::CentralOperationError::RecoveryCollision { code },
+        ) => assert_eq!(code, "update_swap_collision"),
+        other => panic!("expected swap collision, got {other:?}"),
+    }
+    assert_eq!(std::fs::read(target.join("SKILL.md")).unwrap(), b"old");
+    assert!(std::fs::symlink_metadata(&manifest.staging).is_ok());
+    assert!(std::fs::symlink_metadata(&manifest.marker).is_ok());
+    let row = db::get_fs_db_operation(&pool, "collision-op")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(row.phase, "fs_staged");
+}

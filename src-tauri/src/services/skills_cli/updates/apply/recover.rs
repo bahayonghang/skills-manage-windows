@@ -5,12 +5,12 @@ use std::sync::atomic::AtomicBool;
 
 use chrono::Utc;
 
-use crate::db::DbPool;
-use crate::db::{
+use crate::db::repos::skills_cli_updates_repo::{
     self, list_pending_update_operations, transition_update_operation,
     transition_update_operation_in_transaction, upsert_update_state_in_transaction,
-    SkillsCliUpdateStateRow as PersistedSkill,
 };
+use crate::db::DbPool;
+use crate::db::SkillsCliUpdateStateRow as PersistedSkill;
 use crate::fs_util::run_blocking_fs_with;
 
 use super::super::super::{check_cancel, SkillsCliError};
@@ -55,7 +55,7 @@ pub(super) async fn recover_one(
     cancel: Option<&AtomicBool>,
 ) -> Result<SkillsCliApplyRecoveryResult, SkillsCliError> {
     check_cancel(cancel)?;
-    let row = db::get_update_operation(pool, operation_id)
+    let row = skills_cli_updates_repo::get_update_operation(pool, operation_id)
         .await
         .map_err(map_db_error)?
         .ok_or(SkillsCliError::UpdateRecoveryRequired)?;
@@ -232,7 +232,7 @@ async fn finalize_new_baseline(
     let now = Utc::now().to_rfc3339();
     let mut transaction = pool.begin().await.map_err(map_db_error)?;
     for item in &manifest.selections {
-        let mut row = db::get_update_state(pool, &item.skill_name)
+        let mut row = skills_cli_updates_repo::get_update_state(pool, &item.skill_name)
             .await
             .map_err(map_db_error)?
             .unwrap_or(PersistedSkill {

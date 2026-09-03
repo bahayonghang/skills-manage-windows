@@ -1,0 +1,29 @@
+{
+  "id": "frontend-boundary-cleanup",
+  "name": "frontend-boundary-cleanup",
+  "title": "前端分层与废弃代码收口",
+  "description": "消除 page-store 反向依赖、Tauri event 类型旁路和不可达模块，并收口 browser fixture i18n。",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-09-02",
+  "completedAt": "2026-09-03",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "09-02-engineering-audit-remediation",
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "audit_severity": "medium",
+    "estimated_effort": "M"
+  }
+}

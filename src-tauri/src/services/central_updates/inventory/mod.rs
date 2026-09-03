@@ -24,7 +24,10 @@ use std::sync::atomic::AtomicBool;
 use chrono::Utc;
 use tauri::AppHandle;
 
-use crate::db::{self, DbPool, SkillRepositoryPendingAddition};
+use crate::db::repos::pending_additions_repo;
+use crate::db::repos::repositories_repo;
+use crate::db::repos::skills_repo;
+use crate::db::{DbPool, SkillRepositoryPendingAddition};
 use crate::services::github_import;
 use crate::targets::ActiveTarget;
 
@@ -153,7 +156,7 @@ pub(crate) async fn compute_skill_update_inventory(
         Option<Vec<String>>,
     ) = match scope.kind {
         SkillRefreshScopeKind::All => {
-            let repo_ids = db::get_skill_repositories_with_stats(pool)
+            let repo_ids = repositories_repo::get_skill_repositories_with_stats(pool)
                 .await?
                 .into_iter()
                 .filter(|r| !r.repository.is_unknown && r.repository.source_type == "github")
@@ -169,7 +172,9 @@ pub(crate) async fn compute_skill_update_inventory(
             let repo_ids = normalize_ids(scope.repository_ids.clone().unwrap_or_default());
             let mut skill_ids = Vec::new();
             for repository_id in &repo_ids {
-                let ids = db::get_central_skill_ids_by_repository(pool, repository_id).await?;
+                let ids =
+                    repositories_repo::get_central_skill_ids_by_repository(pool, repository_id)
+                        .await?;
                 skill_ids.extend(ids);
             }
             (Some(normalize_ids(skill_ids)), repo_ids, None)
@@ -193,10 +198,10 @@ pub(crate) async fn compute_skill_update_inventory(
         if ids.is_empty() {
             Vec::new()
         } else {
-            db::get_central_skills_by_ids(pool, ids).await?
+            skills_repo::get_central_skills_by_ids(pool, ids).await?
         }
     } else {
-        db::get_central_skills(pool).await?
+        skills_repo::get_central_skills(pool).await?
     };
 
     let valid_repositories =
@@ -411,11 +416,16 @@ pub(crate) async fn compute_skill_update_inventory(
                 snapshot_digest: Some(snapshot.snapshot_digest.clone()),
                 discovered_at: now.clone(),
             };
-            db::upsert_pending_addition(pool, &addition).await?;
+            pending_additions_repo::upsert_pending_addition(pool, &addition).await?;
         }
         for item in &collection.skipped_remote_added {
             let source_path = normalize_repo_path(&item.preview.source_path)?;
-            db::delete_pending_addition(pool, &item.repository_id, &source_path).await?;
+            pending_additions_repo::delete_pending_addition(
+                pool,
+                &item.repository_id,
+                &source_path,
+            )
+            .await?;
         }
         for item in remote_added_items {
             remote_added.push(remote_added_from_item(item));
@@ -467,7 +477,7 @@ pub(crate) async fn compute_skill_update_inventory(
     let now = Utc::now().to_rfc3339();
     if include_sync_buckets {
         for repository_id in &repository_ids {
-            db::set_repository_last_synced_at(pool, repository_id, &now).await?;
+            repositories_repo::set_repository_last_synced_at(pool, repository_id, &now).await?;
         }
     }
 
@@ -536,7 +546,7 @@ pub(crate) async fn apply_skill_update_decisions_impl(
         for selection in addition.selections {
             if selection.resolution == github_import::DuplicateResolution::Skip {
                 if let Ok(source_path) = normalize_repo_path(&selection.source_path) {
-                    let _ = db::upsert_skill_repository_sync_skip(
+                    let _ = repositories_repo::upsert_skill_repository_sync_skip(
                         pool,
                         &repository_id,
                         &source_path,
@@ -544,7 +554,12 @@ pub(crate) async fn apply_skill_update_decisions_impl(
                         &source_path,
                     )
                     .await;
-                    let _ = db::delete_pending_addition(pool, &repository_id, &source_path).await;
+                    let _ = pending_additions_repo::delete_pending_addition(
+                        pool,
+                        &repository_id,
+                        &source_path,
+                    )
+                    .await;
                 }
             } else {
                 import_selections.push(selection);
@@ -614,10 +629,18 @@ pub(crate) async fn apply_skill_update_decisions_impl(
             Ok(import_result) => {
                 for imported in &import_result.imported_skills {
                     let source_path = normalize_repo_path(&imported.source_path)?;
-                    let _ =
-                        db::delete_skill_repository_sync_skip(pool, &repository_id, &source_path)
-                            .await;
-                    let _ = db::delete_pending_addition(pool, &repository_id, &source_path).await;
+                    let _ = repositories_repo::delete_skill_repository_sync_skip(
+                        pool,
+                        &repository_id,
+                        &source_path,
+                    )
+                    .await;
+                    let _ = pending_additions_repo::delete_pending_addition(
+                        pool,
+                        &repository_id,
+                        &source_path,
+                    )
+                    .await;
                     result
                         .imported_skill_ids
                         .push(imported.imported_skill_id.clone());

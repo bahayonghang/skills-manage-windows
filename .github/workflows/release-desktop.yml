@@ -46,6 +46,7 @@ jobs:
   release-context:
     name: Freeze release context
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       tag: ${{ steps.context.outputs.tag }}
       version: ${{ steps.context.outputs.version }}
@@ -68,6 +69,17 @@ jobs:
       - name: Fetch canonical refs
         run: git fetch --force origin main:refs/remotes/origin/main --tags
 
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "26"
+
+      - name: Assert Node.js 26
+        run: |
+          set -euo pipefail
+          node --version
+          node -e 'const major = process.versions.node.split(".")[0]; if (major !== "26") { console.error("Expected Node 26.x, got", process.version); process.exit(1); }'
+
       - name: Checkout frozen tag commit
         shell: bash
         env:
@@ -78,6 +90,17 @@ jobs:
           set -euo pipefail
           RELEASE_SHA="$(node scripts/release/release-context.mjs --mode "$RELEASE_MODE" --tag "$RELEASE_TAG" --sha "$REHEARSAL_REF" --resolve-only)"
           git checkout --detach "$RELEASE_SHA"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@f8be11a05b1d4f3fcebe6410cc16743212b999b0 # 1.98.0
+        with:
+          toolchain: "1.98.0"
+
+      - name: Assert Rust 1.98.0
+        run: |
+          set -euo pipefail
+          rustc --version
+          rustc --version | grep -F "1.98.0"
 
       - name: Resolve and validate release context
         id: context
@@ -290,6 +313,11 @@ jobs:
     needs: [release-context, build-windows]
     if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
     runs-on: windows-2022
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        installer: [nsis, msi]
     steps:
       - name: Checkout frozen release verifier
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -313,27 +341,26 @@ jobs:
           RELEASE_MODE: ${{ needs.release-context.outputs.mode }}
         run: |
           node scripts/release/release-preflight.mjs --version $env:RELEASE_VERSION --tag $env:RELEASE_TAG --mode $env:RELEASE_MODE --asset-dir smoke-assets --config smoke-evidence/release-updater-config.json --signing-state smoke-evidence/windows-signing.json
-      - name: Install launch and uninstall final NSIS
+      - name: Install, verify, launch, and uninstall
         shell: pwsh
         env:
           RELEASE_VERSION: ${{ needs.release-context.outputs.version }}
+          INSTALLER_KIND: ${{ matrix.installer }}
         run: |
           $ErrorActionPreference = "Stop"
-          $installers = @(Get-ChildItem -LiteralPath smoke-assets -Filter "*windows_x64_nsis.exe")
-          if ($installers.Count -ne 1) { throw "Expected exactly one final NSIS asset, found $($installers.Count)." }
-          $installer = $installers[0]
-          $installRoot = Join-Path $env:RUNNER_TEMP "skillport-install-smoke-$env:RELEASE_VERSION"
-          Start-Process -FilePath $installer.FullName -ArgumentList @("/S", "/D=$installRoot") -Wait
-          $executable = Get-ChildItem -LiteralPath $installRoot -Recurse -Filter skillport.exe | Select-Object -First 1
-          if ($null -eq $executable) { throw "Installed SkillPort executable was not found." }
-          $process = Start-Process -FilePath $executable.FullName -PassThru
-          Start-Sleep -Seconds 5
-          if ($process.HasExited) { throw "Installed SkillPort exited before the smoke check." }
-          Stop-Process -Id $process.Id -Force
-          $uninstaller = Get-ChildItem -LiteralPath $installRoot -Recurse -Filter uninstall.exe | Select-Object -First 1
-          if ($null -eq $uninstaller) { throw "NSIS uninstaller was not found." }
-          Start-Process -FilePath $uninstaller.FullName -ArgumentList "/S" -Wait
-          if (Test-Path $executable.FullName) { throw "Uninstall left the application executable behind." }
+          $kind = $env:INSTALLER_KIND
+          if ($kind -eq "nsis") {
+            $assets = @(Get-ChildItem -LiteralPath smoke-assets -Filter "*windows_x64_nsis.exe")
+            if ($assets.Count -ne 1) { throw "Expected exactly one final NSIS asset, found $($assets.Count)." }
+          } elseif ($kind -eq "msi") {
+            $assets = @(Get-ChildItem -LiteralPath smoke-assets -Filter "*windows_x64.msi")
+            if ($assets.Count -ne 1) { throw "Expected exactly one final MSI asset, found $($assets.Count)." }
+          } else {
+            throw "Unknown installer kind."
+          }
+          $installRoot = Join-Path $env:RUNNER_TEMP "skillport-install-smoke-$env:RELEASE_VERSION-$kind"
+          pwsh -NoProfile -File scripts/release/windows-installer-smoke.ps1 -InstallerKind $kind -ArtifactPath $assets[0].FullName -ExpectedVersion $env:RELEASE_VERSION -InstallRoot $installRoot -SigningStatePath (Join-Path (Get-Location) "smoke-evidence/windows-signing.json")
+          if ($LASTEXITCODE -ne 0) { throw "windows-installer-smoke failed ($LASTEXITCODE)." }
 
   build-macos:
     name: Build macOS universal

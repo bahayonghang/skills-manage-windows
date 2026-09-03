@@ -19,6 +19,7 @@ pub use export_import::{export_collection_impl, import_collection_impl, Collecti
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /// A Collection with its member skills included.
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollectionDetail {
     pub id: String,
@@ -203,6 +204,7 @@ pub async fn batch_install_collection_impl(
 
 /// Tauri command: create a new collection.
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn create_collection(
     state: State<'_, AppState>,
     name: String,
@@ -243,6 +245,7 @@ pub async fn create_collection(
 
 /// Tauri command: return all collections.
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn get_collections(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<Vec<Collection>> {
@@ -254,6 +257,7 @@ pub async fn get_collections(
 
 /// Tauri command: return a collection with its member skills.
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn get_collection_detail(
     state: State<'_, AppState>,
     collection_id: String,
@@ -266,6 +270,7 @@ pub async fn get_collection_detail(
 
 /// Tauri command: add a skill to a collection.
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn add_skill_to_collection(
     state: State<'_, AppState>,
     collection_id: String,
@@ -390,6 +395,7 @@ pub async fn delete_collection(
 
 /// Tauri command: update a collection's name and description.
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn update_collection(
     state: State<'_, AppState>,
     collection_id: String,
@@ -486,6 +492,7 @@ pub async fn batch_install_collection(
 
 /// Tauri command: export a collection to a JSON string.
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn export_collection(
     state: State<'_, AppState>,
     collection_id: String,

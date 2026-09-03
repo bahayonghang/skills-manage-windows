@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
 import { ScanDirectory } from "@/types";
 
 // Mock Tauri core before importing the store
@@ -13,6 +13,8 @@ import {
   useSettingsStore,
 } from "@/stores/settingsStore";
 import { resetAiSettingsSliceForTests } from "@/stores/settingsStore.aiSlice";
+
+const mockedInvoke = invoke as unknown as Mock;
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -66,7 +68,7 @@ describe("settingsStore", () => {
   });
 
   it("loadCentralUpdateCheckMode reads and normalizes persisted mode", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce("sync");
+    mockedInvoke.mockResolvedValueOnce("sync");
 
     await useSettingsStore.getState().loadCentralUpdateCheckMode();
 
@@ -78,7 +80,7 @@ describe("settingsStore", () => {
   });
 
   it("setCentralUpdateCheckMode persists the selected mode", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce(null);
+    mockedInvoke.mockResolvedValueOnce(null);
 
     await useSettingsStore.getState().setCentralUpdateCheckMode("sync");
 
@@ -93,7 +95,7 @@ describe("settingsStore", () => {
 
   it("loadScanDirectories sets isLoadingScanDirs while loading", async () => {
     let resolve!: (value: ScanDirectory[]) => void;
-    vi.mocked(invoke).mockReturnValueOnce(
+    mockedInvoke.mockReturnValueOnce(
       new Promise<ScanDirectory[]>((r) => (resolve = r))
     );
 
@@ -106,7 +108,7 @@ describe("settingsStore", () => {
   });
 
   it("loadScanDirectories populates scanDirectories on success", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce(mockScanDirectories);
+    mockedInvoke.mockResolvedValueOnce(mockScanDirectories);
 
     await useSettingsStore.getState().loadScanDirectories();
 
@@ -117,7 +119,7 @@ describe("settingsStore", () => {
   });
 
   it("loadScanDirectories calls get_scan_directories command", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce([]);
+    mockedInvoke.mockResolvedValueOnce([]);
 
     await useSettingsStore.getState().loadScanDirectories();
 
@@ -125,7 +127,7 @@ describe("settingsStore", () => {
   });
 
   it("loadScanDirectories sets error on failure", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("DB error"));
+    mockedInvoke.mockRejectedValueOnce(new Error("DB error"));
 
     await useSettingsStore.getState().loadScanDirectories();
 
@@ -141,7 +143,7 @@ describe("settingsStore", () => {
     // Start with one builtin dir
     useSettingsStore.setState({ scanDirectories: [mockBuiltinDir] });
 
-    vi.mocked(invoke).mockResolvedValueOnce(mockCustomDir);
+    mockedInvoke.mockResolvedValueOnce(mockCustomDir);
 
     const result = await useSettingsStore.getState().addScanDirectory(
       "~/projects/my-project",
@@ -155,7 +157,7 @@ describe("settingsStore", () => {
   });
 
   it("addScanDirectory calls add_scan_directory with correct args", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce(mockCustomDir);
+    mockedInvoke.mockResolvedValueOnce(mockCustomDir);
 
     await useSettingsStore.getState().addScanDirectory("~/my-dir", "Label");
 
@@ -166,7 +168,7 @@ describe("settingsStore", () => {
   });
 
   it("addScanDirectory passes null for label when not provided", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce(mockCustomDir);
+    mockedInvoke.mockResolvedValueOnce(mockCustomDir);
 
     await useSettingsStore.getState().addScanDirectory("~/my-dir");
 
@@ -177,7 +179,7 @@ describe("settingsStore", () => {
   });
 
   it("addScanDirectory throws on failure", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("UNIQUE constraint"));
+    mockedInvoke.mockRejectedValueOnce(new Error("UNIQUE constraint"));
 
     await expect(
       useSettingsStore.getState().addScanDirectory("/duplicate")
@@ -189,7 +191,7 @@ describe("settingsStore", () => {
   it("removeScanDirectory removes directory from list", async () => {
     useSettingsStore.setState({ scanDirectories: [mockBuiltinDir, mockCustomDir] });
 
-    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    mockedInvoke.mockResolvedValueOnce(undefined);
 
     await useSettingsStore.getState().removeScanDirectory("~/projects/my-project");
 
@@ -200,7 +202,7 @@ describe("settingsStore", () => {
 
   it("removeScanDirectory calls remove_scan_directory command", async () => {
     useSettingsStore.setState({ scanDirectories: [mockCustomDir] });
-    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    mockedInvoke.mockResolvedValueOnce(undefined);
 
     await useSettingsStore.getState().removeScanDirectory("~/projects/my-project");
 
@@ -210,7 +212,7 @@ describe("settingsStore", () => {
   });
 
   it("removeScanDirectory throws on failure", async () => {
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("Cannot remove builtin"));
+    mockedInvoke.mockRejectedValueOnce(new Error("Cannot remove builtin"));
 
     await expect(
       useSettingsStore.getState().removeScanDirectory("~/.agents/skills/")
@@ -226,7 +228,7 @@ describe("settingsStore", () => {
       ],
     });
 
-    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    mockedInvoke.mockResolvedValueOnce(undefined);
     await useSettingsStore.getState().toggleScanDirectory("~/projects/my-project", false);
 
     const state = useSettingsStore.getState();
@@ -238,7 +240,7 @@ describe("settingsStore", () => {
       scanDirectories: [{ ...mockCustomDir, is_active: true }],
     });
 
-    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    mockedInvoke.mockResolvedValueOnce(undefined);
     await useSettingsStore.getState().toggleScanDirectory("~/projects/my-project", false);
 
     expect(invoke).toHaveBeenCalledWith("set_scan_directory_active", {
@@ -254,7 +256,7 @@ describe("settingsStore", () => {
       ],
     });
 
-    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    mockedInvoke.mockResolvedValueOnce(undefined);
     await useSettingsStore.getState().toggleScanDirectory("~/projects/my-project", true);
 
     expect(useSettingsStore.getState().scanDirectories[0].is_active).toBe(true);
@@ -268,7 +270,7 @@ describe("settingsStore", () => {
       ],
     });
 
-    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    mockedInvoke.mockResolvedValueOnce(undefined);
     await useSettingsStore.getState().toggleScanDirectory("~/projects/my-project", false);
 
     const state = useSettingsStore.getState();
@@ -283,7 +285,7 @@ describe("settingsStore", () => {
       scanDirectories: [{ ...mockCustomDir, is_active: true }],
     });
 
-    vi.mocked(invoke).mockRejectedValueOnce(new Error("DB error"));
+    mockedInvoke.mockRejectedValueOnce(new Error("DB error"));
     await expect(
       useSettingsStore.getState().toggleScanDirectory("~/projects/my-project", false)
     ).rejects.toThrow("DB error");
@@ -298,7 +300,7 @@ describe("settingsStore", () => {
   });
 
   it("loadGitHubPat reads the app-wide token status without plaintext", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce({
+    mockedInvoke.mockResolvedValueOnce({
       configured: true,
       storageState: "stored",
       error: null,
@@ -316,7 +318,7 @@ describe("settingsStore", () => {
   });
 
   it("saveGitHubPat persists a token through secure storage", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce({
+    mockedInvoke.mockResolvedValueOnce({
       configured: true,
       storageState: "stored",
       error: null,
@@ -335,7 +337,7 @@ describe("settingsStore", () => {
     useSettingsStore.setState({
       githubPatState: { configured: true, storageState: "stored", error: null },
     });
-    vi.mocked(invoke).mockResolvedValueOnce({
+    mockedInvoke.mockResolvedValueOnce({
       configured: false,
       storageState: "missing",
       error: null,
@@ -349,7 +351,7 @@ describe("settingsStore", () => {
   });
 
   it("testGitHubPat stores the app-wide token test result", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce({
+    mockedInvoke.mockResolvedValueOnce({
       configured: true,
       ok: true,
       status: 200,
@@ -365,8 +367,92 @@ describe("settingsStore", () => {
     expect(useSettingsStore.getState().isTestingGitHubPat).toBe(false);
   });
 
+  const GITHUB_PAT_SENTINEL = "ghp_risk_coverage_sentinel_token";
+
+  function expectGitHubPatAbsentFromStore(thrown?: unknown) {
+    const state = useSettingsStore.getState();
+    expect(JSON.stringify(state)).not.toContain(GITHUB_PAT_SENTINEL);
+    expect(state.githubPatState).not.toHaveProperty("token");
+    expect(state.githubPatState).not.toHaveProperty("value");
+    expect(state.githubPatState).not.toHaveProperty("pat");
+    expect(state.error === null || !state.error.includes(GITHUB_PAT_SENTINEL)).toBe(true);
+    if (thrown !== undefined) {
+      expect(String(thrown)).not.toContain(GITHUB_PAT_SENTINEL);
+    }
+  }
+
+  it("saveGitHubPat reject clears saving and rethrows without retaining the PAT", async () => {
+    mockedInvoke.mockRejectedValueOnce(new Error("github.pat_persist_failed"));
+
+    const thrown = await useSettingsStore
+      .getState()
+      .saveGitHubPat(GITHUB_PAT_SENTINEL)
+      .then(
+        () => {
+          throw new Error("expected saveGitHubPat to reject");
+        },
+        (error: unknown) => error,
+      );
+
+    const state = useSettingsStore.getState();
+    expect(state.isSavingGitHubPat).toBe(false);
+    expect(state.error).toBe("Error: github.pat_persist_failed");
+    expectGitHubPatAbsentFromStore(thrown);
+  });
+
+  it("clearGitHubPat reject clears saving and rethrows", async () => {
+    useSettingsStore.setState({
+      githubPatState: { configured: true, storageState: "stored", error: null },
+    });
+    mockedInvoke.mockRejectedValueOnce(new Error("github.pat_clear_failed"));
+
+    await expect(useSettingsStore.getState().clearGitHubPat()).rejects.toThrow(
+      "github.pat_clear_failed",
+    );
+
+    const state = useSettingsStore.getState();
+    expect(state.isSavingGitHubPat).toBe(false);
+    expect(state.error).toBe("Error: github.pat_clear_failed");
+    expect(state.githubPatState.configured).toBe(true);
+    expectGitHubPatAbsentFromStore();
+  });
+
+  it("testGitHubPat reject clears testing and rethrows", async () => {
+    mockedInvoke.mockRejectedValueOnce(new Error("github.pat_test_failed"));
+
+    await expect(useSettingsStore.getState().testGitHubPat()).rejects.toThrow(
+      "github.pat_test_failed",
+    );
+
+    const state = useSettingsStore.getState();
+    expect(state.isTestingGitHubPat).toBe(false);
+    expect(state.error).toBe("Error: github.pat_test_failed");
+    expectGitHubPatAbsentFromStore();
+  });
+
+  it("saveGitHubPat success omits the PAT sentinel from store state", async () => {
+    mockedInvoke.mockResolvedValueOnce({
+      configured: true,
+      storageState: "stored",
+      error: null,
+    });
+
+    await useSettingsStore.getState().saveGitHubPat(GITHUB_PAT_SENTINEL);
+
+    expect(invoke).toHaveBeenCalledWith("set_github_pat", {
+      value: GITHUB_PAT_SENTINEL,
+    });
+    expect(useSettingsStore.getState().githubPatState).toEqual({
+      configured: true,
+      storageState: "stored",
+      error: null,
+    });
+    expect(useSettingsStore.getState().isSavingGitHubPat).toBe(false);
+    expectGitHubPatAbsentFromStore();
+  });
+
   it("loadAiSettings reads AI settings with one batch command", async () => {
-    vi.mocked(invoke)
+    mockedInvoke
       .mockResolvedValueOnce({
         ai_provider: "glm",
         ai_region: "cn",
@@ -422,7 +508,7 @@ describe("settingsStore", () => {
 
   it("debounces rapid AI setting edits into one batch save", async () => {
     vi.useFakeTimers();
-    vi.mocked(invoke)
+    mockedInvoke
       .mockResolvedValueOnce({
         configured: true,
         storageState: "stored",
@@ -477,7 +563,7 @@ describe("settingsStore", () => {
   it("clears the renderer secret when secure save succeeds but ordinary settings fail", async () => {
     const secret = "secret-sentinel-ai-key";
     const settingsError = new Error("settings.persist_failed");
-    vi.mocked(invoke)
+    mockedInvoke
       .mockResolvedValueOnce({
         configured: true,
         storageState: "stored",
@@ -507,7 +593,7 @@ describe("settingsStore", () => {
       provider: "claude",
       value: secret,
     });
-    const ordinarySettingsPayload = vi.mocked(invoke).mock.calls[1]?.[1];
+    const ordinarySettingsPayload = mockedInvoke.mock.calls[1]?.[1];
     expect(JSON.stringify(ordinarySettingsPayload)).not.toContain(secret);
     expect(ordinarySettingsPayload).toEqual({
       values: expect.not.objectContaining({ ai_api_key: expect.any(String) }),
@@ -533,7 +619,7 @@ describe("settingsStore", () => {
   it("stops provider switching when the pre-switch flush fails", async () => {
     vi.useFakeTimers();
     const flushError = new Error("settings.flush_failed");
-    vi.mocked(invoke).mockRejectedValueOnce(flushError);
+    mockedInvoke.mockRejectedValueOnce(flushError);
     useSettingsStore.setState({
       aiSettingsLoaded: true,
       aiSettings: {
@@ -572,7 +658,7 @@ describe("settingsStore", () => {
   });
 
   it("flushes AI settings before testing the connection", async () => {
-    vi.mocked(invoke)
+    mockedInvoke
       .mockResolvedValueOnce({
         configured: true,
         storageState: "stored",
@@ -613,7 +699,7 @@ describe("settingsStore", () => {
   });
 
   it("switchAiProvider restores scoped settings and reads scoped key state", async () => {
-    vi.mocked(invoke)
+    mockedInvoke
       .mockResolvedValueOnce({
         configured: true,
         storageState: "stored",
@@ -667,7 +753,7 @@ describe("settingsStore", () => {
   });
 
   it("switchAiProvider uses OpenRouter OpenAI-compatible defaults", async () => {
-    vi.mocked(invoke)
+    mockedInvoke
       .mockResolvedValueOnce({
         configured: false,
         storageState: "missing",
@@ -710,7 +796,7 @@ describe("settingsStore", () => {
   });
 
   it("normalizes the legacy OpenRouter messages endpoint to chat completions", async () => {
-    vi.mocked(invoke)
+    mockedInvoke
       .mockResolvedValueOnce({
         ai_provider: "openrouter",
         ai_api_url__openrouter: "https://openrouter.ai/api/v1/messages",
@@ -733,7 +819,7 @@ describe("settingsStore", () => {
   });
 
   it("forces OpenRouter to OpenAI protocol even with legacy scoped protocol", async () => {
-    vi.mocked(invoke)
+    mockedInvoke
       .mockResolvedValueOnce({
         ai_provider: "openrouter",
         ai_protocol__openrouter: "anthropic",
@@ -752,7 +838,7 @@ describe("settingsStore", () => {
   });
 
   it("serializes custom base URL separately from resolved OpenAI URL", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    mockedInvoke.mockResolvedValueOnce(undefined);
     useSettingsStore.setState({
       aiSettingsLoaded: true,
       aiSettings: {
@@ -788,7 +874,7 @@ describe("settingsStore", () => {
         error: null,
       },
     });
-    vi.mocked(invoke).mockResolvedValueOnce({
+    mockedInvoke.mockResolvedValueOnce({
       configured: false,
       storageState: "missing",
       fingerprint: null,

@@ -12,16 +12,18 @@ use crate::targets::ActiveTarget;
 
 use super::error::MarketplaceError;
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct SkillsShSkill {
     pub id: String,
     pub skill_id: String,
     pub name: String,
     pub source: String,
-    pub installs: u64,
-    pub stars: Option<u64>,
+    pub installs: u32,
+    pub stars: Option<u32>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct SkillsShFileEntry {
     pub name: String,
@@ -118,7 +120,7 @@ fn skills_sh_skill_from_search_item(item: SkillsShSearchItem) -> Option<SkillsSh
         skill_id,
         name,
         source,
-        installs: item.installs.unwrap_or(0),
+        installs: u32::try_from(item.installs.unwrap_or(0)).unwrap_or(u32::MAX),
         stars: None,
     })
 }
@@ -148,7 +150,10 @@ async fn enrich_skills_sh_stars(
         .await;
 
     for skill in skills {
-        skill.stars = star_map.get(&skill.source).copied();
+        skill.stars = star_map
+            .get(&skill.source)
+            .copied()
+            .map(|stars| u32::try_from(stars).unwrap_or(u32::MAX));
     }
 }
 

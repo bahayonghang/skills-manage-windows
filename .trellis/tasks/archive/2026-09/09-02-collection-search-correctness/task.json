@@ -1,0 +1,35 @@
+{
+  "id": "collection-search-correctness",
+  "name": "collection-search-correctness",
+  "title": "Collection 搜索与详情一致性",
+  "description": "修复 Collection 搜索路由、数据就绪和详情请求乱序覆盖。",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-09-02",
+  "completedAt": "2026-09-02",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "09-02-engineering-audit-remediation",
+  "relatedFiles": [
+    "src/components/layout/GlobalSearchDialog.tsx",
+    "src/stores/collectionStore.ts",
+    "src/stores/centralSkillsStore.listSlice.ts",
+    "src/i18n/locales/en.json",
+    "src/i18n/locales/zh.json"
+  ],
+  "notes": "",
+  "meta": {
+    "audit_severity": "high",
+    "estimated_effort": "M"
+  }
+}

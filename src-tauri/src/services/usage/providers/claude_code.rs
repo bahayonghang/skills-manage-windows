@@ -117,7 +117,7 @@ impl UsageProvider for ClaudeCodeProvider {
         SOURCE
     }
 
-    async fn available(&self, scope: &Scope) -> bool {
+    async fn available(&self, scope: &Scope) -> Result<bool, UsageError> {
         let backend = scope.fs_backend();
         let home = Self::claude_home(scope);
         backend
@@ -212,7 +212,7 @@ async fn collect_remote(scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
     let history_path = scope.join_path(&claude_home, &["history.jsonl"]);
     let projects_dir = scope.join_path(&claude_home, &["projects"]);
 
-    if !backend.exists(&history_path).await {
+    if !backend.exists(&history_path).await? {
         return Ok(vec![]);
     }
 
@@ -229,7 +229,7 @@ async fn collect_remote(scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
     );
 
     // Source 2: projects/**/*.jsonl
-    if backend.exists(&projects_dir).await {
+    if backend.exists(&projects_dir).await? {
         let paths = backend.walk_jsonl(&projects_dir).await?;
         let content_by_path = backend.read_many_to_strings(&paths).await?;
         for path in paths {
@@ -485,14 +485,10 @@ mod tests {
         let dir = TempDir::new().unwrap();
         std::env::set_var("CLAUDE_CONFIG_DIR", dir.path());
         // 没有 history.jsonl
-        assert!(!tokio_test_block_on(
-            ClaudeCodeProvider.available(&Scope::Local)
-        ));
+        assert!(!tokio_test_block_on(ClaudeCodeProvider.available(&Scope::Local)).unwrap());
         // 创建后应当 true
         std::fs::write(dir.path().join("history.jsonl"), "").unwrap();
-        assert!(tokio_test_block_on(
-            ClaudeCodeProvider.available(&Scope::Local)
-        ));
+        assert!(tokio_test_block_on(ClaudeCodeProvider.available(&Scope::Local)).unwrap());
         std::env::remove_var("CLAUDE_CONFIG_DIR");
     }
 
@@ -671,5 +667,34 @@ mod tests {
         assert_eq!(cache.vanished_paths().len(), 1);
 
         std::env::remove_var("CLAUDE_CONFIG_DIR");
+    }
+
+    #[test]
+    fn remote_available_distinguishes_missing_from_transport_and_permission() {
+        use crate::services::usage::fs_backend::test_fixtures;
+        use crate::targets::RunnerPhase;
+        use crate::test_support::FakeRunner;
+        use std::sync::Arc;
+
+        let runner = Arc::new(FakeRunner::new());
+        let scope = test_fixtures::ssh_scope(runner.clone(), "ssh-prod");
+
+        runner.push_output(1, "", "");
+        assert!(!tokio_test_block_on(ClaudeCodeProvider.available(&scope)).unwrap());
+
+        runner.push_output(0, "", "");
+        assert!(tokio_test_block_on(ClaudeCodeProvider.available(&scope)).unwrap());
+
+        runner.push_error(RunnerPhase::Start, "connection refused");
+        let transport = tokio_test_block_on(ClaudeCodeProvider.available(&scope)).unwrap_err();
+        assert!(transport.is_target_fatal());
+        assert_eq!(transport.stable_code(), "usage.remote_transport");
+        assert!(transport.retryable());
+
+        runner.push_output(2, "", "Permission denied: /home/alice/.ssh/id_ed25519");
+        let permission = tokio_test_block_on(ClaudeCodeProvider.available(&scope)).unwrap_err();
+        assert_eq!(permission.stable_code(), "usage.remote_permission");
+        assert!(!permission.to_string().contains("/home/alice"));
+        assert!(!permission.to_string().contains("id_ed25519"));
     }
 }

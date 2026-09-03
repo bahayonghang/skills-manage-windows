@@ -1,0 +1,10 @@
+{"file":".trellis/spec/backend/transactional-mutations.md","reason":"Confirm relocate, centralize, and create/update tests prove all-or-nothing results."}
+{"file":".trellis/spec/backend/settings-domain-boundary.md","reason":"Confirm target ID quarantine and credential/settings convergence."}
+{"file":".trellis/spec/backend/test-support.md","reason":"Confirm fixtures stay in harness; no expanded pub(crate) for tests."}
+{"file":".trellis/spec/frontend/renderer-authority-boundary.md","reason":"Confirm PAT sentinel never enters store, error, or diagnostics."}
+{"file":".trellis/spec/frontend/async-error-feedback.md","reason":"Confirm refresh failure is not reported as mutation-never-happened."}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Confirm focused filters are nonzero and new tests sit in owner directories."}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Confirm just ci, sizecheck, and no coverage-tooling additions."}
+{"file":".trellis/tasks/08-31-risk-driven-test-coverage-r2/research/backend-risk-coverage-r2.md","reason":"Check that round-1 and dense surfaces were not retested for coverage padding."}
+{"file":".trellis/tasks/08-31-risk-driven-test-coverage-r2/research/frontend-risk-coverage-r2.md","reason":"Check metadata/PAT/install/release/update-center gaps were covered without adapter padding."}
+{"file":".trellis/tasks/08-31-risk-driven-test-coverage-r2/prd.md","reason":"Acceptance criteria and explicit out-of-scope redaction/concurrency deferrals."}

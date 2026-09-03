@@ -1,0 +1,29 @@
+{
+  "id": "dependency-audit-observability",
+  "name": "dependency-audit-observability",
+  "title": "依赖审计非阻断告警可见性",
+  "description": "保留现有阻断阈值，同时呈现 npm lower 与 Cargo warning 信号。",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-09-02",
+  "completedAt": "2026-09-03",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "09-02-engineering-audit-remediation",
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "audit_severity": "medium",
+    "estimated_effort": "S"
+  }
+}

@@ -133,7 +133,7 @@ pub async fn apply_central_store_location_change_impl(
 
     let source_root_for_copy = source_root.clone();
     let target_root_for_copy = target_root.clone();
-    let (copied, overwritten) = run_blocking_fs_with(
+    let (copied, overwritten, created_skill_dirs) = run_blocking_fs_with(
         "central store relocation copy",
         move || {
             std::fs::create_dir_all(&target_root_for_copy).map_err(|e| {
@@ -148,6 +148,7 @@ pub async fn apply_central_store_location_change_impl(
 
             let mut copied = 0usize;
             let mut overwritten = 0usize;
+            let mut created_skill_dirs = Vec::new();
             if source_root_for_copy.exists() {
                 for entry in std::fs::read_dir(&source_root_for_copy).map_err(|e| {
                     CentralStoreLocationError::io(
@@ -176,16 +177,20 @@ pub async fn apply_central_store_location_change_impl(
                         overwritten += 1;
                     } else {
                         copied += 1;
+                        created_skill_dirs.push(target_skill_dir);
                     }
                 }
             }
-            Ok((copied, overwritten))
+            Ok((copied, overwritten, created_skill_dirs))
         },
         CentralStoreLocationError::task_join,
     )
     .await?;
 
-    update_central_root(pool, &source_root, &target_root).await?;
+    if let Err(error) = update_central_root(pool, &source_root, &target_root).await {
+        compensate_created_skill_dirs(created_skill_dirs).await?;
+        return Err(error);
+    }
     let symlink_failures =
         rebuild_symlinks_pointing_to_old_root(pool, &source_root, &target_root).await?;
     scan_all_skills_impl(pool).await?;
@@ -280,6 +285,39 @@ fn skill_dir_ids(root: &Path) -> Result<HashSet<String>, CentralStoreLocationErr
     Ok(ids)
 }
 
+fn sql_like_child_prefix(root: &str) -> String {
+    let escaped = root
+        .replace('#', "##")
+        .replace('%', "#%")
+        .replace('_', "#_");
+    format!("{escaped}/%")
+}
+
+fn stored_path_prefix_len(root: &str) -> i64 {
+    i64::try_from(root.len() + 1).expect("stored path length fits i64")
+}
+
+async fn compensate_created_skill_dirs(
+    created_skill_dirs: Vec<PathBuf>,
+) -> Result<(), CentralStoreLocationError> {
+    if created_skill_dirs.is_empty() {
+        return Ok(());
+    }
+    run_blocking_fs_with(
+        "central store relocation compensate created dirs",
+        move || {
+            for dir in created_skill_dirs {
+                if std::fs::symlink_metadata(&dir).is_ok() {
+                    remove_existing_path(&dir)?;
+                }
+            }
+            Ok(())
+        },
+        CentralStoreLocationError::task_join,
+    )
+    .await
+}
+
 async fn update_central_root(
     pool: &DbPool,
     old_root: &Path,
@@ -287,47 +325,76 @@ async fn update_central_root(
 ) -> Result<(), CentralStoreLocationError> {
     let old_root = stored_path_string(old_root);
     let new_root = stored_path_string(new_root);
+    let like_child = sql_like_child_prefix(&old_root);
+    let prefix_len = stored_path_prefix_len(&old_root);
+
+    let mut transaction = pool.begin().await?;
     sqlx::query("UPDATE agents SET global_skills_dir = ? WHERE id = ?")
         .bind(&new_root)
         .bind(CENTRAL_AGENT_ID)
-        .execute(pool)
+        .execute(&mut *transaction)
         .await?;
     sqlx::query("UPDATE scan_directories SET path = ? WHERE path = ? AND is_builtin = 1")
         .bind(&new_root)
         .bind(&old_root)
-        .execute(pool)
+        .execute(&mut *transaction)
         .await?;
     sqlx::query(
         "UPDATE skills
-         SET file_path = REPLACE(file_path, ?, ?),
+         SET file_path = CASE
+               WHEN file_path = ? THEN ?
+               WHEN file_path LIKE ? ESCAPE '#' THEN ? || substr(file_path, ?)
+               ELSE file_path
+             END,
              canonical_path = CASE
                WHEN canonical_path IS NULL THEN canonical_path
-               ELSE REPLACE(canonical_path, ?, ?)
+               WHEN canonical_path = ? THEN ?
+               WHEN canonical_path LIKE ? ESCAPE '#' THEN ? || substr(canonical_path, ?)
+               ELSE canonical_path
              END
          WHERE is_central = 1",
     )
     .bind(&old_root)
     .bind(&new_root)
+    .bind(&like_child)
+    .bind(&new_root)
+    .bind(prefix_len)
     .bind(&old_root)
     .bind(&new_root)
-    .execute(pool)
+    .bind(&like_child)
+    .bind(&new_root)
+    .bind(prefix_len)
+    .execute(&mut *transaction)
     .await?;
     sqlx::query(
         "UPDATE skill_installations
-         SET installed_path = REPLACE(installed_path, ?, ?),
+         SET installed_path = CASE
+               WHEN installed_path = ? THEN ?
+               WHEN installed_path LIKE ? ESCAPE '#' THEN ? || substr(installed_path, ?)
+               ELSE installed_path
+             END,
              symlink_target = CASE
                WHEN symlink_target IS NULL THEN symlink_target
-               ELSE REPLACE(symlink_target, ?, ?)
+               WHEN symlink_target = ? THEN ?
+               WHEN symlink_target LIKE ? ESCAPE '#' THEN ? || substr(symlink_target, ?)
+               ELSE symlink_target
              END
          WHERE agent_id = ? AND link_type = 'native'",
     )
     .bind(&old_root)
     .bind(&new_root)
+    .bind(&like_child)
+    .bind(&new_root)
+    .bind(prefix_len)
     .bind(&old_root)
     .bind(&new_root)
+    .bind(&like_child)
+    .bind(&new_root)
+    .bind(prefix_len)
     .bind(CENTRAL_AGENT_ID)
-    .execute(pool)
+    .execute(&mut *transaction)
     .await?;
+    transaction.commit().await?;
     Ok(())
 }
 

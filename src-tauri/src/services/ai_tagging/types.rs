@@ -12,6 +12,7 @@ pub(crate) const DEFAULT_AI_TAGGING_INTERVAL_MS: u64 = 4_000;
 pub(crate) const DEFAULT_AI_TAG_STOP_ON_RATE_LIMIT: bool = true;
 pub(crate) const AI_TAG_AUTO_APPLY_CONFIDENCE: f64 = 0.7;
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillTagSuggestion {
     pub skill_id: String,
@@ -20,6 +21,7 @@ pub struct SkillTagSuggestion {
     pub reason: String,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillTagProposal {
     pub skill_id: String,
@@ -36,6 +38,7 @@ pub(crate) struct ResolvedAiSuggestions {
     pub(crate) proposals: Vec<SkillTagProposal>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillTagSuggestionResult {
     pub skill_id: String,
@@ -44,6 +47,7 @@ pub struct SkillTagSuggestionResult {
     pub proposals: Vec<SkillTagProposal>,
     pub succeeded: bool,
     pub error: Option<String>,
+    #[cfg_attr(feature = "ipc-codegen", specta(type = u32))]
     pub low_confidence_count: usize,
 }
 

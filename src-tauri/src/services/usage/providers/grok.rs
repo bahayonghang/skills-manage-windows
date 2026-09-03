@@ -105,7 +105,7 @@ impl UsageProvider for GrokProvider {
         SOURCE
     }
 
-    async fn available(&self, scope: &Scope) -> bool {
+    async fn available(&self, scope: &Scope) -> Result<bool, UsageError> {
         let backend = scope.fs_backend();
         backend.exists(&Self::sessions_dir(scope)).await
     }
@@ -211,7 +211,7 @@ fn scan_local(
 async fn collect_remote(scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
     let backend = scope.fs_backend();
     let sessions_dir = GrokProvider::sessions_dir(scope);
-    if !backend.exists(&sessions_dir).await {
+    if !backend.exists(&sessions_dir).await? {
         return Ok(vec![]);
     }
 
@@ -233,10 +233,7 @@ async fn collect_remote(scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
             .unwrap_or(dir_name.clone());
         let proj_path = scope.join_path(&sessions_dir, &[&dir_name]);
 
-        let session_dirs = match backend.list_entries(&proj_path).await {
-            Ok(d) => d,
-            Err(_) => continue,
-        };
+        let session_dirs = backend.list_entries(&proj_path).await?;
 
         for sess in session_dirs {
             if !sess.is_dir {

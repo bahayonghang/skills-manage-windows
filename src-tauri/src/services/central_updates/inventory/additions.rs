@@ -5,6 +5,8 @@ use std::sync::Arc;
 
 use tauri::AppHandle;
 
+use crate::db::repos::pending_additions_repo;
+use crate::db::repos::repositories_repo;
 use crate::db::{self, DbPool};
 use crate::services::github_import;
 use crate::targets::ActiveTarget;
@@ -20,10 +22,14 @@ pub(super) async fn load_repository_for_import_addition(
     pool: &DbPool,
     repository_id: &str,
 ) -> Result<Option<db::SkillRepository>, CentralUpdatesError> {
-    match db::get_skill_repository_by_id(pool, repository_id).await? {
+    match repositories_repo::get_skill_repository_by_id(pool, repository_id).await? {
         Some(repository) => Ok(Some(repository)),
         None => {
-            db::clear_pending_additions_for_repos(pool, &[repository_id.to_string()]).await?;
+            pending_additions_repo::clear_pending_additions_for_repos(
+                pool,
+                &[repository_id.to_string()],
+            )
+            .await?;
             Ok(None)
         }
     }
@@ -57,7 +63,8 @@ pub(super) async fn load_pending_addition_snapshot_identity(
     selections: &[github_import::GitHubSkillImportSelection],
 ) -> Result<PendingAdditionSnapshotIdentity, CentralUpdatesError> {
     let repository_ids = [repository_id.to_string()];
-    let pending = db::list_pending_additions_for_repos(pool, &repository_ids).await?;
+    let pending =
+        pending_additions_repo::list_pending_additions_for_repos(pool, &repository_ids).await?;
     let pending_by_source_path = pending
         .into_iter()
         .map(|item| (item.source_path.clone(), item))

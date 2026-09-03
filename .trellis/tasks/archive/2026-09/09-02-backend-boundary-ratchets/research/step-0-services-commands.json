@@ -1,0 +1,35 @@
+{
+  "count": 6,
+  "hits": [
+    {
+      "file": "src-tauri/src/services/ai_provider/claude.rs",
+      "line": 131,
+      "text": "crate::commands"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/claude.rs",
+      "line": 251,
+      "text": "crate::commands"
+    },
+    {
+      "file": "src-tauri/src/services/ai_provider/stream.rs",
+      "line": 223,
+      "text": "crate::commands"
+    },
+    {
+      "file": "src-tauri/src/services/ai_tagging/mod.rs",
+      "line": 233,
+      "text": "crate::commands"
+    },
+    {
+      "file": "src-tauri/src/services/github_import/pat.rs",
+      "line": 66,
+      "text": "crate::commands"
+    },
+    {
+      "file": "src-tauri/src/services/github_import/remote.rs",
+      "line": 87,
+      "text": "crate::commands"
+    }
+  ]
+}

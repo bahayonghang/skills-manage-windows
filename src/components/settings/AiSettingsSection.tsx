@@ -8,6 +8,7 @@ import {
   ServerCog,
   SlidersHorizontal,
 } from "lucide-react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -25,13 +26,13 @@ import {
   type RegionId,
 } from "@/data/aiProviders";
 import { formatBackendError } from "@/lib/backendError";
-import type { TFunction } from "i18next";
+import { AI_BROWSER_FIXTURE_TEST_CODE } from "@/stores/settingsStore.aiSlice";
 import type {
   AiConnectionTestResult,
   AiSaveStatus,
   AiSettings,
 } from "@/stores/settingsStore";
-import type { AiApiKeyState, SecretStorageState } from "@/types";
+import type { AiApiKeyState, SecretStorageState } from "@/types/credentials";
 
 interface AiSettingsSectionProps {
   aiSaveError: string | null;
@@ -572,6 +573,23 @@ interface AiTestResultPanelProps {
   ) => void;
 }
 
+function resolveAiTestMessage(
+  result: AiConnectionTestResult,
+  providerLabel: string,
+  t: TFunction,
+): string {
+  if (result.ok) {
+    return t("settings.aiTestSuccess", { provider: providerLabel });
+  }
+  if (result.code === AI_BROWSER_FIXTURE_TEST_CODE) {
+    return t("settings.aiTestBrowserUnavailable");
+  }
+  if (result.code) {
+    return formatBackendError(`${result.code}:${result.msg}`, t);
+  }
+  return result.msg;
+}
+
 function AiTestResultPanel({
   aiRegion,
   aiTestResult,
@@ -582,11 +600,7 @@ function AiTestResultPanel({
   onSetShowAiTestDetails,
 }: AiTestResultPanelProps) {
   const { t } = useTranslation();
-  const message = aiTestResult.ok
-    ? t("settings.aiTestSuccess", { provider: providerLabel })
-    : aiTestResult.code
-      ? formatBackendError(`${aiTestResult.code}:${aiTestResult.msg}`, t)
-      : aiTestResult.msg;
+  const message = resolveAiTestMessage(aiTestResult, providerLabel, t);
 
   return (
     <div

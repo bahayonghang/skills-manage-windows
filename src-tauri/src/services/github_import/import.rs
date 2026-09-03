@@ -130,6 +130,7 @@ pub(super) async fn import_github_repo_skills_from_snapshot(
     for op in &staging_ops {
         let summary = import_single_staged_skill(
             pool,
+            &crate::services::central_updates::CentralFs::Local,
             repo,
             snapshot,
             central_root,
@@ -137,6 +138,7 @@ pub(super) async fn import_github_repo_skills_from_snapshot(
             provenance,
             &mut progress_state,
             app,
+            true,
         )
         .await?;
         imported_skills.push(summary);
@@ -277,11 +279,6 @@ pub(super) struct StagedImport {
     pub(super) final_skill_id: String,
     pub(super) resolution: DuplicateResolution,
     pub(super) source_files: Vec<SnapshotSourceFile>,
-}
-
-#[derive(Debug)]
-pub(super) struct ExistingSkillBackup {
-    pub(super) path: PathBuf,
 }
 
 pub(super) async fn plan_import_staging(
@@ -464,6 +461,7 @@ pub(crate) async fn import_github_repo_skills_from_snapshot_partially(
     for op in &runnable_ops {
         match import_single_staged_skill(
             pool,
+            &crate::services::central_updates::CentralFs::Local,
             repo,
             snapshot,
             central_root,
@@ -471,6 +469,7 @@ pub(crate) async fn import_github_repo_skills_from_snapshot_partially(
             None,
             &mut progress_state,
             app,
+            true,
         )
         .await
         {
@@ -506,6 +505,7 @@ pub(crate) async fn import_github_repo_skills_from_snapshot_partially(
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn import_single_staged_skill(
     pool: &DbPool,
+    fs: &crate::services::central_updates::CentralFs,
     repo: &GitHubRepoRef,
     snapshot: &GitHubRepoSnapshot,
     central_root: &Path,
@@ -513,85 +513,81 @@ pub(super) async fn import_single_staged_skill(
     provenance: Option<&ImportProvenance>,
     progress_state: &mut GitHubImportProgressState,
     app: Option<&AppHandle>,
+    emit_per_file_progress: bool,
 ) -> Result<ImportedGitHubSkillSummary, GithubImportError> {
-    let target_dir = central_root.join(&op.final_skill_id);
-    let staging_path = create_unique_work_dir(central_root, ".skillport-import-")?;
+    let target_dir = match fs {
+        crate::services::central_updates::CentralFs::Local => central_root.join(&op.final_skill_id),
+        crate::services::central_updates::CentralFs::Remote(_) => PathBuf::from(remote_join(
+            &central_root.to_string_lossy().replace('\\', "/"),
+            &op.final_skill_id,
+        )),
+    };
+    let frontmatter = frontmatter_from_snapshot(snapshot, &op.candidate.source_path)?;
+    for file in &op.source_files {
+        if !is_safe_repo_relative_path(&file.relative_path) {
+            return Err(GithubImportError::RepoContainsUnsupportedPath(
+                file.repo_path.clone(),
+            ));
+        }
+        if emit_per_file_progress {
+            progress_state.completed_files += 1;
+            progress_state.completed_bytes += file.byte_len as u64;
+            emit_github_import_progress(
+                app,
+                GitHubImportProgressPayload {
+                    phase: GitHubImportProgressPhase::Writing,
+                    current_skill: Some(op.candidate.source_path.clone()),
+                    current_path: Some(file.relative_path.clone()),
+                    completed_files: progress_state.completed_files,
+                    total_files: progress_state.total_files,
+                    completed_bytes: progress_state.completed_bytes,
+                    total_bytes: progress_state.total_bytes,
+                },
+            );
+        }
+    }
+    if !emit_per_file_progress {
+        progress_state.completed_files += 1;
+        emit_github_import_progress(
+            app,
+            GitHubImportProgressPayload {
+                phase: GitHubImportProgressPhase::Writing,
+                current_skill: Some(op.candidate.source_path.clone()),
+                current_path: Some("SKILL.md".to_string()),
+                completed_files: progress_state.completed_files,
+                total_files: progress_state.total_files,
+                completed_bytes: progress_state.completed_bytes,
+                total_bytes: progress_state.total_bytes,
+            },
+        );
+    }
 
-    if let Err(error) = write_snapshot_source_to_target(
-        snapshot,
-        &op.source_files,
-        &staging_path,
-        &op.candidate.source_path,
-        progress_state,
-        app,
-    )
-    .await
+    if op.resolution != DuplicateResolution::Overwrite
+        && matches!(fs, crate::services::central_updates::CentralFs::Local)
+        && target_dir.exists()
     {
-        discard_staging_dir(&staging_path).await;
-        return Err(error);
-    }
-
-    let skill_md_path = staging_path.join("SKILL.md");
-    let raw = match std::fs::read_to_string(&skill_md_path) {
-        Ok(raw) => raw,
-        Err(e) => {
-            discard_staging_dir(&staging_path).await;
-            return Err(GithubImportError::io("Failed to read imported SKILL.md", e));
-        }
-    };
-    let frontmatter = match parse_frontmatter(&raw) {
-        Some(frontmatter) => frontmatter,
-        None => {
-            discard_staging_dir(&staging_path).await;
-            return Err(GithubImportError::ImportedSkillMissingFrontmatter(
-                op.candidate.source_path.clone(),
-            ));
-        }
-    };
-
-    let _mutation_guard = crate::services::central_mutation::acquire_central_mutation_guard(
-        "GitHub skill import",
-        crate::services::central_mutation::DEFAULT_CENTRAL_MUTATION_TIMEOUT,
-    )
-    .await?;
-
-    let mut existing_backup = None;
-    if target_dir.exists() {
-        if op.resolution == DuplicateResolution::Overwrite {
-            existing_backup = Some(match backup_existing_skill_dir(central_root, &target_dir) {
-                Ok(backup) => backup,
-                Err(error) => {
-                    discard_staging_dir(&staging_path).await;
-                    return Err(error);
-                }
-            });
-        } else {
-            discard_staging_dir(&staging_path).await;
-            return Err(GithubImportError::TargetDirExists(
-                target_dir.display().to_string(),
-            ));
-        }
-    }
-
-    if let Err(error) = std::fs::rename(&staging_path, &target_dir) {
-        discard_staging_dir(&staging_path).await;
-        restore_or_cleanup_target_dir(&target_dir, existing_backup).await;
-        return Err(GithubImportError::io(
-            format!(
-                "Failed to finalize import target directory '{}'",
-                target_dir.display()
-            ),
-            error,
+        return Err(GithubImportError::TargetDirExists(
+            target_dir.display().to_string(),
         ));
     }
 
+    let existing = db::get_skill_by_id(pool, &op.final_skill_id).await?;
+    let uid = existing
+        .as_ref()
+        .filter(|skill| skill.is_central)
+        .map(|skill| skill.uid.clone())
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    let (file_path, canonical_path) = import_skill_persistence_paths(fs, &target_dir);
+    let mut candidate = op.candidate.clone();
+    candidate.skill_name = frontmatter.name.clone();
+    candidate.description = frontmatter.description.clone();
     let db_skill = Skill {
         id: op.final_skill_id.clone(),
-        uid: uuid::Uuid::new_v4().to_string(),
+        uid,
         name: frontmatter.name.clone(),
         description: frontmatter.description.clone(),
-        file_path: target_dir.join("SKILL.md").to_string_lossy().into_owned(),
-        canonical_path: Some(target_dir.to_string_lossy().into_owned()),
+        file_path,
+        canonical_path: Some(canonical_path),
         is_central: true,
         source: Some(format!("github:{}/{}", repo.owner, repo.repo)),
         content: None,
@@ -601,24 +597,21 @@ pub(super) async fn import_single_staged_skill(
     };
     let (resolved_commit_sha, content_digest) =
         provenance_for(provenance, &op.candidate.source_path);
-    if let Err(error) = db::upsert_skill_with_github_repository(
+    crate::services::central_updates::journaled_central_content_upsert_with_fs(
         pool,
-        &db_skill,
-        &repo.owner,
-        &repo.repo,
-        &repo.branch,
-        &repo.normalized_url,
-        &op.candidate.source_path,
-        resolved_commit_sha.as_deref(),
-        content_digest.as_deref(),
+        fs,
+        crate::services::central_updates::JournaledCentralContentUpsert {
+            skill: db_skill,
+            repo: repo.clone(),
+            candidate,
+            snapshot,
+            target_dir: target_dir.clone(),
+            resolved_commit_sha,
+            content_digest,
+        },
     )
     .await
-    {
-        restore_or_cleanup_target_dir(&target_dir, existing_backup).await;
-        return Err(GithubImportError::Db(error));
-    }
-
-    drop_existing_backup(existing_backup).await;
+    .map_err(map_journaled_upsert_error)?;
 
     Ok(ImportedGitHubSkillSummary {
         source_path: op.candidate.source_path.clone(),
@@ -630,86 +623,61 @@ pub(super) async fn import_single_staged_skill(
     })
 }
 
-pub(super) fn backup_existing_skill_dir(
-    central_root: &Path,
+fn import_skill_persistence_paths(
+    fs: &crate::services::central_updates::CentralFs,
     target_dir: &Path,
-) -> Result<ExistingSkillBackup, GithubImportError> {
-    let backup_path = central_root.join(format!(".skillport-backup-{}", Uuid::new_v4()));
-    std::fs::rename(target_dir, &backup_path).map_err(|e| {
-        GithubImportError::io(
-            format!(
-                "Failed to back up existing canonical skill '{}'",
-                target_dir.display()
-            ),
-            e,
-        )
+) -> (String, String) {
+    match fs {
+        crate::services::central_updates::CentralFs::Local => (
+            target_dir.join("SKILL.md").to_string_lossy().into_owned(),
+            target_dir.to_string_lossy().into_owned(),
+        ),
+        crate::services::central_updates::CentralFs::Remote(_) => {
+            let canonical_path = target_dir.to_string_lossy().replace('\\', "/");
+            (
+                crate::targets::remote_join(&canonical_path, "SKILL.md"),
+                canonical_path,
+            )
+        }
+    }
+}
+
+fn frontmatter_from_snapshot(
+    snapshot: &GitHubRepoSnapshot,
+    source_path: &str,
+) -> Result<SkillFrontmatter, GithubImportError> {
+    let bytes = snapshot
+        .files
+        .iter()
+        .find_map(|(repo_path, bytes)| {
+            let relative = repo_file_relative_to_source(repo_path, source_path)?;
+            relative
+                .eq_ignore_ascii_case("SKILL.md")
+                .then_some(bytes.as_slice())
+        })
+        .ok_or_else(|| {
+            GithubImportError::ImportedSkillMissingFrontmatter(source_path.to_string())
+        })?;
+    let raw = std::str::from_utf8(bytes).map_err(|error| {
+        GithubImportError::Parse(format!("Skill metadata is not valid UTF-8: {error}"))
     })?;
-    Ok(ExistingSkillBackup { path: backup_path })
+    parse_frontmatter(raw)
+        .ok_or_else(|| GithubImportError::ImportedSkillMissingFrontmatter(source_path.to_string()))
 }
 
-/// Best-effort recursive removal of an import staging directory, executed on
-/// the blocking-thread pool. Failures are ignored, matching the historical
-/// `let _ = std::fs::remove_dir_all(...)` cleanup behaviour.
-async fn discard_staging_dir(staging_path: &Path) {
-    let staging_path = staging_path.to_path_buf();
-    let _ = crate::fs_util::run_blocking_fs_with(
-        "import staging cleanup",
-        move || {
-            let _ = std::fs::remove_dir_all(&staging_path);
-            Ok(())
-        },
-        GithubImportError::task_join,
-    )
-    .await;
-}
-
-pub(super) async fn restore_or_cleanup_target_dir(
-    target_dir: &Path,
-    backup: Option<ExistingSkillBackup>,
-) {
-    let target_dir = target_dir.to_path_buf();
-    let _ = crate::fs_util::run_blocking_fs_with(
-        "import target restore",
-        move || {
-            if target_dir.exists() {
-                let _ = std::fs::remove_dir_all(&target_dir);
-            }
-            if let Some(backup) = backup {
-                let _ = std::fs::rename(&backup.path, &target_dir);
-            }
-            Ok(())
-        },
-        GithubImportError::task_join,
-    )
-    .await;
-}
-
-pub(super) async fn drop_existing_backup(backup: Option<ExistingSkillBackup>) {
-    let _ = crate::fs_util::run_blocking_fs_with(
-        "import backup cleanup",
-        move || {
-            if let Some(backup) = backup {
-                let _ = std::fs::remove_dir_all(&backup.path);
-            }
-            Ok(())
-        },
-        GithubImportError::task_join,
-    )
-    .await;
-}
-
-pub(super) fn create_unique_work_dir(
-    parent: &Path,
-    prefix: &str,
-) -> Result<PathBuf, GithubImportError> {
-    let path = parent.join(format!("{prefix}{}", Uuid::new_v4()));
-    std::fs::create_dir_all(&path).map_err(|e| {
-        GithubImportError::io(
-            format!("Failed to create staging directory '{}'", path.display()),
-            e,
-        )
-    })?;
-    Ok(path)
+fn map_journaled_upsert_error(
+    error: crate::services::central_updates::CentralUpdatesError,
+) -> GithubImportError {
+    use crate::services::central_updates::CentralUpdatesError;
+    match error {
+        CentralUpdatesError::GithubImport(inner) => inner,
+        CentralUpdatesError::Db(error) => GithubImportError::Db(error),
+        CentralUpdatesError::Remote(message) => GithubImportError::Remote(message),
+        CentralUpdatesError::FirstUpsertTargetExists(path) => {
+            GithubImportError::TargetDirExists(path)
+        }
+        other => GithubImportError::CentralApply(Box::new(other)),
+    }
 }
 
 pub(crate) async fn central_skills_root(pool: &DbPool) -> Result<PathBuf, GithubImportError> {

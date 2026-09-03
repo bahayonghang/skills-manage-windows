@@ -3,7 +3,11 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use crate::db::{self, Agent, DbPool};
+use crate::db::repos::agents_repo;
+use crate::db::repos::installations_repo;
+use crate::db::repos::observations_repo;
+use crate::db::repos::skills_repo;
+use crate::db::{Agent, DbPool};
 use crate::services::central_mutation::{
     acquire_target_mutation_guard, DEFAULT_CENTRAL_MUTATION_TIMEOUT,
 };
@@ -269,7 +273,7 @@ async fn remove_deleted_platform_copy_local_item(
     path: &str,
 ) -> Result<(), CentralUpdatesError> {
     ensure_central_still_missing(pool, &removal.skill_id).await?;
-    let agent = db::get_agent_by_id(pool, &removal.agent_id)
+    let agent = agents_repo::get_agent_by_id(pool, &removal.agent_id)
         .await?
         .ok_or_else(|| CentralUpdatesError::AgentNotFound(removal.agent_id.clone()))?;
     if removal.agent_id == "central" {
@@ -284,7 +288,7 @@ async fn plan_remote_leftover_deletes(
     allowed_agent_ids: Option<&HashSet<String>>,
     result: &mut SkillUpdateApplyResult,
 ) -> RemoteLeftoverPlan {
-    let agents = match db::get_all_agents(pool).await {
+    let agents = match agents_repo::get_all_agents(pool).await {
         Ok(agents) => agents
             .into_iter()
             .map(|agent| (agent.id.clone(), agent))
@@ -512,7 +516,7 @@ async fn cleanup_remote_leftover_path(
         }
         payload_pairs.push((request.skill_id.clone(), request.agent_id.clone()));
     }
-    db::delete_leftover_installations_and_observations_for_paths(
+    installations_repo::delete_leftover_installations_and_observations_for_paths(
         pool,
         &path_aliases,
         &payload_pairs,
@@ -688,7 +692,7 @@ async fn ensure_central_still_missing(
     pool: &DbPool,
     skill_id: &str,
 ) -> Result<(), CentralUpdatesError> {
-    if db::get_central_skills_by_ids(pool, &[skill_id.to_string()])
+    if skills_repo::get_central_skills_by_ids(pool, &[skill_id.to_string()])
         .await?
         .is_empty()
     {
@@ -711,7 +715,8 @@ async fn remove_deleted_platform_copy_local(
     ensure_local_child_path(root, target, &removal.agent_id)?;
 
     if removal.agent_id == "claude-code" {
-        let observations = db::get_agent_skill_observations(pool, &removal.agent_id).await?;
+        let observations =
+            observations_repo::get_agent_skill_observations(pool, &removal.agent_id).await?;
         if let Some(obs) = observations.iter().find(|obs| {
             obs.skill_id == removal.skill_id && paths_equivalent_str(&obs.dir_path, path)
         }) {

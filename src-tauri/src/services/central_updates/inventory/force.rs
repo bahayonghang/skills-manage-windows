@@ -2,6 +2,10 @@ use std::collections::HashMap;
 
 use tauri::AppHandle;
 
+use crate::db::repos::repositories_repo;
+use crate::db::repos::skills_repo;
+use crate::db::repos::update_inventory_repo;
+use crate::db::repos::update_states_repo;
 use crate::db::{self, DbPool};
 use crate::services::central_skills::{
     self, BatchDeleteCentralSkillRequest, BatchDeleteCentralSkillResult,
@@ -37,7 +41,7 @@ pub(crate) async fn force_update_central_skills_impl(
     if skill_ids.is_empty() {
         return Err(CentralUpdatesError::NoForceUpdateSelection);
     }
-    let skills = db::get_central_skills_by_ids(pool, &skill_ids).await?;
+    let skills = skills_repo::get_central_skills_by_ids(pool, &skill_ids).await?;
     let prepared = prepare_skill_updates(pool, fs, skills, auth_token, false).await?;
     let snapshot_repos = prepared
         .iter()
@@ -87,6 +91,7 @@ pub(crate) async fn force_update_central_skills_impl(
             skill: skill.clone(),
             remote: remote.clone(),
             refresh_copies: request.refresh_copy_installations,
+            first_upsert: false,
         })
         .collect();
     for ((skill, _, before), outcome) in pending_updates
@@ -96,7 +101,7 @@ pub(crate) async fn force_update_central_skills_impl(
         debug_assert_eq!(skill.id, outcome.skill_id);
         match outcome.result {
             Ok(state) => {
-                db::upsert_skill_update_state(pool, &state).await?;
+                update_states_repo::upsert_skill_update_state(pool, &state).await?;
                 result.overwritten.push(ForceSkillUpdateSuccess {
                     skill_id: skill.id,
                     repository_id: repository_id_for_state_from_db(pool, &before).await?,
@@ -120,7 +125,8 @@ pub(crate) async fn force_update_central_skills_impl(
         .iter()
         .map(|item| item.skill_id.clone())
         .collect::<Vec<_>>();
-    db::delete_skill_update_inventory_entries_for_skills(pool, &succeeded).await?;
+    update_inventory_repo::delete_skill_update_inventory_entries_for_skills(pool, &succeeded)
+        .await?;
     Ok(result)
 }
 
@@ -166,12 +172,14 @@ pub(crate) async fn force_mirror_central_repositories_impl(
 
     let mut skill_ids = Vec::new();
     for repository_id in &repository_ids {
-        skill_ids.extend(db::get_central_skill_ids_by_repository(pool, repository_id).await?);
+        skill_ids.extend(
+            repositories_repo::get_central_skill_ids_by_repository(pool, repository_id).await?,
+        );
     }
     let skills = if skill_ids.is_empty() {
         Vec::new()
     } else {
-        db::get_central_skills_by_ids(pool, &normalize_ids(skill_ids)).await?
+        skills_repo::get_central_skills_by_ids(pool, &normalize_ids(skill_ids)).await?
     };
     let prepared = prepare_skill_updates(pool, fs, skills, auth_token, false).await?;
     let mut pending_overwrites = Vec::new();
@@ -212,6 +220,7 @@ pub(crate) async fn force_mirror_central_repositories_impl(
             skill: skill.clone(),
             remote: remote.clone(),
             refresh_copies: true,
+            first_upsert: false,
         })
         .collect();
     for ((skill, _, before), outcome) in pending_overwrites
@@ -221,7 +230,7 @@ pub(crate) async fn force_mirror_central_repositories_impl(
         debug_assert_eq!(skill.id, outcome.skill_id);
         match outcome.result {
             Ok(state) => {
-                db::upsert_skill_update_state(pool, &state).await?;
+                update_states_repo::upsert_skill_update_state(pool, &state).await?;
                 overwritten.push(ForceSkillUpdateSuccess {
                     skill_id: skill.id,
                     repository_id: repository_id_for_state_from_db(pool, &before).await?,
@@ -278,7 +287,11 @@ pub(crate) async fn force_mirror_central_repositories_impl(
         .collect::<Vec<_>>();
     affected.extend(imported.iter().map(|item| item.imported_skill_id.clone()));
     affected.extend(deleted.succeeded.iter().map(|item| item.skill_id.clone()));
-    db::delete_skill_update_inventory_entries_for_skills(pool, &normalize_ids(affected)).await?;
+    update_inventory_repo::delete_skill_update_inventory_entries_for_skills(
+        pool,
+        &normalize_ids(affected),
+    )
+    .await?;
 
     Ok(ForceRepositoryMirrorResult {
         overwritten,
@@ -294,7 +307,7 @@ async fn repository_id_for_state_from_db(
     pool: &DbPool,
     state: &db::SkillUpdateState,
 ) -> Result<Option<String>, CentralUpdatesError> {
-    let repo_with_stats = db::get_skill_repositories_with_stats(pool).await?;
+    let repo_with_stats = repositories_repo::get_skill_repositories_with_stats(pool).await?;
     let repo_by_id = repo_with_stats
         .iter()
         .map(|r| (r.repository.id.clone(), r.repository.clone()))
@@ -353,7 +366,9 @@ async fn force_import_remote_added(
         })
         .collect::<Vec<_>>();
     for (repository_id, selections) in by_repository {
-        let Some(repository) = db::get_skill_repository_by_id(pool, &repository_id).await? else {
+        let Some(repository) =
+            repositories_repo::get_skill_repository_by_id(pool, &repository_id).await?
+        else {
             continue;
         };
         let Some(repo_url) = repository_import_url(&repository) else {

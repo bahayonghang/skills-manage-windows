@@ -8,7 +8,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::AppHandle;
 
-use crate::db::{self, DbPool, SkillRepository, SkillUpdateState};
+use crate::db::repos::repositories_repo;
+use crate::db::repos::update_states_repo;
+use crate::db::{DbPool, SkillRepository, SkillUpdateState};
 use crate::services::central_skills::{
     self, BatchDeleteCentralSkillRequest, BatchDeleteCentralSkillResult,
 };
@@ -240,7 +242,7 @@ pub(crate) async fn check_central_repository_sync_impl(
             }
         };
 
-        db::upsert_skill_update_state(pool, &state_result).await?;
+        update_states_repo::upsert_skill_update_state(pool, &state_result).await?;
         update_counters_for_state(&mut counters, &state_result);
         emit_update_progress(
             app,
@@ -350,7 +352,9 @@ pub(crate) async fn apply_central_repository_sync_impl(
         if import_selections.is_empty() {
             continue;
         }
-        let Some(repository) = db::get_skill_repository_by_id(pool, &repository_id).await? else {
+        let Some(repository) =
+            repositories_repo::get_skill_repository_by_id(pool, &repository_id).await?
+        else {
             failed_repositories.push(CentralRepositorySyncFailure {
                 repository_id,
                 name: None,
@@ -398,8 +402,12 @@ pub(crate) async fn apply_central_repository_sync_impl(
             Ok(result) => {
                 for imported in &result.imported_skills {
                     let source_path = normalize_repo_path(&imported.source_path)?;
-                    db::delete_skill_repository_sync_skip(pool, &repository_id, &source_path)
-                        .await?;
+                    repositories_repo::delete_skill_repository_sync_skip(
+                        pool,
+                        &repository_id,
+                        &source_path,
+                    )
+                    .await?;
                 }
                 import_results.push(result);
             }
@@ -411,7 +419,7 @@ pub(crate) async fn apply_central_repository_sync_impl(
         }
     }
 
-    let states = db::get_skill_update_states(pool).await?;
+    let states = update_states_repo::get_skill_update_states(pool).await?;
     Ok(CentralRepositorySyncApplyResult {
         kept_skill_ids,
         delete_result,
@@ -548,7 +556,9 @@ async fn load_syncable_github_repositories(
 ) -> Result<Vec<(SkillRepository, GitHubRepoRef)>, CentralUpdatesError> {
     let mut repositories = Vec::new();
     for repository_id in repository_ids {
-        let Some(repository) = db::get_skill_repository_by_id(pool, repository_id).await? else {
+        let Some(repository) =
+            repositories_repo::get_skill_repository_by_id(pool, repository_id).await?
+        else {
             continue;
         };
         let Some(repo) = resolve_github_repo_ref_from_repository(&repository, auth_token).await?
@@ -632,7 +642,9 @@ pub(crate) async fn collect_remote_added_skills(
     snapshots: &super::snapshots::SharedGitHubSnapshots,
     failed_repositories: &mut Vec<CentralRepositorySyncFailure>,
 ) -> Result<CentralRemoteAddedCollection, CentralUpdatesError> {
-    let members = db::get_central_repository_members_by_repositories(pool, repository_ids).await?;
+    let members =
+        repositories_repo::get_central_repository_members_by_repositories(pool, repository_ids)
+            .await?;
     let mut source_paths_by_repo = HashMap::<String, HashSet<String>>::new();
     for member in members {
         let Some(source_path) = member
@@ -649,7 +661,7 @@ pub(crate) async fn collect_remote_added_skills(
             .or_default()
             .insert(source_path);
     }
-    let skips = db::get_skill_repository_sync_skips(pool, repository_ids).await?;
+    let skips = repositories_repo::get_skill_repository_sync_skips(pool, repository_ids).await?;
     let mut skipped_paths_by_repo = HashMap::<String, HashSet<String>>::new();
     for skip in skips {
         let source_path = normalize_repo_path(&skip.source_path)?;
@@ -719,7 +731,7 @@ pub(crate) async fn collect_remote_added_skills(
                 preview,
             };
             if skipped_paths.contains(&source_path) {
-                db::upsert_skill_repository_sync_skip(
+                repositories_repo::upsert_skill_repository_sync_skip(
                     pool,
                     &repository.id,
                     &source_path,

@@ -7,7 +7,8 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::db::{self, DbPool, SkillInstallation};
+use crate::db::repos::installations_repo;
+use crate::db::{DbPool, SkillInstallation};
 
 use super::error::InstallationError;
 use super::fs_util::{dirs_have_same_contents, run_blocking_fs, symlink_points_to};
@@ -34,7 +35,7 @@ pub(crate) async fn record_installation(
         symlink_target,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
-    Ok(db::upsert_skill_installation(pool, &installation).await?)
+    Ok(installations_repo::upsert_skill_installation(pool, &installation).await?)
 }
 
 pub(crate) async fn detect_existing_agent_install(
@@ -44,7 +45,7 @@ pub(crate) async fn detect_existing_agent_install(
     target_path: &Path,
     canonical_dir: &Path,
 ) -> Result<Option<SkippedInstall>, InstallationError> {
-    let installations = db::get_skill_installations(pool, skill_id).await?;
+    let installations = installations_repo::get_skill_installations(pool, skill_id).await?;
 
     if let Some(record) = installations
         .iter()

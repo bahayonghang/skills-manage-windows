@@ -34,6 +34,9 @@ fn join_posix_path_preserves_remote_home_root() {
 
 struct FailingProvider;
 struct ReviewProvider;
+struct EmptyCollectedProvider;
+struct RemoteFatalProvider;
+struct IsolatedSuccessProvider;
 
 #[async_trait::async_trait]
 impl UsageProvider for FailingProvider {
@@ -45,12 +48,12 @@ impl UsageProvider for FailingProvider {
         "Failing Provider"
     }
 
-    async fn available(&self, _scope: &Scope) -> bool {
-        true
+    async fn available(&self, _scope: &Scope) -> Result<bool, UsageError> {
+        Ok(true)
     }
 
     async fn collect(&self, _scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
-        Err(UsageError::Remote("fixture failure".to_string()))
+        Err(UsageError::Parse("fixture failure".to_string()))
     }
 }
 
@@ -64,8 +67,8 @@ impl UsageProvider for ReviewProvider {
         "Review Provider"
     }
 
-    async fn available(&self, _scope: &Scope) -> bool {
-        true
+    async fn available(&self, _scope: &Scope) -> Result<bool, UsageError> {
+        Ok(true)
     }
 
     async fn collect(&self, _scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
@@ -77,6 +80,164 @@ impl UsageProvider for ReviewProvider {
             source: self.display_name().to_string(),
         }])
     }
+}
+
+#[async_trait::async_trait]
+impl UsageProvider for EmptyCollectedProvider {
+    fn id(&self) -> &'static str {
+        "empty-collected"
+    }
+
+    fn display_name(&self) -> &'static str {
+        "Empty Collected"
+    }
+
+    async fn available(&self, _scope: &Scope) -> Result<bool, UsageError> {
+        Ok(true)
+    }
+
+    async fn collect(&self, _scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
+        Ok(Vec::new())
+    }
+}
+
+#[async_trait::async_trait]
+impl UsageProvider for RemoteFatalProvider {
+    fn id(&self) -> &'static str {
+        "remote-fatal"
+    }
+
+    fn display_name(&self) -> &'static str {
+        "Remote Fatal"
+    }
+
+    async fn available(&self, _scope: &Scope) -> Result<bool, UsageError> {
+        Ok(true)
+    }
+
+    async fn collect(&self, _scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
+        Err(UsageError::from_remote(crate::targets::TargetsError::RemoteInspectFailed {
+            path: "/home/alice/.codex/sessions".to_string(),
+            detail: "Permission denied: /home/alice/.ssh/id_ed25519\nssh -i private.pem host -- find /home/alice\nstderr: secret".to_string(),
+        }))
+    }
+}
+
+#[async_trait::async_trait]
+impl UsageProvider for IsolatedSuccessProvider {
+    fn id(&self) -> &'static str {
+        "isolated-success"
+    }
+
+    fn display_name(&self) -> &'static str {
+        "Isolated Success"
+    }
+
+    async fn available(&self, _scope: &Scope) -> Result<bool, UsageError> {
+        Ok(true)
+    }
+
+    async fn collect(&self, _scope: &Scope) -> Result<Vec<SkillCall>, UsageError> {
+        Ok(vec![SkillCall {
+            skill: "isolated-review".to_string(),
+            timestamp_ms: 1_800_000_000_000,
+            project: "/isolated".to_string(),
+            session_id: "iso-1".to_string(),
+            source: self.display_name().to_string(),
+        }])
+    }
+}
+
+fn remote_scope(target_id: &str) -> (std::sync::Arc<crate::test_support::FakeRunner>, Scope) {
+    let runner = std::sync::Arc::new(crate::test_support::FakeRunner::new());
+    let scope = super::fs_backend::test_fixtures::ssh_scope(runner.clone(), target_id);
+    (runner, scope)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TargetSnapshot {
+    calls: Vec<db::SkillCallRow>,
+    providers: Vec<db::SkillCallProviderRow>,
+    metadata: Vec<db::SkillUsageMetadataRow>,
+    last_scan_ms: Option<i64>,
+    file_cache: Vec<(String, i64, i64, String, i64)>,
+}
+
+async fn snapshot_target(
+    pool: &crate::db::DbPool,
+    target_id: &str,
+    cache_provider: &str,
+) -> TargetSnapshot {
+    let mut file_cache = db::list_file_cache_rows(pool, target_id, cache_provider)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| {
+            (
+                row.file_path,
+                row.mtime_ms,
+                row.size,
+                row.calls_json,
+                row.scanned_at_ms,
+            )
+        })
+        .collect::<Vec<_>>();
+    file_cache.sort();
+    TargetSnapshot {
+        calls: db::list_calls_for_target(pool, target_id).await.unwrap(),
+        providers: db::list_provider_rows(pool, target_id).await.unwrap(),
+        metadata: db::list_usage_metadata(pool, target_id).await.unwrap(),
+        last_scan_ms: db::get_last_scan_ms(pool, target_id).await.unwrap(),
+        file_cache,
+    }
+}
+
+fn seeded_call(skill: &str, source: &str) -> db::NewSkillCall {
+    db::NewSkillCall {
+        skill: skill.to_string(),
+        timestamp_ms: 1_700_000_000_000,
+        project: "/project".to_string(),
+        session_id: "seeded".to_string(),
+        source: source.to_string(),
+    }
+}
+
+async fn seed_target_cache(pool: &crate::db::DbPool, target_id: &str, skill: &str, source: &str) {
+    db::replace_calls_for_target(
+        pool,
+        target_id,
+        &[seeded_call(skill, source)],
+        &[db::ProviderScanOutcome {
+            provider_id: "codex".to_string(),
+            display_name: "Codex CLI".to_string(),
+            available: true,
+            call_count: 1,
+        }],
+        &[db::NewSkillUsageMetadata {
+            skill: skill.to_string(),
+            match_status: "unmatched".to_string(),
+            resolved_skill_id: None,
+            static_token_estimate: Some(3),
+            static_byte_count: Some(9),
+        }],
+        1_111,
+    )
+    .await
+    .unwrap();
+    db::upsert_file_cache_rows(
+        pool,
+        target_id,
+        "codex",
+        &[db::NewSkillCallFileCache {
+            file_path: format!("/usage-cache/{target_id}/session.jsonl"),
+            mtime_ms: 50,
+            size: 12,
+            calls_json: "[]".to_string(),
+        }],
+        1_111,
+    )
+    .await
+    .unwrap();
 }
 
 fn write_claude_fixture(dir: &TempDir) {
@@ -134,6 +295,190 @@ async fn refresh_marks_available_provider_unavailable_when_collect_fails() {
     assert_eq!(health.len(), 1);
     assert_eq!(health[0].provider_id, "failing");
     assert!(!health[0].available);
+}
+
+#[tokio::test]
+async fn remote_fatal_error_preserves_every_target_cache_table() {
+    let pool = setup_pool().await;
+    seed_target_cache(&pool, "ssh-prod", "seeded-skill", "Codex CLI").await;
+    let before = snapshot_target(&pool, "ssh-prod", "codex").await;
+    let (_runner, scope) = remote_scope("ssh-prod");
+
+    let error = refresh_with_providers(&pool, &scope, true, vec![Box::new(RemoteFatalProvider)])
+        .await
+        .unwrap_err();
+    assert!(error.is_target_fatal());
+    assert_eq!(error.stable_code(), "usage.remote_permission");
+    assert!(!error.retryable());
+    let public = error.to_string();
+    assert!(!public.contains("/home/alice"));
+    assert!(!public.contains("private.pem"));
+    assert!(!public.contains("stderr"));
+    assert_eq!(snapshot_target(&pool, "ssh-prod", "codex").await, before);
+}
+
+#[tokio::test]
+async fn confirmed_empty_collection_commits_and_clears_target_cache() {
+    let pool = setup_pool().await;
+    seed_target_cache(&pool, "ssh-prod", "seeded-skill", "Codex CLI").await;
+    let (_runner, scope) = remote_scope("ssh-prod");
+
+    let summary =
+        refresh_with_providers(&pool, &scope, true, vec![Box::new(EmptyCollectedProvider)])
+            .await
+            .unwrap();
+    assert!(!summary.cached);
+    assert_eq!(summary.calls_written, 0);
+    assert_eq!(summary.providers_available, 1);
+    assert_ne!(summary.scanned_at_ms, 1_111);
+
+    let calls = db::list_calls_for_target(&pool, "ssh-prod").await.unwrap();
+    assert!(calls.is_empty());
+    let health = list_provider_health(&pool, "ssh-prod").await.unwrap();
+    assert_eq!(health.len(), 1);
+    assert_eq!(health[0].provider_id, "empty-collected");
+    assert!(health[0].available);
+    assert_eq!(health[0].call_count, 0);
+    let last = db::get_last_scan_ms(&pool, "ssh-prod").await.unwrap();
+    assert_eq!(last, Some(summary.scanned_at_ms));
+}
+
+#[tokio::test]
+async fn one_target_fatal_refresh_does_not_mutate_another_target() {
+    let pool = setup_pool().await;
+    seed_target_cache(&pool, "local", "local-skill", "Claude Code").await;
+    seed_target_cache(&pool, "ssh-prod", "remote-skill", "Codex CLI").await;
+    seed_target_cache(&pool, "wsl-dev", "wsl-skill", "Droid CLI").await;
+    let local_before = snapshot_target(&pool, "local", "codex").await;
+    let wsl_before = snapshot_target(&pool, "wsl-dev", "codex").await;
+    let (_runner, scope) = remote_scope("ssh-prod");
+
+    refresh_with_providers(&pool, &scope, true, vec![Box::new(RemoteFatalProvider)])
+        .await
+        .unwrap_err();
+
+    assert_eq!(snapshot_target(&pool, "local", "codex").await, local_before);
+    assert_eq!(snapshot_target(&pool, "wsl-dev", "codex").await, wsl_before);
+
+    let summary = refresh_with_providers(
+        &pool,
+        &Scope::Local,
+        true,
+        vec![Box::new(IsolatedSuccessProvider)],
+    )
+    .await
+    .unwrap();
+    assert_eq!(summary.calls_written, 1);
+    assert_eq!(summary.providers_available, 1);
+    let local_calls = db::list_calls_for_target(&pool, "local").await.unwrap();
+    assert_eq!(local_calls.len(), 1);
+    assert_eq!(local_calls[0].skill, "isolated-review");
+    assert_eq!(snapshot_target(&pool, "wsl-dev", "codex").await, wsl_before);
+    let remote_after = snapshot_target(&pool, "ssh-prod", "codex").await;
+    assert_eq!(remote_after.calls[0].skill, "remote-skill");
+}
+
+#[test]
+fn remote_fatal_logs_omit_path_command_and_streams() {
+    const TARGET_ID: &str = "ssh-prod";
+    const PROVIDER_ID: &str = "remote-fatal";
+    const CODE: &str = "usage.remote_permission";
+    const LEAK_SEEDS: [&str; 5] = [
+        "/home/alice/.codex/sessions",
+        "/home/alice/.ssh/id_ed25519",
+        "private.pem",
+        "stderr: secret",
+        "find /home/alice",
+    ];
+
+    let logs = std::sync::Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
+    let writer = logs.clone();
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(move || SharedLog(writer.clone()))
+        .with_ansi(false)
+        .with_max_level(tracing::Level::TRACE)
+        .compact()
+        .finish();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("current-thread runtime for isolated tracing capture");
+    let pool = runtime.block_on(setup_pool());
+    let (_runner, scope) = remote_scope(TARGET_ID);
+
+    // Boxed async_trait/join_all futures do not inherit Instrument::with_subscriber.
+    // Hold a thread-local default across the whole block_on so capture stays valid
+    // under parallel cargo test (sibling tests install other subscribers).
+    let _guard = tracing::subscriber::set_default(subscriber);
+    tracing::callsite::rebuild_interest_cache();
+    let error = runtime
+        .block_on(refresh_with_providers(
+            &pool,
+            &scope,
+            true,
+            vec![Box::new(RemoteFatalProvider)],
+        ))
+        .unwrap_err();
+    assert_eq!(error.stable_code(), CODE);
+    assert!(!error.retryable());
+
+    let logged = String::from_utf8(logs.lock().unwrap().clone()).unwrap();
+    assert!(
+        captured_log_has_field(&logged, "target_id", TARGET_ID),
+        "missing target-safe id: {logged}"
+    );
+    assert!(
+        captured_log_has_field(&logged, "provider", PROVIDER_ID),
+        "missing provider id: {logged}"
+    );
+    assert!(
+        captured_log_has_field(&logged, "code", CODE),
+        "missing stable code: {logged}"
+    );
+    assert!(
+        captured_log_has_field(&logged, "retryable", "false"),
+        "missing retryable: {logged}"
+    );
+
+    let ipc = serde_json::to_string(&crate::ipc_error::IpcError::new(
+        error.stable_code(),
+        error.public_message(),
+        error.retryable(),
+    ))
+    .unwrap();
+    assert!(ipc.contains(CODE));
+    assert!(ipc.contains("\"retryable\":false"));
+    for seed in LEAK_SEEDS {
+        assert!(!logged.contains(seed), "log leaked {seed}: {logged}");
+        assert!(!ipc.contains(seed), "ipc leaked {seed}: {ipc}");
+        assert!(
+            !error.to_string().contains(seed),
+            "display leaked {seed}: {error}"
+        );
+    }
+}
+
+fn captured_log_has_field(logged: &str, key: &str, value: &str) -> bool {
+    [
+        format!("{key}={value}"),
+        format!("{key}=\"{value}\""),
+        format!("{key}={value:?}"),
+    ]
+    .iter()
+    .any(|needle| logged.contains(needle.as_str()))
+}
+
+struct SharedLog(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+impl std::io::Write for SharedLog {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 #[tokio::test]

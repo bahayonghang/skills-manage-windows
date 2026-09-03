@@ -1,12 +1,5 @@
 import { invoke, isTauriRuntime } from "@/lib/ipc";
-import {
-  SkillAiTagReview,
-  SkillRepository,
-  SkillRepositoryWithStats,
-  SkillTag,
-  SkillTagSuggestionResult,
-  SkillWithLinks,
-} from "@/types";
+import { SkillTagSuggestionResult } from "@/types";
 import {
   createRunningAiTagJob,
   summarizeAiTagResults,
@@ -14,7 +7,35 @@ import {
 import type {
   CentralSkillsState,
   CentralStoreContext,
+  CentralStoreSet,
 } from "./centralSkillsStore.types";
+
+async function mutateThenRefresh<T>(
+  set: CentralStoreSet,
+  mutate: () => Promise<T>,
+  refresh: () => Promise<Partial<CentralSkillsState>>,
+): Promise<T> {
+  set({ isMetadataUpdating: true, error: null });
+  let result: T;
+  try {
+    result = await mutate();
+  } catch (err) {
+    set({ error: String(err), isMetadataUpdating: false });
+    throw err;
+  }
+  try {
+    const next = await refresh();
+    set({ ...next, isMetadataUpdating: false, requiresCentralReload: false });
+    return result;
+  } catch (refreshErr) {
+    set({
+      error: String(refreshErr),
+      isMetadataUpdating: false,
+      requiresCentralReload: true,
+    });
+    throw refreshErr;
+  }
+}
 
 export function createCentralMetadataSlice({
   set,
@@ -38,56 +59,53 @@ export function createCentralMetadataSlice({
           "Desktop-only feature: repository metadata is available in the Tauri app.",
         );
       }
-      set({ isMetadataUpdating: true, error: null });
-      try {
-        const repository = await invoke<SkillRepository>(
-          "create_or_update_skill_repository",
-          {
+      return mutateThenRefresh(
+        set,
+        () =>
+          invoke("create_or_update_skill_repository", {
+            id: null,
             name,
             sourceType: "manual",
-          },
-        );
-        const repositories = await invoke<SkillRepositoryWithStats[]>(
-          "get_skill_repositories",
-        );
-        set({ repositories, isMetadataUpdating: false });
-        return repository;
-      } catch (err) {
-        set({ error: String(err), isMetadataUpdating: false });
-        throw err;
-      }
+            owner: null,
+            repo: null,
+            branch: null,
+            url: null,
+            isUnknown: null,
+          }),
+        async () => {
+          const repositories = await invoke("get_skill_repositories");
+          return { repositories };
+        },
+      );
     },
 
     assignSkillsToRepository: async (skillIds, repositoryId) => {
-      set({ isMetadataUpdating: true, error: null });
-      try {
-        await invoke("assign_skills_to_repository", { skillIds, repositoryId });
-        const [skills, repositories] = await Promise.all([
-          invoke<SkillWithLinks[]>("get_central_skills"),
-          invoke<SkillRepositoryWithStats[]>("get_skill_repositories"),
-        ]);
-        set({ skills, repositories, isMetadataUpdating: false });
-      } catch (err) {
-        set({ error: String(err), isMetadataUpdating: false });
-        throw err;
-      }
+      await mutateThenRefresh(
+        set,
+        () => invoke("assign_skills_to_repository", { skillIds, repositoryId }),
+        async () => {
+          const [skills, repositories] = await Promise.all([
+            invoke("get_central_skills"),
+            invoke("get_skill_repositories"),
+          ]);
+          return { skills, repositories };
+        },
+      );
     },
 
     setRepositoryPinned: async (repositoryId, pinned) => {
-      set({ isMetadataUpdating: true, error: null });
-      try {
-        await invoke<SkillRepository>("set_skill_repository_pinned", {
-          repositoryId,
-          pinned,
-        });
-        const repositories = await invoke<SkillRepositoryWithStats[]>(
-          "get_skill_repositories",
-        );
-        set({ repositories, isMetadataUpdating: false });
-      } catch (err) {
-        set({ error: String(err), isMetadataUpdating: false });
-        throw err;
-      }
+      await mutateThenRefresh(
+        set,
+        () =>
+          invoke("set_skill_repository_pinned", {
+            repositoryId,
+            pinned,
+          }),
+        async () => {
+          const repositories = await invoke("get_skill_repositories");
+          return { repositories };
+        },
+      );
     },
 
     createTag: async (name) => {
@@ -96,41 +114,42 @@ export function createCentralMetadataSlice({
           "Desktop-only feature: tag metadata is available in the Tauri app.",
         );
       }
-      set({ isMetadataUpdating: true, error: null });
-      try {
-        const tag = await invoke<SkillTag>("create_skill_tag", { name });
-        const tags = await invoke<SkillTag[]>("get_skill_tags");
-        set({ tags, isMetadataUpdating: false });
-        return tag;
-      } catch (err) {
-        set({ error: String(err), isMetadataUpdating: false });
-        throw err;
-      }
+      return mutateThenRefresh(
+        set,
+        () =>
+          invoke("create_skill_tag", {
+            name,
+            description: null,
+            color: null,
+          }),
+        async () => {
+          const tags = await invoke("get_skill_tags");
+          return { tags };
+        },
+      );
     },
 
     assignSkillTags: async (skillIds, tagIds) => {
-      set({ isMetadataUpdating: true, error: null });
-      try {
-        await invoke("assign_skill_tags", { skillIds, tagIds });
-        const skills = await invoke<SkillWithLinks[]>("get_central_skills");
-        set({ skills, isMetadataUpdating: false });
-      } catch (err) {
-        set({ error: String(err), isMetadataUpdating: false });
-        throw err;
-      }
+      await mutateThenRefresh(
+        set,
+        () => invoke("assign_skill_tags", { skillIds, tagIds }),
+        async () => {
+          const skills = await invoke("get_central_skills");
+          return { skills };
+        },
+      );
     },
 
     unassignSkillTags: async (skillId, tagIds) => {
       if (tagIds.length === 0) return;
-      set({ isMetadataUpdating: true, error: null });
-      try {
-        await invoke("unassign_skill_tags", { skillId, tagIds });
-        const skills = await invoke<SkillWithLinks[]>("get_central_skills");
-        set({ skills, isMetadataUpdating: false });
-      } catch (err) {
-        set({ error: String(err), isMetadataUpdating: false });
-        throw err;
-      }
+      await mutateThenRefresh(
+        set,
+        () => invoke("unassign_skill_tags", { skillId, tagIds }),
+        async () => {
+          const skills = await invoke("get_central_skills");
+          return { skills };
+        },
+      );
     },
 
     loadAiTagReviews: async () => {
@@ -138,39 +157,37 @@ export function createCentralMetadataSlice({
         set({ aiTagReviews: [] });
         return;
       }
-      const reviews = await invoke<SkillAiTagReview[]>(
-        "get_pending_ai_tag_reviews",
-      );
-      set({ aiTagReviews: reviews ?? [] });
+      try {
+        const reviews = await invoke("get_pending_ai_tag_reviews");
+        set({ aiTagReviews: reviews ?? [], error: null });
+      } catch (err) {
+        set({ error: String(err) });
+      }
     },
 
     acceptAiTagReview: async (skillId, tagIds) => {
-      set({ isMetadataUpdating: true, error: null });
-      try {
-        await invoke("accept_ai_tag_review", { skillId, tagIds });
-        const [skills, reviews] = await Promise.all([
-          invoke<SkillWithLinks[]>("get_central_skills"),
-          invoke<SkillAiTagReview[]>("get_pending_ai_tag_reviews"),
-        ]);
-        set({ skills, aiTagReviews: reviews ?? [], isMetadataUpdating: false });
-      } catch (err) {
-        set({ error: String(err), isMetadataUpdating: false });
-        throw err;
-      }
+      await mutateThenRefresh(
+        set,
+        () => invoke("accept_ai_tag_review", { skillId, tagIds }),
+        async () => {
+          const [skills, reviews] = await Promise.all([
+            invoke("get_central_skills"),
+            invoke("get_pending_ai_tag_reviews"),
+          ]);
+          return { skills, aiTagReviews: reviews ?? [] };
+        },
+      );
     },
 
     skipAiTagReview: async (skillId) => {
-      set({ isMetadataUpdating: true, error: null });
-      try {
-        await invoke("skip_ai_tag_review", { skillId });
-        const reviews = await invoke<SkillAiTagReview[]>(
-          "get_pending_ai_tag_reviews",
-        );
-        set({ aiTagReviews: reviews ?? [], isMetadataUpdating: false });
-      } catch (err) {
-        set({ error: String(err), isMetadataUpdating: false });
-        throw err;
-      }
+      await mutateThenRefresh(
+        set,
+        () => invoke("skip_ai_tag_review", { skillId }),
+        async () => {
+          const reviews = await invoke("get_pending_ai_tag_reviews");
+          return { aiTagReviews: reviews ?? [] };
+        },
+      );
     },
 
     bulkSuggestSkillTags: async (skillIds) => {
@@ -183,28 +200,11 @@ export function createCentralMetadataSlice({
         error: null,
         aiTagJob: createRunningAiTagJob(skillIds),
       });
+      let result: SkillTagSuggestionResult[];
       try {
-        const result = await invoke<SkillTagSuggestionResult[]>(
-          "bulk_suggest_skill_tags",
-          {
-            skillIds,
-          },
-        );
-        const [skills, reviews] = await Promise.all([
-          invoke<SkillWithLinks[]>("get_central_skills"),
-          invoke<SkillAiTagReview[]>("get_pending_ai_tag_reviews"),
-        ]);
-        set((state) => ({
-          skills,
-          aiTagReviews: reviews ?? [],
-          isSuggestingTags: false,
-          aiTagJob:
-            state.aiTagJob.status === "completed" ||
-            state.aiTagJob.status === "cancelled"
-              ? state.aiTagJob
-              : summarizeAiTagResults(skillIds, result),
-        }));
-        return result;
+        result = await invoke("bulk_suggest_skill_tags", {
+          skillIds,
+        });
       } catch (err) {
         set((state) => ({
           error: String(err),
@@ -216,6 +216,36 @@ export function createCentralMetadataSlice({
           },
         }));
         throw err;
+      }
+      try {
+        const [skills, reviews] = await Promise.all([
+          invoke("get_central_skills"),
+          invoke("get_pending_ai_tag_reviews"),
+        ]);
+        set((state) => ({
+          skills,
+          aiTagReviews: reviews ?? [],
+          isSuggestingTags: false,
+          requiresCentralReload: false,
+          aiTagJob:
+            state.aiTagJob.status === "completed" ||
+            state.aiTagJob.status === "cancelled"
+              ? state.aiTagJob
+              : summarizeAiTagResults(skillIds, result),
+        }));
+        return result;
+      } catch (refreshErr) {
+        set((state) => ({
+          error: String(refreshErr),
+          isSuggestingTags: false,
+          requiresCentralReload: true,
+          aiTagJob:
+            state.aiTagJob.status === "completed" ||
+            state.aiTagJob.status === "cancelled"
+              ? state.aiTagJob
+              : summarizeAiTagResults(skillIds, result),
+        }));
+        throw refreshErr;
       }
     },
   };

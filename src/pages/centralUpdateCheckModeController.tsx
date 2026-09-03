@@ -7,13 +7,13 @@ import { UpdateCheckModeDialog } from "@/components/central/UpdateCheckModeDialo
 import { UpdateModePreferenceSelect } from "@/components/central/UpdateModePreferenceSelect";
 import type { CentralSkillsShellProps } from "@/components/central/CentralSkillsShell";
 import { formatBackendError } from "@/lib/backendError";
+import type { UpdateCheckMode } from "@/lib/updateCheckMode";
 import type { CentralSkillsCheckButtonState } from "@/pages/centralSkillsCheckButton";
 import {
   buildUpdateCheckRefreshContext,
   buildUpdateCheckScope,
   hasSyncableGitHubRepository,
   preferredUpdateCenterTab,
-  type UpdateCheckMode,
 } from "@/pages/centralUpdateCheckMode";
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { useSettingsStore } from "@/stores/settingsStore";

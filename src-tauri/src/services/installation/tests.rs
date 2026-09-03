@@ -2859,3 +2859,163 @@ async fn test_remote_uninstall_removes_tree_and_deletes_record() {
         .unwrap()
         .is_empty());
 }
+
+async fn seed_non_central_skill(pool: &DbPool, source_dir: &Path, skill_id: &str) {
+    crate::test_support::write_skill_md(source_dir, skill_id, Some("outside central"));
+    let skill = db::Skill {
+        id: skill_id.to_string(),
+        uid: format!("{skill_id}-uid"),
+        name: skill_id.to_string(),
+        description: Some("outside central".to_string()),
+        file_path: source_dir.join("SKILL.md").to_string_lossy().into_owned(),
+        canonical_path: None,
+        is_central: false,
+        source: None,
+        content: None,
+        scanned_at: chrono::Utc::now().to_rfc3339(),
+        fs_created_at: None,
+        fs_updated_at: None,
+    };
+    db::upsert_skill(pool, &skill).await.unwrap();
+}
+
+async fn inject_ensure_centralized_upsert_failure(pool: &DbPool, skill_id: &str) {
+    sqlx::query(&format!(
+        "CREATE TRIGGER fail_ensure_centralized_upsert
+         BEFORE UPDATE ON skills
+         WHEN NEW.id = '{skill_id}' AND NEW.is_central = 1
+         BEGIN SELECT RAISE(ABORT, 'injected ensure_centralized upsert failure'); END"
+    ))
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn ensure_centralized_upsert_failure_compensates_copied_canonical_dir() {
+    let temp = tempfile::tempdir().unwrap();
+    let central_dir = temp.path().join("central");
+    let agent_dir = temp.path().join("agent");
+    let source_dir = temp.path().join("source").join("adopt-me");
+    fs::create_dir_all(&central_dir).unwrap();
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    seed_non_central_skill(&pool, &source_dir, "adopt-me").await;
+    let source_bytes = fs::read(source_dir.join("SKILL.md")).unwrap();
+    let canonical_dir = central_dir.join("adopt-me");
+
+    inject_ensure_centralized_upsert_failure(&pool, "adopt-me").await;
+
+    let err = super::centralize::ensure_centralized(&pool, "adopt-me", &canonical_dir)
+        .await
+        .expect_err("upsert failure after copy must surface");
+    assert!(
+        matches!(err, InstallationError::Db(_)),
+        "unexpected ensure_centralized error: {err}"
+    );
+    assert_eq!(fs::read(source_dir.join("SKILL.md")).unwrap(), source_bytes);
+    assert!(
+        !canonical_dir.exists(),
+        "newly copied canonical dir must be removed after upsert failure"
+    );
+    let skill = db::get_skill_by_id(&pool, "adopt-me")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!skill.is_central);
+}
+
+#[tokio::test]
+async fn ensure_centralized_repairs_row_when_skill_md_exists_but_not_central() {
+    let temp = tempfile::tempdir().unwrap();
+    let central_dir = temp.path().join("central");
+    let agent_dir = temp.path().join("agent");
+    let source_dir = temp.path().join("source").join("leftover-skill");
+    fs::create_dir_all(&central_dir).unwrap();
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    seed_non_central_skill(&pool, &source_dir, "leftover-skill").await;
+    let canonical_dir = central_dir.join("leftover-skill");
+    fs::create_dir_all(&canonical_dir).unwrap();
+    fs::copy(source_dir.join("SKILL.md"), canonical_dir.join("SKILL.md")).unwrap();
+
+    inject_ensure_centralized_upsert_failure(&pool, "leftover-skill").await;
+    let err = super::centralize::ensure_centralized(&pool, "leftover-skill", &canonical_dir)
+        .await
+        .expect_err("leftover SKILL.md must still attempt upsert");
+    assert!(matches!(err, InstallationError::Db(_)));
+    assert!(
+        canonical_dir.join("SKILL.md").exists(),
+        "pre-existing leftover copy is not this call's newly copied dir"
+    );
+    assert!(
+        !db::get_skill_by_id(&pool, "leftover-skill")
+            .await
+            .unwrap()
+            .unwrap()
+            .is_central
+    );
+
+    sqlx::query("DROP TRIGGER fail_ensure_centralized_upsert")
+        .execute(&pool)
+        .await
+        .unwrap();
+    super::centralize::ensure_centralized(&pool, "leftover-skill", &canonical_dir)
+        .await
+        .unwrap();
+
+    let skill = db::get_skill_by_id(&pool, "leftover-skill")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(skill.is_central);
+    assert!(
+        crate::paths::paths_equivalent(
+            Path::new(skill.canonical_path.as_deref().unwrap()),
+            &canonical_dir,
+        ),
+        "canonical_path={:?}",
+        skill.canonical_path
+    );
+}
+
+#[tokio::test]
+async fn ensure_centralized_local_install_entry_does_not_succeed_with_non_central_row() {
+    let temp = tempfile::tempdir().unwrap();
+    let central_dir = temp.path().join("central");
+    let agent_dir = temp.path().join("agent");
+    let source_dir = temp.path().join("source").join("public-adopt");
+    fs::create_dir_all(&central_dir).unwrap();
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    seed_non_central_skill(&pool, &source_dir, "public-adopt").await;
+
+    inject_ensure_centralized_upsert_failure(&pool, "public-adopt").await;
+
+    let agent = db::get_agent_by_id(&pool, "claude-code")
+        .await
+        .unwrap()
+        .unwrap();
+    let central = db::get_agent_by_id(&pool, "central")
+        .await
+        .unwrap()
+        .unwrap();
+    let prepare_err =
+        super::native::prepare_target_local(&pool, "public-adopt", &agent, &central).await;
+    assert!(
+        prepare_err.is_err(),
+        "prepare_target_local must not succeed when upsert fails"
+    );
+
+    let install_err = install_copy_local(&pool, "public-adopt", "claude-code").await;
+    assert!(
+        install_err.is_err(),
+        "install_skill must not report success with a non-central row"
+    );
+    let skill = db::get_skill_by_id(&pool, "public-adopt")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!skill.is_central);
+    assert!(db::get_skill_installations(&pool, "public-adopt")
+        .await
+        .unwrap()
+        .is_empty());
+}

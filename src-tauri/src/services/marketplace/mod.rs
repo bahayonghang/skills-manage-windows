@@ -30,6 +30,7 @@ pub(crate) use skills_sh::{
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SkillRegistry {
     pub id: String,
@@ -49,6 +50,7 @@ pub struct SkillRegistry {
     pub created_at: String,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MarketplaceSkill {
     pub id: String,
@@ -87,6 +89,7 @@ pub struct RegistryCacheMetadata {
     pub cache_expires_at: Option<String>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncRegistryOptions {

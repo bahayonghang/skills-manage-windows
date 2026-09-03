@@ -6,9 +6,11 @@ import {
   resolveProviderApiUrl,
 } from "@/lib/aiProviderConfig";
 import { parseBackendError } from "@/lib/backendError";
-import type { AiApiKeyState } from "@/types";
+import type { AiApiKeyState } from "@/types/credentials";
 
 export type AiSaveStatus = "idle" | "saving" | "saved" | "error";
+
+export const AI_BROWSER_FIXTURE_TEST_CODE = "browser_fixture";
 
 export interface AiSettings {
   provider: string;
@@ -202,11 +204,25 @@ function parseAiConnectionError(err: unknown): AiConnectionTestResult {
   const parsed = parseBackendError(err);
   const prefixedMessage = parsed.message.match(/^API .*?:\s*(.*)$/)?.[1]?.trim();
 
-  return {
+  return asAiConnectionTestResult({
     ok: false,
     msg: prefixedMessage || parsed.message,
     code: parsed.code ?? undefined,
     details: parsed.details ?? undefined,
+  });
+}
+
+function asAiConnectionTestResult(result: {
+  ok: boolean;
+  msg: string;
+  code?: string | null;
+  details?: string | null;
+}): AiConnectionTestResult {
+  return {
+    ok: result.ok,
+    msg: result.msg,
+    code: result.code ?? undefined,
+    details: result.details ?? undefined,
   };
 }
 
@@ -248,7 +264,7 @@ export function createAiSettingsSlice<TState extends AiSettingsStoreState>(
         return;
       }
       try {
-        const values = await invoke<Record<string, string | null>>("get_settings", {
+        const values = await invoke("get_settings", {
           keys: AI_SETTING_KEYS,
         });
         const loadedSettings = normalizeAiSettings(values);
@@ -465,16 +481,17 @@ export function createAiSettingsSlice<TState extends AiSettingsStoreState>(
       set({ aiTesting: true, aiTestResult: null, error: null } as Partial<TState>);
 
       if (!isTauriRuntime()) {
-        const testResult = {
+        const testResult: AiConnectionTestResult = {
           ok: false,
-          msg: "AI connection is unavailable in the browser fixture.",
+          code: AI_BROWSER_FIXTURE_TEST_CODE,
+          msg: "",
         };
         set({ aiTesting: false, aiTestResult: testResult } as Partial<TState>);
         return testResult;
       }
 
       try {
-        const testResult = await invoke("test_ai_connection");
+        const testResult = asAiConnectionTestResult(await invoke("test_ai_connection"));
         set({ aiTesting: false, aiTestResult: testResult } as Partial<TState>);
         return testResult;
       } catch (err) {

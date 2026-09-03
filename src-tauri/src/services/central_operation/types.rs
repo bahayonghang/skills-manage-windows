@@ -189,6 +189,7 @@ pub struct PreparedDeleteReconciliationPreview {
     pub blocker_codes: Vec<String>,
 }
 
+#[cfg_attr(feature = "ipc-codegen", derive(specta::Type))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PendingDeleteRecoveryPreview {
     pub operation_id: String,

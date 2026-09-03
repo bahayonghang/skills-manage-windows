@@ -10,6 +10,7 @@
 
 use std::path::PathBuf;
 
+use crate::db::repos::skills_repo;
 use crate::db::{self, DbPool};
 use crate::targets::{connect_remote_target, ActiveTarget, ConnectedRemoteTarget, TargetsError};
 
@@ -120,7 +121,7 @@ impl InstallTransport {
         match self {
             Self::Local => Ok(SourceContext::Local),
             Self::Remote(_) => {
-                let skill = db::get_skill_by_id(pool, skill_id)
+                let skill = skills_repo::get_skill_by_id(pool, skill_id)
                     .await?
                     .ok_or_else(|| InstallationError::SkillNotFound(skill_id.to_string()))?;
                 let source_dir = remote::remote_skill_source_dir(&skill, skill_id)?;

@@ -128,7 +128,7 @@ pub(crate) async fn explain_skill(
 
     let client = {
         let builder = reqwest::Client::builder()
-            .user_agent(crate::commands::APP_USER_AGENT)
+            .user_agent(crate::http_identity::APP_USER_AGENT)
             .connect_timeout(super::AI_CONNECT_TIMEOUT)
             .timeout(super::AI_REQUEST_TIMEOUT);
         #[cfg(test)]
@@ -248,7 +248,7 @@ pub(crate) async fn test_ai_connection(
 
     let client = {
         let builder = reqwest::Client::builder()
-            .user_agent(crate::commands::APP_USER_AGENT)
+            .user_agent(crate::http_identity::APP_USER_AGENT)
             .connect_timeout(super::AI_CONNECT_TIMEOUT.min(std::time::Duration::from_secs(5)))
             .timeout(super::AI_REQUEST_TIMEOUT);
         #[cfg(test)]

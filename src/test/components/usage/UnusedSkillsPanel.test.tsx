@@ -754,17 +754,16 @@ describe("UnusedSkillsPanel", () => {
       screen.getByRole("button", { name: /移除 \(2\)|Unlink \(2\)/ }),
     );
 
-    // 部分失败：弹窗保留、失败行呈现原因
-    await waitFor(() =>
-      expect(screen.getByTestId("unused-unlink-error-claude-code")).toHaveTextContent(
-        /blocked/,
-      ),
-    );
+    // 部分失败：弹窗保留、失败行呈现原因，勾选重置为仅失败项（同一次提交后的同一帧）
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("unused-unlink-error-claude-code"),
+      ).toHaveTextContent(/blocked/);
+      expect(
+        screen.getByRole("button", { name: /移除 \(1\)|Unlink \(1\)/ }),
+      ).toBeEnabled();
+    });
     expect(screen.getByTestId("unused-unlink-dialog")).toBeInTheDocument();
-    // 勾选重置为仅失败项（claude-code），确认按钮计数回到 1
-    expect(
-      screen.getByRole("button", { name: /移除 \(1\)|Unlink \(1\)/ }),
-    ).toBeEnabled();
 
     // 直接重试只提交失败项
     fireEvent.click(

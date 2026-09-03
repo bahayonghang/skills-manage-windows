@@ -320,7 +320,7 @@ fn validate_target_ids<'a>(ids: impl Iterator<Item = &'a str>) -> Result<(), Qua
         if id == LOCAL_TARGET_ID {
             return Err(QuarantineReason::ReservedId);
         }
-        if id.is_empty() {
+        if !is_allowed_target_id_token(id) {
             return Err(QuarantineReason::InvalidSchema);
         }
         if !seen.insert(id) {
@@ -685,5 +685,67 @@ mod tests {
         assert_eq!(status, TargetConfigQuarantineStatus::default());
         assert!(!serialized.contains("plaintext-secret"));
         assert!(!serialized.contains("protectedPassword"));
+    }
+
+    fn target_id_parity_cases() -> [(&'static str, bool); 6] {
+        [
+            ("../escape", false),
+            ("a/b", false),
+            ("a\\b", false),
+            (" ", false),
+            ("ssh-demo\n1", false),
+            ("ssh-demo_1", true),
+        ]
+    }
+
+    #[test]
+    fn validate_target_ids_matches_sanitize_target_id_matrix() {
+        for (id, accepted) in target_id_parity_cases() {
+            assert_eq!(
+                validate_target_ids(std::iter::once(id)).is_ok(),
+                accepted,
+                "validate_target_ids({id:?})"
+            );
+            assert_eq!(
+                super::super::sanitize_target_id(id).is_ok(),
+                accepted,
+                "sanitize_target_id({id:?})"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn hostile_target_ids_are_quarantined_for_ssh_and_wsl() {
+        for id in ["../escape", "a/b", "a\\b"] {
+            let pool = setup_test_db().await;
+            let ssh = serde_json::to_string(&vec![valid_ssh(id)]).unwrap();
+            db::set_setting(&pool, TARGETS_SETTING_KEY, &ssh)
+                .await
+                .unwrap();
+            let snapshot = load_target_config_snapshot(&pool).await.unwrap();
+            assert!(
+                snapshot.ssh_targets.is_empty(),
+                "ssh id {id:?} must be quarantined before cache paths"
+            );
+            assert_eq!(
+                snapshot.quarantine_status.incidents[0].reason_code,
+                "invalid_schema"
+            );
+
+            let pool = setup_test_db().await;
+            let wsl = serde_json::to_string(&vec![valid_wsl(id)]).unwrap();
+            db::set_setting(&pool, WSL_TARGETS_SETTING_KEY, &wsl)
+                .await
+                .unwrap();
+            let snapshot = load_target_config_snapshot(&pool).await.unwrap();
+            assert!(
+                snapshot.wsl_targets.is_empty(),
+                "wsl id {id:?} must be quarantined before cache paths"
+            );
+            assert_eq!(
+                snapshot.quarantine_status.incidents[0].reason_code,
+                "invalid_schema"
+            );
+        }
     }
 }

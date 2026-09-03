@@ -84,7 +84,7 @@ pub(super) async fn create_remote_preview_workspace(
     let output = connection
         .run_script(
             &script,
-            &[archive_url.as_str(), crate::commands::APP_USER_AGENT],
+            &[archive_url.as_str(), crate::http_identity::APP_USER_AGENT],
         )
         .await
         .map_err(|e| GithubImportError::Remote(e.to_string()))?;
@@ -224,15 +224,17 @@ pub(crate) async fn import_github_repo_skills_remote_with_auth(
     auth: Option<&str>,
 ) -> Result<GitHubRepoImportResult, GithubImportError> {
     let resolved = resolve_repo_source(repo_url, auth).await?;
-    let connection = connect_remote_target(active_target)
-        .await
-        .map_err(|e| GithubImportError::Remote(e.to_string()))?;
+    let connection = Arc::new(
+        connect_remote_target(active_target)
+            .await
+            .map_err(|e| GithubImportError::Remote(e.to_string()))?,
+    );
     cleanup_expired_preview_snapshots_for_connection(&connection).await;
     let workspace = create_remote_preview_workspace(&connection, &resolved.repo, auth).await?;
 
     let result = import_github_repo_skills_remote_from_workspace(
         pool,
-        active_target,
+        Arc::clone(&connection),
         &resolved.repo,
         resolved.source_path.as_deref(),
         &workspace,
@@ -264,9 +266,11 @@ pub(crate) async fn import_github_repo_skills_remote_from_pinned_snapshot(
 ) -> Result<GitHubRepoImportResult, GithubImportError> {
     validate_commit_sha(resolved_commit_sha)?;
     let pinned_repo = pinned_repo_ref(repo, resolved_commit_sha);
-    let connection = connect_remote_target(active_target)
-        .await
-        .map_err(|error| GithubImportError::Remote(error.to_string()))?;
+    let connection = Arc::new(
+        connect_remote_target(active_target)
+            .await
+            .map_err(|error| GithubImportError::Remote(error.to_string()))?,
+    );
     cleanup_expired_preview_snapshots_for_connection(&connection).await;
     let workspace = create_remote_preview_workspace(&connection, &pinned_repo, auth).await?;
 
@@ -296,7 +300,7 @@ pub(crate) async fn import_github_repo_skills_remote_from_pinned_snapshot(
         };
         import_github_repo_skills_remote_from_workspace(
             pool,
-            active_target,
+            Arc::clone(&connection),
             repo,
             None,
             &workspace,
@@ -320,7 +324,7 @@ pub(crate) async fn import_github_repo_skills_remote_from_pinned_snapshot(
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn import_github_repo_skills_remote_from_workspace(
     pool: &DbPool,
-    active_target: &ActiveTarget,
+    connection: Arc<ConnectedRemoteTarget>,
     repo: &GitHubRepoRef,
     source_path: Option<&str>,
     workspace: &GitHubPreviewWorkspace,
@@ -349,9 +353,6 @@ pub(super) async fn import_github_repo_skills_remote_from_workspace(
         .await?
         .ok_or(GithubImportError::CentralAgentMissing)?;
     let central_root = central.global_skills_dir;
-    let connection = connect_remote_target(active_target)
-        .await
-        .map_err(|e| GithubImportError::Remote(e.to_string()))?;
     connection
         .mkdir_p(&central_root)
         .await
@@ -365,7 +366,14 @@ pub(super) async fn import_github_repo_skills_remote_from_workspace(
     )
     .await?;
 
-    let (staging_ops, skipped_skills) = plan_import_staging(pool, &candidates, selections).await?;
+    let (mut staging_ops, skipped_skills) =
+        plan_import_staging(pool, &candidates, selections).await?;
+
+    let snapshot =
+        github_snapshot_from_remote_workspace(&connection, workspace, &staging_ops).await?;
+    for op in &mut staging_ops {
+        op.source_files = collect_snapshot_source_files(&snapshot, &op.candidate.source_path)?;
+    }
 
     let total_files = staging_ops.len();
     let total_bytes = 0;
@@ -389,123 +397,25 @@ pub(super) async fn import_github_repo_skills_remote_from_workspace(
         },
     );
 
+    let fs = crate::services::central_updates::CentralFs::Remote(connection);
+    let central_root_path = PathBuf::from(&central_root);
     let mut imported_skills = Vec::new();
-    let mut created_paths: Vec<String> = Vec::new();
-    let mut created_stages: Vec<String> = Vec::new();
 
     for op in &staging_ops {
-        let target_dir = remote_join(&central_root, &op.final_skill_id);
-        let source_dir =
-            remote_skill_source_dir(&workspace.remote_repo_dir, &op.candidate.source_path)?;
-        let stage_dir = remote_join(
-            &central_root,
-            &format!(
-                ".skillport-import-{}-{}",
-                op.final_skill_id,
-                uuid::Uuid::new_v4()
-            ),
-        );
-        if connection
-            .exists(&target_dir)
-            .await
-            .map_err(|e| GithubImportError::Remote(e.to_string()))?
-            && op.resolution != DuplicateResolution::Overwrite
-        {
-            for path in created_paths.iter().rev() {
-                let _ = connection.remove_tree(path).await;
-            }
-            return Err(GithubImportError::TargetDirExists(target_dir));
-        }
-
-        created_stages.push(stage_dir.clone());
-        let overwrite = if op.resolution == DuplicateResolution::Overwrite {
-            "1"
-        } else {
-            "0"
-        };
-        if let Err(error) = connection
-            .run_script(
-                remote_import_skill_script(),
-                &[
-                    source_dir.as_str(),
-                    stage_dir.as_str(),
-                    target_dir.as_str(),
-                    overwrite,
-                ],
-            )
-            .await
-        {
-            let _ = connection.remove_tree(&stage_dir).await;
-            for path in created_paths.iter().rev() {
-                let _ = connection.remove_tree(path).await;
-            }
-            return Err(GithubImportError::Remote(error.to_string()));
-        }
-        created_stages.pop();
-
-        created_paths.push(target_dir.clone());
-
-        let skill_md_path = remote_join(&target_dir, "SKILL.md");
-        let frontmatter = SkillFrontmatter {
-            name: op.candidate.skill_name.clone(),
-            description: op.candidate.description.clone(),
-        };
-
-        progress_state.completed_files += 1;
-        emit_github_import_progress(
-            app,
-            GitHubImportProgressPayload {
-                phase: GitHubImportProgressPhase::Writing,
-                current_skill: Some(op.candidate.source_path.clone()),
-                current_path: Some("SKILL.md".to_string()),
-                completed_files: progress_state.completed_files,
-                total_files: progress_state.total_files,
-                completed_bytes: progress_state.completed_bytes,
-                total_bytes: progress_state.total_bytes,
-            },
-        );
-
-        let db_skill = Skill {
-            id: op.final_skill_id.clone(),
-            uid: uuid::Uuid::new_v4().to_string(),
-            name: frontmatter.name.clone(),
-            description: frontmatter.description.clone(),
-            file_path: skill_md_path,
-            canonical_path: Some(target_dir.clone()),
-            is_central: true,
-            source: Some(format!("github:{}/{}", repo.owner, repo.repo)),
-            content: None,
-            scanned_at: Utc::now().to_rfc3339(),
-            fs_created_at: None,
-            fs_updated_at: None,
-        };
-        let (resolved_commit_sha, content_digest) =
-            provenance_for(provenance, &op.candidate.source_path);
-        db::upsert_skill_with_github_repository(
+        let summary = import_single_staged_skill(
             pool,
-            &db_skill,
-            &repo.owner,
-            &repo.repo,
-            &repo.branch,
-            &repo.normalized_url,
-            &op.candidate.source_path,
-            resolved_commit_sha.as_deref(),
-            content_digest.as_deref(),
+            &fs,
+            repo,
+            &snapshot,
+            &central_root_path,
+            op,
+            provenance,
+            &mut progress_state,
+            app,
+            false,
         )
         .await?;
-
-        imported_skills.push(ImportedGitHubSkillSummary {
-            source_path: op.candidate.source_path.clone(),
-            original_skill_id: op.candidate.skill_id.clone(),
-            imported_skill_id: op.final_skill_id.clone(),
-            skill_name: frontmatter.name,
-            target_directory: target_dir,
-            resolution: op.resolution.clone(),
-        });
-    }
-
-    for stage in created_stages.iter().rev() {
-        let _ = connection.remove_tree(stage).await;
+        imported_skills.push(summary);
     }
 
     emit_github_import_progress(
@@ -528,49 +438,40 @@ pub(super) async fn import_github_repo_skills_remote_from_workspace(
     })
 }
 
-pub(super) fn remote_skill_source_dir(
-    remote_repo_dir: &str,
-    source_path: &str,
-) -> Result<String, GithubImportError> {
-    if source_path == "." {
-        return Ok(remote_repo_dir.to_string());
+async fn github_snapshot_from_remote_workspace(
+    connection: &ConnectedRemoteTarget,
+    workspace: &GitHubPreviewWorkspace,
+    staging_ops: &[StagedImport],
+) -> Result<GitHubRepoSnapshot, GithubImportError> {
+    let source_paths = staging_ops
+        .iter()
+        .map(|op| op.candidate.source_path.as_str())
+        .collect::<HashSet<_>>();
+    let inventory = remote_preview_repository_files(connection, &workspace.remote_repo_dir).await?;
+    let mut files = HashMap::new();
+    for file in inventory {
+        let included = source_paths.iter().any(|source_path| {
+            repo_file_relative_to_source(&file.repo_path, source_path).is_some()
+        });
+        if !included {
+            continue;
+        }
+        let remote_path = remote_join(&workspace.remote_repo_dir, &file.repo_path);
+        let bytes = connection
+            .read_file_bounded(&remote_path, file.byte_len)
+            .await
+            .map_err(|error| match error {
+                crate::targets::TargetsError::RemoteFileTooLarge { .. } => {
+                    GithubImportError::PreviewSnapshotIntegrity
+                }
+                error => GithubImportError::Remote(error.to_string()),
+            })?;
+        if bytes.len() as u64 != file.byte_len {
+            return Err(GithubImportError::PreviewSnapshotIntegrity);
+        }
+        files.insert(file.repo_path, bytes);
     }
-    Ok(remote_join(
-        remote_repo_dir,
-        &normalize_repo_path(source_path)?,
-    ))
-}
-
-pub(super) fn remote_import_skill_script() -> &'static str {
-    r#"set -eu
-source_dir=$1
-stage_dir=$2
-target_dir=$3
-overwrite=$4
-backup_dir="${target_dir}.skillport-backup-$$"
-rm -rf -- "$stage_dir"
-mkdir -p -- "$stage_dir"
-cp -a "$source_dir/." "$stage_dir/"
-if [ -e "$target_dir" ]; then
-  if [ "$overwrite" != "1" ]; then
-    rm -rf -- "$stage_dir"
-    printf 'Target directory already exists: %s\n' "$target_dir" >&2
-    exit 23
-  fi
-  rm -rf -- "$backup_dir"
-  mv "$target_dir" "$backup_dir"
-fi
-if mv "$stage_dir" "$target_dir"; then
-  rm -rf -- "$backup_dir"
-else
-  status=$?
-  if [ -e "$backup_dir" ] && [ ! -e "$target_dir" ]; then
-    mv "$backup_dir" "$target_dir" || true
-  fi
-  rm -rf -- "$stage_dir"
-  exit "$status"
-fi
-"#
+    Ok(GitHubRepoSnapshot { files })
 }
 
 /// Explicitly discard a registered preview snapshot and release its storage.

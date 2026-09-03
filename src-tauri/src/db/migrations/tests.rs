@@ -188,7 +188,7 @@ fn migration_sources_are_checksum_locked() {
     assert_eq!(
         checksums,
         [
-            "173296a19419edf197e3baa3b22de1f33184a1d8631141549751fbf1cfc24f7f",
+            "01da45f3f92d1b24d292f392b878b265f0cb884244792318f793f231736b362f",
             "92aeea552f562f4142946460635a6d7d2d75c89f8899ea2063a80c213bcf14aa",
             "ad1c327066e8bd7a0f5d5aca5ccd6666247d92fc2dfbee5d9c37c6a60ae948a8",
             "f1225528d87dccc2b06e0553a241fd3f0e56463cf69faafb18976401da111188",
@@ -468,8 +468,7 @@ async fn assert_preflight_rejection(mutation_sql: &str, expected: &str) {
     assert!(sibling_files(&database_path, ".pre-migration-").is_empty());
 }
 
-#[tokio::test]
-async fn preflight_accepts_the_published_windows_v1_checksum_without_rewriting_it() {
+async fn assert_preflight_accepts_v1_legacy_checksum_without_rewriting_it(checksum: &str) {
     let directory = TempDir::new().unwrap();
     let database_path = directory.path().join("db.sqlite");
     let pool = db::open_database(&database_path).await.unwrap();
@@ -485,7 +484,7 @@ async fn preflight_accepts_the_published_windows_v1_checksum_without_rewriting_i
     .await
     .unwrap();
     sqlx::query("UPDATE schema_migrations SET checksum = ? WHERE version = 1")
-        .bind(versions::PUBLISHED_WINDOWS_V1_CHECKSUM)
+        .bind(checksum)
         .execute(&pool)
         .await
         .unwrap();
@@ -498,7 +497,7 @@ async fn preflight_accepts_the_published_windows_v1_checksum_without_rewriting_i
         .unwrap()
         .try_get::<String, _>("checksum")
         .unwrap();
-    assert_eq!(stored_checksum, versions::PUBLISHED_WINDOWS_V1_CHECKSUM);
+    assert_eq!(stored_checksum, checksum);
     assert_eq!(
         sqlx::query("SELECT COUNT(*) AS count FROM skills WHERE id = 'legacy-checksum-sentinel'")
             .fetch_one(&reopened)
@@ -510,6 +509,22 @@ async fn preflight_accepts_the_published_windows_v1_checksum_without_rewriting_i
     );
     assert!(sibling_files(&database_path, ".pre-migration-").is_empty());
     reopened.close().await;
+}
+
+#[tokio::test]
+async fn preflight_accepts_the_published_windows_v1_checksum_without_rewriting_it() {
+    assert_preflight_accepts_v1_legacy_checksum_without_rewriting_it(
+        versions::PUBLISHED_WINDOWS_V1_CHECKSUM,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn preflight_accepts_the_published_pre_final_schema_v1_checksum_without_rewriting_it() {
+    assert_preflight_accepts_v1_legacy_checksum_without_rewriting_it(
+        versions::PUBLISHED_PRE_FINAL_SCHEMA_V1_CHECKSUM,
+    )
+    .await;
 }
 
 #[tokio::test]

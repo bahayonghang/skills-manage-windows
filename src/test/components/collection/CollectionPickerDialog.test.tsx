@@ -62,6 +62,8 @@ function buildStoreState(overrides = {}) {
     currentDetail: null,
     isLoading: false,
     isLoadingDetail: false,
+    hasLoaded: true,
+    detailTargetId: null,
     error: null,
     loadCollections: mockLoadCollections,
     createCollection: vi.fn(),

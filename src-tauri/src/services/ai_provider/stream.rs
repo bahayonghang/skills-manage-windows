@@ -220,7 +220,7 @@ pub(crate) async fn do_explain_skill_stream(
     // Long streams use explicit header, idle and total deadlines instead of
     // reqwest's whole-response `.timeout()`.
     let client = reqwest::Client::builder()
-        .user_agent(crate::commands::APP_USER_AGENT)
+        .user_agent(crate::http_identity::APP_USER_AGENT)
         .connect_timeout(super::AI_CONNECT_TIMEOUT)
         .pool_idle_timeout(Duration::from_secs(90))
         .build()

@@ -1,5 +1,4 @@
 import { invoke, isTauriRuntime } from "@/lib/ipc";
-import { MarketplaceSkill, SkillRegistry } from "@/types";
 import { normalizeRegistryIdentity } from "./marketplaceStore.shared";
 import type { MarketplaceState, MarketplaceStoreContext } from "./marketplaceStore.types";
 
@@ -37,7 +36,7 @@ export function createMarketplaceRegistrySlice({ set, get, getGeneration }: Mark
     const generation = getGeneration();
     set({ isLoading: true, error: null });
     try {
-      const registries = await invoke<SkillRegistry[]>("list_registries");
+      const registries = await invoke("list_registries");
       if (generation === getGeneration()) {
         set({ registries: registries ?? [], isLoading: false });
       }
@@ -65,14 +64,13 @@ export function createMarketplaceRegistrySlice({ set, get, getGeneration }: Mark
     const generation = getGeneration();
     set({ isSyncing: true, error: null });
     try {
-      const command = forceRefresh ? "sync_registry_with_options" : "sync_registry";
       const skills = forceRefresh
-        ? await invoke<MarketplaceSkill[]>(command, {
+        ? await invoke("sync_registry_with_options", {
             registryId,
             options: { forceRefresh: true },
           })
-        : await invoke<MarketplaceSkill[]>(command, { registryId });
-      const registries = await invoke<SkillRegistry[]>("list_registries");
+        : await invoke("sync_registry", { registryId });
+      const registries = await invoke("list_registries");
       if (generation === getGeneration()) {
         set({
           skills: skills ?? [],
@@ -81,7 +79,7 @@ export function createMarketplaceRegistrySlice({ set, get, getGeneration }: Mark
         });
       }
     } catch (err) {
-      const registries = await invoke<SkillRegistry[]>("list_registries").catch(() => null);
+      const registries = await invoke("list_registries").catch(() => null);
       if (generation === getGeneration()) {
         set({
           error: String(err),
@@ -97,7 +95,7 @@ export function createMarketplaceRegistrySlice({ set, get, getGeneration }: Mark
     const generation = getGeneration();
     set({ isLoading: true, error: null });
     try {
-      const skills = await invoke<MarketplaceSkill[]>("search_marketplace_skills", {
+      const skills = await invoke("search_marketplace_skills", {
         registryId,
         query: query || null,
       });
@@ -112,7 +110,7 @@ export function createMarketplaceRegistrySlice({ set, get, getGeneration }: Mark
   },
 
   loadPreviewSkills: async (registryId: string) => {
-    return invoke<MarketplaceSkill[]>("search_marketplace_skills", {
+    return invoke("search_marketplace_skills", {
       registryId,
       query: null,
     });
@@ -167,8 +165,8 @@ export function createMarketplaceRegistrySlice({ set, get, getGeneration }: Mark
         })}`
       );
     }
-    const registry = await invoke<SkillRegistry>("add_registry", { name, sourceType, url });
-    const registries = await invoke<SkillRegistry[]>("list_registries");
+    const registry = await invoke("add_registry", { name, sourceType, url });
+    const registries = await invoke("list_registries");
     if (generation === getGeneration()) {
       set({ registries: registries ?? [] });
     }
@@ -178,7 +176,7 @@ export function createMarketplaceRegistrySlice({ set, get, getGeneration }: Mark
   removeRegistry: async (registryId: string) => {
     const generation = getGeneration();
     await invoke("remove_registry", { registryId });
-    const registries = await invoke<SkillRegistry[]>("list_registries");
+    const registries = await invoke("list_registries");
     if (generation === getGeneration()) {
       set((s) => ({
         registries: registries ?? [],

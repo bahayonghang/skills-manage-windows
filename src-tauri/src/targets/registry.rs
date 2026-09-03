@@ -44,6 +44,14 @@ impl TargetRegistry {
             .insert(target_id.to_string(), pool);
     }
 
+    #[cfg(test)]
+    pub(super) fn has_cached_pool(&self, target_id: &str) -> bool {
+        self.pools
+            .lock()
+            .expect("target pool cache")
+            .contains_key(target_id)
+    }
+
     pub(super) fn set_session_password(
         &self,
         credential_key: &str,

@@ -71,6 +71,7 @@ fn reviewed_failure(definition: OperationDefinition, error: IpcError) -> Reviewe
 // ─── Registry CRUD ───────────────────────────────────────────────────────────
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn list_registries(
     state: State<'_, AppState>,
 ) -> crate::ipc_error::IpcResult<Vec<SkillRegistry>> {
@@ -87,6 +88,7 @@ pub async fn list_registries(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn add_registry(
     state: State<'_, AppState>,
     name: String,
@@ -159,6 +161,7 @@ pub async fn remove_registry(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn sync_registry(
     state: State<'_, AppState>,
     registry_id: String,
@@ -203,6 +206,7 @@ pub async fn sync_registry(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn sync_registry_with_options(
     state: State<'_, AppState>,
     registry_id: String,
@@ -248,6 +252,7 @@ pub async fn sync_registry_with_options(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn search_marketplace_skills(
     state: State<'_, AppState>,
     registry_id: Option<String>,
@@ -355,6 +360,7 @@ fn marketplace_install_ipc_error(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn search_skills_sh(
     state: State<'_, AppState>,
     query: String,
@@ -372,6 +378,7 @@ pub async fn search_skills_sh(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn resolve_skills_sh_url(
     state: State<'_, AppState>,
     source: String,
@@ -394,6 +401,7 @@ pub async fn resolve_skills_sh_url(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn browse_skills_sh_directory(
     state: State<'_, AppState>,
     source: String,
@@ -416,6 +424,7 @@ pub async fn browse_skills_sh_directory(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn read_skills_sh_file(
     state: State<'_, AppState>,
     source: String,
@@ -482,6 +491,7 @@ pub async fn install_from_skills_sh(
 // ─── AI Explanation ──────────────────────────────────────────────────────────
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn explain_skill(
     state: State<'_, AppState>,
     content: String,
@@ -550,6 +560,7 @@ pub async fn test_ai_connection(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn get_skill_explanation(
     state: State<'_, AppState>,
     skill_id: String,
@@ -584,6 +595,7 @@ pub async fn get_skill_explanation_summaries(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn explain_skill_stream(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -626,6 +638,7 @@ pub async fn explain_skill_stream(
 }
 
 #[tauri::command]
+#[cfg_attr(feature = "ipc-codegen", specta::specta)]
 pub async fn refresh_skill_explanation(
     state: State<'_, AppState>,
     app: AppHandle,

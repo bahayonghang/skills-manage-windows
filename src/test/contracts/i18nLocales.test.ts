@@ -38,4 +38,17 @@ describe("i18n locale strings", () => {
     ]);
     expect(labels.join(" ")).not.toMatch(/[{}]/);
   });
+
+  it("keeps English and Chinese locale keys in parity", () => {
+    const collectKeys = (value: unknown, prefix = ""): string[] => {
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        return Object.entries(value as Record<string, unknown>).flatMap(
+          ([key, child]) => collectKeys(child, prefix ? `${prefix}.${key}` : key),
+        );
+      }
+      return prefix ? [prefix] : [];
+    };
+
+    expect(collectKeys(en).sort()).toEqual(collectKeys(zh).sort());
+  });
 });

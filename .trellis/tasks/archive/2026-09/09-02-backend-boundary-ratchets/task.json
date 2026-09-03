@@ -1,0 +1,29 @@
+{
+  "id": "backend-boundary-ratchets",
+  "name": "backend-boundary-ratchets",
+  "title": "后端依赖方向与 repository 所有权",
+  "description": "移除 services 对 commands 的反向依赖，渐进收敛 db 宽门面并增加防回退检查。",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-09-02",
+  "completedAt": "2026-09-03",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "09-02-engineering-audit-remediation",
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "audit_severity": "medium",
+    "estimated_effort": "L"
+  }
+}

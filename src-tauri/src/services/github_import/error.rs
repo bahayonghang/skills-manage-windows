@@ -32,6 +32,9 @@ pub enum GithubImportError {
     #[error(transparent)]
     CentralMutation(#[from] crate::services::central_mutation::CentralMutationError),
 
+    #[error("{0}")]
+    CentralApply(Box<crate::services::central_updates::CentralUpdatesError>),
+
     // ── HTTP categories (parent design.md 1.2 Http-variant convention) ──────
     /// HTTP transport/protocol failure (connect, timeout, non-2xx status,
     /// mirror-fallback summaries). Message preformatted at the call site.
@@ -333,6 +336,8 @@ impl GithubImportError {
         }
     }
 
+    /// Join helper for `fs_util::run_blocking_fs_with` call sites.
+    #[allow(dead_code)]
     pub(crate) fn task_join(label: &'static str, message: String) -> Self {
         Self::TaskJoin { label, message }
     }
@@ -443,6 +448,7 @@ impl GithubImportError {
             Self::Io { .. } => "github_import.io",
             Self::Db(_) => "github_import.db",
             Self::CentralMutation(_) => "github_import.central_mutation",
+            Self::CentralApply(error) => error.diagnostic_category(),
             Self::Remote(_) => "github_import.remote",
             Self::TaskJoin { .. } => "github_import.task_join",
             _ => "github_import.other",
@@ -544,9 +550,16 @@ impl GithubImportError {
     /// The summary is fixed and never contains a token, workspace path, digest,
     /// branch value, or file content.
     pub fn to_ipc_error(&self) -> String {
-        match self.ipc_code() {
-            Some(code) => format!("github_import.{}:{}", code, self),
-            None => self.to_string(),
+        match self {
+            Self::CentralApply(error) => format!(
+                "{}:{}",
+                error.stable_error_code(),
+                error.public_update_message()
+            ),
+            _ => match self.ipc_code() {
+                Some(code) => format!("github_import.{}:{}", code, self),
+                None => self.to_string(),
+            },
         }
     }
 }
@@ -623,7 +636,8 @@ mod snapshot_failure_tests {
 #[cfg(test)]
 mod ipc_error_code_tests {
     use super::*;
-    use crate::ipc_error::public_message_for_code;
+    use crate::ipc_error::{public_message_for_code, IpcError};
+    use crate::services::central_updates::CentralUpdatesError;
 
     #[test]
     fn configured_github_denial_keeps_auth_context_in_the_typed_code() {
@@ -729,5 +743,26 @@ mod ipc_error_code_tests {
                 "missing zh backendErrors.github_import.{suffix}"
             );
         }
+    }
+
+    #[test]
+    fn central_apply_ipc_does_not_leak_paths_or_file_contents() {
+        let secret = r"C:\Users\alice\private\skill.md token=ghp_super_secret";
+        let error = GithubImportError::CentralApply(Box::new(CentralUpdatesError::Batch(
+            secret.to_string(),
+        )));
+        assert_eq!(error.diagnostic_category(), "central_updates.batch");
+        let ipc = IpcError::from(error.to_ipc_error());
+        let serialized = serde_json::to_string(&ipc).expect("serialize");
+        assert!(!error.to_ipc_error().contains("alice"));
+        assert!(!error.to_ipc_error().contains("ghp_super_secret"));
+        assert!(!ipc.message.contains("alice"));
+        assert!(!ipc.message.contains("ghp_"));
+        assert!(!serialized.contains("alice"));
+        assert!(!serialized.contains("ghp_"));
+        assert_eq!(
+            ipc.message,
+            "The operation failed. See runtime logs for details."
+        );
     }
 }

@@ -129,6 +129,140 @@ async fn table_indexes(pool: &DbPool, table: &str) -> Vec<String> {
         .collect()
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct PragmaColumn {
+    type_name: String,
+    not_null: i64,
+    default_expr: Option<String>,
+}
+
+async fn pragma_column(pool: &DbPool, table: &str, column: &str) -> PragmaColumn {
+    let row = sqlx::query(&format!("PRAGMA table_info({table})"))
+        .fetch_all(pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|row| row.try_get::<String, _>("name").unwrap() == column)
+        .unwrap_or_else(|| panic!("{table}.{column} must exist"));
+    PragmaColumn {
+        type_name: row.try_get::<String, _>("type").unwrap(),
+        not_null: row.try_get::<i64, _>("notnull").unwrap(),
+        default_expr: row.try_get::<Option<String>, _>("dflt_value").unwrap(),
+    }
+}
+
+async fn index_is_unique(pool: &DbPool, table: &str, index: &str) -> bool {
+    sqlx::query(&format!("PRAGMA index_list({table})"))
+        .fetch_all(pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|row| row.try_get::<String, _>("name").unwrap() == index)
+        .map(|row| row.try_get::<i64, _>("unique").unwrap() == 1)
+        .unwrap_or(false)
+}
+
+const FINAL_SCHEMA_TEXT_COLUMNS: [(&str, &str); 4] = [
+    ("skill_tags", "group_id"),
+    ("skill_ai_tag_reviews", "proposed_name"),
+    ("skill_ai_tag_reviews", "proposed_description"),
+    ("skill_repositories", "last_synced_at"),
+];
+
+fn expected_nullable_text_column() -> PragmaColumn {
+    PragmaColumn {
+        type_name: "TEXT".to_string(),
+        not_null: 0,
+        default_expr: None,
+    }
+}
+
+#[tokio::test]
+async fn test_init_creates_final_schema_columns_and_unique_uid_index() {
+    let pool = setup_test_db().await;
+    let expected = expected_nullable_text_column();
+
+    for (table, column) in FINAL_SCHEMA_TEXT_COLUMNS {
+        assert_eq!(
+            pragma_column(&pool, table, column).await,
+            expected,
+            "{table}.{column} on a new database must match the base DDL"
+        );
+    }
+
+    assert!(table_indexes(&pool, "skills")
+        .await
+        .contains(&"idx_skills_uid".to_string()));
+    assert!(
+        index_is_unique(&pool, "skills", "idx_skills_uid").await,
+        "idx_skills_uid must be unique on a new database"
+    );
+}
+
+#[tokio::test]
+async fn test_init_upgrades_missing_final_schema_columns() {
+    // 豁免 test_support::mem_pool：本测试手工搭建缺列旧库验证 ensure_column 升级。
+    let pool = SqlitePool::connect(":memory:").await.unwrap();
+    sqlx::query(
+        "CREATE TABLE skill_repositories (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            owner TEXT,
+            repo TEXT,
+            branch TEXT,
+            url TEXT,
+            pinned BOOLEAN NOT NULL DEFAULT 0,
+            is_unknown BOOLEAN NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "CREATE TABLE skill_tags (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            description TEXT,
+            color TEXT,
+            is_builtin BOOLEAN NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "CREATE TABLE skill_ai_tag_reviews (
+            skill_id TEXT NOT NULL,
+            tag_id TEXT NOT NULL,
+            confidence REAL NOT NULL,
+            reason TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            suggested_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (skill_id, tag_id)
+        )",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    init_database(&pool).await.unwrap();
+
+    let expected = expected_nullable_text_column();
+    for (table, column) in FINAL_SCHEMA_TEXT_COLUMNS {
+        assert_eq!(
+            pragma_column(&pool, table, column).await,
+            expected,
+            "{table}.{column} after upgrading an old database must match the base DDL"
+        );
+    }
+}
+
 const OWNED_SKILL_RELATION_TABLES: [&str; 7] = [
     "skill_update_states",
     "skill_repository_members",

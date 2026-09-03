@@ -214,7 +214,7 @@ pub(crate) async fn list_global(
         return list_global_at(pool, &paths.canonical_root_path(), &paths.lock_path_buf()).await;
     }
     let ownership = load_lock_from_transport(tx).await?;
-    let agents = crate::db::get_all_agents(pool)
+    let agents = crate::db::repos::agents_repo::get_all_agents(pool)
         .await
         .map_err(|error| SkillsCliError::Io {
             context: "read platforms",
@@ -305,7 +305,7 @@ pub(crate) async fn list_global_at(
     lock_path: &std::path::Path,
 ) -> Result<SkillsCliGlobalSnapshot, SkillsCliError> {
     let ownership = load_cli_lock_ownership(lock_path)?;
-    let agents = crate::db::get_all_agents(pool)
+    let agents = crate::db::repos::agents_repo::get_all_agents(pool)
         .await
         .map_err(|error| SkillsCliError::Io {
             context: "read platforms",
@@ -343,7 +343,7 @@ pub(crate) async fn mapped_inventory_platforms_via_transport(
     tx: &SkillsCliTransport,
     pool: &DbPool,
 ) -> Result<Vec<inventory::InventoryPlatform>, SkillsCliError> {
-    let agents = crate::db::get_all_agents(pool)
+    let agents = crate::db::repos::agents_repo::get_all_agents(pool)
         .await
         .map_err(|error| SkillsCliError::Io {
             context: "read platforms",
@@ -394,7 +394,7 @@ pub async fn install_targets(
     tx: &SkillsCliTransport,
     pool: &DbPool,
 ) -> Result<Vec<SkillsCliInstallTarget>, SkillsCliError> {
-    let agents = crate::db::get_all_agents(pool)
+    let agents = crate::db::repos::agents_repo::get_all_agents(pool)
         .await
         .map_err(|error| SkillsCliError::Io {
             context: "read platforms",

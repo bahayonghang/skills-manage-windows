@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { resolveRepoRoot } from "../lib/repo-root.mjs";
@@ -11,6 +11,10 @@ const ECOSYSTEMS = new Set(["npm", "cargo"]);
 const NPM_ADVISORY_PATTERN = /^GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/;
 const CARGO_ADVISORY_PATTERN = /^RUSTSEC-\d{4}-\d{4}$/;
 const BLOCKING_NPM_SEVERITIES = new Set(["high", "critical"]);
+const NPM_EVIDENCE_SEVERITIES = new Set(["moderate", "low"]);
+const NPM_AUDIT_COMMAND = "pnpm audit --prod --json";
+const CARGO_AUDIT_COMMAND = "cargo audit --file src-tauri/Cargo.lock --json";
+export const MAX_EVIDENCE_ROWS = 50;
 
 function sorted(values) {
   return [...values].sort((left, right) => left.localeCompare(right));
@@ -24,6 +28,10 @@ function isIsoDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function asNonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
 function validateExceptions(exceptions, now) {
@@ -140,6 +148,104 @@ function normalizeCargoBlockers(report, errors) {
   return blockers;
 }
 
+function npmEvidenceVersions(advisory) {
+  const findings = Array.isArray(advisory?.findings) ? advisory.findings : [];
+  const versions = findings
+    .map((finding) => asNonEmptyString(finding?.version))
+    .filter((version) => version !== null);
+  return versions.length > 0 ? versions : ["unknown"];
+}
+
+function normalizeNpmEvidence(report) {
+  if (!report || typeof report !== "object" || !report.advisories || typeof report.advisories !== "object") {
+    return [];
+  }
+
+  const findings = [];
+  for (const advisory of Object.values(report.advisories)) {
+    if (!NPM_EVIDENCE_SEVERITIES.has(advisory?.severity)) continue;
+    const packageName = asNonEmptyString(advisory?.module_name) ?? "unknown";
+    const advisoryId = asNonEmptyString(advisory?.github_advisory_id) ?? "unknown";
+    for (const version of npmEvidenceVersions(advisory)) {
+      findings.push({
+        ecosystem: "npm",
+        category: advisory.severity,
+        severity: advisory.severity,
+        advisory: advisoryId,
+        package: packageName,
+        version,
+      });
+    }
+  }
+  return findings;
+}
+
+function normalizeCargoEvidence(report) {
+  const warnings = report?.warnings;
+  if (!warnings || typeof warnings !== "object" || Array.isArray(warnings)) {
+    return [];
+  }
+
+  const findings = [];
+  for (const [warningKind, list] of Object.entries(warnings)) {
+    if (!Array.isArray(list)) continue;
+    for (const warning of list) {
+      const category = asNonEmptyString(warning?.kind) ?? warningKind;
+      findings.push({
+        ecosystem: "cargo",
+        category,
+        advisory: asNonEmptyString(warning?.advisory?.id) ?? "unknown",
+        package: asNonEmptyString(warning?.package?.name) ?? "unknown",
+        version: asNonEmptyString(warning?.package?.version) ?? "unknown",
+      });
+    }
+  }
+  return findings;
+}
+
+function evidenceKey(finding) {
+  return `${finding.ecosystem}:${finding.category}:${finding.advisory}:${finding.package}:${finding.version}`;
+}
+
+function compareEvidence(left, right) {
+  return (
+    left.ecosystem.localeCompare(right.ecosystem) ||
+    left.category.localeCompare(right.category) ||
+    left.advisory.localeCompare(right.advisory) ||
+    left.package.localeCompare(right.package) ||
+    left.version.localeCompare(right.version)
+  );
+}
+
+function summarizeEvidence(findings) {
+  const counts = new Map();
+  for (const finding of findings) {
+    const key = evidenceKey(finding);
+    const existing = counts.get(key);
+    if (existing) {
+      existing.count += 1;
+      continue;
+    }
+    counts.set(key, { ...finding, count: 1 });
+  }
+
+  const rows = [...counts.values()].sort(compareEvidence);
+  const shownRows = rows.slice(0, MAX_EVIDENCE_ROWS);
+  return {
+    total: rows.length,
+    shown: shownRows.length,
+    truncated: Math.max(0, rows.length - shownRows.length),
+    rows: shownRows,
+  };
+}
+
+function buildProvenance() {
+  return {
+    currentness: "unverified",
+    sources: [NPM_AUDIT_COMMAND, CARGO_AUDIT_COMMAND],
+  };
+}
+
 export function evaluateDependencyAudit({ npmAudit, cargoAudit, exceptions, now = new Date() }) {
   const errors = [];
   const npmBlockers = normalizeNpmBlockers(npmAudit, errors);
@@ -164,10 +270,51 @@ export function evaluateDependencyAudit({ npmAudit, cargoAudit, exceptions, now 
     errors,
     blockers,
     approved: blockers.filter((blocker) => exceptionKeys.has(blocker.key)),
+    evidence: summarizeEvidence([...normalizeNpmEvidence(npmAudit), ...normalizeCargoEvidence(cargoAudit)]),
+    provenance: buildProvenance(),
   };
 }
 
-function runJsonCommand(command, args, label) {
+export function formatAuditEvidence(result) {
+  const evidence = result.evidence ?? { total: 0, shown: 0, truncated: 0, rows: [] };
+  const provenance = result.provenance ?? buildProvenance();
+  const consoleLines = [
+    `[audit] currentness: ${provenance.currentness}`,
+    `[audit] sources: ${provenance.sources.join("; ")}`,
+    `[audit] evidence total=${evidence.total} shown=${evidence.shown} truncated=${evidence.truncated}`,
+    ...evidence.rows.map(
+      (row) =>
+        `[audit] ${row.ecosystem} ${row.category} ${row.advisory} ${row.package}@${row.version} count=${row.count}`,
+    ),
+  ];
+  const markdownLines = [
+    "## Dependency audit evidence",
+    "",
+    `- currentness: ${provenance.currentness}`,
+    `- sources: ${provenance.sources.map((source) => `\`${source}\``).join("; ")}`,
+    `- total: ${evidence.total} shown: ${evidence.shown} truncated: ${evidence.truncated}`,
+    "",
+    "| Ecosystem | Category | Advisory | Package | Version | Count |",
+    "| --- | --- | --- | --- | --- | ---: |",
+    ...evidence.rows.map(
+      (row) =>
+        `| ${row.ecosystem} | ${row.category} | ${row.advisory} | ${row.package} | ${row.version} | ${row.count} |`,
+    ),
+    "",
+  ];
+  return {
+    consoleText: consoleLines.join("\n"),
+    markdown: markdownLines.join("\n"),
+  };
+}
+
+function resolveSummaryPath(summaryPath) {
+  if (typeof summaryPath !== "string") return null;
+  const trimmed = summaryPath.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export function runJsonCommand(command, args, label) {
   const result = spawnSync(command, args, {
     cwd: repoRoot,
     encoding: "utf8",
@@ -196,16 +343,38 @@ export function runDependencyAudit() {
   return evaluateDependencyAudit({ npmAudit, cargoAudit, exceptions });
 }
 
-const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : null;
-if (invokedPath === import.meta.url) {
+export function executeDependencyAuditCli({
+  evaluate = runDependencyAudit,
+  summaryPath = process.env.GITHUB_STEP_SUMMARY ?? null,
+  writeLine = console.log,
+  writeError = console.error,
+  exitProcess = (code) => process.exit(code),
+} = {}) {
   try {
-    const result = runDependencyAudit();
-    if (result.errors.length > 0) throw new Error(result.errors.join("\n"));
-    console.log(
+    const result = evaluate();
+    const output = formatAuditEvidence(result);
+    writeLine(output.consoleText);
+    const resolvedSummaryPath = resolveSummaryPath(summaryPath);
+    if (resolvedSummaryPath) {
+      try {
+        appendFileSync(resolvedSummaryPath, output.markdown);
+      } catch (error) {
+        throw new Error(`Failed to write GitHub Step Summary: ${error.message}`);
+      }
+    }
+    if (result.errors.length > 0) {
+      throw new Error(result.errors.join("\n"));
+    }
+    writeLine(
       `[audit] Passed. ${result.blockers.length} blocking advisories, ${result.approved.length} approved exceptions.`,
     );
   } catch (error) {
-    console.error(`[audit] ${error.message}`);
-    process.exit(1);
+    writeError(`[audit] ${error.message}`);
+    exitProcess(1);
   }
+}
+
+const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : null;
+if (invokedPath === import.meta.url) {
+  executeDependencyAuditCli();
 }

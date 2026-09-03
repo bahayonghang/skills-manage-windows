@@ -4,6 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::db::repos::skills_repo;
 use crate::db::{self, DbPool};
 
 use super::error::InstallationError;
@@ -15,54 +16,83 @@ use super::fs_util::{
 /// from its actual location (looked up in the database) and update the DB
 /// record to mark it as central.
 ///
-/// This enables installing platform-specific skills to other platforms:
-/// the skill is first adopted into the central directory, then distributed
-/// via symlink/copy as usual.
+/// Callers own the target mutation guard. Existing `SKILL.md` is not enough
+/// to skip the database repair: a leftover copy with `is_central = false`
+/// must still be upserted.
 pub(crate) async fn ensure_centralized(
     pool: &DbPool,
     skill_id: &str,
     canonical_dir: &Path,
 ) -> Result<(), InstallationError> {
-    if path_exists_blocking(&canonical_dir.join("SKILL.md")).await? {
-        return Ok(());
-    }
-
-    // The top-level installation use case owns the target mutation guard.
-    if path_exists_blocking(&canonical_dir.join("SKILL.md")).await? {
-        return Ok(());
-    }
-
-    // Look up the skill's actual file location from the database.
-    let skill = db::get_skill_by_id(pool, skill_id)
+    let skill = skills_repo::get_skill_by_id(pool, skill_id)
         .await?
         .ok_or_else(|| InstallationError::SkillNotFound(skill_id.to_string()))?;
 
-    // Derive the source directory (parent of file_path).
-    let source_file = PathBuf::from(&skill.file_path);
-    let source_dir = source_file
-        .parent()
-        .ok_or_else(|| InstallationError::InvalidSkillFilePath(skill_id.to_string()))?;
-
-    if !path_exists_blocking(&source_file).await? {
-        return Err(InstallationError::SkillSourceMissing(
-            source_file.display().to_string(),
-        ));
+    let canonical_exists = path_exists_blocking(&canonical_dir.join("SKILL.md")).await?;
+    if canonical_exists && skill.is_central {
+        return Ok(());
     }
 
-    // Copy to central directory.
-    copy_dir_all_blocking(source_dir, canonical_dir).await?;
+    let copied_now = if canonical_exists {
+        false
+    } else {
+        let source_file = PathBuf::from(&skill.file_path);
+        let source_dir = source_file
+            .parent()
+            .ok_or_else(|| InstallationError::InvalidSkillFilePath(skill_id.to_string()))?;
 
-    // Update the DB record to reflect centralization.
-    let mut updated = skill;
-    updated.canonical_path = Some(canonical_dir.to_string_lossy().into_owned());
-    updated.is_central = true;
-    updated.file_path = canonical_dir
+        if !path_exists_blocking(&source_file).await? {
+            return Err(InstallationError::SkillSourceMissing(
+                source_file.display().to_string(),
+            ));
+        }
+
+        copy_dir_all_blocking(source_dir, canonical_dir).await?;
+        true
+    };
+
+    match persist_central_skill_row(pool, skill, canonical_dir).await {
+        Ok(()) => Ok(()),
+        Err(error) if copied_now => {
+            let _ = remove_copied_canonical_dir(canonical_dir).await;
+            Err(error)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+async fn persist_central_skill_row(
+    pool: &DbPool,
+    mut skill: db::Skill,
+    canonical_dir: &Path,
+) -> Result<(), InstallationError> {
+    skill.canonical_path = Some(canonical_dir.to_string_lossy().into_owned());
+    skill.is_central = true;
+    skill.file_path = canonical_dir
         .join("SKILL.md")
         .to_string_lossy()
         .into_owned();
-    db::upsert_skill(pool, &updated).await?;
-
+    skills_repo::upsert_skill(pool, &skill).await?;
     Ok(())
+}
+
+async fn remove_copied_canonical_dir(canonical_dir: &Path) -> Result<(), InstallationError> {
+    let canonical_dir = canonical_dir.to_path_buf();
+    run_blocking_fs("ensure_centralized compensate canonical copy", move || {
+        match std::fs::symlink_metadata(&canonical_dir) {
+            Ok(_) => std::fs::remove_dir_all(&canonical_dir).map_err(|e| {
+                InstallationError::io(
+                    format!(
+                        "Failed to remove incomplete central copy '{}'",
+                        canonical_dir.display()
+                    ),
+                    e,
+                )
+            }),
+            Err(_) => Ok(()),
+        }
+    })
+    .await
 }
 
 /// Two agents share a skills directory if their global_skills_dir resolves to

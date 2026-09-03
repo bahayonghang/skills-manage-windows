@@ -5,6 +5,8 @@
 //! 不触网，仅汇总/清理 DB 既有状态。
 
 use super::*;
+use crate::db::repos::pending_additions_repo;
+use crate::db::repos::update_inventory_repo;
 use crate::services::central_updates::CentralUpdatesError;
 
 pub(crate) async fn get_skill_update_inventory_impl_scoped(
@@ -20,10 +22,12 @@ pub(crate) async fn get_skill_update_inventory_impl_scoped(
      */
 
     let scope_filter = InventoryScopeFilter::from_scope(pool, scope.clone()).await?;
-    db::prune_orphaned_pending_additions(pool).await?;
-    let entries =
-        db::list_skill_update_inventory_entries(pool, &inventory_id_for_scope(scope.as_ref()))
-            .await?;
+    pending_additions_repo::prune_orphaned_pending_additions(pool).await?;
+    let entries = update_inventory_repo::list_skill_update_inventory_entries(
+        pool,
+        &inventory_id_for_scope(scope.as_ref()),
+    )
+    .await?;
     let (updatable, remote_missing, unsupported, failed_repositories, inventory_generated_at) =
         inventory_from_entries(entries)?;
 
@@ -33,16 +37,18 @@ pub(crate) async fn get_skill_update_inventory_impl_scoped(
      * ========================================================================
      */
     let pending = match &scope_filter.pending {
-        PendingAdditionScope::All => db::list_pending_additions(pool).await?,
+        PendingAdditionScope::All => pending_additions_repo::list_pending_additions(pool).await?,
         PendingAdditionScope::Repositories(repository_ids) => {
             let ids = repository_ids.iter().cloned().collect::<Vec<_>>();
-            db::list_pending_additions_for_repos(pool, &ids).await?
+            pending_additions_repo::list_pending_additions_for_repos(pool, &ids).await?
         }
-        PendingAdditionScope::SkillIds(skill_ids) => db::list_pending_additions(pool)
-            .await?
-            .into_iter()
-            .filter(|p| skill_ids.contains(&p.skill_id))
-            .collect(),
+        PendingAdditionScope::SkillIds(skill_ids) => {
+            pending_additions_repo::list_pending_additions(pool)
+                .await?
+                .into_iter()
+                .filter(|p| skill_ids.contains(&p.skill_id))
+                .collect()
+        }
         PendingAdditionScope::None => Vec::new(),
     };
     let remote_added = pending
@@ -100,29 +106,36 @@ pub(crate) async fn clear_skill_update_inventory_impl(
      */
     match scope {
         None => {
-            db::clear_all_skill_update_inventory(pool).await?;
-            db::clear_pending_additions(pool).await?;
+            update_inventory_repo::clear_all_skill_update_inventory(pool).await?;
+            pending_additions_repo::clear_pending_additions(pool).await?;
         }
         Some(scope) => match scope.kind {
             SkillRefreshScopeKind::All => {
-                db::clear_all_skill_update_inventory(pool).await?;
-                db::clear_pending_additions(pool).await?;
+                update_inventory_repo::clear_all_skill_update_inventory(pool).await?;
+                pending_additions_repo::clear_pending_additions(pool).await?;
             }
             SkillRefreshScopeKind::Skills => {
                 let ids = normalize_ids(scope.skill_ids.unwrap_or_default());
-                db::delete_skill_update_inventory_entries_for_skills(pool, &ids).await?;
-                db::clear_pending_additions_for_skill_ids(pool, &ids).await?;
+                update_inventory_repo::delete_skill_update_inventory_entries_for_skills(pool, &ids)
+                    .await?;
+                pending_additions_repo::clear_pending_additions_for_skill_ids(pool, &ids).await?;
             }
             SkillRefreshScopeKind::Repositories => {
                 let ids = normalize_ids(scope.repository_ids.unwrap_or_default());
                 if !ids.is_empty() {
-                    db::delete_skill_update_inventory_entries_for_repositories(pool, &ids).await?;
-                    db::clear_pending_additions_for_repos(pool, &ids).await?;
+                    update_inventory_repo::delete_skill_update_inventory_entries_for_repositories(
+                        pool, &ids,
+                    )
+                    .await?;
+                    pending_additions_repo::clear_pending_additions_for_repos(pool, &ids).await?;
                 }
             }
             SkillRefreshScopeKind::Platform => {
-                db::clear_skill_update_inventory_run(pool, &inventory_id_for_scope(Some(&scope)))
-                    .await?;
+                update_inventory_repo::clear_skill_update_inventory_run(
+                    pool,
+                    &inventory_id_for_scope(Some(&scope)),
+                )
+                .await?;
             }
         },
     }

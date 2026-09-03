@@ -5,12 +5,22 @@ type GeneratedIpcCommandSpec<Args, Result> = { args: Args; result: Result };
 const command = <Args, Result>() => ({}) as GeneratedIpcCommandSpec<Args, Result>;
 
 export const GENERATED_IPC_COMMANDS = {
+  accept_ai_tag_review: command<{ skillId: string; tagIds: string[] }, null>(),
+  add_project: command<{ path: string }, ProjectDto>(),
+  add_registry: command<{ name: string; sourceType: string; url: string }, SkillRegistry>(),
+  add_scan_directory: command<{ path: string; label: string | null }, ScanDirectory>(),
+  add_skill_to_collection: command<{ collectionId: string; skillId: string }, null>(),
   apply_central_repository_sync: command<{ decisions: CentralRepositorySyncDecisions }, CentralRepositorySyncApplyResult_Serialize>(),
   apply_central_store_location_change: command<{ request: CentralStoreLocationApplyRequest }, CentralStoreLocationChangeResult>(),
   apply_local_remote_sync: command<{ request: LocalRemoteSyncApplyRequest }, LocalRemoteSyncApplyResult_Serialize>(),
+  assign_skill_tags: command<{ skillIds: string[]; tagIds: string[] }, null>(),
+  assign_skills_to_repository: command<{ repositoryId: string; skillIds: string[] }, null>(),
   batch_install_central_skills: command<{ skillIds: string[]; agentIds: string[]; method: string | null; projectPath: string | null }, CentralBatchInstallResult>(),
   batch_install_collection: command<{ collectionId: string; agentIds: string[] }, BatchInstallResult>(),
   batch_install_to_agents: command<{ skillId: string; agentIds: string[]; method: string | null }, BatchInstallResult>(),
+  browse_skills_sh_directory: command<{ source: string; skillId: string }, SkillsShFileEntry[]>(),
+  bulk_suggest_skill_tags: command<{ skillIds: string[] }, SkillTagSuggestionResult[]>(),
+  cancel_ai_tag_job: command<{ jobId: string }, null>(),
   cancel_skills_cli_job: command<{ jobId: string }, boolean>(),
   clear_ai_api_key: command<{ provider: string | null }, AiApiKeyState_Serialize>(),
   clear_github_pat: command<undefined, GitHubPatState_Serialize>(),
@@ -22,15 +32,32 @@ export const GENERATED_IPC_COMMANDS = {
 	repositoryIds?: string[] | null,
 	agentIds?: string[] | null,
 } | null }, null>(),
+  create_collection: command<{ name: string; description: string | null }, Collection>(),
+  create_or_update_skill_repository: command<{ id: string | null; name: string; sourceType: string | null; owner: string | null; repo: string | null; branch: string | null; url: string | null; isUnknown: boolean | null }, SkillRepository>(),
+  create_skill_tag: command<{ name: string; description: string | null; color: string | null }, SkillTag>(),
   delete_central_skill: command<{ skillId: string; removeAgentIds: string[]; force: boolean | null }, DeleteCentralSkillResult>(),
   delete_central_skills: command<{ requests: BatchDeleteCentralSkillRequest[] }, BatchDeleteCentralSkillResult_Serialize>(),
   delete_collection: command<{ collectionId: string }, null>(),
   delete_skill_repository: command<{ repositoryId: string; requests: BatchDeleteCentralSkillRequest[] }, DeleteSkillRepositoryResult_Serialize>(),
+  explain_skill: command<{ content: string }, string>(),
+  explain_skill_stream: command<{ skillId: string; content: string; lang: string }, null>(),
+  export_collection: command<{ collectionId: string }, string>(),
   force_mirror_central_repositories: command<{ request: ForceRepositoryMirrorRequest }, ForceRepositoryMirrorResult_Serialize>(),
   force_update_central_skills: command<{ request: ForceSkillUpdateRequest }, ForceSkillUpdateResult>(),
+  get_agents: command<undefined, AgentWithStatus[]>(),
   get_ai_api_key_state: command<{ provider: string | null }, AiApiKeyState_Serialize>(),
+  get_app_runtime_info: command<undefined, AppRuntimeInfo>(),
   get_central_skill_update_states: command<undefined, SkillUpdateState[]>(),
+  get_collection_detail: command<{ collectionId: string }, CollectionDetail>(),
+  get_collections: command<undefined, Collection[]>(),
   get_github_pat: command<undefined, GitHubPatState_Serialize>(),
+  get_pending_ai_tag_reviews: command<undefined, SkillAiTagReview[]>(),
+  get_project_skills: command<{ id: string }, ProjectSkillDto[]>(),
+  get_scan_directories: command<undefined, ScanDirectory[]>(),
+  get_settings: command<{ keys: string[] }, { [key in string]: string | null }>(),
+  get_skill_explanation: command<{ skillId: string; lang: string }, string | null>(),
+  get_skill_repositories: command<undefined, SkillRepositoryWithStats[]>(),
+  get_skill_tags: command<undefined, SkillTag[]>(),
   get_skill_update_inventory: command<{ scope: {
 	kind: SkillRefreshScopeKind,
 	mode?: SkillRefreshMode | null,
@@ -47,18 +74,36 @@ export const GENERATED_IPC_COMMANDS = {
   install_skill_to_agent: command<{ skillId: string; agentId: string; method: string | null }, InstallResult>(),
   install_skill_to_project: command<{ projectId: string; skillId: string; agentId: string; method: string }, ProjectSkillInstallation>(),
   keep_remote_missing_central_skills: command<{ skillIds: string[] }, string[]>(),
+  list_projects: command<undefined, ProjectDto[]>(),
+  list_projects_using_skill: command<{ skillId: string }, ProjectUsingSkillDto[]>(),
+  list_registries: command<undefined, SkillRegistry[]>(),
+  pick_project_folder: command<undefined, string | null>(),
   preview_central_store_location_change: command<{ request: CentralStoreLocationPreviewRequest }, CentralStoreLocationPreview>(),
+  preview_delete_central_skills: command<{ skillIds: string[] }, BatchDeleteCentralSkillPreviewResult_Serialize>(),
+  preview_delete_skill_repository: command<{ repositoryId: string }, DeleteSkillRepositoryPreview_Serialize>(),
   preview_local_remote_sync: command<{ request: LocalRemoteSyncPreviewRequest }, LocalRemoteSyncPreview_Serialize>(),
+  read_skills_sh_file: command<{ source: string; filePath: string }, string>(),
+  record_frontend_runtime_log: command<{ payload: FrontendRuntimeLogPayload }, null>(),
+  refresh_skill_explanation: command<{ skillId: string; content: string; lang: string }, null>(),
   refresh_skill_update_inventory: command<{ scope: SkillRefreshScope; operationId: string }, SkillUpdateInventory_Serialize>(),
   remove_project: command<{ id: string; uninstallSkills: boolean }, null>(),
   remove_registry: command<{ registryId: string }, null>(),
   remove_scan_directory: command<{ path: string }, null>(),
   remove_skill_from_collection: command<{ collectionId: string; skillId: string }, null>(),
+  rename_project: command<{ id: string; name: string }, null>(),
+  rescan_project: command<{ id: string }, number>(),
+  resolve_skills_sh_url: command<{ source: string; skillId: string }, string>(),
   retry_failed_update_repositories: command<{ scope: SkillRefreshScope; repositoryIds: string[]; modeOverride: "regular" | "sync" | null; operationId: string }, SkillUpdateInventory_Serialize>(),
   scan_deleted_platform_copies: command<{ agentIds: string[] | null }, DeletedPlatformCopyGroup[]>(),
   scan_platform_duplicate_skills: command<{ agentIds: string[] | null }, PlatformDuplicateGroup[]>(),
+  search_marketplace_skills: command<{ registryId: string | null; query: string | null }, MarketplaceSkill[]>(),
+  search_skills_sh: command<{ query: string; limit: number | null }, SkillsShSkill[]>(),
   set_ai_api_key: command<{ value: string; provider: string | null }, AiApiKeyState_Serialize>(),
   set_github_pat: command<{ value: string }, GitHubPatState_Serialize>(),
+  set_project_pinned: command<{ id: string; pinned: boolean }, null>(),
+  set_scan_directory_active: command<{ path: string; isActive: boolean }, null>(),
+  set_settings: command<{ values: { [key in string]: string } }, null>(),
+  set_skill_repository_pinned: command<{ repositoryId: string; pinned: boolean }, SkillRepository>(),
   skills_cli_add_global: command<{ jobId: string; source: string; skillNames: string[]; skillportAgentIds: string[] }, SkillsCliAddResult>(),
   skills_cli_apply_updates: command<{ request: SkillsCliApplyUpdateRequest }, SkillsCliApplyResult>(),
   skills_cli_check_updates: command<{ jobId: string }, SkillsCliUpdateInventory>(),
@@ -78,32 +123,65 @@ export const GENERATED_IPC_COMMANDS = {
   skills_cli_unlink_platform_batch: command<{ jobId: string; items: SkillsCliPlacementBatchItem[]; force: boolean }, SkillsCliPlacementMutationOutcome>(),
   skills_cli_update_inventory: command<undefined, SkillsCliUpdateInventory>(),
   skills_cli_verify_update_baseline: command<{ jobId: string; skillNames: string[] }, SkillsCliUpdateInventory>(),
+  skip_ai_tag_review: command<{ skillId: string }, null>(),
+  sync_registry: command<{ registryId: string }, MarketplaceSkill[]>(),
+  sync_registry_with_options: command<{ registryId: string; options: {
+	forceRefresh: boolean,
+} | null }, MarketplaceSkill[]>(),
   test_ai_connection: command<undefined, AiConnectionTestResult_Serialize>(),
   test_github_pat: command<undefined, GitHubPatTestResult>(),
   unassign_skill_tags: command<{ skillId: string; tagIds: string[] }, null>(),
   uninstall_skill_from_project: command<{ projectId: string; skillId: string; agentId: string }, null>(),
+  update_collection: command<{ collectionId: string; name: string; description: string | null }, Collection>(),
 } as const;
 
 export const GENERATED_IPC_COMMAND_NAMES = [
+  "accept_ai_tag_review",
+  "add_project",
+  "add_registry",
+  "add_scan_directory",
+  "add_skill_to_collection",
   "apply_central_repository_sync",
   "apply_central_store_location_change",
   "apply_local_remote_sync",
+  "assign_skill_tags",
+  "assign_skills_to_repository",
   "batch_install_central_skills",
   "batch_install_collection",
   "batch_install_to_agents",
+  "browse_skills_sh_directory",
+  "bulk_suggest_skill_tags",
+  "cancel_ai_tag_job",
   "cancel_skills_cli_job",
   "clear_ai_api_key",
   "clear_github_pat",
   "clear_skill_update_inventory",
+  "create_collection",
+  "create_or_update_skill_repository",
+  "create_skill_tag",
   "delete_central_skill",
   "delete_central_skills",
   "delete_collection",
   "delete_skill_repository",
+  "explain_skill",
+  "explain_skill_stream",
+  "export_collection",
   "force_mirror_central_repositories",
   "force_update_central_skills",
+  "get_agents",
   "get_ai_api_key_state",
+  "get_app_runtime_info",
   "get_central_skill_update_states",
+  "get_collection_detail",
+  "get_collections",
   "get_github_pat",
+  "get_pending_ai_tag_reviews",
+  "get_project_skills",
+  "get_scan_directories",
+  "get_settings",
+  "get_skill_explanation",
+  "get_skill_repositories",
+  "get_skill_tags",
   "get_skill_update_inventory",
   "import_collection",
   "import_obsidian_skill_to_central",
@@ -113,18 +191,36 @@ export const GENERATED_IPC_COMMAND_NAMES = [
   "install_skill_to_agent",
   "install_skill_to_project",
   "keep_remote_missing_central_skills",
+  "list_projects",
+  "list_projects_using_skill",
+  "list_registries",
+  "pick_project_folder",
   "preview_central_store_location_change",
+  "preview_delete_central_skills",
+  "preview_delete_skill_repository",
   "preview_local_remote_sync",
+  "read_skills_sh_file",
+  "record_frontend_runtime_log",
+  "refresh_skill_explanation",
   "refresh_skill_update_inventory",
   "remove_project",
   "remove_registry",
   "remove_scan_directory",
   "remove_skill_from_collection",
+  "rename_project",
+  "rescan_project",
+  "resolve_skills_sh_url",
   "retry_failed_update_repositories",
   "scan_deleted_platform_copies",
   "scan_platform_duplicate_skills",
+  "search_marketplace_skills",
+  "search_skills_sh",
   "set_ai_api_key",
   "set_github_pat",
+  "set_project_pinned",
+  "set_scan_directory_active",
+  "set_settings",
+  "set_skill_repository_pinned",
   "skills_cli_add_global",
   "skills_cli_apply_updates",
   "skills_cli_check_updates",
@@ -144,10 +240,14 @@ export const GENERATED_IPC_COMMAND_NAMES = [
   "skills_cli_unlink_platform_batch",
   "skills_cli_update_inventory",
   "skills_cli_verify_update_baseline",
+  "skip_ai_tag_review",
+  "sync_registry",
+  "sync_registry_with_options",
   "test_ai_connection",
   "test_github_pat",
   "unassign_skill_tags",
   "uninstall_skill_from_project",
+  "update_collection",
 ] as const;
 
 export const GENERATED_REVIEWED_IPC_ERROR_CODES = [
@@ -287,7 +387,31 @@ export const GENERATED_REVIEWED_IPC_ERROR_CODES = [
   "skills_cli.update_unsupported",
   "startup.rebuild_unavailable",
   "storage.unavailable",
+  "usage.remote_permission",
+  "usage.remote_protocol",
+  "usage.remote_transport",
 ] as const;
+
+/**
+ *  An agent enriched with a live `is_detected` flag derived from the file
+ *  system at query time, rather than from the last scan run.
+ */
+export type AgentWithStatus = {
+	id: string,
+	display_name: string,
+	category: string,
+	global_skills_dir: string,
+	project_skills_dir: string | null,
+	icon_name: string | null,
+	/**
+	 *  `true` if the agent is considered "installed" on this machine.
+	 *  Detected by checking whether `global_skills_dir` exists or its parent
+	 *  directory exists.
+	 */
+	is_detected: boolean,
+	is_builtin: boolean,
+	is_enabled: boolean,
+};
 
 export type AiApiKeyState = AiApiKeyState_Serialize | AiApiKeyState_Deserialize;
 
@@ -321,6 +445,25 @@ export type AiConnectionTestResult_Serialize = {
 	msg: string,
 	code?: string | null,
 	details?: string | null,
+};
+
+export type AppPlatform = "windows" | "macos" | "linux" | "other";
+
+export type AppRuntimeInfo = {
+	platform: AppPlatform,
+	windowsUpdaterSupported: boolean,
+};
+
+export type BatchDeleteCentralSkillPreviewResult = BatchDeleteCentralSkillPreviewResult_Serialize | BatchDeleteCentralSkillPreviewResult_Deserialize;
+
+export type BatchDeleteCentralSkillPreviewResult_Deserialize = {
+	previews: DeleteCentralSkillPreview_Deserialize[],
+	failed: FailedCentralSkillDelete_Deserialize[],
+};
+
+export type BatchDeleteCentralSkillPreviewResult_Serialize = {
+	previews: DeleteCentralSkillPreview_Serialize[],
+	failed: FailedCentralSkillDelete_Serialize[],
 };
 
 export type BatchDeleteCentralSkillRequest = {
@@ -489,10 +632,53 @@ export type Collection = {
 	updated_at: string,
 };
 
+/**  A Collection with its member skills included. */
+export type CollectionDetail = {
+	id: string,
+	name: string,
+	description: string | null,
+	created_at: string,
+	updated_at: string,
+	/**  All skills that are members of this collection. */
+	skills: Skill[],
+};
+
+export type DeleteCentralSkillPreview = DeleteCentralSkillPreview_Serialize | DeleteCentralSkillPreview_Deserialize;
+
+export type DeleteCentralSkillPreview_Deserialize = {
+	skill_id: string,
+	skill_name: string,
+	central_path: string,
+	copy_installations: SkillInstallationDetail[],
+	auto_removed_agent_ids: string[],
+	pending_recovery?: PendingDeleteRecoveryPreview | null,
+};
+
+export type DeleteCentralSkillPreview_Serialize = {
+	skill_id: string,
+	skill_name: string,
+	central_path: string,
+	copy_installations: SkillInstallationDetail[],
+	auto_removed_agent_ids: string[],
+	pending_recovery?: PendingDeleteRecoveryPreview | null,
+};
+
 export type DeleteCentralSkillResult = {
 	removed_central_path: string,
 	removed_agent_ids: string[],
 	retained_agent_ids: string[],
+};
+
+export type DeleteSkillRepositoryPreview = DeleteSkillRepositoryPreview_Serialize | DeleteSkillRepositoryPreview_Deserialize;
+
+export type DeleteSkillRepositoryPreview_Deserialize = {
+	repository: SkillRepositoryWithStats,
+	delete_preview: BatchDeleteCentralSkillPreviewResult_Deserialize,
+};
+
+export type DeleteSkillRepositoryPreview_Serialize = {
+	repository: SkillRepositoryWithStats,
+	delete_preview: BatchDeleteCentralSkillPreviewResult_Serialize,
 };
 
 export type DeleteSkillRepositoryResult = DeleteSkillRepositoryResult_Serialize | DeleteSkillRepositoryResult_Deserialize;
@@ -636,6 +822,16 @@ export type ForceSkillUpdateSuccess = {
 	remoteHash: string | null,
 	bytesChanged: boolean,
 	copyInstallationsRefreshed: boolean,
+};
+
+export type FrontendRuntimeLogDetails = "Null" | boolean | number | null | string | FrontendRuntimeLogDetails[] | { [key in string]: FrontendRuntimeLogDetails };
+
+export type FrontendRuntimeLogPayload = {
+	level?: string | null,
+	source?: string | null,
+	message?: string | null,
+	details?: FrontendRuntimeLogDetails | null,
+	operationId?: string | null,
 };
 
 export type GitHubPatState = GitHubPatState_Serialize | GitHubPatState_Deserialize;
@@ -815,6 +1011,17 @@ export type LocalRemoteSyncPreview_Serialize = {
 	totalByteCount: number,
 };
 
+export type MarketplaceSkill = {
+	id: string,
+	registry_id: string,
+	name: string,
+	description: string | null,
+	download_url: string,
+	is_installed: boolean,
+	synced_at: string,
+	cache_updated_at: string | null,
+};
+
 export type ObsidianImportResult = {
 	skill_id: string,
 	target: string,
@@ -825,12 +1032,47 @@ export type OrphanSkillEntry = {
 	brokenPath: string,
 };
 
+export type PendingDeleteRecoveryPreview = {
+	operation_id: string,
+	operation_kind: string,
+	phase: string,
+	error_code: string | null,
+	force_delete_eligible: boolean,
+	blocker_codes: string[],
+};
+
 export type PlatformDuplicateGroup = {
 	agentId: string,
 	skillId: string,
 	skillName: string,
 	writablePaths: string[],
 	pluginPaths: string[],
+};
+
+export type ProjectDto = {
+	id: string,
+	path: string,
+	name: string,
+	pinned: boolean,
+	addedAt: string,
+	lastScannedAt: string | null,
+	skillCount: number,
+};
+
+export type ProjectSkillDto = {
+	projectId: string,
+	skillId: string,
+	name: string,
+	description: string | null,
+	filePath: string,
+	/**  `'central'` | `'project'` */
+	sourceOrigin: string,
+	agentId: string,
+	agentDisplayName: string,
+	installedPath: string,
+	/**  `'symlink'` | `'copy'` */
+	linkType: string,
+	symlinkTarget: string | null,
 };
 
 /**  项目下某个 agent 目录中登记的 skill 安装。 */
@@ -848,6 +1090,20 @@ export type ProjectSkillInstallation = {
 	link_type: string,
 	symlink_target: string | null,
 	created_at: string,
+};
+
+/**
+ *  反向视图：一个 skill 装在哪些项目下、走哪个 agent、用哪种 link_type。
+ *  用于中央 skill 详情页 sidebar 显示「装在哪些项目」。
+ */
+export type ProjectUsingSkillDto = {
+	projectId: string,
+	projectName: string,
+	projectPath: string,
+	agentId: string,
+	agentDisplayName: string,
+	installedPath: string,
+	linkType: string,
 };
 
 export type RemoteAddedSkill = {
@@ -869,7 +1125,58 @@ export type Result<T, E> = {
 	err: E,
 };
 
+export type ScanDirectory = {
+	id: number,
+	path: string,
+	label: string | null,
+	is_active: boolean,
+	is_builtin: boolean,
+	added_at: string,
+};
+
 export type SecretStorageState = "stored" | "session" | "missing" | "unreadable";
+
+export type Skill = {
+	id: string,
+	uid: string,
+	name: string,
+	description: string | null,
+	file_path: string,
+	canonical_path: string | null,
+	is_central: boolean,
+	source: string | null,
+	content: string | null,
+	scanned_at: string,
+	fs_created_at: string | null,
+	fs_updated_at: string | null,
+};
+
+export type SkillAiTagReview = {
+	skill_id: string,
+	skill_name: string,
+	tag: SkillTag,
+	confidence: number | null,
+	reason: string,
+	suggested_at: string,
+	updated_at: string,
+	is_proposal: boolean,
+};
+
+/**
+ *  An installation record enriched with the `installed_at` timestamp for
+ *  the skill detail IPC response. This is the frontend-facing version of
+ *  `db::SkillInstallation` — `created_at` from the DB is exposed as
+ *  `installed_at` for clarity.
+ */
+export type SkillInstallationDetail = {
+	skill_id: string,
+	agent_id: string,
+	installed_path: string,
+	link_type: string,
+	symlink_target: string | null,
+	/**  ISO 8601 timestamp of when the skill was first installed. */
+	installed_at: string,
+};
 
 export type SkillRefreshCachePolicy = "use_fresh" | "bypass";
 
@@ -885,6 +1192,24 @@ export type SkillRefreshScope = {
 };
 
 export type SkillRefreshScopeKind = "all" | "skills" | "repositories" | "platform";
+
+export type SkillRegistry = {
+	id: string,
+	name: string,
+	source_type: string,
+	url: string,
+	is_builtin: boolean,
+	is_enabled: boolean,
+	last_synced: string | null,
+	last_attempted_sync: string | null,
+	last_sync_status: string,
+	last_sync_error: string | null,
+	cache_updated_at: string | null,
+	cache_expires_at: string | null,
+	etag: string | null,
+	last_modified: string | null,
+	created_at: string,
+};
 
 export type SkillRepository = {
 	id: string,
@@ -903,6 +1228,49 @@ export type SkillRepository = {
 	 *  旧 DB 升级时通过 ensure_column 安全加列，默认为 NULL。
 	 */
 	last_synced_at?: string | null,
+};
+
+export type SkillRepositoryWithStats = {
+	skill_count: number,
+	unknown_skill_count: number,
+} & SkillRepository;
+
+export type SkillTag = {
+	id: string,
+	name: string,
+	description: string | null,
+	color: string | null,
+	is_builtin: boolean,
+	created_at: string,
+	updated_at: string,
+	/**  标签所属分组的 id。M3 加入；旧 db 升级时通过 ensure_column 自动加列。 */
+	group_id?: string | null,
+};
+
+export type SkillTagProposal = {
+	skill_id: string,
+	tag_id: string,
+	proposed_name: string,
+	proposed_description: string | null,
+	confidence: number | null,
+	reason: string,
+};
+
+export type SkillTagSuggestion = {
+	skill_id: string,
+	tag: SkillTag,
+	confidence: number | null,
+	reason: string,
+};
+
+export type SkillTagSuggestionResult = {
+	skill_id: string,
+	skill_name: string | null,
+	suggestions: SkillTagSuggestion[],
+	proposals: SkillTagProposal[],
+	succeeded: boolean,
+	error: string | null,
+	low_confidence_count: number,
 };
 
 export type SkillUpdateDiagnostic = {
@@ -1185,11 +1553,30 @@ export type SkillsCliUpdateSkillRow = {
 
 export type SkillsCliUpdateStatus = "not_checked" | "checking" | "current" | "update_available" | "local_modified" | "baseline_required" | "unsupported" | "rate_limited" | "failed";
 
+export type SkillsShFileEntry = {
+	name: string,
+	path: string,
+	is_dir: boolean,
+};
+
+export type SkillsShSkill = {
+	id: string,
+	skill_id: string,
+	name: string,
+	source: string,
+	installs: number,
+	stars: number | null,
+};
+
 /**  Describes a target that was already installed and safely left in place. */
 export type SkippedInstall = {
 	agent_id: string,
 	target_path: string,
 	reason: string,
+};
+
+export type SyncRegistryOptions = {
+	forceRefresh: boolean,
 };
 
 export type UnsupportedSkill = {
