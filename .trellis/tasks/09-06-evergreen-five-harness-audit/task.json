@@ -1,0 +1,32 @@
+{
+  "id": "evergreen-five-harness-audit",
+  "name": "evergreen-five-harness-audit",
+  "title": "常青项目审查与五套 harness 对齐改造规划",
+  "description": "当前代码与失败工作流审查、五套harness边界和5个待批准改造子任务",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-09-06",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "09-06-harness-session-isolation",
+    "09-06-doctor-pnpm-readonly",
+    "09-06-harness-bootstrap-and-gates",
+    "09-06-central-bulk-install-regression",
+    "09-06-harness-rules-and-handoff"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

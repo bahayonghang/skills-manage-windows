@@ -1,0 +1,543 @@
+{
+  "repo_root": "D:/Documents/Code/Agents/skills-manage-windows",
+  "review_scope": {
+    "mode": "task-tree",
+    "root": "09-06-evergreen-five-harness-audit",
+    "task_count": 6,
+    "members": [
+      {
+        "name": "09-06-evergreen-five-harness-audit",
+        "path": "D:/Documents/Code/Agents/skills-manage-windows/.trellis/tasks/09-06-evergreen-five-harness-audit",
+        "location": "active",
+        "status": "planning"
+      },
+      {
+        "name": "09-06-harness-session-isolation",
+        "path": "D:/Documents/Code/Agents/skills-manage-windows/.trellis/tasks/09-06-harness-session-isolation",
+        "location": "active",
+        "status": "planning"
+      },
+      {
+        "name": "09-06-doctor-pnpm-readonly",
+        "path": "D:/Documents/Code/Agents/skills-manage-windows/.trellis/tasks/09-06-doctor-pnpm-readonly",
+        "location": "active",
+        "status": "planning"
+      },
+      {
+        "name": "09-06-harness-bootstrap-and-gates",
+        "path": "D:/Documents/Code/Agents/skills-manage-windows/.trellis/tasks/09-06-harness-bootstrap-and-gates",
+        "location": "active",
+        "status": "planning"
+      },
+      {
+        "name": "09-06-central-bulk-install-regression",
+        "path": "D:/Documents/Code/Agents/skills-manage-windows/.trellis/tasks/09-06-central-bulk-install-regression",
+        "location": "active",
+        "status": "planning"
+      },
+      {
+        "name": "09-06-harness-rules-and-handoff",
+        "path": "D:/Documents/Code/Agents/skills-manage-windows/.trellis/tasks/09-06-harness-rules-and-handoff",
+        "location": "active",
+        "status": "planning"
+      }
+    ],
+    "edges": [
+      {
+        "parent": "09-06-evergreen-five-harness-audit",
+        "child": "09-06-harness-session-isolation"
+      },
+      {
+        "parent": "09-06-evergreen-five-harness-audit",
+        "child": "09-06-doctor-pnpm-readonly"
+      },
+      {
+        "parent": "09-06-evergreen-five-harness-audit",
+        "child": "09-06-harness-bootstrap-and-gates"
+      },
+      {
+        "parent": "09-06-evergreen-five-harness-audit",
+        "child": "09-06-central-bulk-install-regression"
+      },
+      {
+        "parent": "09-06-evergreen-five-harness-audit",
+        "child": "09-06-harness-rules-and-handoff"
+      }
+    ],
+    "legacy_fallback_tasks": []
+  },
+  "tasks": [
+    {
+      "task_dir": "D:/Documents/Code/Agents/skills-manage-windows/.trellis/tasks/09-06-evergreen-five-harness-audit",
+      "task_status": "planning",
+      "artifacts": {
+        "present": {
+          "prd.md": true,
+          "design.md": true,
+          "implement.md": true,
+          "implement.jsonl": true,
+          "check.jsonl": true,
+          "task.json": true
+        },
+        "shape": "complex",
+        "note": ""
+      },
+      "placeholders": [],
+      "citations": {
+        "total": 0,
+        "by_status": {},
+        "entries": []
+      },
+      "identifiers": {
+        "requirements": [
+          "R1",
+          "R2",
+          "R3",
+          "R4",
+          "R5"
+        ],
+        "criteria": [
+          {
+            "id": "AC1",
+            "requirements": [
+              "R1"
+            ],
+            "clause_hint": 2
+          },
+          {
+            "id": "AC2",
+            "requirements": [
+              "R2"
+            ],
+            "clause_hint": 3
+          },
+          {
+            "id": "AC3",
+            "requirements": [
+              "R3",
+              "R4"
+            ],
+            "clause_hint": 2
+          },
+          {
+            "id": "AC4",
+            "requirements": [
+              "R5"
+            ],
+            "clause_hint": 2
+          }
+        ],
+        "criteria_without_requirement": [],
+        "requirements_without_criterion": [],
+        "referenced_but_undefined": []
+      },
+      "blocking": [],
+      "drift_pass_required": false,
+      "task_name": "09-06-evergreen-five-harness-audit",
+      "location": "active"
+    },
+    {
+      "task_dir": "D:/Documents/Code/Agents/skills-manage-windows/.trellis/tasks/09-06-harness-session-isolation",
+      "task_status": "planning",
+      "artifacts": {
+        "present": {
+          "prd.md": true,
+          "design.md": true,
+          "implement.md": true,
+          "implement.jsonl": true,
+          "check.jsonl": true,
+          "task.json": true
+        },
+        "shape": "complex",
+        "note": ""
+      },
+      "placeholders": [],
+      "citations": {
+        "total": 3,
+        "by_status": {
+          "resolved": 3
+        },
+        "entries": [
+          {
+            "artifact": "prd.md",
+            "artifact_line": 8,
+            "citation": "trellis/scripts/common/active_task.py:584",
+            "status": "resolved",
+            "resolved_path": ".trellis/scripts/common/active_task.py",
+            "file_lines": 731
+          },
+          {
+            "artifact": "prd.md",
+            "artifact_line": 8,
+            "citation": "trellis/scripts/common/active_task.py:689",
+            "status": "resolved",
+            "resolved_path": ".trellis/scripts/common/active_task.py",
+            "file_lines": 731
+          },
+          {
+            "artifact": "prd.md",
+            "artifact_line": 9,
+            "citation": "trellis/scripts/common/session_context.py:622",
+            "status": "resolved",
+            "resolved_path": ".trellis/scripts/common/session_context.py",
+            "file_lines": 892
+          }
+        ]
+      },
+      "identifiers": {
+        "requirements": [
+          "R1",
+          "R2",
+          "R3",
+          "R4"
+        ],
+        "criteria": [
+          {
+            "id": "AC1",
+            "requirements": [
+              "R1"
+            ],
+            "clause_hint": 3
+          },
+          {
+            "id": "AC2",
+            "requirements": [
+              "R2"
+            ],
+            "clause_hint": 2
+          },
+          {
+            "id": "AC3",
+            "requirements": [
+              "R3"
+            ],
+            "clause_hint": 3
+          },
+          {
+            "id": "AC4",
+            "requirements": [
+              "R4"
+            ],
+            "clause_hint": 2
+          }
+        ],
+        "criteria_without_requirement": [],
+        "requirements_without_criterion": [],
+        "referenced_but_undefined": []
+      },
+      "blocking": [],
+      "drift_pass_required": false,
+      "task_name": "09-06-harness-session-isolation",
+      "location": "active"
+    },
+    {
+      "task_dir": "D:/Documents/Code/Agents/skills-manage-windows/.trellis/tasks/09-06-doctor-pnpm-readonly",
+      "task_status": "planning",
+      "artifacts": {
+        "present": {
+          "prd.md": true,
+          "design.md": true,
+          "implement.md": true,
+          "implement.jsonl": true,
+          "check.jsonl": true,
+          "task.json": true
+        },
+        "shape": "complex",
+        "note": ""
+      },
+      "placeholders": [],
+      "citations": {
+        "total": 1,
+        "by_status": {
+          "resolved": 1
+        },
+        "entries": [
+          {
+            "artifact": "prd.md",
+            "artifact_line": 7,
+            "citation": "scripts/check/doctor.mjs:44",
+            "status": "resolved",
+            "resolved_path": "scripts/check/doctor.mjs",
+            "file_lines": 276
+          }
+        ]
+      },
+      "identifiers": {
+        "requirements": [
+          "R1",
+          "R2",
+          "R3"
+        ],
+        "criteria": [
+          {
+            "id": "AC1",
+            "requirements": [
+              "R1"
+            ],
+            "clause_hint": 2
+          },
+          {
+            "id": "AC2",
+            "requirements": [
+              "R1",
+              "R2"
+            ],
+            "clause_hint": 5
+          },
+          {
+            "id": "AC3",
+            "requirements": [
+              "R3"
+            ],
+            "clause_hint": 2
+          }
+        ],
+        "criteria_without_requirement": [],
+        "requirements_without_criterion": [],
+        "referenced_but_undefined": []
+      },
+      "blocking": [],
+      "drift_pass_required": false,
+      "task_name": "09-06-doctor-pnpm-readonly",
+      "location": "active"
+    },
+    {
+      "task_dir": "D:/Documents/Code/Agents/skills-manage-windows/.trellis/tasks/09-06-harness-bootstrap-and-gates",
+      "task_status": "planning",
+      "artifacts": {
+        "present": {
+          "prd.md": true,
+          "design.md": true,
+          "implement.md": true,
+          "implement.jsonl": true,
+          "check.jsonl": true,
+          "task.json": true
+        },
+        "shape": "complex",
+        "note": ""
+      },
+      "placeholders": [],
+      "citations": {
+        "total": 2,
+        "by_status": {
+          "resolved": 2
+        },
+        "entries": [
+          {
+            "artifact": "prd.md",
+            "artifact_line": 7,
+            "citation": "trellis/scripts/tests/test_runtime_resilience.py:304",
+            "status": "resolved",
+            "resolved_path": ".trellis/scripts/tests/test_runtime_resilience.py",
+            "file_lines": 681
+          },
+          {
+            "artifact": "prd.md",
+            "artifact_line": 7,
+            "citation": "scripts/check/run-ci.mjs:33",
+            "status": "resolved",
+            "resolved_path": "scripts/check/run-ci.mjs",
+            "file_lines": 385
+          }
+        ]
+      },
+      "identifiers": {
+        "requirements": [
+          "R1",
+          "R2",
+          "R3",
+          "R4"
+        ],
+        "criteria": [
+          {
+            "id": "AC1",
+            "requirements": [
+              "R1"
+            ],
+            "clause_hint": 2
+          },
+          {
+            "id": "AC2",
+            "requirements": [
+              "R2"
+            ],
+            "clause_hint": 2
+          },
+          {
+            "id": "AC3",
+            "requirements": [
+              "R3"
+            ],
+            "clause_hint": 4
+          },
+          {
+            "id": "AC4",
+            "requirements": [
+              "R4"
+            ],
+            "clause_hint": 6
+          }
+        ],
+        "criteria_without_requirement": [],
+        "requirements_without_criterion": [],
+        "referenced_but_undefined": []
+      },
+      "blocking": [],
+      "drift_pass_required": false,
+      "task_name": "09-06-harness-bootstrap-and-gates",
+      "location": "active"
+    },
+    {
+      "task_dir": "D:/Documents/Code/Agents/skills-manage-windows/.trellis/tasks/09-06-central-bulk-install-regression",
+      "task_status": "planning",
+      "artifacts": {
+        "present": {
+          "prd.md": true,
+          "design.md": true,
+          "implement.md": true,
+          "implement.jsonl": true,
+          "check.jsonl": true,
+          "task.json": true
+        },
+        "shape": "complex",
+        "note": ""
+      },
+      "placeholders": [],
+      "citations": {
+        "total": 1,
+        "by_status": {
+          "resolved": 1
+        },
+        "entries": [
+          {
+            "artifact": "prd.md",
+            "artifact_line": 7,
+            "citation": "src/test/pages/CentralSkillsView.repositories-and-installs.test.tsx:541",
+            "status": "resolved",
+            "resolved_path": "src/test/pages/CentralSkillsView.repositories-and-installs.test.tsx",
+            "file_lines": 599
+          }
+        ]
+      },
+      "identifiers": {
+        "requirements": [
+          "R1",
+          "R2",
+          "R3"
+        ],
+        "criteria": [
+          {
+            "id": "AC1",
+            "requirements": [
+              "R1"
+            ],
+            "clause_hint": 1
+          },
+          {
+            "id": "AC2",
+            "requirements": [
+              "R2"
+            ],
+            "clause_hint": 2
+          },
+          {
+            "id": "AC3",
+            "requirements": [
+              "R3"
+            ],
+            "clause_hint": 3
+          }
+        ],
+        "criteria_without_requirement": [],
+        "requirements_without_criterion": [],
+        "referenced_but_undefined": []
+      },
+      "blocking": [],
+      "drift_pass_required": false,
+      "task_name": "09-06-central-bulk-install-regression",
+      "location": "active"
+    },
+    {
+      "task_dir": "D:/Documents/Code/Agents/skills-manage-windows/.trellis/tasks/09-06-harness-rules-and-handoff",
+      "task_status": "planning",
+      "artifacts": {
+        "present": {
+          "prd.md": true,
+          "design.md": true,
+          "implement.md": true,
+          "implement.jsonl": true,
+          "check.jsonl": true,
+          "task.json": true
+        },
+        "shape": "complex",
+        "note": ""
+      },
+      "placeholders": [],
+      "citations": {
+        "total": 0,
+        "by_status": {},
+        "entries": []
+      },
+      "identifiers": {
+        "requirements": [
+          "R1",
+          "R2",
+          "R3",
+          "R4",
+          "R5"
+        ],
+        "criteria": [
+          {
+            "id": "AC1",
+            "requirements": [
+              "R1"
+            ],
+            "clause_hint": 2
+          },
+          {
+            "id": "AC2",
+            "requirements": [
+              "R2"
+            ],
+            "clause_hint": 3
+          },
+          {
+            "id": "AC3",
+            "requirements": [
+              "R3"
+            ],
+            "clause_hint": 3
+          },
+          {
+            "id": "AC4",
+            "requirements": [
+              "R4",
+              "R5"
+            ],
+            "clause_hint": 2
+          },
+          {
+            "id": "AC5",
+            "requirements": [
+              "R1",
+              "R5"
+            ],
+            "clause_hint": 4
+          }
+        ],
+        "criteria_without_requirement": [],
+        "requirements_without_criterion": [],
+        "referenced_but_undefined": []
+      },
+      "blocking": [],
+      "drift_pass_required": false,
+      "task_name": "09-06-harness-rules-and-handoff",
+      "location": "active"
+    }
+  ],
+  "reviews_git": {
+    "path": ".trellis/reviews/09-06-evergreen-five-harness-audit.md",
+    "state": "ignored"
+  },
+  "blocking": []
+}
