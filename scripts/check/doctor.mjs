@@ -41,6 +41,24 @@ export function redactSecrets(value, env = process.env) {
     .replace(assignmentSecretPattern, "$1[REDACTED]");
 }
 
+/**
+ * pnpm 12+ defaults `pmOnFail` to download. Inject ignore only into the
+ * version probe so diagnostics cannot fetch, self-update, or rewrite global
+ * config. This must not be used to bypass the repository pin in CI.
+ */
+const PNPM_PM_ON_FAIL_KEY = "pnpm_config_pm_on_fail";
+
+export function withPnpmReadonlyProbeEnv(env = process.env) {
+  const next = { ...env };
+  for (const key of Object.keys(next)) {
+    if (key.toLowerCase() === PNPM_PM_ON_FAIL_KEY) {
+      delete next[key];
+    }
+  }
+  next[PNPM_PM_ON_FAIL_KEY] = "ignore";
+  return next;
+}
+
 export function runCommand(command, args = [], options = {}) {
   try {
     const result = spawnSync(command, args, {
@@ -199,7 +217,7 @@ export function collectDoctorChecks({
       expected: TOOLCHAIN.pnpm,
       mode: "exact",
       hint: "activate pnpm 10.34.5 without changing the repository",
-    }, options),
+    }, { ...options, env: withPnpmReadonlyProbeEnv(options.env) }),
     checkVersion({
       id: "rustc",
       label: "rustc",
