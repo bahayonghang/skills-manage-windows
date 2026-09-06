@@ -298,7 +298,10 @@ def get_current_task(
 
     from .active_task import resolve_active_task
 
-    return resolve_active_task(repo_root, platform_input, platform).task_path
+    active = resolve_active_task(repo_root, platform_input, platform)
+    if not active.task_path or active.stale:
+        return None
+    return active.task_path
 
 
 def get_current_task_abs(

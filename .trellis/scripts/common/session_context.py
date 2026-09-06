@@ -21,7 +21,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .active_task import resolve_context_key
+from .active_task import invalid_pointer_payload, resolve_active_task, resolve_context_key
 from .config import get_git_packages
 from .git import run_git
 from .packages_context import get_packages_section
@@ -34,8 +34,6 @@ from .paths import (
     DIR_WORKSPACE,
     count_lines,
     get_active_journal_file,
-    get_current_task,
-    get_current_task_source,
     get_developer,
     get_repo_root,
     get_tasks_dir,
@@ -487,6 +485,74 @@ def get_update_hint(repo_root: Path, context_key: str | None = None) -> str | No
     )
 
 
+def _resolve_current_task_view(repo_root: Path) -> tuple[dict | None, dict | None]:
+    """Consume one ActiveTask parse: executable current task vs invalid pointer."""
+    active = resolve_active_task(repo_root)
+    current_info = None
+    invalid_info = None
+    if active.task_path and not active.stale:
+        current_dir = repo_root / active.task_path
+        ct = load_task(current_dir)
+        current_info = {
+            "path": active.task_path,
+            "name": ct.name if ct else "",
+            "status": ct.status if ct else "",
+            "source": active.source_type,
+            "contextKey": active.context_key,
+            "description": ct.description if ct else "",
+            "created": ct.raw.get("createdAt", "unknown") if ct else "unknown",
+            "hasPrd": (current_dir / "prd.md").is_file(),
+        }
+    payload = invalid_pointer_payload(active)
+    if payload is not None:
+        invalid_info = {
+            "path": payload["path"],
+            "reason": payload["reason"],
+            "archivePath": payload["archive_path"],
+        }
+    return current_info, invalid_info
+
+
+def _append_current_task_sections(
+    lines: list[str],
+    repo_root: Path,
+    *,
+    include_details: bool,
+) -> None:
+    current_info, invalid_info = _resolve_current_task_view(repo_root)
+    lines.append("## CURRENT TASK")
+    if current_info:
+        lines.append(f"Path: {current_info['path']}")
+        source = current_info["source"]
+        key = current_info["contextKey"]
+        lines.append(f"Source: {source}" + (f":{key}" if key else ""))
+        if current_info.get("name"):
+            lines.append(f"Name: {current_info['name']}")
+        if current_info.get("status"):
+            lines.append(f"Status: {current_info['status']}")
+        if include_details:
+            created = current_info.get("created")
+            if created:
+                lines.append(f"Created: {created}")
+            description = current_info.get("description")
+            if description:
+                lines.append(f"Description: {description}")
+            if current_info.get("hasPrd"):
+                lines.append("")
+                lines.append("[!] This task has prd.md - read it for task details")
+    else:
+        lines.append("(none)")
+    lines.append("")
+    if invalid_info:
+        lines.append("## INVALID POINTER")
+        lines.append(f"Path: {invalid_info['path']}")
+        lines.append(f"Reason: {invalid_info['reason']}")
+        archive_path = invalid_info.get("archivePath")
+        if archive_path:
+            lines.append(f"Archived at: {archive_path}")
+        lines.append("")
+
+
 # =============================================================================
 # JSON Output
 # =============================================================================
@@ -555,6 +621,10 @@ def get_context_json(repo_root: Path | None = None) -> dict:
         },
     }
 
+    current_info, invalid_info = _resolve_current_task_view(repo_root)
+    result["currentTask"] = current_info
+    result["invalidPointer"] = invalid_info
+
     if pkg_git_info:
         result["packageGit"] = pkg_git_info
 
@@ -618,33 +688,8 @@ def get_context_text(repo_root: Path | None = None) -> str:
         ),
     )
 
-    # Current task
-    lines.append("## CURRENT TASK")
-    current_task = get_current_task(repo_root)
-    if current_task:
-        current_task_dir = repo_root / current_task
-        source_type, context_key, _ = get_current_task_source(repo_root)
-        lines.append(f"Path: {current_task}")
-        lines.append(
-            f"Source: {source_type}" + (f":{context_key}" if context_key else "")
-        )
-
-        ct = load_task(current_task_dir)
-        if ct:
-            lines.append(f"Name: {ct.name}")
-            lines.append(f"Status: {ct.status}")
-            lines.append(f"Created: {ct.raw.get('createdAt', 'unknown')}")
-            if ct.description:
-                lines.append(f"Description: {ct.description}")
-
-        # Check for prd.md
-        prd_file = current_task_dir / "prd.md"
-        if prd_file.is_file():
-            lines.append("")
-            lines.append("[!] This task has prd.md - read it for task details")
-    else:
-        lines.append("(none)")
-    lines.append("")
+    # Current task (executable only) plus invalid-pointer diagnostics
+    _append_current_task_sections(lines, repo_root, include_details=True)
 
     # Active tasks
     lines.append("## ACTIVE TASKS")
@@ -760,20 +805,16 @@ def get_context_record_json(repo_root: Path | None = None) -> dict:
                 "meta": t.meta,
             })
 
-    # Current task
+    current_info, invalid_info = _resolve_current_task_view(repo_root)
     current_task_info = None
-    current_task = get_current_task(repo_root)
-    if current_task:
-        source_type, context_key, _ = get_current_task_source(repo_root)
-        ct = load_task(repo_root / current_task)
-        if ct:
-            current_task_info = {
-                "path": current_task,
-                "name": ct.name,
-                "status": ct.status,
-                "source": source_type,
-                "contextKey": context_key,
-            }
+    if current_info:
+        current_task_info = {
+            "path": current_info["path"],
+            "name": current_info["name"],
+            "status": current_info["status"],
+            "source": current_info["source"],
+            "contextKey": current_info["contextKey"],
+        }
 
     # Package git repos
     pkg_git_info = _collect_package_git_info(
@@ -792,6 +833,7 @@ def get_context_record_json(repo_root: Path | None = None) -> dict:
         },
         "myTasks": my_tasks,
         "currentTask": current_task_info,
+        "invalidPointer": invalid_info,
     }
 
     if pkg_git_info:
@@ -855,22 +897,8 @@ def get_context_text_record(repo_root: Path | None = None) -> str:
         ),
     )
 
-    # CURRENT TASK
-    lines.append("## CURRENT TASK")
-    current_task = get_current_task(repo_root)
-    if current_task:
-        source_type, context_key, _ = get_current_task_source(repo_root)
-        lines.append(f"Path: {current_task}")
-        lines.append(
-            f"Source: {source_type}" + (f":{context_key}" if context_key else "")
-        )
-        ct = load_task(repo_root / current_task)
-        if ct:
-            lines.append(f"Name: {ct.name}")
-            lines.append(f"Status: {ct.status}")
-    else:
-        lines.append("(none)")
-    lines.append("")
+    # CURRENT TASK (executable only) plus invalid-pointer diagnostics
+    _append_current_task_sections(lines, repo_root, include_details=False)
 
     lines.append("========================================")
 

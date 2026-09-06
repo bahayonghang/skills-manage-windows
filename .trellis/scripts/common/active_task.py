@@ -21,8 +21,10 @@ from typing import Any
 
 DIR_WORKFLOW = ".trellis"
 DIR_TASKS = "tasks"
+DIR_ARCHIVE = "archive"
 DIR_RUNTIME = ".runtime"
 DIR_SESSIONS = "sessions"
+FILE_TASK_JSON = "task.json"
 DIR_SHELL_TICKETS = "shell-tickets"
 # Pre-0.6.13 name, when the bridge was Cursor-only. Still read so a session that
 # was mid-command across an upgrade does not silently degrade; never written.
@@ -151,12 +153,20 @@ _CONTEXT_KEY_PLATFORM_ALIASES = {
 
 @dataclass(frozen=True)
 class ActiveTask:
-    """Resolved active task state."""
+    """Resolved active task state.
+
+    ``task_path`` is set only for an executable current task. Invalid pointers
+    keep ``stale=True`` plus ``pointer`` / ``invalid_reason`` diagnostics and
+    never populate ``task_path``.
+    """
 
     task_path: str | None
     source_type: str
     context_key: str | None = None
     stale: bool = False
+    pointer: str | None = None
+    invalid_reason: str | None = None
+    archive_path: str | None = None
 
     @property
     def source(self) -> str:
@@ -166,6 +176,10 @@ class ActiveTask:
         if self.source_type == "session-fallback" and self.context_key:
             return f"session-fallback:{self.context_key}"
         return self.source_type
+
+    @property
+    def is_executable(self) -> bool:
+        return bool(self.task_path) and not self.stale and self.invalid_reason is None
 
 
 def normalize_task_ref(task_ref: str) -> str:
@@ -529,6 +543,88 @@ def _write_json(path: Path, data: dict[str, Any]) -> bool:
         return False
 
 
+def _posix_relative(path: Path, repo_root: Path) -> str:
+    try:
+        return path.relative_to(repo_root).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _archive_root(repo_root: Path) -> Path:
+    return repo_root / DIR_WORKFLOW / DIR_TASKS / DIR_ARCHIVE
+
+
+def _is_under_archive(resolved: Path, repo_root: Path) -> bool:
+    archive_root = _archive_root(repo_root)
+    try:
+        resolved.resolve().relative_to(archive_root.resolve())
+        return True
+    except (ValueError, OSError):
+        return False
+
+
+def _task_dir_name(task_ref: str, repo_root: Path) -> str:
+    resolved = resolve_task_ref(task_ref, repo_root)
+    if resolved is not None:
+        return resolved.name
+    normalized = normalize_task_ref(task_ref)
+    return Path(normalized).name if normalized else ""
+
+
+def _find_archived_location(task_ref: str, repo_root: Path) -> Path | None:
+    archive_root = _archive_root(repo_root)
+    if not archive_root.is_dir():
+        return None
+    name = _task_dir_name(task_ref, repo_root)
+    if not name:
+        return None
+    try:
+        month_dirs = sorted(archive_root.iterdir())
+    except OSError:
+        return None
+    for month_dir in month_dirs:
+        if not month_dir.is_dir():
+            continue
+        candidate = month_dir / name
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def _classify_pointer(
+    task_ref: str,
+    repo_root: Path,
+) -> tuple[str | None, bool, str | None, str | None]:
+    """Return ``(executable_path, stale, invalid_reason, archive_path)``."""
+    resolved = resolve_task_ref(task_ref, repo_root)
+    if resolved is not None and resolved.is_dir():
+        if _is_under_archive(resolved, repo_root):
+            return None, True, "archived", _posix_relative(resolved, repo_root)
+        task_json = resolved / FILE_TASK_JSON
+        if not task_json.is_file():
+            return None, True, "missing_task_json", None
+        data = _read_json(task_json)
+        if data is None:
+            return None, True, "missing_task_json", None
+        return _posix_relative(resolved, repo_root), False, None, None
+
+    archived = _find_archived_location(task_ref, repo_root)
+    if archived is not None:
+        return None, True, "archived", _posix_relative(archived, repo_root)
+    return None, True, "missing_directory", None
+
+
+def invalid_pointer_payload(active: ActiveTask) -> dict[str, Any] | None:
+    """Structured invalid-pointer diagnostic, or None when there is none."""
+    if not active.stale or not active.pointer:
+        return None
+    return {
+        "path": active.pointer,
+        "reason": active.invalid_reason,
+        "archive_path": active.archive_path,
+    }
+
+
 def _canonical_task_ref(task_path: str, repo_root: Path) -> str | None:
     normalized = normalize_task_ref(task_path)
     if not normalized:
@@ -550,9 +646,17 @@ def _active_from_ref(
 ) -> ActiveTask | None:
     if not task_ref:
         return None
-    resolved = resolve_task_ref(task_ref, repo_root)
-    stale = resolved is None or not resolved.is_dir()
-    return ActiveTask(task_ref, source_type, context_key, stale)
+    pointer = normalize_task_ref(task_ref) or task_ref
+    executable, stale, reason, archive = _classify_pointer(pointer, repo_root)
+    return ActiveTask(
+        executable,
+        source_type,
+        context_key,
+        stale,
+        pointer=pointer,
+        invalid_reason=reason,
+        archive_path=archive,
+    )
 
 
 def _context_path(repo_root: Path, context_key: str) -> Path:
@@ -564,17 +668,16 @@ def resolve_active_task(
     platform_input: dict[str, Any] | None = None,
     platform: str | None = None,
     *,
-    allow_single_session_fallback: bool = True,
+    allow_single_session_fallback: bool = False,
     allow_environment_context: bool = True,
 ) -> ActiveTask:
-    """Resolve the active task from session runtime state only.
+    """Resolve the active task from this session's runtime pointer only.
 
-    A stale session task is returned as stale. Missing context identity or a
-    missing/empty session context falls back to single-session inference: if
-    exactly one session file exists in the runtime, return its task with
-    source_type="session-fallback" — covers pull-based platform sub-agents
-    (copilot, gemini, qoder) that don't inherit the parent's session id. ≥2
-    files or 0 files yield ActiveTask(None) — refuses to guess across windows.
+    A determined ``context_key`` never borrows another session: missing own
+    pointer means this session has no task. Identity-less callers do not guess
+    a unique sibling session unless they explicitly opt into
+    ``allow_single_session_fallback``. Invalid pointers remain diagnostic
+    (stale) and are never an executable current task.
     """
     context_key = resolve_context_key(
         platform_input,
@@ -587,6 +690,7 @@ def resolve_active_task(
         active = _active_from_ref(task_ref, repo_root, "session", context_key)
         if active:
             return active
+        return ActiveTask(None, "none", context_key)
 
     if allow_single_session_fallback:
         fallback = _resolve_single_session_fallback(repo_root)
@@ -599,9 +703,9 @@ def resolve_active_task(
 def _resolve_single_session_fallback(repo_root: Path) -> ActiveTask | None:
     """Return the task pointed at by the sole session file, if exactly one exists.
 
-    Used when context-key resolution fails (typical for class-2 platform
-    sub-agents). Returns None if 0 or ≥2 session files are present — refuses
-    to pick across windows so 04-21's multi-session isolation contract holds.
+    Opt-in only via ``allow_single_session_fallback``. Never used when a
+    context key is already determined. Returns None if 0 or ≥2 session files
+    are present.
     """
     sessions_dir = _runtime_sessions_dir(repo_root)
     if not sessions_dir.is_dir():
@@ -673,7 +777,7 @@ def set_active_task(
     context.setdefault("current_run", None)
     if not _write_json(context_path, context):
         return None
-    return ActiveTask(canonical, "session", context_key)
+    return ActiveTask(canonical, "session", context_key, pointer=canonical)
 
 
 def clear_active_task(
@@ -681,18 +785,26 @@ def clear_active_task(
     platform_input: dict[str, Any] | None = None,
     platform: str | None = None,
 ) -> ActiveTask:
-    """Clear the active task by deleting its resolved session context file."""
+    """Clear this call's session file only.
+
+    Uses the determined context key for this call. No identity, or no own
+    session file, is a no-op and never deletes another session's pointer.
+    """
     context_key = resolve_context_key(platform_input, platform)
     if not context_key:
         return ActiveTask(None, "none")
 
-    previous = resolve_active_task(repo_root, platform_input, platform)
-    if not previous.task_path or not previous.context_key:
+    context_path = _context_path(repo_root, context_key)
+    context = _read_json(context_path) or {}
+    task_ref = _string_value(context.get("current_task"))
+    previous = _active_from_ref(task_ref, repo_root, "session", context_key)
+    if previous is None:
+        previous = ActiveTask(None, "none", context_key)
+
+    if not context_path.is_file():
         return previous
 
-    context_path = _context_path(repo_root, previous.context_key)
-    if context_path.is_file():
-        _remove_file(context_path)
+    _remove_file(context_path)
     return previous
 
 

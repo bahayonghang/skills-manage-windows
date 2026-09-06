@@ -41,6 +41,7 @@ from common.paths import (
 )
 from common.active_task import (
     clear_active_task,
+    invalid_pointer_payload,
     resolve_active_task,
     resolve_context_key,
     set_active_task,
@@ -149,7 +150,7 @@ def cmd_finish(args: argparse.Namespace) -> int:
     """Clear active task."""
     repo_root = get_repo_root()
     active = clear_active_task(repo_root)
-    current = active.task_path
+    current = active.task_path or active.pointer
 
     if not current:
         print(colored("No current task set", Colors.YELLOW))
@@ -170,10 +171,12 @@ def cmd_current(args: argparse.Namespace) -> int:
     """Show active task."""
     repo_root = get_repo_root()
     active = resolve_active_task(repo_root)
+    executable = bool(active.task_path) and not active.stale
+    invalid = invalid_pointer_payload(active)
 
     if getattr(args, "json", False):
         task_obj = None
-        if active.task_path:
+        if executable and active.task_path:
             data = read_json(repo_root / active.task_path / FILE_TASK_JSON) or {}
             task_obj = {
                 "dir": active.task_path,
@@ -189,20 +192,30 @@ def cmd_current(args: argparse.Namespace) -> int:
             "current_task": task_obj,
             "source": active.source,
             "stale": active.stale,
+            "invalid_pointer": invalid,
         }, ensure_ascii=False))
-        return 0 if active.task_path else 1
+        return 0 if executable else 1
 
     if args.source:
         print(f"Current task: {active.task_path or '(none)'}")
         print(f"Source: {active.source}")
         if active.stale:
             print("State: stale")
-        return 0 if active.task_path else 1
+        if invalid:
+            print(f"Invalid pointer: {invalid['path']} ({invalid['reason']})")
+            if invalid.get("archive_path"):
+                print(f"Archived at: {invalid['archive_path']}")
+        return 0 if executable else 1
 
-    if active.task_path:
+    if executable:
         print(active.task_path)
         return 0
 
+    print("No valid current task")
+    if invalid:
+        print(f"Invalid pointer: {invalid['path']} ({invalid['reason']})")
+        if invalid.get("archive_path"):
+            print(f"Archived at: {invalid['archive_path']}")
     return 1
 
 
@@ -223,7 +236,12 @@ def cmd_workflow(args: argparse.Namespace) -> int:
         return 1
 
     active = resolve_active_task(repo_root)
-    if not active.task_path:
+    if (
+        not active.task_path
+        or active.stale
+        or active.source_type != "session"
+        or not active.context_key
+    ):
         print(colored("Error: No current task set", Colors.RED))
         print("Hint: run task.py start <dir> first")
         return 1
