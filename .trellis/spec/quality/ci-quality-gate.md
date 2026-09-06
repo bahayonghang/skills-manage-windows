@@ -30,6 +30,9 @@ Toolchain:
 
 just doctor
   -> node scripts/check/doctor.mjs (read-only environment diagnostics)
+     pnpm probe: `pnpm --version`, 5s timeout, pin 10.34.5
+     child env only `pnpm_config_pm_on_fail=ignore`
+     Does not prove the pin is on PATH for later gates; does not install or switch toolchains
 
 just check
   -> node scripts/check/run-ci.mjs --lane quick (development feedback only)
@@ -75,7 +78,8 @@ The orchestrator owns explicit reusable lanes:
 quick: version:check -> docs:gen:check -> typecheck -> lint -> capabilitycheck
        -> sizecheck -> entrypointcheck -> fmt --check
 common: quick -> ipc:codegen:check -> test -> build -> docs:site:build
-rust-platform: clippy --all-targets --locked -> test --locked
+rust-platform: clippy --all-targets --locked -> test --locked -> trellis-python
+               (Windows `python` / POSIX `python3`; unittest discover `.trellis/scripts/tests`)
 all/default: common + rust-platform in parallel
 ```
 
@@ -94,13 +98,17 @@ The local developer entrypoints are intentionally layered:
 
 ```text
 just doctor -> inspect Node/pnpm/Rust/just/Git and Windows Tauri prerequisites
+               (read-only; pnpm probe cannot bootstrap or rewrite global config)
 just check  -> quick static/generated-artifact lane while iterating
 just ci     -> complete frontend and Rust quality gate before a PR
 just audit  -> production dependency vulnerability gate before a PR
 ```
 
 `just doctor` never installs packages, switches a toolchain, modifies PATH, or
-prints credentials. `just check` is not a substitute for `just ci` or `just audit`.
+prints credentials. Its pnpm probe is `pnpm --version` with a 5s timeout and pin
+10.34.5; only the probe child env sets `pnpm_config_pm_on_fail=ignore`. A match or
+mismatch does not prove the pin is the PATH command later gates will spawn.
+`just check` is not a substitute for `just ci` or `just audit`.
 
 ## 3. Contracts
 

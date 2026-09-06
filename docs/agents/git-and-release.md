@@ -3,6 +3,13 @@
 ## Branches And Pull Requests
 
 - `dev` is the permanent daily-development branch.
+- Create Trellis tasks with an explicit PR base so the seed does not follow a remote default of
+  `main`:
+
+```text
+python ./.trellis/scripts/task.py create "<title>" --base-branch dev
+```
+
 - Short-lived task branches target `dev` and use squash merge; the task branch is deleted after
   merge according to repository policy.
 - A `dev` to `main` promotion uses a merge commit. Refresh and verify the exact promotion merge
@@ -44,7 +51,11 @@ Authenticode on the installed exe follows `windows-signing.json` via the same po
 `authenticode=not-configured` must remain NotSigned and must not be reported as signed.
 Publish still requires valid Authenticode through existing preflight. Installed-exe
 Authenticode does not prove the inner exe was signed before bundle; that inner-exe-before-bundle
-path and real user-machine compatibility remain **UNVERIFIED**. REL-001 and REL-002 stay open.
+path and real user-machine compatibility remain **UNVERIFIED**. REL-001 and REL-002 are
+**contract-wontfix** by the recorded 2026-09-03 scope decision; residual risk remains. They stay
+closed and are not product-fixed. Reopening requires new authorization. See
+`.trellis/tasks/archive/2026-09/09-02-engineering-audit-remediation/research/rel-001-002-wontfix-contract-2026-09-03.md`.
+Do not edit historical reports or signing workflows to claim them fixed.
 
 A controlled `windows-2022` NSIS/MSI rehearsal using final signed assets remains
 **UNVERIFIED** until that remote run completes.

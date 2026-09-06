@@ -125,6 +125,70 @@ describe("developer and PR experience contract", () => {
       expect(document.toLowerCase()).toContain("fast-forward");
     }
   });
+
+  it("keeps a unique rule entry: CLAUDE imports AGENTS and omits high-churn counts", () => {
+    const agents = readFileSync("AGENTS.md", "utf8");
+    const claude = readFileSync("CLAUDE.md", "utf8");
+    expect(claude).toMatch(/^@AGENTS\.md\s*$/m);
+    expect(agents).toContain("docs/agents/harness-guide.md");
+    for (const snapshot of [
+      /171\s+(?:个\s+)?#\[tauri::command\]/,
+      /171\s+commands/,
+      /24\s+(?:个)?文件/,
+      /24\s+files/,
+      /36\s+(?:个)?内置/,
+      /70\s+(?:个)?官方/,
+      /22\s+(?:个)?推荐/,
+      /12\s+(?:个)?域/,
+      /17\s+(?:个)?repo/,
+    ]) {
+      expect(claude).not.toMatch(snapshot);
+    }
+  });
+
+  it("documents --base-branch dev as the task create example", () => {
+    const gitAndRelease = readFileSync("docs/agents/git-and-release.md", "utf8");
+    const harness = readFileSync("docs/agents/harness-guide.md", "utf8");
+    expect(gitAndRelease).toContain("--base-branch dev");
+    expect(harness).toContain("--base-branch dev");
+  });
+
+  it("documents a read-only review entry that does not rewrite files", () => {
+    const buildAndTest = readFileSync("docs/agents/build-and-test.md", "utf8");
+    expect(buildAndTest).toContain("## Read-only review entry");
+    expect(buildAndTest).toContain("node scripts/check/run-ci.mjs");
+    expect(buildAndTest).toContain("sync-version.mjs --check");
+    expect(buildAndTest).toMatch(/direct CLI/i);
+  });
+
+  it("retains the Windows x64 acceptance boundary", () => {
+    const agents = readFileSync("AGENTS.md", "utf8");
+    const harness = readFileSync("docs/agents/harness-guide.md", "utf8");
+    expect(agents).toContain("Windows x64 Tauri bundle as a first-class acceptance surface");
+    expect(agents).toMatch(
+      /A frontend-only build\s+does not establish a packaging or release result/,
+    );
+    expect(harness).toContain("frontend-only build");
+  });
+
+  it("does not claim Kimi lacks project custom agents", () => {
+    for (const skillPath of [
+      ".kimi-code/skills/trellis-research/SKILL.md",
+      ".kimi-code/skills/trellis-implement/SKILL.md",
+      ".kimi-code/skills/trellis-check/SKILL.md",
+    ]) {
+      const raw = readFileSync(skillPath, "utf8");
+      expect(raw).not.toMatch(/has no project-level custom/i);
+      expect(raw).not.toMatch(/no project-level custom sub-agent/i);
+    }
+  });
+
+  it("records REL-001 and REL-002 as contract-wontfix with residual risk", () => {
+    const gitAndRelease = readFileSync("docs/agents/git-and-release.md", "utf8");
+    expect(gitAndRelease).not.toMatch(/REL-001 and REL-002 stay open/);
+    expect(gitAndRelease).toContain("contract-wontfix");
+    expect(gitAndRelease).toMatch(/residual risk/i);
+  });
 });
 
 type SkillCatalogEntry = {
