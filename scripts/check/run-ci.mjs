@@ -58,6 +58,22 @@ export const CI_LANES = {
       command: "cargo",
       args: ["test", "--manifest-path", "src-tauri/Cargo.toml", "--locked"],
     },
+    {
+      name: "trellis-python",
+      command: isWindows ? "python" : "python3",
+      args: [
+        "-X",
+        "utf8",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".trellis/scripts/tests",
+        "-p",
+        "test_*.py",
+        "-v",
+      ],
+    },
   ],
 };
 

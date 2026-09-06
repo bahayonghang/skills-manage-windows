@@ -53,6 +53,19 @@ POSIX_PROCESS_SKIP = (
 SECRET = "fixture-secret-LINEAR_KEY_9f3a2b_trellis_runtime"
 CODEX_HOOK = REAL_REPO / ".codex" / "hooks" / "inject-subagent-context.py"
 CLAUDE_HOOK = REAL_REPO / ".claude" / "hooks" / "inject-subagent-context.py"
+REQUIRED_INJECT_HOOKS = (CODEX_HOOK, CLAUDE_HOOK)
+
+
+def missing_inject_hooks(*hook_paths: Path) -> list[str]:
+    return [str(path) for path in hook_paths if not path.is_file()]
+
+
+def require_inject_hooks(*hook_paths: Path) -> None:
+    missing = missing_inject_hooks(*hook_paths)
+    if missing:
+        raise FileNotFoundError(
+            "required inject-subagent-context.py hooks are absent: " + ", ".join(missing)
+        )
 
 
 def _load_hook(kind: str):
@@ -301,17 +314,42 @@ class TestContextBudget(_RepoFixture):
         self.assertGreater(CONTEXT_INJECTION_MAX_JSONL_LINES, 0)
 
 
+class TestRequiredInjectHooks(unittest.TestCase):
+    def test_required_inject_hooks_are_present(self) -> None:
+        missing = missing_inject_hooks(*REQUIRED_INJECT_HOOKS)
+        self.assertEqual(
+            missing,
+            [],
+            "required inject-subagent-context.py hooks are absent: " + ", ".join(missing),
+        )
+
+    def test_missing_inject_hooks_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            absent = (
+                root / ".codex" / "hooks" / "inject-subagent-context.py",
+                root / ".claude" / "hooks" / "inject-subagent-context.py",
+            )
+            self.assertEqual(
+                missing_inject_hooks(*absent),
+                [str(path) for path in absent],
+            )
+            with self.assertRaises(FileNotFoundError) as raised:
+                require_inject_hooks(*absent)
+            message = str(raised.exception)
+            self.assertIn("required inject-subagent-context.py hooks are absent", message)
+            for path in absent:
+                self.assertIn(str(path), message)
+
+
 class TestHookBudgetConsumption(_RepoFixture):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.hooks_present = CODEX_HOOK.is_file() and CLAUDE_HOOK.is_file()
-        if cls.hooks_present:
-            cls.codex = _load_hook("codex")
-            cls.claude = _load_hook("claude")
+        require_inject_hooks(*REQUIRED_INJECT_HOOKS)
+        cls.codex = _load_hook("codex")
+        cls.claude = _load_hook("claude")
 
     def test_hooks_stay_byte_identical_and_fail_closed_without_budget(self) -> None:
-        if not self.hooks_present:
-            self.skipTest("local gitignored inject-subagent-context.py hooks are absent")
         self.assertEqual(
             hashlib.sha256(CODEX_HOOK.read_bytes()).hexdigest(),
             hashlib.sha256(CLAUDE_HOOK.read_bytes()).hexdigest(),
