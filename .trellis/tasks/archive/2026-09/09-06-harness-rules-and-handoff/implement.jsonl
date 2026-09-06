@@ -1,4 +1,4 @@
 {"file":".trellis/spec/quality/ci-quality-gate.md","reason":"项目门禁及本轮只读/实施检查边界"}
-{"file":".trellis/tasks/09-06-evergreen-five-harness-audit/research/harness-checks.md","reason":"五套实际只读命令、静态字段和真实session未验证边界"}
-{"file":".trellis/tasks/09-06-evergreen-five-harness-audit/research/project-and-session-audit.md","reason":"当前结构、隔离反例和历史范围决定"}
-{"file":".trellis/tasks/09-06-evergreen-five-harness-audit/research/harness-alignment.md","reason":"已验证失败/工具边界和未验证事项"}
+{"file":".trellis/tasks/archive/2026-09/09-06-evergreen-five-harness-audit/research/harness-checks.md","reason":"五套实际只读命令、静态字段和真实session未验证边界"}
+{"file":".trellis/tasks/archive/2026-09/09-06-evergreen-five-harness-audit/research/project-and-session-audit.md","reason":"当前结构、隔离反例和历史范围决定"}
+{"file":".trellis/tasks/archive/2026-09/09-06-evergreen-five-harness-audit/research/harness-alignment.md","reason":"已验证失败/工具边界和未验证事项"}
