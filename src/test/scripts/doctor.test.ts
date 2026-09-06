@@ -47,15 +47,7 @@ type DoctorOptions = {
   writeLine?: (line: string) => void;
 };
 
-// @ts-expect-error The doctor runner is an ESM Node script outside the TS source tree.
-const {
-  collectDoctorChecks,
-  redactSecrets,
-  runCommand,
-  runDoctor,
-  TOOLCHAIN,
-  withPnpmReadonlyProbeEnv,
-} = (await import("../../../scripts/check/doctor.mjs")) as {
+type DoctorHelpers = {
   collectDoctorChecks: (options?: DoctorOptions) => DoctorCheck[];
   redactSecrets: (value: string, env?: NodeJS.ProcessEnv) => string;
   runCommand: CommandRunner;
@@ -63,6 +55,17 @@ const {
   TOOLCHAIN: { nodeMajor: number; pnpm: string; rust: string };
   withPnpmReadonlyProbeEnv: (env?: NodeJS.ProcessEnv) => NodeJS.ProcessEnv;
 };
+
+// @ts-expect-error The doctor runner is an ESM Node script outside the TS source tree.
+const doctorHelpers = (await import("../../../scripts/check/doctor.mjs")) as DoctorHelpers;
+const {
+  collectDoctorChecks,
+  redactSecrets,
+  runCommand,
+  runDoctor,
+  TOOLCHAIN,
+  withPnpmReadonlyProbeEnv,
+} = doctorHelpers;
 
 const tempDirs: string[] = [];
 const repoPackageJsonPath = join(process.cwd(), "package.json");
@@ -103,7 +106,7 @@ function listRelativePaths(root: string) {
     if (!existsSync(dir)) return;
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const fullPath = join(dir, entry.name);
-      paths.push(relative(root, fullPath).replaceAll("\\", "/"));
+      paths.push(relative(root, fullPath).split("\\").join("/"));
       if (entry.isDirectory()) visit(fullPath);
     }
   };
