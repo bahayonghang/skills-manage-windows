@@ -99,7 +99,27 @@ describe("CI command lanes", () => {
     expect(packageJson.scripts["docs:build"]).toBe(
       "pnpm docs:gen:check && pnpm docs:site:build",
     );
-    expect(CI_LANES["rust-platform"].map((step) => step.name)).toEqual(["clippy", "test"]);
+    expect(CI_LANES["rust-platform"].map((step) => step.name)).toEqual([
+      "clippy",
+      "test",
+      "trellis-python",
+    ]);
+    expect(CI_LANES["rust-platform"][2]).toEqual({
+      name: "trellis-python",
+      command: process.platform === "win32" ? "python" : "python3",
+      args: [
+        "-X",
+        "utf8",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".trellis/scripts/tests",
+        "-p",
+        "test_*.py",
+        "-v",
+      ],
+    });
   });
 
   it("selects one lane or the default all lanes", async () => {
@@ -158,6 +178,32 @@ describe("CI command lanes", () => {
       "typecheck failed",
     );
     expect(calls).toEqual(["version", "docs-generated", "typecheck"]);
+  });
+
+  it("fails rust-platform when trellis python tests fail and skips no later step", async () => {
+    const calls: string[] = [];
+    const executeStep: ExecuteStep = async ({ step }) => {
+      calls.push(step.name);
+      if (step.name === "trellis-python") throw new Error("python tests failed");
+    };
+
+    await expect(
+      runCi({ lane: "rust-platform", executeStep, summaryPath: null }),
+    ).rejects.toThrowError("python tests failed");
+    expect(calls).toEqual(["clippy", "test", "trellis-python"]);
+  });
+
+  it("does not run trellis-python after an earlier rust-platform failure", async () => {
+    const calls: string[] = [];
+    const executeStep: ExecuteStep = async ({ step }) => {
+      calls.push(step.name);
+      if (step.name === "clippy") throw new Error("clippy failed");
+    };
+
+    await expect(
+      runCi({ lane: "rust-platform", executeStep, summaryPath: null }),
+    ).rejects.toThrowError("clippy failed");
+    expect(calls).toEqual(["clippy"]);
   });
 
   it("aborts a running sibling lane after the first failure", async () => {
@@ -253,6 +299,7 @@ describe("CI command lanes", () => {
     expect(summary).toContain("## CI lane summary");
     expect(summary).toContain("| rust-platform | clippy | success | 1.0 |");
     expect(summary).toContain("| rust-platform | test | success | 1.0 |");
+    expect(summary).toContain("| rust-platform | trellis-python | success | 1.0 |");
     expect(summary).toContain("| rust-platform | success |");
   });
 });

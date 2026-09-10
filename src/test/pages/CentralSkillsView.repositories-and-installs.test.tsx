@@ -538,10 +538,7 @@ describe("CentralSkillsView repositories + installs（V2 markup）", () => {
     expect(dialog).toHaveTextContent("成功 1，跳过 1，失败 1");
   });
 
-  it.skip("quick-filters installed skills and batch installs selected results", async () => {
-    // V2: M2 拆掉了独立的 `installed-filter-*` 快速卡片，已安装筛选改走 ToolbarViewMenu 的
-    // `central-toolbar-view-installed-*` 选项；"select results"/"install selected" 单击改由
-    // BulkActionBar + 卡片 checkbox 提供，已无 1:1 对应入口，待后续重写为新交互链路。
+  it("filters installed skills from the view menu and batch installs only the selected visible skill", async () => {
     mockBatchInstallSkills.mockResolvedValueOnce({
       succeeded: [
         { skill_id: "frontend-design", agent_id: "kiro", target_path: "/Users/test/.kiro/skills/frontend-design" },
@@ -572,28 +569,58 @@ describe("CentralSkillsView repositories + installs（V2 markup）", () => {
       },
     });
 
-    fireEvent.click(screen.getByTestId("installed-filter-any"));
+    fireEvent.click(screen.getByTestId("central-toolbar-view"));
+    fireEvent.click(
+      await screen.findByTestId(
+        "central-toolbar-view-installed-any",
+        {},
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      ),
+    );
 
-    await waitFor(() => {
-      expect(screen.getByText("frontend-design")).toBeInTheDocument();
-      expect(screen.queryByText("code-reviewer")).not.toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByText("frontend-design")).toBeInTheDocument();
+        expect(screen.queryByText("code-reviewer")).not.toBeInTheDocument();
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
 
-    fireEvent.click(screen.getByTestId("installed-filter-select-results"));
-    fireEvent.click(screen.getByTestId("installed-filter-install-selected"));
+    const skillCheckboxes = screen.getAllByLabelText("选择技能");
+    expect(skillCheckboxes).toHaveLength(1);
+    fireEvent.click(skillCheckboxes[0]!);
+    expect(screen.getByTestId("bulk-bar-batch-install")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("bulk-bar-batch-install"));
 
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByText("Universal (.agents/skills)"));
-    fireEvent.click(within(dialog).getByText("Claude Code"));
-    fireEvent.click(within(dialog).getByRole("button", { name: /将 1 个技能安装到 1 个平台/i }));
+    const dialog = await screen.findByRole(
+      "dialog",
+      {},
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    const batchDialog = within(dialog);
+    fireEvent.click(batchDialog.getByText("Universal (.agents/skills)"));
+    fireEvent.click(batchDialog.getByText("Claude Code"));
+    fireEvent.click(
+      batchDialog.getByRole("button", { name: /将 1 个技能安装到 1 个平台/i }),
+    );
 
-    await waitFor(() => {
-      expect(mockBatchInstallSkills).toHaveBeenCalledWith(
-        ["frontend-design"],
-        ["kiro"],
-        "symlink",
-        null
-      );
-    });
+    await waitFor(
+      () => {
+        expect(mockBatchInstallSkills).toHaveBeenCalledTimes(1);
+      },
+      { timeout: ASYNC_UI_TIMEOUT_MS },
+    );
+    expect(mockBatchInstallSkills).toHaveBeenCalledWith(
+      ["frontend-design"],
+      ["kiro"],
+      "symlink",
+      null,
+    );
+    const [skillIds, agentIds, installMode] =
+      mockBatchInstallSkills.mock.calls[0]!;
+    expect(skillIds).toEqual(["frontend-design"]);
+    expect(skillIds).not.toContain("code-reviewer");
+    expect(agentIds).toEqual(["kiro"]);
+    expect(installMode).toBe("symlink");
   });
 });

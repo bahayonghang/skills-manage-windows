@@ -14,6 +14,8 @@ points are `just doctor`, `just check`, `just ci`, and `just audit`.
 - Read [`docs/agents/build-and-test.md`](docs/agents/build-and-test.md) for commands and gates.
 - Read [`docs/agents/git-and-release.md`](docs/agents/git-and-release.md) for branch, PR, and
   release operations.
+- Read [`docs/agents/harness-guide.md`](docs/agents/harness-guide.md) for five-tool rule discovery,
+  evidence layers, and task handoff.
 - Read [`docs/agents/security-and-shared-state.md`](docs/agents/security-and-shared-state.md)
   before changing Central, persistence, credentials, or updater behavior.
 

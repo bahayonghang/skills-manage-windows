@@ -9,8 +9,12 @@ src-tauri/target/
 .tmp/
 
 .agents/
-.claude/
-.codex/
+.claude/**
+!.claude/hooks/
+!.claude/hooks/inject-subagent-context.py
+.codex/**
+!.codex/hooks/
+!.codex/hooks/inject-subagent-context.py
 .opencode/
 .cursor/
 
@@ -37,7 +41,14 @@ Thumbs.db
 .kiro/
 .omp/
 .grok/
-.kimi-code/
+.kimi-code/**
+!.kimi-code/skills/
+!.kimi-code/skills/trellis-research/
+!.kimi-code/skills/trellis-research/SKILL.md
+!.kimi-code/skills/trellis-implement/
+!.kimi-code/skills/trellis-implement/SKILL.md
+!.kimi-code/skills/trellis-check/
+!.kimi-code/skills/trellis-check/SKILL.md
 
 
 # planning with files

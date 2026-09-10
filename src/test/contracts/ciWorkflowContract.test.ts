@@ -42,6 +42,10 @@ type Workflow = {
   permissions: Record<string, string>;
 };
 
+// @ts-expect-error The CI runner is an ESM Node script outside the TS source tree.
+const { CI_LANES } = (await import("../../../scripts/check/run-ci.mjs")) as {
+  CI_LANES: Record<string, Array<{ args: string[]; command: string; name: string }>>;
+};
 const workflow = parse(readFileSync(".github/workflows/ci.yml", "utf8")) as Workflow;
 const dependabot = parse(readFileSync(".github/dependabot.yml", "utf8")) as {
   version: number;
@@ -139,6 +143,62 @@ describe("CI workflow contract", () => {
         step.uses?.startsWith("dtolnay/rust-toolchain@") ?? false
       );
       expect(String(rustSetup?.with?.components ?? "").split(",")).toContain("clippy");
+    }
+  });
+
+  it("runs Trellis Python tests once per rust-platform host without a new lane or Action", () => {
+    expect(CI_LANES.quick.map((step) => step.name)).toEqual([
+      "version",
+      "docs-generated",
+      "typecheck",
+      "lint",
+      "capability",
+      "size",
+      "entrypoints",
+      "fmt",
+    ]);
+    expect(CI_LANES.common.map((step) => step.name)).toEqual([
+      ...CI_LANES.quick.map((step) => step.name),
+      "ipc-codegen",
+      "test",
+      "build",
+      "docs",
+    ]);
+    expect(CI_LANES["rust-platform"].map((step) => step.name)).toEqual([
+      "clippy",
+      "test",
+      "trellis-python",
+    ]);
+    expect(CI_LANES["rust-platform"][2]).toEqual({
+      name: "trellis-python",
+      command: process.platform === "win32" ? "python" : "python3",
+      args: [
+        "-X",
+        "utf8",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".trellis/scripts/tests",
+        "-p",
+        "test_*.py",
+        "-v",
+      ],
+    });
+
+    const rustJobIds = ["windows-rust", "linux-rust", "macos-rust"] as const;
+    expect(requiredLaneIds.filter((jobId) => jobId.endsWith("-rust"))).toEqual([...rustJobIds]);
+    expect(Object.keys(workflow.jobs).filter((jobId) => /python/i.test(jobId))).toEqual([]);
+
+    for (const jobId of rustJobIds) {
+      const job = workflow.jobs[jobId];
+      const laneRuns = job.steps?.filter((step) => step.run?.includes("run-ci.mjs")) ?? [];
+      expect(laneRuns, `${jobId} rust-platform entry`).toHaveLength(1);
+      expect(laneRuns[0]?.run).toBe("node scripts/check/run-ci.mjs --lane rust-platform");
+      expect(
+        findStep(job, (step) => step.uses?.includes("setup-python") ?? false),
+        `${jobId} must not add setup-python`,
+      ).toBeUndefined();
     }
   });
 
