@@ -26,6 +26,10 @@ replacement.
   removing the newly materialized target; a replaced symlink is restored before
   returning the database error. Uninstall deletes metadata before filesystem
   removal and restores the complete installation row if removal fails.
+  Central Install-to-project uses the same rule via
+  `record_project_skill_from_central_install`; skip-already-exists sets
+  `fs_changed=false` so a later metadata failure cannot delete the existing
+  target. See [central-project-install-visibility.md](./central-project-install-visibility.md).
 - `ensure_centralized` may return early only when `canonical_dir/SKILL.md` exists
   **and** the skill row is already `is_central`. A leftover copy with
   `is_central = false` must still be upserted. A copy created on this call is

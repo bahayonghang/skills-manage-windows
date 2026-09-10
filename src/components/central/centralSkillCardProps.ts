@@ -3,7 +3,7 @@ import type { TFunction } from "i18next";
 import type { CentralSkillCardProps } from "@/components/skill/UnifiedSkillCard";
 import { statusAccentOf } from "@/lib/centralSkillCardStatus";
 import { getVisibleSkillTags } from "@/lib/centralTags";
-import type { CentralSkillUpdateState, SkillWithLinks } from "@/types";
+import type { CentralSkillUpdateState, LinkedProject, SkillWithLinks } from "@/types";
 
 interface CentralSkillCardTag {
   id: string;
@@ -82,6 +82,7 @@ export function buildCentralSkillCardProps(
     onUpdateCentral: () => context.onUpdateCentral([skill.id]),
     onDeleteFromCentral: () => context.onDelete(skill),
     detailButtonRef: (node) => context.setDetailButtonRef(skill.id, node),
+    linkedProjects: uniqueLinkedProjects(skill.linked_projects),
     editableTags:
       context.onAddSkillTag &&
       context.onCreateSkillTag &&
@@ -96,4 +97,22 @@ export function buildCentralSkillCardProps(
         : undefined,
     density: context.density,
   };
+}
+
+function uniqueLinkedProjects(
+  projects: SkillWithLinks["linked_projects"],
+): LinkedProject[] | undefined {
+  if (!projects || projects.length === 0) {
+    return undefined;
+  }
+  const seen = new Set<string>();
+  const unique: LinkedProject[] = [];
+  for (const project of projects) {
+    if (seen.has(project.project_id)) {
+      continue;
+    }
+    seen.add(project.project_id);
+    unique.push(project);
+  }
+  return unique.length > 0 ? unique : undefined;
 }

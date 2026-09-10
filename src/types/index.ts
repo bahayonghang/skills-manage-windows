@@ -223,10 +223,17 @@ export interface SkillWithLinks {
   linked_agents: string[];
   /** Agent IDs that share the Central skills directory. */
   shared_root_agents: string[];
+  /** Distinct project destinations; missing/undefined is treated as []. */
+  linked_projects?: LinkedProject[];
   repository?: SkillRepository;
   tags?: SkillTag[];
   source_path?: string;
   is_source_unknown?: boolean;
+}
+
+export interface LinkedProject {
+  project_id: string;
+  path: string;
 }
 export interface BatchInstallResult {
   succeeded: string[];

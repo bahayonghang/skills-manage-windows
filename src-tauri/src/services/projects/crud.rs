@@ -28,7 +28,7 @@ where
     crate::fs_util::run_blocking_fs_with(label, task, ProjectsError::task_join).await
 }
 
-async fn remove_project_skill_target(
+pub(super) async fn remove_project_skill_target(
     target: PathBuf,
     link_type: String,
 ) -> Result<(), ProjectsError> {
@@ -99,7 +99,7 @@ async fn existing_project_skill_symlink_target(
     .await
 }
 
-async fn restore_project_skill_symlink(
+pub(super) async fn restore_project_skill_symlink(
     target: PathBuf,
     link_target: PathBuf,
 ) -> Result<(), ProjectsError> {
@@ -127,7 +127,7 @@ pub fn project_id_from_path(normalized_path: &str) -> String {
     hex[..16].to_string()
 }
 
-fn project_name_from_path(normalized_path: &str) -> String {
+pub(crate) fn project_name_from_path(normalized_path: &str) -> String {
     Path::new(normalized_path)
         .file_name()
         .and_then(|n| n.to_str())

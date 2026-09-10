@@ -670,6 +670,99 @@ async fn test_get_central_skills_no_links() {
     let mut shared = skills_with_links[0].shared_root_agents.clone();
     shared.sort();
     assert!(shared.is_empty());
+    assert!(skills_with_links[0].linked_projects.is_empty());
+}
+
+#[tokio::test]
+async fn test_get_central_skills_includes_deduped_linked_projects() {
+    let pool = setup_test_db().await;
+
+    let central_skill = make_skill("central-proj", "Central Proj", true);
+    db::upsert_skill(&pool, &central_skill).await.unwrap();
+
+    db::insert_project(
+        &pool,
+        &db::Project {
+            id: "proj-prompt".to_string(),
+            path: r"D:\Documents\Code\Rust\Exp\PromptHub".to_string(),
+            name: "Renamed".to_string(),
+            pinned: false,
+            added_at: Utc::now().to_rfc3339(),
+            last_scanned_at: None,
+        },
+    )
+    .await
+    .unwrap();
+    db::insert_project(
+        &pool,
+        &db::Project {
+            id: "proj-other".to_string(),
+            path: "/tmp/other".to_string(),
+            name: "Other".to_string(),
+            pinned: true,
+            added_at: Utc::now().to_rfc3339(),
+            last_scanned_at: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    for (project_id, agent_id) in [
+        ("proj-prompt", "claude-code"),
+        ("proj-prompt", "cursor"),
+        ("proj-other", "claude-code"),
+    ] {
+        db::upsert_project_skill_installation(
+            &pool,
+            &db::ProjectSkillInstallation {
+                project_id: project_id.to_string(),
+                skill_id: "central-proj".to_string(),
+                name: "Central Proj".to_string(),
+                description: None,
+                file_path: format!("{project_id}/SKILL.md"),
+                source_origin: "central".to_string(),
+                agent_id: agent_id.to_string(),
+                installed_path: project_id.to_string(),
+                link_type: "copy".to_string(),
+                symlink_target: None,
+                created_at: Utc::now().to_rfc3339(),
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    let skills_with_links = get_central_skills_impl(&pool).await.unwrap();
+    assert_eq!(skills_with_links.len(), 1);
+    let linked = &skills_with_links[0].linked_projects;
+    assert_eq!(linked.len(), 2);
+    assert_eq!(linked[0].project_id, "proj-other");
+    assert_eq!(linked[1].project_id, "proj-prompt");
+    assert_eq!(linked[1].path, r"D:\Documents\Code\Rust\Exp\PromptHub");
+
+    let page = get_central_skills_page_impl(
+        &pool,
+        crate::services::central_skills::CentralSkillsPageRequest {
+            limit: Some(10),
+            offset: Some(0),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(page.items[0].linked_projects.len(), 2);
+
+    let empty_page = get_central_skills_page_impl(
+        &pool,
+        crate::services::central_skills::CentralSkillsPageRequest {
+            limit: Some(10),
+            offset: Some(50),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert!(empty_page.items.is_empty());
 }
 
 #[tokio::test]

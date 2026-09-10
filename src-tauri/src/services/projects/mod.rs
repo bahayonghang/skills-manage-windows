@@ -12,6 +12,7 @@
 
 pub mod crud;
 pub mod error;
+pub mod record;
 pub mod scan;
 pub mod types;
 
@@ -25,4 +26,8 @@ pub use crud::{
     uninstall_skill_from_project_impl,
 };
 pub use error::ProjectsError;
+pub use record::{
+    record_project_skill_from_central_install, ProjectRecordLocation,
+    RecordProjectSkillFromCentralInstall,
+};
 pub use types::{ProjectDto, ProjectSkillDto, ProjectUsingSkillDto};

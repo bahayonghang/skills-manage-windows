@@ -6,13 +6,17 @@ use sqlx::SqlitePool;
 use std::path::Path;
 use tempfile::TempDir;
 
-use crate::db::{self, DbPool, Skill};
+use crate::db::{self, DbPool, Project, ProjectSkillInstallation, Skill};
 
 use super::crud::{
     add_project_impl, get_project_skills_impl, install_skill_to_project_impl, list_projects_impl,
     list_projects_using_skill_impl, normalize_project_path, project_id_from_path,
     rename_project_impl, rescan_project_impl, set_project_pinned_impl,
     uninstall_skill_from_project_impl,
+};
+use super::record::{
+    record_project_skill_from_central_install, ProjectRecordLocation,
+    RecordProjectSkillFromCentralInstall,
 };
 
 use crate::test_support::mem_pool as setup_test_db;
@@ -1066,4 +1070,214 @@ async fn list_projects_using_skill_empty_for_unused_skill() {
         .await
         .unwrap();
     assert!(rows.is_empty());
+}
+
+#[tokio::test]
+async fn list_linked_projects_for_skills_empty_ids_skips_query() {
+    let pool = setup_test_db().await;
+    let map = db::list_linked_projects_for_skills(&pool, &[])
+        .await
+        .unwrap();
+    assert!(map.is_empty());
+}
+
+#[tokio::test]
+async fn list_linked_projects_for_skills_chunks_501_ids() {
+    let pool = setup_test_db().await;
+    db::insert_project(
+        &pool,
+        &Project {
+            id: "proj-chunk".to_string(),
+            path: "/tmp/chunk".to_string(),
+            name: "Chunk".to_string(),
+            pinned: false,
+            added_at: "2026-09-10T00:00:00Z".to_string(),
+            last_scanned_at: None,
+        },
+    )
+    .await
+    .unwrap();
+    for skill_id in ["skill-0", "skill-500"] {
+        db::upsert_project_skill_installation(
+            &pool,
+            &ProjectSkillInstallation {
+                project_id: "proj-chunk".to_string(),
+                skill_id: skill_id.to_string(),
+                name: skill_id.to_string(),
+                description: None,
+                file_path: format!("/tmp/chunk/{skill_id}/SKILL.md"),
+                source_origin: "central".to_string(),
+                agent_id: "claude-code".to_string(),
+                installed_path: format!("/tmp/chunk/{skill_id}"),
+                link_type: "copy".to_string(),
+                symlink_target: None,
+                created_at: "2026-09-10T00:00:00Z".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    let ids: Vec<String> = (0..501).map(|index| format!("skill-{index}")).collect();
+    let map = db::list_linked_projects_for_skills(&pool, &ids)
+        .await
+        .unwrap();
+    assert_eq!(
+        map.len(),
+        2,
+        "first and last IN chunks must both be queried"
+    );
+    assert_eq!(
+        map.get("skill-0").map(|rows| rows[0].project_id.as_str()),
+        Some("proj-chunk")
+    );
+    assert_eq!(
+        map.get("skill-500").map(|rows| rows[0].project_id.as_str()),
+        Some("proj-chunk")
+    );
+}
+
+#[tokio::test]
+async fn list_linked_projects_for_skills_dedupes_and_sorts() {
+    let pool = setup_test_db().await;
+    db::insert_project(
+        &pool,
+        &Project {
+            id: "proj-alpha".to_string(),
+            path: "/tmp/alpha".to_string(),
+            name: "Renamed Alpha".to_string(),
+            pinned: false,
+            added_at: "2026-09-10T00:00:00Z".to_string(),
+            last_scanned_at: None,
+        },
+    )
+    .await
+    .unwrap();
+    db::insert_project(
+        &pool,
+        &Project {
+            id: "proj-zeta".to_string(),
+            path: "/tmp/zeta".to_string(),
+            name: "Renamed Zeta".to_string(),
+            pinned: true,
+            added_at: "2026-09-10T00:00:00Z".to_string(),
+            last_scanned_at: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    for (project_id, agent_id) in [
+        ("proj-alpha", "claude-code"),
+        ("proj-alpha", "cursor"),
+        ("proj-zeta", "claude-code"),
+    ] {
+        db::upsert_project_skill_installation(
+            &pool,
+            &ProjectSkillInstallation {
+                project_id: project_id.to_string(),
+                skill_id: "shared".to_string(),
+                name: "shared".to_string(),
+                description: None,
+                file_path: format!("{project_id}/SKILL.md"),
+                source_origin: "central".to_string(),
+                agent_id: agent_id.to_string(),
+                installed_path: project_id.to_string(),
+                link_type: "copy".to_string(),
+                symlink_target: None,
+                created_at: "2026-09-10T00:00:00Z".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    let map = db::list_linked_projects_for_skills(&pool, &["shared".to_string()])
+        .await
+        .unwrap();
+    let rows = map.get("shared").expect("skill destinations");
+    assert_eq!(
+        rows.len(),
+        2,
+        "same project with two agents must appear once"
+    );
+    assert_eq!(rows[0].project_id, "proj-zeta");
+    assert_eq!(rows[0].path, "/tmp/zeta");
+    assert_eq!(rows[1].project_id, "proj-alpha");
+}
+
+#[tokio::test]
+async fn record_remote_project_does_not_require_local_directory() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+    let canonical = tmp.path().join("remote-skill");
+    seed_central_skill(&pool, &canonical, "remote-skill").await;
+
+    let remote_path = "/definitely-not-on-this-machine/PromptHub";
+    assert!(
+        !Path::new(remote_path).is_dir(),
+        "fixture path must not exist locally"
+    );
+
+    record_project_skill_from_central_install(
+        &pool,
+        RecordProjectSkillFromCentralInstall {
+            skill_id: "remote-skill",
+            agent_id: "claude-code",
+            project_path: remote_path,
+            location: ProjectRecordLocation::Remote,
+            installed_path: "/definitely-not-on-this-machine/PromptHub/.claude/skills/remote-skill",
+            link_type: "copy",
+            symlink_target: None,
+            fs_changed: false,
+            previous_symlink_target: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let project = db::get_project_by_path(&pool, remote_path)
+        .await
+        .unwrap()
+        .expect("remote project row");
+    assert_eq!(project.path, remote_path);
+    let psi = db::get_project_skill_installation(&pool, &project.id, "remote-skill", "claude-code")
+        .await
+        .unwrap()
+        .expect("psi row");
+    assert_eq!(psi.source_origin, "central");
+    assert_eq!(
+        psi.installed_path,
+        "/definitely-not-on-this-machine/PromptHub/.claude/skills/remote-skill"
+    );
+}
+
+#[tokio::test]
+async fn record_local_project_still_requires_existing_directory() {
+    let tmp = TempDir::new().unwrap();
+    let pool = setup_test_db().await;
+    let canonical = tmp.path().join("local-skill");
+    seed_central_skill(&pool, &canonical, "local-skill").await;
+
+    let missing = "/definitely-not-on-this-machine/PromptHub";
+    let result = record_project_skill_from_central_install(
+        &pool,
+        RecordProjectSkillFromCentralInstall {
+            skill_id: "local-skill",
+            agent_id: "claude-code",
+            project_path: missing,
+            location: ProjectRecordLocation::Local,
+            installed_path: missing,
+            link_type: "copy",
+            symlink_target: None,
+            fs_changed: false,
+            previous_symlink_target: None,
+        },
+    )
+    .await;
+    assert!(result.is_err());
+    assert!(db::get_project_by_path(&pool, missing)
+        .await
+        .unwrap()
+        .is_none());
 }

@@ -4,6 +4,7 @@ import type {
   AgentWithStatus,
   CentralSkillUpdateState,
   ClaudeSourceKind,
+  LinkedProject,
   SkillsCliPlacement,
 } from "@/types";
 
@@ -88,6 +89,8 @@ export interface CentralSkillCardProps extends SkillCardCoreProps {
   density?: SkillCardDensity;
   platformIcons?: SkillCardPlatformIcons;
   footer?: SkillCardFooter;
+  /** Read-only project destinations (Central only). Omit or [] hides the row. */
+  linkedProjects?: LinkedProject[];
 }
 
 /** 平台技能视图卡片：某平台已安装技能（来源类型 + 装/卸该平台）。 */

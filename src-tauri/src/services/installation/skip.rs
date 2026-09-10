@@ -178,7 +178,7 @@ async fn target_is_matching_copy(
     .await
 }
 
-async fn infer_existing_target_link_type(
+pub(crate) async fn infer_existing_target_link_type(
     target_path: &Path,
     canonical_dir: &Path,
 ) -> Result<String, InstallationError> {
@@ -194,7 +194,10 @@ async fn infer_existing_target_link_type(
     Ok("native".to_string())
 }
 
-fn symlink_target_for_link_type(link_type: &str, canonical_dir: &Path) -> Option<String> {
+pub(crate) fn symlink_target_for_link_type(
+    link_type: &str,
+    canonical_dir: &Path,
+) -> Option<String> {
     if link_type == "symlink" {
         Some(canonical_dir.to_string_lossy().into_owned())
     } else {
