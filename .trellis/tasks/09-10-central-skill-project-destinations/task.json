@@ -1,0 +1,28 @@
+{
+  "id": "central-skill-project-destinations",
+  "name": "central-skill-project-destinations",
+  "title": "Central Skills 展示已安装项目",
+  "description": "",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": "central-skills",
+  "package": null,
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-09-10",
+  "completedAt": null,
+  "branch": "feat/central-skill-project-destinations",
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "description": "Central Skills 列表在全局 agent 安装目标之外，展示该技能已安装到的项目（文件夹图标 + 路径末段名称）。"
+  }
+}

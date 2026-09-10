@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/frontend/skill-card-scenarios.md", "reason": "Variant mutex and central-only prop must stay intact"}
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "Cards and list content must not invoke Tauri directly"}
+{"file": ".trellis/spec/backend/layer-boundaries.md", "reason": "No new SQL in services; no commands import from services"}
+{"file": ".trellis/spec/backend/central-skills-pagination.md", "reason": "Page enrichment must not scan the full psi table"}
+{"file": ".trellis/spec/backend/transactional-mutations.md", "reason": "DB failure after project copy must compensate FS"}
+{"file": ".trellis/spec/backend/central-project-install-visibility.md", "reason": "Visibility contract: persist psi and enrich SkillWithLinks"}
+{"file": ".trellis/spec/quality/index.md", "reason": "Quality-check index for CI and test placement"}
+{"file": ".trellis/spec/quality/test-suite-layout.md", "reason": "Vitest under src/test; Rust tests stay with owning service"}
+{"file": ".trellis/spec/frontend/async-ui-test-stability.md", "reason": "Install dialog plus list refresh must wait on the named surface"}
+{"file": ".trellis/tasks/09-10-central-skill-project-destinations/research/current-project-install-visibility.md", "reason": "Check that screenshot-2 installs become visible on the card"}
