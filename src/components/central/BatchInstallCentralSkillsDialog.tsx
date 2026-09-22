@@ -101,11 +101,9 @@ export function BatchInstallCentralSkillsDialog({
     resetSelection();
     setError(null);
     setResult(null);
+    setInstallMethod(canUseSymlink ? "symlink" : "copy");
     if (targetMode === "platform") {
-      setInstallMethod(canUseSymlink ? "symlink" : "copy");
       setProjectPath("");
-    } else {
-      setInstallMethod("copy");
     }
   }, [
     open,
@@ -119,7 +117,7 @@ export function BatchInstallCentralSkillsDialog({
 
   function handleModeChange(mode: TargetMode) {
     setTargetMode(mode);
-    setInstallMethod(mode === "project" || !canUseSymlink ? "copy" : "symlink");
+    setInstallMethod(canUseSymlink ? "symlink" : "copy");
     setError(null);
     setResult(null);
   }

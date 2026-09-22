@@ -135,7 +135,7 @@ describe("BatchInstallCentralSkillsDialog", () => {
     await waitFor(() =>
       expect(mockOnInstall).toHaveBeenCalledWith(
         expect.any(Array),
-        "copy",
+        "symlink",
         "D:\\picked\\batch-project"
       )
     );
@@ -204,7 +204,7 @@ describe("BatchInstallCentralSkillsDialog", () => {
     await waitFor(() =>
       expect(mockOnInstall).toHaveBeenCalledWith(
         expect.any(Array),
-        "copy",
+        "symlink",
         "/home/test/project"
       )
     );
