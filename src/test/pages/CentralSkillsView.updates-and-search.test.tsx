@@ -195,7 +195,7 @@ describe("CentralSkillsView updates + search（V2 markup）", () => {
       expect(mockBatchInstallSkills).toHaveBeenCalledWith(
         ["code-reviewer"],
         ["codex", "claude-code"],
-        "copy",
+        "symlink",
         "D:\\work\\demo"
       );
     });

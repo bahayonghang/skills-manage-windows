@@ -403,7 +403,7 @@ describe("InstallDialog", () => {
       expect(mockOnInstall).toHaveBeenCalledWith(
         "frontend-design",
         expect.any(Array),
-        "copy",
+        "symlink",
         "D:\\work\\demo"
       );
     });
@@ -429,7 +429,7 @@ describe("InstallDialog", () => {
       expect(mockOnInstall).toHaveBeenCalledWith(
         "frontend-design",
         expect.any(Array),
-        "copy",
+        "symlink",
         "D:\\picked\\project"
       );
     });
@@ -499,7 +499,7 @@ describe("InstallDialog", () => {
       expect(mockOnInstall).toHaveBeenCalledWith(
         "frontend-design",
         expect.any(Array),
-        "copy",
+        "symlink",
         "/home/test/project"
       );
     });

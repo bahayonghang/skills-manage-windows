@@ -117,11 +117,7 @@ export function InstallDialog({
         return;
       }
       resetSelection();
-      setInstallMethod(
-        effectiveTargetMode === "project" || !canUseSymlink
-          ? "copy"
-          : "symlink",
-      );
+      setInstallMethod(canUseSymlink ? "symlink" : "copy");
       if (effectiveTargetMode === "platform") {
         setProjectPath("");
       }
@@ -144,7 +140,7 @@ export function InstallDialog({
       return;
     }
     setTargetMode(mode);
-    setInstallMethod(mode === "project" || !canUseSymlink ? "copy" : "symlink");
+    setInstallMethod(canUseSymlink ? "symlink" : "copy");
     if (mode === "platform") {
       setProjectPath("");
     }
