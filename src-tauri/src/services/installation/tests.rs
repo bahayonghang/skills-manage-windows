@@ -179,6 +179,33 @@ async fn create_central_skill(pool: &DbPool, central_dir: &Path, skill_id: &str)
     skill_dir
 }
 
+async fn assert_project_skill_recorded(
+    pool: &DbPool,
+    project_dir: &Path,
+    skill_id: &str,
+    agent_id: &str,
+) {
+    let projects = db::list_projects(pool).await.unwrap();
+    assert_eq!(
+        projects.len(),
+        1,
+        "central project install must register one project"
+    );
+    assert!(
+        crate::paths::paths_equivalent(Path::new(&projects[0].path), project_dir),
+        "registered project path should match install root"
+    );
+    let rows = db::list_project_skill_installations(pool, &projects[0].id)
+        .await
+        .unwrap();
+    assert!(
+        rows.iter().any(|row| {
+            row.skill_id == skill_id && row.agent_id == agent_id && row.source_origin == "central"
+        }),
+        "psi row missing for {skill_id}/{agent_id}: {rows:?}"
+    );
+}
+
 fn create_user_skill(agent_dir: &Path, skill_id: &str) -> PathBuf {
     crate::test_support::write_skill_md(&agent_dir.join(skill_id), skill_id, Some("User skill"))
 }
@@ -1943,6 +1970,7 @@ async fn test_project_install_creates_project_relative_skill_dir() {
         .join("project-skill");
     assert_eq!(PathBuf::from(result.symlink_path), target);
     assert!(target.join("SKILL.md").exists());
+    assert_project_skill_recorded(&pool, &project_dir, "project-skill", "claude-code").await;
 }
 
 #[tokio::test]
@@ -2203,6 +2231,8 @@ async fn test_project_install_skips_existing_central_symlink() {
     assert_eq!(result.skipped.len(), 1);
     assert!(result.failed.is_empty());
     assert_eq!(result.skipped[0].reason, "central_symlink");
+    assert_project_skill_recorded(&pool, &project_dir, "project-symlink-skill", "claude-code")
+        .await;
 }
 
 #[tokio::test]
@@ -2238,6 +2268,112 @@ async fn test_project_install_skips_existing_matching_copy() {
     assert_eq!(result.skipped.len(), 1);
     assert!(result.failed.is_empty());
     assert_eq!(result.skipped[0].reason, "matching_copy");
+    assert_project_skill_recorded(&pool, &project_dir, "project-copy-skill", "claude-code").await;
+}
+
+#[tokio::test]
+async fn test_project_install_db_failure_compensates_new_copy() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = crate::paths::resolve_home_dir()
+        .join(".claude")
+        .join("skills");
+    let project_dir = tmp.path().join("project");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(&project_dir).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    create_central_skill(&pool, &central_dir, "install-rollback").await;
+
+    sqlx::query(
+        "CREATE TRIGGER fail_project_skill_install
+         BEFORE INSERT ON project_skill_installations
+         WHEN NEW.skill_id = 'install-rollback'
+         BEGIN SELECT RAISE(ABORT, 'injected project skill install failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let result = install_central_skill_to_project_outcome_impl(
+        &pool,
+        "install-rollback",
+        "claude-code",
+        &project_dir,
+        "copy",
+    )
+    .await;
+    assert!(result.is_err(), "injected installation write must fail");
+
+    let target = project_dir
+        .join(".claude")
+        .join("skills")
+        .join("install-rollback");
+    assert!(
+        !target.exists(),
+        "failed install must compensate the copied project target"
+    );
+    let projects = db::list_projects(&pool).await.unwrap();
+    if let Some(project) = projects.first() {
+        let row = db::get_project_skill_installation(
+            &pool,
+            &project.id,
+            "install-rollback",
+            "claude-code",
+        )
+        .await
+        .unwrap();
+        assert!(row.is_none(), "failed install must not leave a PSI row");
+    }
+}
+
+#[tokio::test]
+async fn test_project_install_skip_db_failure_keeps_existing_target() {
+    let tmp = TempDir::new().unwrap();
+    let central_dir = tmp.path().join("central");
+    let agent_dir = crate::paths::resolve_home_dir()
+        .join(".claude")
+        .join("skills");
+    let project_dir = tmp.path().join("project");
+    let target_dir = project_dir.join(".claude").join("skills").join("skip-keep");
+    fs::create_dir_all(&central_dir).unwrap();
+    fs::create_dir_all(target_dir.parent().unwrap()).unwrap();
+
+    let pool = setup_db(&central_dir, &agent_dir).await;
+    let central_skill_dir = create_central_skill(&pool, &central_dir, "skip-keep").await;
+    super::fs_util::copy_dir_all(&central_skill_dir, &target_dir).unwrap();
+
+    sqlx::query(
+        "CREATE TRIGGER fail_project_skill_skip_record
+         BEFORE INSERT ON project_skill_installations
+         WHEN NEW.skill_id = 'skip-keep'
+         BEGIN SELECT RAISE(ABORT, 'injected skip record failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let result = install_central_skill_to_project_outcome_impl(
+        &pool,
+        "skip-keep",
+        "claude-code",
+        &project_dir,
+        "copy",
+    )
+    .await;
+    assert!(result.is_err(), "injected skip metadata write must fail");
+    assert!(
+        target_dir.join("SKILL.md").exists(),
+        "skip path must not delete the existing project target"
+    );
+    let projects = db::list_projects(&pool).await.unwrap();
+    if let Some(project) = projects.first() {
+        let row =
+            db::get_project_skill_installation(&pool, &project.id, "skip-keep", "claude-code")
+                .await
+                .unwrap();
+        assert!(row.is_none(), "failed skip record must not leave a PSI row");
+    }
 }
 
 #[tokio::test]

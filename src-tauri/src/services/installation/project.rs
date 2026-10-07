@@ -9,12 +9,19 @@ use crate::db::{self, DbPool};
 
 use crate::targets::{remote_join, ConnectedRemoteTarget, RemotePathInfo};
 
+use crate::services::projects::{
+    record_project_skill_from_central_install, ProjectRecordLocation, ProjectsError,
+    RecordProjectSkillFromCentralInstall,
+};
+
 use super::centralize::{ensure_centralized, ensure_replaceable_target};
 use super::error::InstallationError;
 use super::fs_util::{copy_dir_all_blocking, create_symlink, run_blocking_fs, symlink_target_path};
 use super::native::should_fallback_to_copy;
 use super::remote::ensure_remote_centralized;
-use super::skip::detect_existing_project_install;
+use super::skip::{
+    detect_existing_project_install, infer_existing_target_link_type, symlink_target_for_link_type,
+};
 use super::transport::InstallTransport;
 use super::types::{InstallOutcome, InstallResult};
 
@@ -219,14 +226,18 @@ async fn ensure_remote_project_target_replaceable(
     connection: &ConnectedRemoteTarget,
     target_path: &str,
     method: &str,
-) -> Result<(), InstallationError> {
+) -> Result<Option<String>, InstallationError> {
     let info = connection
         .inspect_path(target_path)
         .await
         .map_err(|e| InstallationError::Remote(e.to_string()))?;
+    let previous_symlink = info
+        .as_ref()
+        .filter(|path_info| path_info.file_type == "symlink")
+        .and_then(|path_info| path_info.symlink_target.clone());
     match classify_remote_project_existing_target(target_path, method, info.as_ref()) {
         RemoteProjectExistingTargetAction::UseEmptyPath
-        | RemoteProjectExistingTargetAction::ReplaceSymlink => Ok(()),
+        | RemoteProjectExistingTargetAction::ReplaceSymlink => Ok(previous_symlink),
         RemoteProjectExistingTargetAction::Reject(error) => {
             Err(InstallationError::RemoteTargetOccupied(error))
         }
@@ -298,7 +309,8 @@ pub(crate) async fn install_central_skill_to_remote_project_outcome_impl(
 
     ensure_remote_project_dir(connection, &paths.project_path).await?;
     ensure_remote_centralized(connection, pool, skill_id, &canonical_dir).await?;
-    ensure_remote_project_target_replaceable(connection, &paths.target_path, method).await?;
+    let previous_symlink_target =
+        ensure_remote_project_target_replaceable(connection, &paths.target_path, method).await?;
 
     connection
         .run_script(
@@ -312,12 +324,49 @@ pub(crate) async fn install_central_skill_to_remote_project_outcome_impl(
             ],
         )
         .await
-        .map_err(|e| InstallationError::Remote(e.to_string()))
-        .map(|_| {
-            InstallOutcome::Installed(InstallResult {
-                symlink_path: paths.target_path,
-            })
-        })
+        .map_err(|e| InstallationError::Remote(e.to_string()))?;
+
+    let symlink_target = if method == "symlink" {
+        Some(canonical_dir.as_str())
+    } else {
+        None
+    };
+    if let Err(error) = record_project_skill_from_central_install(
+        pool,
+        RecordProjectSkillFromCentralInstall {
+            skill_id,
+            agent_id,
+            project_path: &paths.project_path,
+            location: ProjectRecordLocation::Remote,
+            installed_path: &paths.target_path,
+            link_type: method,
+            symlink_target,
+            fs_changed: true,
+            previous_symlink_target: previous_symlink_target.as_deref(),
+        },
+    )
+    .await
+    {
+        if let Err(cleanup_error) = compensate_remote_project_target(
+            connection,
+            &paths.target_path,
+            previous_symlink_target.as_deref(),
+        )
+        .await
+        {
+            tracing::error!(
+                skill_id,
+                agent_id,
+                "Failed to compensate remote project skill target after installation metadata write failure"
+            );
+            return Err(cleanup_error);
+        }
+        return Err(installation_error_from_projects(error));
+    }
+
+    Ok(InstallOutcome::Installed(InstallResult {
+        symlink_path: paths.target_path,
+    }))
 }
 
 fn ensure_project_dir_sync(project_path: &Path) -> Result<(), InstallationError> {
@@ -382,9 +431,26 @@ pub(crate) async fn install_central_skill_to_project_outcome_impl(
     if let Some(skipped) =
         detect_existing_project_install(skill_id, agent_id, &target_path, &canonical_dir).await?
     {
+        let (link_type, symlink_target) =
+            project_install_link_metadata(&target_path, &canonical_dir).await?;
+        record_local_central_project_install(
+            pool,
+            project_path,
+            &target_path,
+            LocalProjectRecord {
+                skill_id,
+                agent_id,
+                link_type: &link_type,
+                symlink_target: symlink_target.as_deref(),
+                fs_changed: false,
+                previous_symlink_target: None,
+            },
+        )
+        .await?;
         return Ok(InstallOutcome::Skipped(skipped));
     }
 
+    let previous_symlink_target = existing_local_symlink_target(&target_path).await?;
     ensure_replaceable_target(&target_path).await?;
 
     if method == "copy" {
@@ -407,7 +473,167 @@ pub(crate) async fn install_central_skill_to_project_outcome_impl(
         }
     }
 
+    let (link_type, symlink_target) =
+        project_install_link_metadata(&target_path, &canonical_dir).await?;
+    let previous_symlink = previous_symlink_target
+        .as_ref()
+        .map(|path| path.to_string_lossy().into_owned());
+    record_local_central_project_install(
+        pool,
+        project_path,
+        &target_path,
+        LocalProjectRecord {
+            skill_id,
+            agent_id,
+            link_type: &link_type,
+            symlink_target: symlink_target.as_deref(),
+            fs_changed: true,
+            previous_symlink_target: previous_symlink.as_deref(),
+        },
+    )
+    .await?;
+
     Ok(InstallOutcome::Installed(InstallResult {
         symlink_path: target_path.to_string_lossy().into_owned(),
     }))
+}
+
+async fn project_install_link_metadata(
+    target_path: &Path,
+    canonical_dir: &Path,
+) -> Result<(String, Option<String>), InstallationError> {
+    let link_type = infer_existing_target_link_type(target_path, canonical_dir).await?;
+    let symlink_target = symlink_target_for_link_type(&link_type, canonical_dir);
+    Ok((link_type, symlink_target))
+}
+
+async fn existing_local_symlink_target(
+    target_path: &Path,
+) -> Result<Option<PathBuf>, InstallationError> {
+    let target_path = target_path.to_path_buf();
+    run_blocking_fs("project skill symlink inspection", move || {
+        let metadata = match std::fs::symlink_metadata(&target_path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => {
+                return Err(InstallationError::io(
+                    format!(
+                        "Failed to inspect project skill target '{}'",
+                        target_path.display()
+                    ),
+                    error,
+                ));
+            }
+        };
+        if !metadata.file_type().is_symlink() {
+            return Ok(None);
+        }
+        std::fs::read_link(&target_path).map(Some).map_err(|error| {
+            InstallationError::io(
+                format!(
+                    "Failed to read project skill symlink '{}'",
+                    target_path.display()
+                ),
+                error,
+            )
+        })
+    })
+    .await
+}
+
+struct LocalProjectRecord<'a> {
+    skill_id: &'a str,
+    agent_id: &'a str,
+    link_type: &'a str,
+    symlink_target: Option<&'a str>,
+    fs_changed: bool,
+    previous_symlink_target: Option<&'a str>,
+}
+
+async fn record_local_central_project_install(
+    pool: &DbPool,
+    project_path: &Path,
+    target_path: &Path,
+    params: LocalProjectRecord<'_>,
+) -> Result<(), InstallationError> {
+    let project_path = project_path.to_string_lossy();
+    let installed_path = target_path.to_string_lossy();
+    record_project_skill_from_central_install(
+        pool,
+        RecordProjectSkillFromCentralInstall {
+            skill_id: params.skill_id,
+            agent_id: params.agent_id,
+            project_path: project_path.as_ref(),
+            location: ProjectRecordLocation::Local,
+            installed_path: installed_path.as_ref(),
+            link_type: params.link_type,
+            symlink_target: params.symlink_target,
+            fs_changed: params.fs_changed,
+            previous_symlink_target: params.previous_symlink_target,
+        },
+    )
+    .await
+    .map_err(installation_error_from_projects)
+}
+
+const REMOTE_PROJECT_COMPENSATE_SCRIPT: &str = r#"
+set -eu
+
+target_path=$1
+previous_target=$2
+
+if [ -L "$target_path" ] || [ -e "$target_path" ]; then
+  if [ -L "$target_path" ]; then
+    rm -f -- "$target_path"
+  else
+    rm -rf -- "$target_path"
+  fi
+fi
+
+if [ -n "$previous_target" ]; then
+  ln -s "$previous_target" "$target_path"
+fi
+"#;
+
+async fn compensate_remote_project_target(
+    connection: &ConnectedRemoteTarget,
+    target_path: &str,
+    previous_symlink_target: Option<&str>,
+) -> Result<(), InstallationError> {
+    connection
+        .run_script(
+            REMOTE_PROJECT_COMPENSATE_SCRIPT,
+            &[target_path, previous_symlink_target.unwrap_or("")],
+        )
+        .await
+        .map_err(|e| InstallationError::Remote(e.to_string()))
+        .map(|_| ())
+}
+
+fn installation_error_from_projects(error: ProjectsError) -> InstallationError {
+    match error {
+        ProjectsError::Db(error) => InstallationError::Db(error),
+        ProjectsError::Installation(error) => error,
+        ProjectsError::Io { context, source } => InstallationError::io(context, source),
+        ProjectsError::ProjectPathEmpty => InstallationError::ProjectPathMissing(String::new()),
+        ProjectsError::ProjectPathInvalid(path)
+        | ProjectsError::ProjectPathMissingOrNotDir(path) => {
+            InstallationError::ProjectPathNotDirectory(path)
+        }
+        ProjectsError::SkillNotFoundInCentral(skill_id) => {
+            InstallationError::SkillNotFound(skill_id)
+        }
+        ProjectsError::CentralAgentProjectTarget => InstallationError::CentralAgentProjectTarget,
+        ProjectsError::AgentNotFound(agent_id) => InstallationError::AgentNotFound(agent_id),
+        ProjectsError::TaskJoin { label, message } => InstallationError::task_join(label, message),
+        remaining @ (ProjectsError::ProjectNameEmpty
+        | ProjectsError::ProjectNotFound(_)
+        | ProjectsError::AgentDisabled(_)
+        | ProjectsError::SkillNotCentralized(_)
+        | ProjectsError::SkillNoCanonicalPath(_)
+        | ProjectsError::CentralSkillDirMissing(_)
+        | ProjectsError::SkillNotInstalledInProject { .. }) => {
+            InstallationError::ProjectInstallRecord(remaining.to_string())
+        }
+    }
 }

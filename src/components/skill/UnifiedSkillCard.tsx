@@ -8,6 +8,7 @@ import {
   Loader2,
   Trash2,
   Download,
+  Folder,
 } from "lucide-react";
 import { memo, useMemo, type MouseEventHandler, type Ref } from "react";
 import { useTranslation } from "react-i18next";
@@ -21,8 +22,9 @@ import {
 import { CardTagEditor } from "@/components/skill/CardTagEditor";
 import { SkillCardDenseRow } from "@/components/skill/SkillCardDenseRow";
 import { SkillCardMeta } from "@/components/skill/SkillCardMeta";
-import type { CentralSkillUpdateState, ClaudeSourceKind, SkillsCliPlacement } from "@/types";
+import type { CentralSkillUpdateState, ClaudeSourceKind, LinkedProject, SkillsCliPlacement } from "@/types";
 import { cn } from "@/lib/utils";
+import { formatPathForDisplay, getPathBasename } from "@/lib/path";
 import {
   getPlatformTargetInstallAgentIds,
   getPlatformTargetMemberIds,
@@ -86,6 +88,7 @@ interface SkillCardModel {
   statusChipLabel?: string;
   editableTags?: SkillCardTypes.SkillCardEditableTags;
   footer?: SkillCardTypes.SkillCardFooter;
+  linkedProjects?: LinkedProject[];
   layout?: "denseRow";
   path?: string | null;
   placements?: readonly SkillsCliPlacement[];
@@ -124,6 +127,7 @@ function toModel(props: SkillCardTypes.UnifiedSkillCardProps): SkillCardModel {
         density: props.density,
         platformIcons: props.platformIcons,
         footer: props.footer,
+        linkedProjects: props.linkedProjects,
       };
     case "platform":
       return {
@@ -237,6 +241,57 @@ function UnifiedSkillCardComponent(props: SkillCardTypes.UnifiedSkillCardProps) 
   return <SkillCardStandardCard model={model} />;
 }
 
+function LinkedProjectChips({
+  projects,
+}: {
+  projects: LinkedProject[] | undefined;
+}) {
+  const { t } = useTranslation();
+  if (!projects || projects.length === 0) {
+    return null;
+  }
+  const unique = uniqueLinkedProjectChips(projects);
+  if (unique.length === 0) {
+    return null;
+  }
+  const fallback = t("central.linkedProjectFallback");
+  return (
+    <div
+      className="flex flex-wrap gap-1"
+      data-testid="central-linked-projects"
+    >
+      {unique.map((project) => {
+        const name = getPathBasename(project.path) || fallback;
+        return (
+          <span
+            key={project.project_id}
+            title={formatPathForDisplay(project.path)}
+            aria-label={t("central.linkedProjectLabel", { name })}
+            data-testid={`central-linked-project-${project.project_id}`}
+            className="inline-flex max-w-full items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground"
+          >
+            <Folder className="size-3 shrink-0" aria-hidden />
+            <span className="min-w-0 truncate">{name}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function uniqueLinkedProjectChips(projects: LinkedProject[]): LinkedProject[] {
+  const seen = new Set<string>();
+  const unique: LinkedProject[] = [];
+  for (const project of projects) {
+    if (seen.has(project.project_id)) {
+      continue;
+    }
+    seen.add(project.project_id);
+    unique.push(project);
+  }
+  return unique;
+}
+
 function SkillCardStandardCard({ model }: { model: SkillCardModel }) {
   const { t } = useTranslation();
   const {
@@ -280,6 +335,7 @@ function SkillCardStandardCard({ model }: { model: SkillCardModel }) {
     statusChipLabel,
     editableTags,
     footer,
+    linkedProjects,
   } = model;
 
   // "default" 是旧别名，归一化为 "comfortable"
@@ -632,6 +688,8 @@ function SkillCardStandardCard({ model }: { model: SkillCardModel }) {
               <CardTagEditor {...editableTags} />
             </div>
           )}
+
+          <LinkedProjectChips projects={linkedProjects} />
 
           {/* Row 4: Footer (central 方案C) or Platform toggle icons */}
           {footer ? (

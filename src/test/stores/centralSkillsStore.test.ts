@@ -927,6 +927,46 @@ describe("centralSkillsStore", () => {
     expect(useCentralSkillsStore.getState().isInstalling).toBe(false);
   });
 
+  it("stores linked_projects from the post-install Central refresh", async () => {
+    const refreshed = [
+      {
+        ...mockSkills[0],
+        linked_projects: [
+          {
+            project_id: "proj-prompthub",
+            path: "D:\\Documents\\Code\\Rust\\Exp\\PromptHub",
+          },
+        ],
+      },
+    ];
+    vi.mocked(invoke)
+      .mockResolvedValueOnce({
+        succeeded: [
+          {
+            skill_id: "frontend-design",
+            agent_id: "cursor",
+            target_path: "D:\\Documents\\Code\\Rust\\Exp\\PromptHub\\.cursor\\skills\\frontend-design",
+          },
+        ],
+        skipped: [],
+        failed: [],
+      })
+      .mockResolvedValueOnce(refreshed)
+      .mockResolvedValueOnce(mockRepositories);
+
+    await useCentralSkillsStore
+      .getState()
+      .installSkill("frontend-design", ["cursor"], "copy", "D:\\Documents\\Code\\Rust\\Exp\\PromptHub");
+
+    expect(invoke).toHaveBeenCalledWith("get_central_skills");
+    expect(useCentralSkillsStore.getState().skills[0]?.linked_projects).toEqual([
+      {
+        project_id: "proj-prompthub",
+        path: "D:\\Documents\\Code\\Rust\\Exp\\PromptHub",
+      },
+    ]);
+  });
+
   it("sets error and re-throws when installSkill fails", async () => {
     vi.mocked(invoke).mockRejectedValueOnce(
       ipcFixtureError("storage.unavailable", "symlink failed"),

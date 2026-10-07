@@ -181,6 +181,9 @@ pub enum InstallationError {
 
     #[error("The directory link did not resolve to the expected target")]
     ManagedDirectoryLinkTargetMismatch,
+
+    #[error("{0}")]
+    ProjectInstallRecord(String),
 }
 
 impl InstallationError {

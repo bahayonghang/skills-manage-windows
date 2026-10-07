@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend pre-dev checklist: Central card, i18n, store-only IPC"}
+{"file": ".trellis/spec/frontend/skill-card-scenarios.md", "reason": "Central variant is the only place to add linkedProjects; toModel + variant tests"}
+{"file": ".trellis/spec/frontend/ipc-adapter.md", "reason": "No new invoke from components; SkillWithLinks stays on typed commandMap"}
+{"file": ".trellis/spec/frontend/module-boundaries.md", "reason": "lib/store/component direction; card props built in centralSkillCardProps"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-dev checklist for installation, projects, central_skills"}
+{"file": ".trellis/spec/backend/layer-boundaries.md", "reason": "SQL in projects_repo; installation calls projects service, not repos directly"}
+{"file": ".trellis/spec/backend/central-skills-pagination.md", "reason": "linked_projects enrichment must follow page IN-chunk and empty-page rules"}
+{"file": ".trellis/spec/backend/transactional-mutations.md", "reason": "project install FS+DB compensation if metadata write fails"}
+{"file": ".trellis/spec/backend/central-project-install-visibility.md", "reason": "Central project-path persist + linked_projects enrichment contract"}
+{"file": ".trellis/spec/backend/path-policy.md", "reason": "Remote project path normalize must not use local is_dir"}
+{"file": ".trellis/tasks/09-10-central-skill-project-destinations/research/current-project-install-visibility.md", "reason": "Current two install pipelines and why Central project installs are invisible"}

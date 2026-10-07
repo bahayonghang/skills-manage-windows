@@ -43,6 +43,23 @@ export type UnifiedSkillCardProps =
 
 **Why**：类型互斥是本约定的核心交付物，负例是它唯一的回归探测器。
 
+## 约定 4：Central 项目落点用 `linkedProjects`，不用 `projectBadge`
+
+**What**：中央库卡片上「已装到哪些项目」只走 central 场景的 `linkedProjects`（`project_id` + `path`）。可见名是 `getPathBasename(path)`，完整路径只放 `title`。空数组不渲染。compact 不得 idle-hide 这些 chips。
+
+`projectBadge` 仍是 Obsidian/import 单值徽章，禁止拿来堆多个项目。构造方只有 `buildCentralSkillCardProps`。禁止在卡片或 list content 里 `invoke("list_projects_using_skill")`。后端合同见 [Central Project Install Visibility](../backend/central-project-install-visibility.md)。
+
+**Wrong vs Correct**：
+
+```tsx
+// ❌ Wrong
+<UnifiedSkillCard variant="central" projectBadge="PromptHub" />
+await invoke("list_projects_using_skill", { skillId: skill.id });
+
+// ✅ Correct
+linkedProjects: uniqueLinkedProjects(skill.linked_projects)
+```
+
 ## 参考
 
 - 设计依据与调用点矩阵：`.trellis/tasks/archive/2026-07/07-04-skill-card-scenarios/design.md`（归档后路径）

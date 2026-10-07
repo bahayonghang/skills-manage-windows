@@ -186,6 +186,17 @@ const negativeCases: UnifiedSkillCardProps[] = [
     // @ts-expect-error 场景互斥：central 不接受 skillsCli 专属的 uninstallLockReason
     uninstallLockReason: "locked",
   },
+  {
+    variant: "platform",
+    name: "bad-platform-linked-projects",
+    sourceType: "copy",
+    originKind: null,
+    isReadOnly: false,
+    onDetail: noop,
+    uninstallFromLabel: "卸载",
+    // @ts-expect-error 场景互斥：platform 不接受 central 专属的 linkedProjects
+    linkedProjects: [{ project_id: "p1", path: "D:\\work\\PromptHub" }],
+  },
 ];
 
 // JSX 形态同样被拒绝（单行元素，directive 覆盖整行）
@@ -206,7 +217,7 @@ describe("UnifiedSkillCard 场景 interface", () => {
   });
 
   it("互斥负例仅存在于编译期（运行时对象可构造）", () => {
-    expect(negativeCases).toHaveLength(10);
+    expect(negativeCases).toHaveLength(11);
     expect(jsxNegativeCase).toHaveLength(2);
   });
 });

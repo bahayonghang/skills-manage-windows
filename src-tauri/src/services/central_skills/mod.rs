@@ -46,6 +46,6 @@ pub use types::{
     BatchDeleteCentralSkillResult, BatchDeleteCentralSkillSuccess, CentralSkillsPage,
     CentralSkillsPageRequest, DeleteCentralSkillPreview, DeleteCentralSkillResult,
     DeleteSkillRepositoryPreview, DeleteSkillRepositoryResult, DirectoryTreeEntry,
-    FailedCentralSkillDelete, ResetUnknownSourceSkillsPreview, SkillDetail,
+    FailedCentralSkillDelete, LinkedProject, ResetUnknownSourceSkillsPreview, SkillDetail,
     SkillInstallationDetail, SkillRef, SkillWithLinks,
 };

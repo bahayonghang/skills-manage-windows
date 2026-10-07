@@ -1,10 +1,20 @@
 //! `projects` 和 `project_skill_installations` 两张表的 CRUD。
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use sqlx::Row;
 
+use crate::db::sqlite_batch::SQLITE_IN_QUERY_BATCH_SIZE;
 use crate::db::types::{DbPool, Project, ProjectSkillInstallation};
+
+/// One distinct project destination for a Central skill, plus `pinned` for sort.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkedProjectRow {
+    pub skill_id: String,
+    pub project_id: String,
+    pub path: String,
+    pub pinned: bool,
+}
 
 // ─── projects ────────────────────────────────────────────────────────────────
 
@@ -336,4 +346,78 @@ pub async fn delete_stale_project_skill_installations(
         delete_project_skill_installation(pool, project_id, &skill_id, &agent_id).await?;
     }
     Ok(())
+}
+
+/// Batch-read distinct project destinations for Central skill cards.
+///
+/// Empty `skill_ids` returns an empty map and issues no query. Dynamic `IN`
+/// lists are chunked at [`SQLITE_IN_QUERY_BATCH_SIZE`]. Each skill's list is
+/// unique by `project_id` and sorted pinned DESC, path basename
+/// case-insensitive, then `project_id`.
+pub async fn list_linked_projects_for_skills(
+    pool: &DbPool,
+    skill_ids: &[String],
+) -> Result<HashMap<String, Vec<LinkedProjectRow>>, sqlx::Error> {
+    if skill_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let mut grouped: HashMap<String, Vec<LinkedProjectRow>> = HashMap::new();
+    for chunk in skill_ids.chunks(SQLITE_IN_QUERY_BATCH_SIZE) {
+        let placeholders = chunk.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT psi.skill_id AS skill_id,
+                    p.id AS project_id,
+                    p.path AS path,
+                    p.pinned AS pinned
+               FROM project_skill_installations psi
+               JOIN projects p ON p.id = psi.project_id
+              WHERE psi.skill_id IN ({})",
+            placeholders
+        );
+        let mut query = sqlx::query(&sql);
+        for id in chunk {
+            query = query.bind(id);
+        }
+        for row in query.fetch_all(pool).await? {
+            let item = LinkedProjectRow {
+                skill_id: row.try_get("skill_id")?,
+                project_id: row.try_get("project_id")?,
+                path: row.try_get("path")?,
+                pinned: row.try_get("pinned")?,
+            };
+            let entries = grouped.entry(item.skill_id.clone()).or_default();
+            if entries
+                .iter()
+                .any(|existing| existing.project_id == item.project_id)
+            {
+                continue;
+            }
+            entries.push(item);
+        }
+    }
+
+    for entries in grouped.values_mut() {
+        entries.sort_by(|left, right| {
+            right
+                .pinned
+                .cmp(&left.pinned)
+                .then_with(|| {
+                    path_basename_sort_key(&left.path).cmp(&path_basename_sort_key(&right.path))
+                })
+                .then_with(|| left.project_id.cmp(&right.project_id))
+        });
+    }
+
+    Ok(grouped)
+}
+
+fn path_basename_sort_key(path: &str) -> String {
+    let normalized = path.replace('\\', "/");
+    let trimmed = normalized.trim_end_matches('/');
+    trimmed
+        .rsplit('/')
+        .next()
+        .unwrap_or(trimmed)
+        .to_ascii_lowercase()
 }

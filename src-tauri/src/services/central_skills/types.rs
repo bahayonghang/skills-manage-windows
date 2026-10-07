@@ -3,6 +3,13 @@ use serde::{Deserialize, Serialize};
 use crate::db::{Collection, SkillRepository, SkillRepositoryWithStats, SkillTag};
 use crate::services::central_operation::PendingDeleteRecoveryPreview;
 
+/// A project directory this Central skill is installed into.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LinkedProject {
+    pub project_id: String,
+    pub path: String,
+}
+
 /// A Central Skill with a list of agent IDs that currently have this skill
 /// installed (via symlink or copy).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,6 +29,9 @@ pub struct SkillWithLinks {
     pub linked_agents: Vec<String>,
     /// Agent IDs that use the Central skills directory as their own root.
     pub shared_root_agents: Vec<String>,
+    /// Distinct project destinations (`project_id` unique). Missing JSON → `[]`.
+    #[serde(default)]
+    pub linked_projects: Vec<LinkedProject>,
     pub repository: Option<SkillRepository>,
     pub tags: Vec<SkillTag>,
     pub source_path: Option<String>,

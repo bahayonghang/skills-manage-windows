@@ -1264,6 +1264,8 @@
     "viewDetailsLabel": "View details for {{name}}",
     "installLabel": "Install {{name}} to platforms",
     "installTo": "Install to...",
+    "linkedProjectLabel": "Installed in project {{name}}",
+    "linkedProjectFallback": "Project",
     "uninstallFromPlatforms": "Uninstall from platforms",
     "uninstallFromPlatformsLabel": "Uninstall {{name}} from platforms",
     "deleteSkill": "Delete from Central Skills",

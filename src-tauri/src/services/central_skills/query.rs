@@ -10,7 +10,9 @@ use super::common::{
     skill_dir_path, skill_filesystem_timestamps,
 };
 use super::error::CentralSkillsError;
-use super::types::{CentralSkillsPage, CentralSkillsPageRequest, SkillDetail, SkillWithLinks};
+use super::types::{
+    CentralSkillsPage, CentralSkillsPageRequest, LinkedProject, SkillDetail, SkillWithLinks,
+};
 
 async fn get_observation_detail(
     pool: &DbPool,
@@ -225,6 +227,8 @@ async fn skills_with_links_from_rows(
     let mut repository_assignments =
         db::get_skill_repository_assignments_for_skills(pool, &skill_ids).await?;
     let mut tags_by_skill = db::get_skill_tags_for_skills(pool, &skill_ids).await?;
+    let mut linked_projects_by_skill =
+        crate::db::repos::projects_repo::list_linked_projects_for_skills(pool, &skill_ids).await?;
     let unknown_repository = db::get_local_unknown_repository(pool).await?;
     let mut result = Vec::with_capacity(skills.len());
     for skill in skills {
@@ -244,6 +248,15 @@ async fn skills_with_links_from_rows(
             }
         });
         let tags = tags_by_skill.remove(&skill.id).unwrap_or_default();
+        let linked_projects = linked_projects_by_skill
+            .remove(&skill.id)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|row| LinkedProject {
+                project_id: row.project_id,
+                path: row.path,
+            })
+            .collect();
 
         result.push(SkillWithLinks {
             id: skill.id,
@@ -259,6 +272,7 @@ async fn skills_with_links_from_rows(
             updated_at,
             linked_agents,
             shared_root_agents: shared_root_agents.clone(),
+            linked_projects,
             repository: Some(repository_assignment.repository),
             tags,
             source_path: repository_assignment.source_path,
