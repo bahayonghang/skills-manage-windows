@@ -88,6 +88,7 @@ Delete may use `fs_staged -> db_committed` because its backup rename is the dest
 - Staging, backup, marker creation, swap, restore, finalize, phase transition, and copy refresh are idempotent. Before restore/finalize, verify the marker identity and expected fingerprint; collision preserves evidence and fails closed.
 - The business DB mutation and `db_committed` phase transition share one SQLite transaction. A visible `db_committed` row is the commit point; commit-unknown handling reads the row before deciding rollback or roll-forward.
 - Delete renames Central/native installation paths to operation-scoped sibling backups, deletes only the `skills` parent in the DB transaction, and relies on FK cascade for the seven owned relations. Retained copy installations are not moved or deleted.
+- Local delete finalize removes a directory-symlink backup without following the link. On Windows, select that backup with `FileTypeExt::is_symlink_dir` and delete it with `fs::remove_dir`; `Metadata::is_dir` is false for these reparse points and must not select the branch. Failure stays `cleanup_file`. Other symlinks and files stay on `fs::remove_file` / `cleanup_file`. Real directories stay on `fs::remove_dir_all` / `cleanup_directory`. Unix `symlink_metadata` does not report a symlink as a directory, so those links stay on `remove_file`. Do not call `remove_dir_all` on a symlink.
 - Update and GitHub-backed content upsert keep `update_skills_batch` as the only production orchestrator. They stage new contents, swap canonical data, and commit skill/repository state with the marker; update may then refresh copied installations as a derived projection.
 - Local GitHub import (`import_single_staged_skill`) and remote GitHub import (`import_github_repo_skills_remote_from_workspace`) final apply must call `journaled_central_content_upsert_with_fs` → `update_skills_batch`. Preview workspace acquisition and cleanup stay outside this seam. Production must not retain a parallel FS→DB apply (`backup_existing_skill_dir`, `restore_or_cleanup_target_dir`, `drop_existing_backup`, or `remote_import_skill_script` target/backup swap).
 - A first content upsert uses `OperationKind::CentralUpdate` plus `UpdateManifest(had_target=false)`. Overwrite uses `had_target=true` and keeps the persisted `uid`. It does not introduce a parallel journal kind or schema. Candidate validation and snapshot acquisition finish before the target lock; final apply acquires that lock, recovers pending rows, and commits the skill row, repository membership, commit/digest provenance, and `db_committed` transition in one SQLite transaction.
@@ -122,6 +123,8 @@ Delete may use `fs_staged -> db_committed` because its backup rename is the dest
 | Remote target is offline | Keep pending row; fail only that target's mutation/retry |
 | Unrelated skill has a pending row when a batch starts | Do not inspect, retry, timestamp, or rewrite that row's recovery evidence |
 | Repeated restore/finalize/retry | Return the same converged old/new state without overwriting new user data |
+| Local finalize backup is a directory symlink | Remove only the link. Windows uses `is_symlink_dir` plus `fs::remove_dir` and does not follow the target; failure stays `cleanup_file`. Unix stays on `remove_file` |
+| Local finalize backup is a file, other symlink, or real directory | File and non-directory symlink: `remove_file` / `cleanup_file`. Real directory: `remove_dir_all` / `cleanup_directory` |
 | Operation Logs list/detail/export | Contain summary/code/ID only; never contain `manifest_json` or full paths |
 | `force=false` and selected skill has a `prepared` delete whose expected paths are `(false, false)` | Restore fail-closes with `delete_restore_collision`; retain the pending row |
 | `force=true`, no backup/marker, `central_delete/prepared`, fingerprint may have drifted | `prepared -> rolled_back`, then a new journaled delete of current owned paths |
@@ -146,6 +149,7 @@ Delete may use `fs_staged -> db_committed` because its backup rename is the dest
 - Independent-process same-target lease contention/crash release plus different-target non-contention for Local/SSH/WSL identities.
 - Subprocess kill matrix at prepared, staged, swapped, DB apply/commit, copies pending, and pre-completion; reopen must converge to complete old or new state and preserve collision evidence.
 - Delete DB/marker/rename/remote failures prove rollback propagation, retained copies, FK cascade, symlink/native/copy semantics, and idempotent retry.
+- Local delete finalize of a directory symlink created with `test_support::symlink_dir` removes the backup link and marker, and leaves the target directory and its files in place.
 - Update normal/force/mirror use one Saga; 33 remote writes remain three chunks and copy refresh remains chunks of 32.
 - A multi-file first content upsert preserves identical `SKILL.md`, references, scripts, and assets payloads across Local, Fake SSH, and Fake WSL, with `had_target=false` and per-skill commit/digest provenance.
 - GitHub import production sources contain `journaled_central_content_upsert_with_fs` and do not contain `backup_existing_skill_dir`, `restore_or_cleanup_target_dir`, or `remote_import_skill_script`. Overwrite restore keeps uid; first-upsert DB failure removes the new target and leaves no skill row. Commit-unknown injection covers visible `db_committed` roll-forward and invisible rollback. Same-target import contends with delete/update/install; different targets do not.
@@ -194,4 +198,4 @@ journaled_central_content_upsert_with_fs(pool, fs, JournaledCentralContentUpsert
 
 The journaled seam owns lock, `prepared` durability, swap, the skill/repository/provenance transaction, and rollback. Import code must not delete a backup before that transaction commits.
 
-> Source task: `07-24-fs-db-operation-journal` (2026-07-27); GitHub import unique orchestrator: `09-02-github-import-fs-db-atomicity` (2026-09-02)
+> Source task: `07-24-fs-db-operation-journal` (2026-07-27); GitHub import unique orchestrator: `09-02-github-import-fs-db-atomicity` (2026-09-02); directory-symlink finalize: `10-08-central-skill-delete-blocked` (2026-10-08)
