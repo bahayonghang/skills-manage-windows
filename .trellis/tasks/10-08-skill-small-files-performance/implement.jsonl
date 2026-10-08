@@ -1,9 +1,0 @@
-{"file":".trellis/spec/backend/spawn-blocking-io.md","reason":"Recursive IO blocking boundary and Windows AppHandle restriction"}
-{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"One target lease across mutation recovery and finalization"}
-{"file":".trellis/spec/backend/fs-db-operation-journal.md","reason":"Keep durable manifests fingerprints recovery and copies_pending"}
-{"file":".trellis/tasks/10-08-skill-small-files-performance/research/preview-contract-excerpt.md","reason":"Required immutable snapshot rules beyond the source spec injection size limit"}
-{"file":".trellis/spec/backend/central-update-batching.md","reason":"Existing production update batching and leftover semantics"}
-{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Progress changes remain behind store and adapter boundaries"}
-{"file":".trellis/tasks/10-08-skill-small-files-performance/research/performance-analysis.md","reason":"Current lifecycle cost evidence and optimization hypotheses"}
-{"file":".trellis/tasks/10-08-skill-small-files-performance/research/implementation-budget.md","reason":"Locked measurement-driven scope progress budget and regression limits"}
-{"file":".trellis/tasks/10-08-skill-small-files-performance/research/optimization-boundaries.md","reason":"Verified ownership caller inventory digest framing and isolated test boundaries"}
