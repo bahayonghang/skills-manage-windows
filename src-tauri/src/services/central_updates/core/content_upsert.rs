@@ -5,10 +5,13 @@ use crate::db::{DbPool, Skill, SkillUpdateState};
 use crate::services::github_import::{GitHubRepoRef, GitHubRepoSnapshot, RemoteSkillCandidate};
 use crate::targets::ActiveTarget;
 
-use super::batch::{update_skills_batch, SkillUpdatePlan};
+#[cfg(test)]
+use super::batch::update_skills_batch;
+use super::batch::{update_skills_batch_with_progress, SkillUpdatePlan};
 use crate::services::central_updates::error::CentralUpdatesError;
 use crate::services::central_updates::fs::{
     collect_remote_skill_files, ensure_remote_skill_manifest, hash_remote_files, CentralFs,
+    StageWriteProgressReporter,
 };
 use crate::services::central_updates::types::{GitHubUpdateSource, RemoteSkillContent};
 
@@ -42,6 +45,15 @@ pub(crate) async fn journaled_central_content_upsert_with_fs(
     fs: &CentralFs,
     input: JournaledCentralContentUpsert<'_>,
 ) -> Result<SkillUpdateState, CentralUpdatesError> {
+    journaled_central_content_upsert_with_fs_and_progress(pool, fs, input, None).await
+}
+
+pub(crate) async fn journaled_central_content_upsert_with_fs_and_progress(
+    pool: &DbPool,
+    fs: &CentralFs,
+    input: JournaledCentralContentUpsert<'_>,
+    progress: Option<StageWriteProgressReporter>,
+) -> Result<SkillUpdateState, CentralUpdatesError> {
     let existing = skills_repo::get_skill_by_id(pool, &input.skill.id).await?;
     let local_hash = fs
         .hash_directories(std::slice::from_ref(&input.target_dir))
@@ -54,7 +66,8 @@ pub(crate) async fn journaled_central_content_upsert_with_fs(
         })?;
     let plan = content_upsert_plan(input, local_hash, existing)?;
     let skill_id = plan.skill.id.clone();
-    let mut outcomes = update_skills_batch(pool, fs, vec![plan], None).await;
+    let mut outcomes =
+        update_skills_batch_with_progress(pool, fs, vec![plan], None, progress).await;
     let outcome = outcomes.pop().ok_or_else(|| {
         CentralUpdatesError::Batch(format!(
             "Central content upsert returned no outcome for skill '{skill_id}'."

@@ -20,7 +20,7 @@ use super::remote_scripts::{
 };
 use super::{
     hash_entries, hash_local_directory, posix_path, remove_path, write_remote_skill_files,
-    CentralFs, CentralSkillWrite,
+    CentralFs, CentralSkillWrite, StageWriteProgressReporter,
 };
 use crate::services::central_updates::error::CentralUpdatesError;
 
@@ -126,18 +126,29 @@ impl CentralFs {
         })
     }
 
+    #[cfg(test)]
     pub(crate) async fn stage_operation_update(
         &self,
         manifest: &UpdateManifest,
-        write: &CentralSkillWrite,
+        write: CentralSkillWrite,
+    ) -> Result<(), CentralUpdatesError> {
+        self.stage_operation_update_with_progress(manifest, write, None)
+            .await
+    }
+
+    async fn stage_operation_update_with_progress(
+        &self,
+        manifest: &UpdateManifest,
+        write: CentralSkillWrite,
+        progress: Option<StageWriteProgressReporter>,
     ) -> Result<(), CentralUpdatesError> {
         match self {
             Self::Local => {
                 let manifest = manifest.clone();
-                let files = write.files.clone();
+                let files = write.files;
                 run_blocking_fs_with(
                     "Central update durable staging",
-                    move || stage_local(&manifest, &files),
+                    move || stage_local(&manifest, &files, progress.as_ref()),
                     CentralUpdatesError::task_join,
                 )
                 .await
@@ -146,7 +157,7 @@ impl CentralFs {
                 let archive = {
                     let stage = OperationUpdateStage {
                         manifest: manifest.clone(),
-                        write: write.clone(),
+                        write,
                     };
                     run_blocking_fs_with(
                         "Central update durable archive",
@@ -191,6 +202,16 @@ impl CentralFs {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) async fn stage_operation_updates(
+        &self,
+        stages: Vec<OperationUpdateStage>,
+        cancel: Option<&AtomicBool>,
+    ) -> Vec<OperationUpdateStageOutcome> {
+        self.stage_operation_updates_with_progress(stages, cancel, None)
+            .await
+    }
+
     #[tracing::instrument(
         skip_all,
         fields(
@@ -200,10 +221,11 @@ impl CentralFs {
             write_chunks = stages.len().div_ceil(REMOTE_WRITE_CHUNK_SIZE)
         )
     )]
-    pub(crate) async fn stage_operation_updates(
+    pub(crate) async fn stage_operation_updates_with_progress(
         &self,
         stages: Vec<OperationUpdateStage>,
         cancel: Option<&AtomicBool>,
+        progress: Option<StageWriteProgressReporter>,
     ) -> Vec<OperationUpdateStageOutcome> {
         match self {
             Self::Local => {
@@ -213,8 +235,12 @@ impl CentralFs {
                     let result = if cancel.is_some_and(|flag| flag.load(Ordering::SeqCst)) {
                         Err(CentralUpdatesError::BatchCancelled)
                     } else {
-                        self.stage_operation_update(&stage.manifest, &stage.write)
-                            .await
+                        self.stage_operation_update_with_progress(
+                            &stage.manifest,
+                            stage.write,
+                            progress.clone(),
+                        )
+                        .await
                     };
                     outcomes.push(OperationUpdateStageOutcome {
                         operation_id,
@@ -470,8 +496,15 @@ async fn stage_operation_updates_remote(
 
     let mut staged = Vec::new();
     for (parent, group) in groups {
-        for chunk in group.chunks(REMOTE_WRITE_CHUNK_SIZE) {
-            let chunk = chunk.to_vec();
+        let mut group = group.into_iter();
+        loop {
+            let chunk = group
+                .by_ref()
+                .take(REMOTE_WRITE_CHUNK_SIZE)
+                .collect::<Vec<_>>();
+            if chunk.is_empty() {
+                break;
+            }
             if cancel.is_some_and(|flag| flag.load(Ordering::SeqCst)) {
                 outcomes.extend(chunk.into_iter().map(|stage| OperationUpdateStageOutcome {
                     operation_id: stage.manifest.operation_id,
@@ -498,18 +531,17 @@ async fn stage_operation_updates_remote(
                 skills = chunk.len(),
                 payload_bytes = tracing::field::Empty
             );
-            let archive_chunk = chunk.clone();
             let archive = run_blocking_fs_with(
                 "Central update durable batch archive",
-                move || build_operation_stage_archive(&archive_chunk),
+                move || build_operation_stage_archive(&chunk).map(|archive| (archive, chunk)),
                 CentralUpdatesError::task_join,
             )
             .instrument(archive_span.clone())
             .await;
-            let archive = match archive {
-                Ok(archive) => {
+            let (archive, chunk) = match archive {
+                Ok((archive, chunk)) => {
                     archive_span.record("payload_bytes", archive.len());
-                    archive
+                    (archive, chunk)
                 }
                 Err(error) => {
                     let message = error.to_string();

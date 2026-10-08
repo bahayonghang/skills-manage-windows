@@ -22,6 +22,81 @@ CentralFs::refresh_copy_installs_cancellable(
 
 Normal update, force update, and force mirror must route through `update_skills_batch`; do not add a second per-skill production loop.
 
+## Scenario: Local stage write progress and owned file contents
+
+### 1. Scope / Trigger
+
+GitHub import reports successful staging writes while the existing Central Saga owns locking, recovery, swap, persistence, copy refresh, and finalize. Large file counts must not cause one Tauri event per file or repeated deep copies of the same owned byte batch.
+
+### 2. Signatures
+
+```rust
+journaled_central_content_upsert_with_fs_and_progress(
+    pool: &DbPool,
+    fs: &CentralFs,
+    input: JournaledCentralContentUpsert<'_>,
+    progress: Option<StageWriteProgressReporter>,
+) -> Result<SkillUpdateState, CentralUpdatesError>
+
+StageWriteProgressReporter::channel()
+    -> (StageWriteProgressReporter, watch::Receiver<StageWriteProgress>)
+```
+
+The existing no-progress upsert and batch wrappers delegate to the same orchestration body. Public Tauri commands, DTOs, database schemas, and journal manifest versions remain unchanged.
+
+### 3. Contracts
+
+- The blocking writer counts a file and its bytes only after `std::fs::write` succeeds. A preparation/path-validation loop never advances completed writes.
+- `StageWriteProgress` contains cumulative successful `completed_files`, `completed_bytes`, and the latest skill-relative `current_path`. It contains no event handle, credential, or full user path.
+- Create one reporter for each single-skill journaled import upsert. The importer adds that stage's counters to the completed counts from earlier skills; ordinary multi-skill update batches pass no reporter.
+- The writer retains one cumulative watch value. Publish after 256 additional successful files or 100 ms; always flush at success/error. The async importer samples at most once per 100 ms and flushes the latest value when the service settles. Start, phase transition, error, and terminal handling retain existing semantics.
+- Closing the data channel cannot leave a polling loop running after the import. A completed staging count does not establish successful swap, DB commit, copy refresh, or finalize.
+- Remote progress continues to count completed skills. Increment only after the Remote service succeeds; archive preparation is not a confirmed remote write.
+- Move the owned file list through plan, write, stage, and blocking worker. Retained immutable snapshots may require one initial copy. Ordinary update, force update, and force mirror use the same ownership rule.
+- Cache successfully created exact parents only inside one operation-owned staging writer. Keep per-file safe-path validation, original file order, and first-error behavior. Never cache filesystem existence across operations.
+- Candidate digest optimization may filter selected paths before hashing. Preserve exact manifest validation and each existing digest domain/framing. Immutable memory metadata does not replace fresh staging, target, backup, recovery, or delete fingerprint reads.
+- Delete fingerprint sorting may borrow paths for comparison. Preserve the original global `Path` order, tree-collection error order, symlink behavior, and byte framing.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+| --- | --- |
+| Preparation rejects a path or target | No completed write count |
+| File N fails | Report only the successful preceding writes, retain the original typed error |
+| Parent creation fails | Do not cache the parent or advance counters |
+| All staging writes succeed but Saga fails later | Keep accurate staging counts; return the existing failure/pending result |
+| Data channel closes before service completion | Keep the retained counters, avoid busy polling, and await service settlement |
+| Remote service fails | Do not advance completed skill count |
+| Target or backup changes externally | Fresh validation rejects the operation under the existing journal contract |
+
+### 5. Good / Base / Bad Cases
+
+- Good: 13,016 successful writes produce bounded cumulative publications and an exact final count, with event emission on the async importer.
+- Base: a caller without progress follows the same Saga with `None`.
+- Bad: source validation emits a completed write; a blocking worker captures `AppHandle`; a cached memory digest replaces mutable disk validation.
+
+### 6. Tests Required
+
+- Assert zero preparing counts, monotone cumulative counts, exact success/error tail, first-error ordering, and no writes after the failed item.
+- Assert publication budget `ceil(files / 256) + ceil(write_ms / 100) + 2`; test the time threshold without waiting on wall-clock sleeps.
+- Assert async sampling retains the last value on closed channels and awaits service settlement, including errors; distinguish source-event counts from real Tauri IPC/WebView evidence.
+- Assert shared parents, unsafe paths, nested paths, and parent/file collisions preserve contents and errors.
+- Compare optimized candidate digests and directory fingerprints against the prior algorithms, including root/nested sources, Unicode, empty/binary files, missing manifest, and sibling directory/path ordering.
+- Preserve uid, no-op, selected recovery, stage/swap/DB/copy/finalize faults, repeated cleanup, and directory symlink target-protection regressions.
+
+### 7. Wrong vs Correct
+
+```rust
+// Wrong: a source entry does not establish a completed write.
+completed_files += 1;
+emit_writing(source_entry);
+
+// Correct: the worker publishes data after a successful write.
+std::fs::write(&path, &file.bytes)?;
+progress.written(&file.relative_path, file.bytes.len() as u64);
+// The async importer samples the cumulative value and emits the event.
+```
+
 ## 3. Contracts
 
 - Remote Central writes group by target parent and use chunks of 16.

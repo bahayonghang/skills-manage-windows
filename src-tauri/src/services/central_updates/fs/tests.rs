@@ -357,7 +357,9 @@ async fn ssh_and_wsl_fake_runners_cover_update_stage_swap_and_phase_loss_rollbac
         runner.push_success(&remote_hash_output(backup, &old_file_digest));
         runner.push_success("ROLLED_BACK\n");
 
-        fs.stage_operation_update(&manifest, &write).await.unwrap();
+        fs.stage_operation_update(&manifest, write.clone())
+            .await
+            .unwrap();
         fs.swap_operation_update(&manifest).await.unwrap();
         fs.rollback_operation_update(
             &manifest,

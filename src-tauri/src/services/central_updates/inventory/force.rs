@@ -85,16 +85,19 @@ pub(crate) async fn force_update_central_skills_impl(
             }
         }
     }
-    let plans = pending_updates
-        .iter()
-        .map(|(skill, remote, _)| SkillUpdatePlan {
-            skill: skill.clone(),
-            remote: remote.clone(),
-            refresh_copies: request.refresh_copy_installations,
-            first_upsert: false,
+    let (before_updates, plans): (Vec<_>, Vec<_>) = pending_updates
+        .into_iter()
+        .map(|(skill, remote, before)| {
+            let plan = SkillUpdatePlan {
+                skill: skill.clone(),
+                remote,
+                refresh_copies: request.refresh_copy_installations,
+                first_upsert: false,
+            };
+            ((skill, before), plan)
         })
-        .collect();
-    for ((skill, _, before), outcome) in pending_updates
+        .unzip();
+    for ((skill, before), outcome) in before_updates
         .into_iter()
         .zip(update_skills_batch(pool, fs, plans, None).await)
     {
@@ -214,16 +217,19 @@ pub(crate) async fn force_mirror_central_repositories_impl(
             }
         }
     }
-    let overwrite_plans = pending_overwrites
-        .iter()
-        .map(|(skill, remote, _)| SkillUpdatePlan {
-            skill: skill.clone(),
-            remote: remote.clone(),
-            refresh_copies: true,
-            first_upsert: false,
+    let (before_overwrites, overwrite_plans): (Vec<_>, Vec<_>) = pending_overwrites
+        .into_iter()
+        .map(|(skill, remote, before)| {
+            let plan = SkillUpdatePlan {
+                skill: skill.clone(),
+                remote,
+                refresh_copies: true,
+                first_upsert: false,
+            };
+            ((skill, before), plan)
         })
-        .collect();
-    for ((skill, _, before), outcome) in pending_overwrites
+        .unzip();
+    for ((skill, before), outcome) in before_overwrites
         .into_iter()
         .zip(update_skills_batch(pool, fs, overwrite_plans, None).await)
     {

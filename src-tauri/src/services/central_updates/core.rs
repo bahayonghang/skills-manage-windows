@@ -27,6 +27,8 @@ const UPDATE_PROGRESS_EVENT: &str = "central://skill-update-progress";
 
 mod batch;
 mod content_upsert;
+#[cfg(test)]
+mod performance_benchmark;
 mod state;
 #[cfg(test)]
 mod tests;
@@ -37,7 +39,7 @@ pub(crate) use batch::{
 };
 pub(crate) use content_upsert::{
     journaled_central_content_upsert, journaled_central_content_upsert_with_fs,
-    JournaledCentralContentUpsert,
+    journaled_central_content_upsert_with_fs_and_progress, JournaledCentralContentUpsert,
 };
 #[allow(unused_imports)]
 pub(crate) use state::repository_url;
@@ -300,17 +302,20 @@ pub(crate) async fn update_central_skills_impl(
         }
     }
 
-    let plans = pending_updates
-        .iter()
-        .map(|(prepared, remote)| SkillUpdatePlan {
-            skill: prepared.skill.clone(),
-            remote: remote.clone(),
-            refresh_copies: true,
-            first_upsert: false,
+    let (prepared_updates, plans): (Vec<_>, Vec<_>) = pending_updates
+        .into_iter()
+        .map(|(prepared, remote)| {
+            let plan = SkillUpdatePlan {
+                skill: prepared.skill.clone(),
+                remote,
+                refresh_copies: true,
+                first_upsert: false,
+            };
+            (prepared, plan)
         })
-        .collect();
+        .unzip();
     let update_outcomes = update_skills_batch(pool, fs, plans, Some(cancel)).await;
-    for ((prepared_skill, _), outcome) in pending_updates.into_iter().zip(update_outcomes) {
+    for (prepared_skill, outcome) in prepared_updates.into_iter().zip(update_outcomes) {
         let skill = &prepared_skill.skill;
         match outcome.result {
             Ok(state_result) => {

@@ -146,10 +146,23 @@ pub(crate) fn candidate_content_digest_from_snapshot(
     snapshot: &GitHubRepoSnapshot,
     source_path: &str,
 ) -> Result<String, GithubImportError> {
-    candidate_content_digest_from_repository_files(
-        &snapshot_files_from_local(snapshot),
-        source_path,
-    )
+    let entries = snapshot
+        .files
+        .iter()
+        .filter_map(|(repo_path, bytes)| {
+            repo_file_relative_to_source(repo_path, source_path).map(|path| DigestFileEntry {
+                path,
+                byte_len: bytes.len() as u64,
+                sha256: file_sha256(bytes),
+            })
+        })
+        .collect::<Vec<_>>();
+    if !entries.iter().any(|entry| entry.path == "SKILL.md") {
+        return Err(GithubImportError::PreviewFileManifestIncomplete(
+            source_path.to_string(),
+        ));
+    }
+    Ok(aggregate_digest(SKILL_CONTENT_DIGEST_DOMAIN, &entries))
 }
 
 pub(super) fn candidate_content_digest_from_repository_files(
@@ -200,6 +213,58 @@ fn decode_file_digest(value: &str) -> Result<[u8; 32], GithubImportError> {
             .map_err(|_| GithubImportError::PreviewSnapshotIntegrity)?;
     }
     Ok(raw)
+}
+
+#[cfg(test)]
+mod digest_compatibility_tests {
+    use super::*;
+
+    #[test]
+    fn selected_subtree_digest_matches_the_complete_inventory_algorithm() {
+        let mut snapshot = GitHubRepoSnapshot {
+            files: HashMap::from([
+                ("SKILL.md".to_string(), b"root".to_vec()),
+                ("skills/a/SKILL.md".to_string(), b"nested".to_vec()),
+                ("skills/a/empty".to_string(), Vec::new()),
+                ("skills/a/assets/图.bin".to_string(), vec![0, 255, 13, 10]),
+                ("skills/a.ext/SKILL.md".to_string(), b"unrelated".to_vec()),
+                ("skills/b/large.bin".to_string(), vec![127; 4_096]),
+            ]),
+        };
+        for source in [".", "skills/a", "/skills/a/", "skills/a.ext"] {
+            assert_eq!(
+                candidate_content_digest_from_snapshot(&snapshot, source).unwrap(),
+                candidate_content_digest_from_repository_files(
+                    &snapshot_files_from_local(&snapshot),
+                    source
+                )
+                .unwrap(),
+            );
+        }
+        let selected = candidate_content_digest_from_snapshot(&snapshot, "skills/a").unwrap();
+        snapshot.files.get_mut("skills/b/large.bin").unwrap()[0] = 3;
+        assert_eq!(
+            candidate_content_digest_from_snapshot(&snapshot, "skills/a").unwrap(),
+            selected
+        );
+        snapshot.files.remove("skills/a/SKILL.md");
+        snapshot
+            .files
+            .insert("skills/a/skill.md".to_string(), b"wrong case".to_vec());
+        for source in ["skills/a", "missing"] {
+            let new = candidate_content_digest_from_snapshot(&snapshot, source).unwrap_err();
+            let old = candidate_content_digest_from_repository_files(
+                &snapshot_files_from_local(&snapshot),
+                source,
+            )
+            .unwrap_err();
+            assert!(matches!(
+                new,
+                GithubImportError::PreviewFileManifestIncomplete(_)
+            ));
+            assert_eq!(new.to_string(), old.to_string());
+        }
+    }
 }
 
 /// Recompute the repository snapshot digest from the retained storage and

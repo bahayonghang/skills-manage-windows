@@ -23,6 +23,8 @@ where
     E: Send + 'static,
     F: FnOnce() -> Result<T, E> + Send + 'static,
 {
+    #[cfg(test)]
+    let _benchmark_span = tracing::info_span!("blocking_fs_await", phase = label);
     match tauri::async_runtime::spawn_blocking(task).await {
         Ok(result) => result,
         Err(e) => Err(join_error(label, e.to_string())),

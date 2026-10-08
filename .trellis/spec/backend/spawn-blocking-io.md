@@ -23,7 +23,7 @@ pub async fn run_blocking_fs_with<T, E, F, M>(
 - Put one coherent recursive filesystem unit in one blocking closure. Preserve error order, early returns, loop control, cleanup, and user-visible error text.
 - Clone owned paths and small metadata into the closure. Do not pre-clone whole batches of file bytes into a second in-memory copy.
 - Map join failure into the caller's typed domain error with `run_blocking_fs_with`; do not return `String` below the command boundary.
-- Keep `AppHandle`, `Option<AppHandle>`, progress emission, database work, and other async handles outside the blocking closure. Return a summary and emit progress on the async side.
+- Keep `AppHandle`, `Option<AppHandle>`, progress emission, database work, and other async handles outside the blocking closure. Return a summary or publish bounded cumulative data through a domain-local bridge; emit progress on the async side.
 - If the filesystem unit belongs to a mutation lease, acquire the top-level lease first and keep its guard alive across the blocking await and required DB marker/write.
 - Legacy Central migration runs source create/read/copy/failed-partial cleanup as one blocking unit while the Local mutation guard remains alive; its marker read/write remains async.
 
@@ -36,7 +36,7 @@ pub async fn run_blocking_fs_with<T, E, F, M>(
 | Tokio blocking task cannot join | Map to the domain's `TaskJoin` variant |
 | Recursive copy partially creates a new target then fails | Apply the domain's existing partial-target cleanup; do not broaden deletion |
 | Mutation guard cannot be acquired | Do not run the blocking unit without a lock |
-| Progress is required | Emit before/after await from async code, never from a captured `AppHandle` |
+| Progress is required | Emit before/after await or sample bounded cumulative data from async code, never from a captured `AppHandle` |
 
 ## 5. Good / Base / Bad Cases
 

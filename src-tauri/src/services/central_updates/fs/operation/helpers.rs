@@ -3,6 +3,7 @@ use super::*;
 pub(super) fn stage_local(
     manifest: &UpdateManifest,
     files: &[super::super::RemoteSkillFile],
+    progress: Option<&StageWriteProgressReporter>,
 ) -> Result<(), CentralUpdatesError> {
     let target = Path::new(&manifest.target);
     let staging = Path::new(&manifest.staging);
@@ -25,7 +26,7 @@ pub(super) fn stage_local(
         .map_err(|error| CentralUpdatesError::io("Failed to create update parent", error))?;
     std::fs::write(marker, manifest.operation_id.as_bytes())
         .map_err(|error| CentralUpdatesError::io("Failed to write update marker", error))?;
-    write_remote_skill_files(files, staging)?;
+    write_remote_skill_files(files, staging, progress)?;
     if hash_local_directory(staging)? != manifest.new_fingerprint {
         return Err(CentralOperationError::RecoveryCollision {
             code: "update_staging_fingerprint",

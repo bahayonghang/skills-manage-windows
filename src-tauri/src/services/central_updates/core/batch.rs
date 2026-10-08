@@ -17,6 +17,7 @@ use super::state_from_remote;
 use crate::services::central_updates::error::CentralUpdatesError;
 use crate::services::central_updates::fs::{
     CentralFs, CentralSkillWrite, CopyRefreshRequest, OperationUpdateStage,
+    StageWriteProgressReporter,
 };
 use crate::services::central_updates::types::{
     CentralUpdateFailurePhase, CentralUpdateItemError, RemoteSkillContent,
@@ -48,6 +49,16 @@ pub(crate) async fn update_skills_batch(
     fs: &CentralFs,
     plans: Vec<SkillUpdatePlan>,
     cancel: Option<&AtomicBool>,
+) -> Vec<SkillUpdateBatchOutcome> {
+    update_skills_batch_with_progress(pool, fs, plans, cancel, None).await
+}
+
+pub(super) async fn update_skills_batch_with_progress(
+    pool: &DbPool,
+    fs: &CentralFs,
+    plans: Vec<SkillUpdatePlan>,
+    cancel: Option<&AtomicBool>,
+    progress: Option<StageWriteProgressReporter>,
 ) -> Vec<SkillUpdateBatchOutcome> {
     let _mutation_guard =
         match crate::services::central_mutation::acquire_target_mutation_guard_by_id(
@@ -152,15 +163,20 @@ pub(crate) async fn update_skills_batch(
     .await;
 
     let stage_outcomes = fs
-        .stage_operation_updates(
+        .stage_operation_updates_with_progress(
             prepared
-                .iter()
+                .iter_mut()
                 .map(|update| OperationUpdateStage {
                     manifest: update.manifest.clone(),
-                    write: update.write.clone(),
+                    write: CentralSkillWrite {
+                        skill_id: update.write.skill_id.clone(),
+                        target_dir: update.write.target_dir.clone(),
+                        files: std::mem::take(&mut update.write.files),
+                    },
                 })
                 .collect(),
             cancel,
+            progress,
         )
         .await;
     let mut stage_results = stage_outcomes
@@ -249,7 +265,7 @@ enum CommittedUpdateResult {
 async fn prepare_update(
     pool: &DbPool,
     fs: &CentralFs,
-    plan: SkillUpdatePlan,
+    mut plan: SkillUpdatePlan,
     batch_id: &str,
     index: usize,
 ) -> Result<PreparedUpdate, CentralUpdatesError> {
@@ -261,7 +277,7 @@ async fn prepare_update(
     let write = CentralSkillWrite {
         skill_id: plan.skill.id.clone(),
         target_dir: plan.remote.target_dir.clone(),
-        files: plan.remote.files.clone(),
+        files: std::mem::take(&mut plan.remote.files),
     };
     let operation_id = uuid::Uuid::new_v4().to_string();
     let manifest = fs

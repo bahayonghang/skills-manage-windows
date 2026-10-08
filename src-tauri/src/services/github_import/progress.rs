@@ -1,4 +1,5 @@
 use super::*;
+use crate::services::central_updates::fs::StageWriteProgress;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct SnapshotSourceFile {
@@ -46,7 +47,42 @@ pub(super) fn emit_github_import_progress(
     app: Option<&AppHandle>,
     payload: GitHubImportProgressPayload,
 ) {
+    #[cfg(test)]
+    tests::observe(&payload);
     if let Some(app) = app {
         let _ = app.emit("github-import:progress", payload);
     }
 }
+
+/// Samples the retained worker value on the async side. A closed writer does
+/// not change the service's transaction/finalization completion boundary.
+pub(super) async fn observe_stage_write_progress<F: std::future::Future>(
+    future: F,
+    mut receiver: tokio::sync::watch::Receiver<StageWriteProgress>,
+    mut on_progress: impl FnMut(StageWriteProgress),
+) -> F::Output {
+    tokio::pin!(future);
+    let period = TokioDuration::from_millis(100);
+    let mut interval = tokio::time::interval_at(Instant::now() + period, period);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut last_progress = StageWriteProgress::default();
+    loop {
+        tokio::select! {
+            result = &mut future => {
+                let progress = receiver.borrow_and_update().clone();
+                on_progress(progress);
+                return result;
+            }
+            _ = interval.tick() => {
+                let progress = receiver.borrow_and_update().clone();
+                if progress != last_progress {
+                    on_progress(progress.clone());
+                    last_progress = progress;
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests;

@@ -18,6 +18,33 @@ pub const DEFAULT_CENTRAL_MUTATION_TIMEOUT: Duration = Duration::from_secs(10);
 #[cfg(test)]
 static DEFAULT_LOCK_TEST_MUTEX: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
+#[cfg(test)]
+thread_local! {
+    static TEST_LOCK_PATH: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Scoped Local lock isolation for current-thread service benchmarks.
+#[cfg(test)]
+pub(crate) struct TestMutationLockPathGuard {
+    previous: Option<PathBuf>,
+    _current_thread: std::marker::PhantomData<std::rc::Rc<()>>,
+}
+
+#[cfg(test)]
+pub(crate) fn use_test_mutation_lock_path(path: PathBuf) -> TestMutationLockPathGuard {
+    TestMutationLockPathGuard {
+        previous: TEST_LOCK_PATH.with(|cell| cell.replace(Some(path))),
+        _current_thread: std::marker::PhantomData,
+    }
+}
+
+#[cfg(test)]
+impl Drop for TestMutationLockPathGuard {
+    fn drop(&mut self) {
+        TEST_LOCK_PATH.with(|cell| cell.replace(self.previous.take()));
+    }
+}
+
 #[derive(Debug)]
 pub struct CentralMutationGuard {
     file: File,
@@ -93,6 +120,9 @@ async fn acquire_default_mutation_guard_at(
     operation: &'static str,
     timeout: Duration,
 ) -> Result<CentralMutationGuard, CentralMutationError> {
+    let path = TEST_LOCK_PATH
+        .with(|cell| cell.borrow().clone())
+        .unwrap_or(path);
     let test_guard = if timeout.is_zero() {
         DEFAULT_LOCK_TEST_MUTEX
             .try_lock()

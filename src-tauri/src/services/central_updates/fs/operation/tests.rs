@@ -68,7 +68,9 @@ async fn central_operation_crash_process_helper() {
     insert_row(&pool, &operation_id, "skill-a", &manifest).await;
 
     if phase != "prepared" {
-        fs.stage_operation_update(&manifest, &write).await.unwrap();
+        fs.stage_operation_update(&manifest, write.clone())
+            .await
+            .unwrap();
         db::transition_fs_db_operation(&pool, &operation_id, "prepared", "fs_staged")
             .await
             .unwrap();
@@ -226,7 +228,7 @@ async fn local_update_restore_and_finalize_are_idempotent() {
         .build_operation_update_manifest("rollback-op", &old_write, Vec::new())
         .await
         .unwrap();
-    fs.stage_operation_update(&old_manifest, &old_write)
+    fs.stage_operation_update(&old_manifest, old_write)
         .await
         .unwrap();
     fs.swap_operation_update(&old_manifest).await.unwrap();
@@ -243,7 +245,7 @@ async fn local_update_restore_and_finalize_are_idempotent() {
         .build_operation_update_manifest("finalize-op", &new_write, Vec::new())
         .await
         .unwrap();
-    fs.stage_operation_update(&new_manifest, &new_write)
+    fs.stage_operation_update(&new_manifest, new_write)
         .await
         .unwrap();
     fs.swap_operation_update(&new_manifest).await.unwrap();
@@ -269,7 +271,7 @@ async fn tampered_staging_fails_closed_and_keeps_row_artifacts() {
     db::transition_fs_db_operation(&pool, "collision-op", "prepared", "fs_staged")
         .await
         .unwrap();
-    fs.stage_operation_update(&manifest, &write).await.unwrap();
+    fs.stage_operation_update(&manifest, write).await.unwrap();
     std::fs::write(
         PathBuf::from(&manifest.staging).join("SKILL.md"),
         b"tampered",

@@ -513,7 +513,7 @@ pub(super) async fn import_single_staged_skill(
     provenance: Option<&ImportProvenance>,
     progress_state: &mut GitHubImportProgressState,
     app: Option<&AppHandle>,
-    emit_per_file_progress: bool,
+    report_file_progress: bool,
 ) -> Result<ImportedGitHubSkillSummary, GithubImportError> {
     let target_dir = match fs {
         crate::services::central_updates::CentralFs::Local => central_root.join(&op.final_skill_id),
@@ -529,37 +529,6 @@ pub(super) async fn import_single_staged_skill(
                 file.repo_path.clone(),
             ));
         }
-        if emit_per_file_progress {
-            progress_state.completed_files += 1;
-            progress_state.completed_bytes += file.byte_len as u64;
-            emit_github_import_progress(
-                app,
-                GitHubImportProgressPayload {
-                    phase: GitHubImportProgressPhase::Writing,
-                    current_skill: Some(op.candidate.source_path.clone()),
-                    current_path: Some(file.relative_path.clone()),
-                    completed_files: progress_state.completed_files,
-                    total_files: progress_state.total_files,
-                    completed_bytes: progress_state.completed_bytes,
-                    total_bytes: progress_state.total_bytes,
-                },
-            );
-        }
-    }
-    if !emit_per_file_progress {
-        progress_state.completed_files += 1;
-        emit_github_import_progress(
-            app,
-            GitHubImportProgressPayload {
-                phase: GitHubImportProgressPhase::Writing,
-                current_skill: Some(op.candidate.source_path.clone()),
-                current_path: Some("SKILL.md".to_string()),
-                completed_files: progress_state.completed_files,
-                total_files: progress_state.total_files,
-                completed_bytes: progress_state.completed_bytes,
-                total_bytes: progress_state.total_bytes,
-            },
-        );
     }
 
     if op.resolution != DuplicateResolution::Overwrite
@@ -597,21 +566,65 @@ pub(super) async fn import_single_staged_skill(
     };
     let (resolved_commit_sha, content_digest) =
         provenance_for(provenance, &op.candidate.source_path);
-    crate::services::central_updates::journaled_central_content_upsert_with_fs(
-        pool,
-        fs,
-        crate::services::central_updates::JournaledCentralContentUpsert {
-            skill: db_skill,
-            repo: repo.clone(),
-            candidate,
-            snapshot,
-            target_dir: target_dir.clone(),
-            resolved_commit_sha,
-            content_digest,
-        },
-    )
-    .await
-    .map_err(map_journaled_upsert_error)?;
+    let input = crate::services::central_updates::JournaledCentralContentUpsert {
+        skill: db_skill,
+        repo: repo.clone(),
+        candidate,
+        snapshot,
+        target_dir: target_dir.clone(),
+        resolved_commit_sha,
+        content_digest,
+    };
+    if report_file_progress {
+        let (reporter, receiver) =
+            crate::services::central_updates::fs::StageWriteProgressReporter::channel();
+        let completed_files = progress_state.completed_files;
+        let completed_bytes = progress_state.completed_bytes;
+        observe_stage_write_progress(
+            crate::services::central_updates::journaled_central_content_upsert_with_fs_and_progress(
+                pool,
+                fs,
+                input,
+                Some(reporter),
+            ),
+            receiver,
+            |written| {
+                progress_state.completed_files = completed_files + written.completed_files;
+                progress_state.completed_bytes = completed_bytes + written.completed_bytes;
+                emit_github_import_progress(
+                    app,
+                    GitHubImportProgressPayload {
+                        phase: GitHubImportProgressPhase::Writing,
+                        current_skill: Some(op.candidate.source_path.clone()),
+                        current_path: written.current_path,
+                        completed_files: progress_state.completed_files,
+                        total_files: progress_state.total_files,
+                        completed_bytes: progress_state.completed_bytes,
+                        total_bytes: progress_state.total_bytes,
+                    },
+                );
+            },
+        )
+        .await
+        .map_err(map_journaled_upsert_error)?;
+    } else {
+        crate::services::central_updates::journaled_central_content_upsert_with_fs(pool, fs, input)
+            .await
+            .map_err(map_journaled_upsert_error)?;
+        progress_state.completed_files += 1;
+        emit_github_import_progress(
+            app,
+            GitHubImportProgressPayload {
+                phase: GitHubImportProgressPhase::Writing,
+                current_skill: Some(op.candidate.source_path.clone()),
+                current_path: Some("SKILL.md".to_string()),
+                completed_files: progress_state.completed_files,
+                total_files: progress_state.total_files,
+                completed_bytes: progress_state.completed_bytes,
+                total_bytes: progress_state.total_bytes,
+            },
+        );
+    }
 
     Ok(ImportedGitHubSkillSummary {
         source_path: op.candidate.source_path.clone(),

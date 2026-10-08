@@ -5,7 +5,7 @@
 //! orchestration code in this domain never branches on target type.
 
 use sha2::{Digest, Sha256};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
@@ -22,10 +22,12 @@ use super::error::CentralUpdatesError;
 
 mod batch;
 mod operation;
+mod progress;
 mod remote_scripts;
 
 pub(crate) use batch::{CentralSkillWrite, CopyRefreshRequest};
 pub(crate) use operation::OperationUpdateStage;
+pub(crate) use progress::{StageWriteProgress, StageWriteProgressReporter};
 
 #[cfg(test)]
 mod tests;
@@ -160,43 +162,64 @@ pub(crate) fn ensure_remote_skill_manifest(
 fn write_remote_skill_files(
     files: &[RemoteSkillFile],
     target_dir: &Path,
+    progress: Option<&StageWriteProgressReporter>,
 ) -> Result<(), CentralUpdatesError> {
-    std::fs::create_dir_all(target_dir).map_err(|e| {
-        CentralUpdatesError::io(
-            format!(
-                "Failed to create update staging directory '{}'",
-                target_dir.display()
-            ),
-            e,
-        )
-    })?;
+    let mut progress = progress.map(StageWriteProgressReporter::writer);
+    let result = (|| {
+        let created_root = std::fs::create_dir_all(target_dir);
+        #[cfg(test)]
+        progress::observe_parent_creation(target_dir, created_root.is_ok());
+        created_root.map_err(|e| {
+            CentralUpdatesError::io(
+                format!(
+                    "Failed to create update staging directory '{}'",
+                    target_dir.display()
+                ),
+                e,
+            )
+        })?;
+        let mut created_parents = HashSet::from([target_dir.to_path_buf()]);
 
-    for file in files {
-        if !is_safe_relative_path(&file.relative_path) {
-            return Err(CentralUpdatesError::UnsupportedRepoFilePath(
-                file.repo_path.clone(),
-            ));
+        for file in files {
+            if !is_safe_relative_path(&file.relative_path) {
+                return Err(CentralUpdatesError::UnsupportedRepoFilePath(
+                    file.repo_path.clone(),
+                ));
+            }
+
+            let destination = target_dir.join(&file.relative_path);
+            let parent = destination.parent().ok_or_else(|| {
+                CentralUpdatesError::NoParentDirectory(destination.display().to_string())
+            })?;
+            if !created_parents.contains(parent) {
+                let created_parent = std::fs::create_dir_all(parent);
+                #[cfg(test)]
+                progress::observe_parent_creation(parent, created_parent.is_ok());
+                created_parent.map_err(|e| {
+                    CentralUpdatesError::io(
+                        format!("Failed to create update file parent '{}'", parent.display()),
+                        e,
+                    )
+                })?;
+                created_parents.insert(parent.to_path_buf());
+            }
+            std::fs::write(&destination, &file.bytes).map_err(|e| {
+                CentralUpdatesError::io(
+                    format!("Failed to write update file '{}'", destination.display()),
+                    e,
+                )
+            })?;
+            if let Some(progress) = &mut progress {
+                progress.written(&file.relative_path, file.bytes.len() as u64);
+            }
         }
 
-        let destination = target_dir.join(&file.relative_path);
-        let parent = destination.parent().ok_or_else(|| {
-            CentralUpdatesError::NoParentDirectory(destination.display().to_string())
-        })?;
-        std::fs::create_dir_all(parent).map_err(|e| {
-            CentralUpdatesError::io(
-                format!("Failed to create update file parent '{}'", parent.display()),
-                e,
-            )
-        })?;
-        std::fs::write(&destination, &file.bytes).map_err(|e| {
-            CentralUpdatesError::io(
-                format!("Failed to write update file '{}'", destination.display()),
-                e,
-            )
-        })?;
+        Ok(())
+    })();
+    if let Some(progress) = &mut progress {
+        progress.flush();
     }
-
-    Ok(())
+    result
 }
 
 #[cfg(test)]
@@ -270,7 +293,7 @@ fn write_skill_dir_atomic_local(
         })?;
     }
 
-    write_remote_skill_files(files, &temp_dir)?;
+    write_remote_skill_files(files, &temp_dir, None)?;
 
     let backup_dir = parent.join(format!(".skillport-backup-{}-{}", skill_id, Uuid::new_v4()));
     replace_target_dir(target_dir, &temp_dir, &backup_dir)
@@ -312,7 +335,6 @@ fn hash_local_directory(root: &Path) -> Result<String, CentralUpdatesError> {
     }
     let mut entries = Vec::new();
     collect_local_hash_entries(root, root, &mut entries)?;
-    entries.sort_by(|left, right| left.0.cmp(&right.0));
     Ok(hash_entries(entries))
 }
 
@@ -366,7 +388,6 @@ async fn hash_remote_directory(
         }
     }
 
-    entries.sort_by(|left, right| left.0.cmp(&right.0));
     Ok(hash_entries(entries))
 }
 
