@@ -1,0 +1,30 @@
+{
+  "id": "skill-small-files-performance",
+  "name": "skill-small-files-performance",
+  "title": "大量小文件 Skill 导入、更新与删除清理性能优化",
+  "description": "建立隔离性能基线，按测量实施真实进度、文件所有权、目录与哈希优化，并验证导入、更新、删除及清理的一致性。",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "lyh",
+  "assignee": "lyh",
+  "createdAt": "2026-10-08",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "commit": "112120cb130c31e195f3fdf497f33fd13eb514e7",
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "2026-10-08：用户批准后已实施选定 D1–D4，467 个相关 release 测试和 T 13,016 文件完整服务单轮通过。完整 just ci 15/15 阶段通过、退出 0。source 发布数量降低 99.2472%；T stage 交替 7 对降低 6.56%，原 10% 目标 NOT_MET。删除 stage 与 L 控制 no-op 回退原因未查明。native 与完整大规模服务性能矩阵未执行；完整 after 构建时源码清单 UNVERIFIED。用户随后明确授权本地提交全部改动及归档当前任务。归档不改变未通过的验收条件。结果见 research/benchmark-results.md、research/independent-check.md。",
+  "meta": {
+    "closure_reason": "user_requested_archive",
+    "acceptance_status": "partial",
+    "performance_target": "NOT_MET"
+  }
+}

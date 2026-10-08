@@ -1,0 +1,12 @@
+{
+  "command": "just ci",
+  "pnpm_version": "10.34.5",
+  "source_head": "063c8d3236197a06ff17083c28a9738487c07510",
+  "started_utc": "2026-10-08T16:50:51.2843194Z",
+  "ended_utc": "2026-10-08T16:50:55.2493718Z",
+  "exit_code": 1,
+  "log": "just-ci-20261008-115051.log",
+  "log_sha256": "3DB5F97B01ABD7B48F0FBF2A71AAC6B29E1154550934A691D8B958E5FE685006",
+  "evidence": "Captured complete console output; Windows local default parallel lanes",
+  "concurrent_activity": "Frozen after T full-service correctness-only run permitted; no performance budget from its timing"
+}

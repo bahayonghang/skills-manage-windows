@@ -1,0 +1,17 @@
+
+running 1 test
+test services::central_updates::core::performance_benchmark::small_files_service_baseline ... BENCH_META {"app_handle":false,"files":[4096,18000],"mode":"stage","network":"not_requested","os_cache":"not_cleared","phase_time":"inclusive wrapper await wall ms","profile":"release","samples":1,"schema":1,"security_scanner":"not_modified"}
+BENCH {"elapsed_ms":3762.8254,"fixture":{"bytes":4193349,"directories":66,"files":4096},"operation":"component_durable_stage","phases":{"Central update durable staging":{"await_ms":3762.7715,"calls":1},"durable_stage":{"await_ms":3762.8127,"calls":1}},"sample":0}
+BENCH {"elapsed_ms":505.7836,"fixture":{"bytes":4193349,"directories":66,"files":4096},"operation":"component_delete_manifest_fingerprint","phases":{"Central operation fingerprint":{"await_ms":505.7562,"calls":1}},"sample":0}
+BENCH {"elapsed_ms":10.7515,"fixture":{"bytes":4193349,"directories":66,"files":4096},"operation":"component_delete_stage","phases":{"Central delete staging":{"await_ms":10.74,"calls":1}},"sample":0}
+BENCH {"elapsed_ms":3212.8552,"fixture":{"bytes":4193349,"directories":66,"files":4096},"operation":"component_delete_finalize","phases":{"Central delete finalize":{"await_ms":3212.8462,"calls":1}},"sample":0}
+BENCH {"elapsed_ms":0.0934,"fixture":{"bytes":4193349,"directories":66,"files":4096},"operation":"component_delete_finalize_repeat","phases":{"Central delete finalize":{"await_ms":0.0882,"calls":1}},"sample":0}
+BENCH {"elapsed_ms":18569.2399,"fixture":{"bytes":18431045,"directories":284,"files":18000},"operation":"component_durable_stage","phases":{"Central update durable staging":{"await_ms":18569.217399999998,"calls":1},"durable_stage":{"await_ms":18569.2339,"calls":1}},"sample":0}
+BENCH {"elapsed_ms":3080.4996,"fixture":{"bytes":18431045,"directories":284,"files":18000},"operation":"component_delete_manifest_fingerprint","phases":{"Central operation fingerprint":{"await_ms":3080.479,"calls":1}},"sample":0}
+BENCH {"elapsed_ms":32.214800000000004,"fixture":{"bytes":18431045,"directories":284,"files":18000},"operation":"component_delete_stage","phases":{"Central delete staging":{"await_ms":32.207699999999996,"calls":1}},"sample":0}
+BENCH {"elapsed_ms":14308.7138,"fixture":{"bytes":18431045,"directories":284,"files":18000},"operation":"component_delete_finalize","phases":{"Central delete finalize":{"await_ms":14308.7061,"calls":1}},"sample":0}
+BENCH {"elapsed_ms":0.4921,"fixture":{"bytes":18431045,"directories":284,"files":18000},"operation":"component_delete_finalize_repeat","phases":{"Central delete finalize":{"await_ms":0.4835,"calls":1}},"sample":0}
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1567 filtered out; finished in 46.75s
+

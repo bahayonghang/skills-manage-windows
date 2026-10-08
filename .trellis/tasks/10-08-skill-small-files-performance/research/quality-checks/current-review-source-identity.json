@@ -1,0 +1,115 @@
+{
+  "captured_utc": "2026-10-08T17:02:46.029281+00:00",
+  "source_head": "063c8d3236197a06ff17083c28a9738487c07510",
+  "usage": "Current review and final CI source context only; captured after benchmark build, not a historical build-time source manifest",
+  "frozen_after_binary_sha256": "41293FD91D399D680488B43AB1CCE547204776864FDDE309C32F1C07D76A3411",
+  "frozen_after_complete_production_source_manifest": "UNVERIFIED: after-source.diff does not contain untracked fs/progress.rs and central_operation/fs/tests.rs; no retrospective assertion of their build-time hashes",
+  "reviewer_changes": "Only two test lexical scopes in github_import/progress/tests.rs; no production changes",
+  "files": [
+    {
+      "path": "src-tauri/src/fs_util.rs",
+      "kind": "tracked_changed",
+      "sha256": "30C79EC5E510810E9012B0A92975AE0111B1BA8196323B7B1580098E9EF85F4D"
+    },
+    {
+      "path": "src-tauri/src/services/central_mutation/mod.rs",
+      "kind": "tracked_changed",
+      "sha256": "E275DF17664F7B456488100C5A9A903D0C03BF91ABC5B27811C8B9913D3893EC"
+    },
+    {
+      "path": "src-tauri/src/services/central_operation/fs.rs",
+      "kind": "tracked_changed",
+      "sha256": "7CA717E16404BD0CB9335B6372ABB56EB87F501DDFD0162AFA384D3234092D96"
+    },
+    {
+      "path": "src-tauri/src/services/central_operation/fs/tests.rs",
+      "kind": "new_untracked",
+      "sha256": "D5D6C585D26728D237852A96BAF25F8CD43BB9732ED80BB42546D48AB5B6EDE3"
+    },
+    {
+      "path": "src-tauri/src/services/central_operation/fs_hash_tests.rs",
+      "kind": "tracked_changed",
+      "sha256": "E6D5CF77DBEF61F8FB8EF05AE54B13EBE4EF3D89E8D9026C7E7C1988F7ACA4BB"
+    },
+    {
+      "path": "src-tauri/src/services/central_updates/core.rs",
+      "kind": "tracked_changed",
+      "sha256": "EE07865B7D1BD0EF3D40D2417C0B37E79F363C87BD1FE91108AFEB81BC041461"
+    },
+    {
+      "path": "src-tauri/src/services/central_updates/core/batch.rs",
+      "kind": "tracked_changed",
+      "sha256": "46646C93B4F1248160DA15BE75207FD593BEEB0433589A242E937E230C364F3B"
+    },
+    {
+      "path": "src-tauri/src/services/central_updates/core/content_upsert.rs",
+      "kind": "tracked_changed",
+      "sha256": "DA757C727827856D63EF2EE389FDE92590B9693FEE4AA109DB36C0EEE746744B"
+    },
+    {
+      "path": "src-tauri/src/services/central_updates/core/performance_benchmark.rs",
+      "kind": "new_untracked",
+      "sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923"
+    },
+    {
+      "path": "src-tauri/src/services/central_updates/fs.rs",
+      "kind": "tracked_changed",
+      "sha256": "AFA9EB8F8E86FE52D93ED72CAB0F9C8F988BC7D5449B355E2EDEDB50DF0033B7"
+    },
+    {
+      "path": "src-tauri/src/services/central_updates/fs/operation.rs",
+      "kind": "tracked_changed",
+      "sha256": "F0B6D9D9569C4BCEB8AA8CFDDFB991480FB73BDF7D065534EA740172F1F56E55"
+    },
+    {
+      "path": "src-tauri/src/services/central_updates/fs/operation/helpers.rs",
+      "kind": "tracked_changed",
+      "sha256": "C1F11C458F659A1548A2AC6487EAC798A81306129935B891F3B6DCF48AC61C4A"
+    },
+    {
+      "path": "src-tauri/src/services/central_updates/fs/operation/tests.rs",
+      "kind": "tracked_changed",
+      "sha256": "9BC94CA5FF33B9B7414E9FC0F4EFD60A5FC05FAE80292B5BFB80CAA3E7BDF162"
+    },
+    {
+      "path": "src-tauri/src/services/central_updates/fs/progress.rs",
+      "kind": "new_untracked",
+      "sha256": "55D208C1FF067B06C1A2B27A218625B6A121522B43825FB0F1C6102454A57459"
+    },
+    {
+      "path": "src-tauri/src/services/central_updates/fs/tests.rs",
+      "kind": "tracked_changed",
+      "sha256": "929DDB11AD16A85A9A69CAC52833AEEED4CA250AC79A22F55C55B17D52F7378E"
+    },
+    {
+      "path": "src-tauri/src/services/central_updates/inventory/force.rs",
+      "kind": "tracked_changed",
+      "sha256": "78FC06B3D69572576185EBD44B795B0E35F893644F98EF11FD51F2F1DC4C5F8C"
+    },
+    {
+      "path": "src-tauri/src/services/central_updates/mod.rs",
+      "kind": "tracked_changed",
+      "sha256": "5AE2B24D206D92049D91FE078A24EE76D1DCCED21C3390B1929D57948AED6BE0"
+    },
+    {
+      "path": "src-tauri/src/services/github_import/import.rs",
+      "kind": "tracked_changed",
+      "sha256": "C978153D611B8DC7FC0855ED47E381762D4302DD096CAE1F293DB9CAEC062C67"
+    },
+    {
+      "path": "src-tauri/src/services/github_import/progress.rs",
+      "kind": "tracked_changed",
+      "sha256": "DFD7AA987451B2B08728689AC0726196D8E4074FF834B6A05B4F00153BF3CE47"
+    },
+    {
+      "path": "src-tauri/src/services/github_import/progress/tests.rs",
+      "kind": "new_untracked",
+      "sha256": "5951F0EB5C66CFCF58B16204488C1EB109F59AD6FF86EF455EF22C3A0CBEB252"
+    },
+    {
+      "path": "src-tauri/src/services/github_import/snapshot.rs",
+      "kind": "tracked_changed",
+      "sha256": "0A5058F07E8DAE5C77AFA7C31C207E220F832AFEA22B95E8DBF561BA957946D1"
+    }
+  ]
+}

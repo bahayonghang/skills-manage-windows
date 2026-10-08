@@ -1,0 +1,33 @@
+node scripts/check/sync-version.mjs
+[version] already synced to 1.0.2
+node scripts/check/run-ci.mjs
+[ci] Running common and rust-platform lanes.
+[common:version] $ pnpm version:check
+[rust-platform:clippy] $ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+[common:version] 
+[common:version] > skillport@1.0.2 version:check D:\Documents\Code\Agents\skills-manage-windows
+[common:version] > node scripts/check/sync-version.mjs --check
+[common:version] 
+[common:version] [version] already synced to 1.0.2
+[common:version] completed in 0.6s
+[common:docs-generated] $ pnpm docs:gen:check
+[common:docs-generated] 
+[common:docs-generated] > skillport@1.0.2 docs:gen:check D:\Documents\Code\Agents\skills-manage-windows
+[common:docs-generated] > node scripts/docs/build-ipc-dict.mjs --check && node scripts/docs/build-schema-table.mjs --check
+[common:docs-generated] 
+[common:docs-generated] [build-ipc-dict] up to date: docs/architecture/_generated/ipc-commands.md
+[common:docs-generated] [build-schema-table] up to date: docs/architecture/_generated/data-model.md
+[common:docs-generated] completed in 0.6s
+[common:typecheck] $ pnpm typecheck
+[common:typecheck] 
+[common:typecheck] > skillport@1.0.2 typecheck D:\Documents\Code\Agents\skills-manage-windows
+[common:typecheck] > tsc --noEmit
+[common:typecheck] 
+[rust-platform:clippy] error: failed to create directory `D:\Documents\Code\Agents\skills-manage-windows\src-tauri\target`
+[rust-platform:clippy] 
+[rust-platform:clippy] Caused by:
+[rust-platform:clippy]   Access is denied. (os error 5)
+[ci] [rust-platform:clippy] failed with exit code 101.
+[ci] Stopping sibling checks...
+[ci] Failed. First failure: [rust-platform:clippy] failed with exit code 101.
+error: recipe `ci` failed on line 35 with exit code 1

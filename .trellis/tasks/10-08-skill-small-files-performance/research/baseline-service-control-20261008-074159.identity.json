@@ -1,0 +1,11 @@
+{
+  "captured_utc": "2026-10-08T12:41:59.0948488Z",
+  "binary": ".git/skill-small-files-tools/benchmark-before-targeted.exe",
+  "binary_sha256": "46A19EC66B300DF79D7345724DB5CA2440160AC29A23202655965A41088AD36F",
+  "source_head_at_invocation": "063c8d3236197a06ff17083c28a9738487c07510",
+  "current_harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923",
+  "files": "32",
+  "samples": 7,
+  "mode": "service",
+  "identity_note": "Binary source and actual harness identity must match the frozen build receipt. Current worktree fields are invocation context only."
+}

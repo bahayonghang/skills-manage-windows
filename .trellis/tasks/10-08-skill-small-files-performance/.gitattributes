@@ -1,0 +1,2 @@
+# Preserve recorded research bytes across Windows and Unix checkouts.
+research/** -text

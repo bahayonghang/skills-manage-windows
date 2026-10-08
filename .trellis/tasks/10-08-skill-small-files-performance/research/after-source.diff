@@ -1,0 +1,1286 @@
+diff --git a/src-tauri/src/fs_util.rs b/src-tauri/src/fs_util.rs
+index e32e99f8..304c1fcc 100644
+--- a/src-tauri/src/fs_util.rs
++++ b/src-tauri/src/fs_util.rs
+@@ -23,6 +23,8 @@ where
+     E: Send + 'static,
+     F: FnOnce() -> Result<T, E> + Send + 'static,
+ {
++    #[cfg(test)]
++    let _benchmark_span = tracing::info_span!("blocking_fs_await", phase = label);
+     match tauri::async_runtime::spawn_blocking(task).await {
+         Ok(result) => result,
+         Err(e) => Err(join_error(label, e.to_string())),
+diff --git a/src-tauri/src/services/central_mutation/mod.rs b/src-tauri/src/services/central_mutation/mod.rs
+index 570dfe3e..6732da9a 100644
+--- a/src-tauri/src/services/central_mutation/mod.rs
++++ b/src-tauri/src/services/central_mutation/mod.rs
+@@ -18,6 +18,33 @@ pub const DEFAULT_CENTRAL_MUTATION_TIMEOUT: Duration = Duration::from_secs(10);
+ #[cfg(test)]
+ static DEFAULT_LOCK_TEST_MUTEX: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+ 
++#[cfg(test)]
++thread_local! {
++    static TEST_LOCK_PATH: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
++}
++
++/// Scoped Local lock isolation for current-thread service benchmarks.
++#[cfg(test)]
++pub(crate) struct TestMutationLockPathGuard {
++    previous: Option<PathBuf>,
++    _current_thread: std::marker::PhantomData<std::rc::Rc<()>>,
++}
++
++#[cfg(test)]
++pub(crate) fn use_test_mutation_lock_path(path: PathBuf) -> TestMutationLockPathGuard {
++    TestMutationLockPathGuard {
++        previous: TEST_LOCK_PATH.with(|cell| cell.replace(Some(path))),
++        _current_thread: std::marker::PhantomData,
++    }
++}
++
++#[cfg(test)]
++impl Drop for TestMutationLockPathGuard {
++    fn drop(&mut self) {
++        TEST_LOCK_PATH.with(|cell| cell.replace(self.previous.take()));
++    }
++}
++
+ #[derive(Debug)]
+ pub struct CentralMutationGuard {
+     file: File,
+@@ -93,6 +120,9 @@ async fn acquire_default_mutation_guard_at(
+     operation: &'static str,
+     timeout: Duration,
+ ) -> Result<CentralMutationGuard, CentralMutationError> {
++    let path = TEST_LOCK_PATH
++        .with(|cell| cell.borrow().clone())
++        .unwrap_or(path);
+     let test_guard = if timeout.is_zero() {
+         DEFAULT_LOCK_TEST_MUTEX
+             .try_lock()
+diff --git a/src-tauri/src/services/central_operation/fs.rs b/src-tauri/src/services/central_operation/fs.rs
+index 412c02cf..a55d764c 100644
+--- a/src-tauri/src/services/central_operation/fs.rs
++++ b/src-tauri/src/services/central_operation/fs.rs
+@@ -561,7 +561,7 @@ fn fingerprint_path_blocking(path: &Path) -> Result<Option<String>, CentralOpera
+                     std::io::Error::other(error.to_string()),
+                 )
+             })?;
+-        entries.sort_by_key(|entry| entry.path().to_path_buf());
++        entries.sort_by(|left, right| left.path().cmp(right.path()));
+         for entry in entries.into_iter().skip(1) {
+             let relative = entry.path().strip_prefix(path).map_err(|_| {
+                 CentralOperationError::InvalidManifest("fingerprint path escaped root".to_string())
+@@ -618,242 +618,4 @@ fn path_token(path: &str) -> String {
+ }
+ 
+ #[cfg(test)]
+-mod tests {
+-    use super::*;
+-    use crate::targets::{
+-        ConnectedRemoteTarget, ConnectedSshTarget, ConnectedWslTarget, RemoteTargetConfig,
+-        SshAuthMethod, WslTargetConfig,
+-    };
+-    use crate::test_support::FakeRunner;
+-    #[cfg(windows)]
+-    use std::os::windows::fs::FileTypeExt;
+-    use std::sync::Arc;
+-
+-    fn fake_connections() -> Vec<(Arc<FakeRunner>, ConnectedRemoteTarget)> {
+-        let ssh_runner = Arc::new(FakeRunner::new());
+-        let ssh = ConnectedSshTarget::for_tests_with_runner(
+-            RemoteTargetConfig {
+-                id: "ssh-operation-test".to_string(),
+-                label: "SSH operation test".to_string(),
+-                host: "example.invalid".to_string(),
+-                username: "tester".to_string(),
+-                port: 22,
+-                auth_method: SshAuthMethod::Key,
+-                key_path: "~/.ssh/id_ed25519".to_string(),
+-                credential_key: None,
+-                protected_password: None,
+-                password: None,
+-                remote_home: "/home/tester".to_string(),
+-                remote_os: "linux".to_string(),
+-                symlink_enabled: true,
+-            },
+-            ssh_runner.clone(),
+-        );
+-        let wsl_runner = Arc::new(FakeRunner::new());
+-        let wsl = ConnectedWslTarget::for_tests_with_runner(
+-            WslTargetConfig {
+-                id: "wsl-operation-test".to_string(),
+-                label: "WSL operation test".to_string(),
+-                distribution: "TestDistro".to_string(),
+-                remote_home: "/home/tester".to_string(),
+-                remote_os: "linux".to_string(),
+-                symlink_enabled: true,
+-            },
+-            wsl_runner.clone(),
+-        );
+-        vec![
+-            (ssh_runner, ConnectedRemoteTarget::Ssh(ssh)),
+-            (wsl_runner, ConnectedRemoteTarget::Wsl(wsl)),
+-        ]
+-    }
+-
+-    #[tokio::test]
+-    async fn local_delete_stage_restore_and_finalize_are_idempotent() {
+-        let temp = tempfile::tempdir().unwrap();
+-        let target = temp.path().join("skill-a");
+-        fs::create_dir(&target).unwrap();
+-        fs::write(target.join("SKILL.md"), "before").unwrap();
+-        let manifest = build_local_delete_manifest("op-a", vec![target.clone()])
+-            .await
+-            .unwrap();
+-        stage_delete_local(&manifest).await.unwrap();
+-        assert!(!target.exists());
+-        restore_delete_local(&manifest).await.unwrap();
+-        assert_eq!(
+-            fs::read_to_string(target.join("SKILL.md")).unwrap(),
+-            "before"
+-        );
+-
+-        let manifest = build_local_delete_manifest("op-b", vec![target.clone()])
+-            .await
+-            .unwrap();
+-        stage_delete_local(&manifest).await.unwrap();
+-        finalize_delete_local(&manifest).await.unwrap();
+-        finalize_delete_local(&manifest).await.unwrap();
+-        assert!(!target.exists());
+-    }
+-
+-    #[tokio::test]
+-    async fn local_delete_finalize_removes_directory_symlink_without_following_target() {
+-        let temp = tempfile::tempdir().unwrap();
+-        let target = temp.path().join("central-skill");
+-        fs::create_dir(&target).unwrap();
+-        fs::write(target.join("SKILL.md"), "keep").unwrap();
+-        let link = temp.path().join("agent-skill");
+-        crate::test_support::symlink_dir(&target, &link);
+-
+-        let manifest = build_local_delete_manifest("op-dir-link", vec![link.clone()])
+-            .await
+-            .unwrap();
+-        assert_eq!(manifest.paths.len(), 1);
+-        assert!(manifest.paths[0].expected_present);
+-        assert_eq!(Path::new(&manifest.paths[0].original), link.as_path());
+-
+-        stage_delete_local(&manifest).await.unwrap();
+-
+-        let backup = Path::new(&manifest.paths[0].backup);
+-        let marker = Path::new(&manifest.paths[0].marker);
+-        assert_eq!(
+-            fs::symlink_metadata(&link).unwrap_err().kind(),
+-            std::io::ErrorKind::NotFound
+-        );
+-        let backup_type = fs::symlink_metadata(backup).unwrap().file_type();
+-        assert!(backup_type.is_symlink());
+-        #[cfg(windows)]
+-        assert!(backup_type.is_symlink_dir());
+-
+-        finalize_delete_local(&manifest).await.unwrap();
+-
+-        assert_eq!(
+-            fs::symlink_metadata(backup).unwrap_err().kind(),
+-            std::io::ErrorKind::NotFound
+-        );
+-        assert_eq!(
+-            fs::symlink_metadata(marker).unwrap_err().kind(),
+-            std::io::ErrorKind::NotFound
+-        );
+-        assert!(target.is_dir());
+-        assert_eq!(fs::read_to_string(target.join("SKILL.md")).unwrap(), "keep");
+-    }
+-
+-    #[tokio::test]
+-    async fn local_delete_restore_preserves_collision_evidence() {
+-        let temp = tempfile::tempdir().unwrap();
+-        let target = temp.path().join("skill-a");
+-        fs::create_dir(&target).unwrap();
+-        fs::write(target.join("SKILL.md"), "before").unwrap();
+-        let manifest = build_local_delete_manifest("op-a", vec![target.clone()])
+-            .await
+-            .unwrap();
+-        stage_delete_local(&manifest).await.unwrap();
+-        fs::create_dir(&target).unwrap();
+-        fs::write(target.join("SKILL.md"), "new-user-data").unwrap();
+-        let error = restore_delete_local(&manifest).await.unwrap_err();
+-        assert!(matches!(
+-            error,
+-            CentralOperationError::RecoveryCollision { .. }
+-        ));
+-        assert!(Path::new(&manifest.paths[0].backup).exists());
+-    }
+-
+-    #[tokio::test]
+-    async fn ssh_and_wsl_fake_runners_cover_delete_stage_and_phase_loss_restore() {
+-        let digest = "a".repeat(64);
+-        for (runner, connection) in fake_connections() {
+-            runner.push_success("");
+-            runner.push_success(&digest);
+-            runner.push_success("STAGED\n");
+-            runner.push_success(&digest);
+-            runner.push_success("RESTORED\n");
+-            let manifest = build_remote_delete_manifest(
+-                &connection,
+-                "remote-op",
+-                vec!["/home/tester/.skillsmanage/skills/demo".to_string()],
+-            )
+-            .await
+-            .unwrap();
+-            stage_delete_remote(&connection, &manifest).await.unwrap();
+-            restore_delete_remote(&connection, &manifest).await.unwrap();
+-            let calls = runner.calls();
+-            assert_eq!(calls.len(), 5);
+-            assert!(calls.iter().any(|call| {
+-                call.args
+-                    .iter()
+-                    .any(|argument| argument.contains("skillport-delete-backup"))
+-            }));
+-        }
+-    }
+-
+-    #[tokio::test]
+-    async fn ssh_and_wsl_delete_finalize_is_idempotent_after_cleanup() {
+-        let digest = "a".repeat(64);
+-        for (runner, connection) in fake_connections() {
+-            let manifest = DeleteManifest {
+-                version: MANIFEST_VERSION,
+-                operation_id: "remote-finalize-op".to_string(),
+-                paths: vec![ManagedPath {
+-                    original: "/home/tester/.skillsmanage/skills/demo".to_string(),
+-                    backup: "/home/tester/.skillsmanage/skills/.skillport-delete-backup"
+-                        .to_string(),
+-                    marker: "/home/tester/.skillsmanage/skills/.skillport-operation.marker"
+-                        .to_string(),
+-                    expected_present: true,
+-                    fingerprint: Some(digest.clone()),
+-                }],
+-            };
+-            for _ in 0..2 {
+-                runner.push_success("MISSING\n");
+-                runner.push_success("FINALIZED\n");
+-                finalize_delete_remote(&connection, &manifest)
+-                    .await
+-                    .unwrap();
+-            }
+-            assert_eq!(runner.calls().len(), 4);
+-        }
+-    }
+-
+-    #[cfg(windows)]
+-    #[tokio::test]
+-    #[ignore = "requires SKILLPORT_TEST_WSL_DISTRO and writes only under WSL /tmp"]
+-    async fn live_wsl_delete_stage_and_restore_smoke() {
+-        let distribution = std::env::var("SKILLPORT_TEST_WSL_DISTRO")
+-            .expect("set SKILLPORT_TEST_WSL_DISTRO to an installed distribution");
+-        let target = WslTargetConfig {
+-            id: "operation-wsl-smoke".to_string(),
+-            label: "Operation WSL smoke".to_string(),
+-            distribution,
+-            remote_home: "/tmp".to_string(),
+-            remote_os: "linux".to_string(),
+-            symlink_enabled: true,
+-        };
+-        let connection = ConnectedRemoteTarget::Wsl(
+-            crate::targets::open_wsl_target(&target).expect("open WSL target"),
+-        );
+-        let root = format!("/tmp/skillport-operation-smoke-{}", uuid::Uuid::new_v4());
+-        let skill = format!("{root}/demo");
+-        connection
+-            .run_script(
+-                "set -eu; mkdir -p -- \"$1\"; printf before > \"$1/SKILL.md\"",
+-                &[&skill],
+-            )
+-            .await
+-            .unwrap();
+-        let manifest =
+-            build_remote_delete_manifest(&connection, "wsl-smoke-op", vec![skill.clone()])
+-                .await
+-                .unwrap();
+-        stage_delete_remote(&connection, &manifest).await.unwrap();
+-        restore_delete_remote(&connection, &manifest).await.unwrap();
+-        assert_eq!(
+-            connection
+-                .run_script("cat -- \"$1/SKILL.md\"", &[&skill])
+-                .await
+-                .unwrap(),
+-            "before"
+-        );
+-        connection
+-            .run_script("rm -rf -- \"$1\"", &[&root])
+-            .await
+-            .unwrap();
+-    }
+-}
++mod tests;
+diff --git a/src-tauri/src/services/central_operation/fs_hash_tests.rs b/src-tauri/src/services/central_operation/fs_hash_tests.rs
+index afcf5467..631058a9 100644
+--- a/src-tauri/src/services/central_operation/fs_hash_tests.rs
++++ b/src-tauri/src/services/central_operation/fs_hash_tests.rs
+@@ -12,3 +12,71 @@ fn local_file_fingerprint_and_path_token_remain_byte_exact() {
+     );
+     assert_eq!(path_token("C:/SkillPort/hash-fixture"), "8303f9fb6a2c052c");
+ }
++
++#[test]
++fn directory_fingerprint_preserves_the_previous_global_path_order() {
++    use sha2::{Digest, Sha256};
++    use walkdir::WalkDir;
++
++    let root = tempfile::tempdir().unwrap();
++    let directory = root.path().join("tree");
++    std::fs::create_dir_all(directory.join("a/empty")).unwrap();
++    std::fs::create_dir_all(directory.join("图/empty")).unwrap();
++    for (name, bytes) in [
++        ("a.ext", b"prefix".as_slice()),
++        ("a/z", b"nested"),
++        ("图/文本", b"unicode"),
++        ("empty", b""),
++    ] {
++        std::fs::write(directory.join(name), bytes).unwrap();
++    }
++    let symlink_target = root.path().join("outside");
++    std::fs::create_dir(&symlink_target).unwrap();
++    std::fs::write(symlink_target.join("retained"), b"target").unwrap();
++    crate::test_support::symlink_dir(&symlink_target, &directory.join("link"));
++    let mut entries = WalkDir::new(&directory)
++        .follow_links(false)
++        .into_iter()
++        .collect::<Result<Vec<_>, _>>()
++        .unwrap();
++    entries.sort_by_key(|entry| entry.path().to_path_buf());
++    let mut hasher = Sha256::new();
++    hasher.update(b"dir\0");
++    for entry in entries.into_iter().skip(1) {
++        hasher.update(
++            entry
++                .path()
++                .strip_prefix(&directory)
++                .unwrap()
++                .to_string_lossy()
++                .as_bytes(),
++        );
++        hasher.update([0]);
++        let metadata = entry.metadata().unwrap();
++        if metadata.file_type().is_symlink() {
++            hasher.update(b"symlink\0");
++            hasher.update(
++                std::fs::read_link(entry.path())
++                    .unwrap()
++                    .to_string_lossy()
++                    .as_bytes(),
++            );
++        } else if metadata.is_file() {
++            hasher.update(b"file\0");
++            super::hash_file(entry.path(), &mut hasher).unwrap();
++        } else {
++            hasher.update(b"dir\0");
++        }
++    }
++    let expected = crate::hashing::encode_lower_hex(hasher.finalize().as_ref());
++    assert_eq!(
++        fingerprint_path_blocking(&directory).unwrap().as_deref(),
++        Some(expected.as_str())
++    );
++    std::fs::write(symlink_target.join("retained"), b"changed external target").unwrap();
++    assert_eq!(
++        fingerprint_path_blocking(&directory).unwrap().as_deref(),
++        Some(expected.as_str())
++    );
++    assert!(symlink_target.join("retained").is_file());
++}
+diff --git a/src-tauri/src/services/central_updates/core.rs b/src-tauri/src/services/central_updates/core.rs
+index 33da99ed..ac20cc50 100644
+--- a/src-tauri/src/services/central_updates/core.rs
++++ b/src-tauri/src/services/central_updates/core.rs
+@@ -27,6 +27,8 @@ const UPDATE_PROGRESS_EVENT: &str = "central://skill-update-progress";
+ 
+ mod batch;
+ mod content_upsert;
++#[cfg(test)]
++mod performance_benchmark;
+ mod state;
+ #[cfg(test)]
+ mod tests;
+@@ -37,7 +39,7 @@ pub(crate) use batch::{
+ };
+ pub(crate) use content_upsert::{
+     journaled_central_content_upsert, journaled_central_content_upsert_with_fs,
+-    JournaledCentralContentUpsert,
++    journaled_central_content_upsert_with_fs_and_progress, JournaledCentralContentUpsert,
+ };
+ #[allow(unused_imports)]
+ pub(crate) use state::repository_url;
+@@ -300,17 +302,20 @@ pub(crate) async fn update_central_skills_impl(
+         }
+     }
+ 
+-    let plans = pending_updates
+-        .iter()
+-        .map(|(prepared, remote)| SkillUpdatePlan {
+-            skill: prepared.skill.clone(),
+-            remote: remote.clone(),
+-            refresh_copies: true,
+-            first_upsert: false,
++    let (prepared_updates, plans): (Vec<_>, Vec<_>) = pending_updates
++        .into_iter()
++        .map(|(prepared, remote)| {
++            let plan = SkillUpdatePlan {
++                skill: prepared.skill.clone(),
++                remote,
++                refresh_copies: true,
++                first_upsert: false,
++            };
++            (prepared, plan)
+         })
+-        .collect();
++        .unzip();
+     let update_outcomes = update_skills_batch(pool, fs, plans, Some(cancel)).await;
+-    for ((prepared_skill, _), outcome) in pending_updates.into_iter().zip(update_outcomes) {
++    for (prepared_skill, outcome) in prepared_updates.into_iter().zip(update_outcomes) {
+         let skill = &prepared_skill.skill;
+         match outcome.result {
+             Ok(state_result) => {
+diff --git a/src-tauri/src/services/central_updates/core/batch.rs b/src-tauri/src/services/central_updates/core/batch.rs
+index 4f52004d..15841de5 100644
+--- a/src-tauri/src/services/central_updates/core/batch.rs
++++ b/src-tauri/src/services/central_updates/core/batch.rs
+@@ -17,6 +17,7 @@ use super::state_from_remote;
+ use crate::services::central_updates::error::CentralUpdatesError;
+ use crate::services::central_updates::fs::{
+     CentralFs, CentralSkillWrite, CopyRefreshRequest, OperationUpdateStage,
++    StageWriteProgressReporter,
+ };
+ use crate::services::central_updates::types::{
+     CentralUpdateFailurePhase, CentralUpdateItemError, RemoteSkillContent,
+@@ -48,6 +49,16 @@ pub(crate) async fn update_skills_batch(
+     fs: &CentralFs,
+     plans: Vec<SkillUpdatePlan>,
+     cancel: Option<&AtomicBool>,
++) -> Vec<SkillUpdateBatchOutcome> {
++    update_skills_batch_with_progress(pool, fs, plans, cancel, None).await
++}
++
++pub(super) async fn update_skills_batch_with_progress(
++    pool: &DbPool,
++    fs: &CentralFs,
++    plans: Vec<SkillUpdatePlan>,
++    cancel: Option<&AtomicBool>,
++    progress: Option<StageWriteProgressReporter>,
+ ) -> Vec<SkillUpdateBatchOutcome> {
+     let _mutation_guard =
+         match crate::services::central_mutation::acquire_target_mutation_guard_by_id(
+@@ -152,15 +163,20 @@ pub(crate) async fn update_skills_batch(
+     .await;
+ 
+     let stage_outcomes = fs
+-        .stage_operation_updates(
++        .stage_operation_updates_with_progress(
+             prepared
+-                .iter()
++                .iter_mut()
+                 .map(|update| OperationUpdateStage {
+                     manifest: update.manifest.clone(),
+-                    write: update.write.clone(),
++                    write: CentralSkillWrite {
++                        skill_id: update.write.skill_id.clone(),
++                        target_dir: update.write.target_dir.clone(),
++                        files: std::mem::take(&mut update.write.files),
++                    },
+                 })
+                 .collect(),
+             cancel,
++            progress,
+         )
+         .await;
+     let mut stage_results = stage_outcomes
+@@ -249,7 +265,7 @@ enum CommittedUpdateResult {
+ async fn prepare_update(
+     pool: &DbPool,
+     fs: &CentralFs,
+-    plan: SkillUpdatePlan,
++    mut plan: SkillUpdatePlan,
+     batch_id: &str,
+     index: usize,
+ ) -> Result<PreparedUpdate, CentralUpdatesError> {
+@@ -261,7 +277,7 @@ async fn prepare_update(
+     let write = CentralSkillWrite {
+         skill_id: plan.skill.id.clone(),
+         target_dir: plan.remote.target_dir.clone(),
+-        files: plan.remote.files.clone(),
++        files: std::mem::take(&mut plan.remote.files),
+     };
+     let operation_id = uuid::Uuid::new_v4().to_string();
+     let manifest = fs
+diff --git a/src-tauri/src/services/central_updates/core/content_upsert.rs b/src-tauri/src/services/central_updates/core/content_upsert.rs
+index cd8776ad..139afe22 100644
+--- a/src-tauri/src/services/central_updates/core/content_upsert.rs
++++ b/src-tauri/src/services/central_updates/core/content_upsert.rs
+@@ -5,10 +5,13 @@ use crate::db::{DbPool, Skill, SkillUpdateState};
+ use crate::services::github_import::{GitHubRepoRef, GitHubRepoSnapshot, RemoteSkillCandidate};
+ use crate::targets::ActiveTarget;
+ 
+-use super::batch::{update_skills_batch, SkillUpdatePlan};
++#[cfg(test)]
++use super::batch::update_skills_batch;
++use super::batch::{update_skills_batch_with_progress, SkillUpdatePlan};
+ use crate::services::central_updates::error::CentralUpdatesError;
+ use crate::services::central_updates::fs::{
+     collect_remote_skill_files, ensure_remote_skill_manifest, hash_remote_files, CentralFs,
++    StageWriteProgressReporter,
+ };
+ use crate::services::central_updates::types::{GitHubUpdateSource, RemoteSkillContent};
+ 
+@@ -41,6 +44,15 @@ pub(crate) async fn journaled_central_content_upsert_with_fs(
+     pool: &DbPool,
+     fs: &CentralFs,
+     input: JournaledCentralContentUpsert<'_>,
++) -> Result<SkillUpdateState, CentralUpdatesError> {
++    journaled_central_content_upsert_with_fs_and_progress(pool, fs, input, None).await
++}
++
++pub(crate) async fn journaled_central_content_upsert_with_fs_and_progress(
++    pool: &DbPool,
++    fs: &CentralFs,
++    input: JournaledCentralContentUpsert<'_>,
++    progress: Option<StageWriteProgressReporter>,
+ ) -> Result<SkillUpdateState, CentralUpdatesError> {
+     let existing = skills_repo::get_skill_by_id(pool, &input.skill.id).await?;
+     let local_hash = fs
+@@ -54,7 +66,8 @@ pub(crate) async fn journaled_central_content_upsert_with_fs(
+         })?;
+     let plan = content_upsert_plan(input, local_hash, existing)?;
+     let skill_id = plan.skill.id.clone();
+-    let mut outcomes = update_skills_batch(pool, fs, vec![plan], None).await;
++    let mut outcomes =
++        update_skills_batch_with_progress(pool, fs, vec![plan], None, progress).await;
+     let outcome = outcomes.pop().ok_or_else(|| {
+         CentralUpdatesError::Batch(format!(
+             "Central content upsert returned no outcome for skill '{skill_id}'."
+diff --git a/src-tauri/src/services/central_updates/fs.rs b/src-tauri/src/services/central_updates/fs.rs
+index 9e5326b1..abf9d090 100644
+--- a/src-tauri/src/services/central_updates/fs.rs
++++ b/src-tauri/src/services/central_updates/fs.rs
+@@ -5,7 +5,7 @@
+ //! orchestration code in this domain never branches on target type.
+ 
+ use sha2::{Digest, Sha256};
+-use std::collections::{HashMap, VecDeque};
++use std::collections::{HashMap, HashSet, VecDeque};
+ use std::path::{Component, Path, PathBuf};
+ use std::sync::Arc;
+ 
+@@ -22,10 +22,12 @@ use super::error::CentralUpdatesError;
+ 
+ mod batch;
+ mod operation;
++mod progress;
+ mod remote_scripts;
+ 
+ pub(crate) use batch::{CentralSkillWrite, CopyRefreshRequest};
+ pub(crate) use operation::OperationUpdateStage;
++pub(crate) use progress::{StageWriteProgress, StageWriteProgressReporter};
+ 
+ #[cfg(test)]
+ mod tests;
+@@ -160,43 +162,64 @@ pub(crate) fn ensure_remote_skill_manifest(
+ fn write_remote_skill_files(
+     files: &[RemoteSkillFile],
+     target_dir: &Path,
++    progress: Option<&StageWriteProgressReporter>,
+ ) -> Result<(), CentralUpdatesError> {
+-    std::fs::create_dir_all(target_dir).map_err(|e| {
+-        CentralUpdatesError::io(
+-            format!(
+-                "Failed to create update staging directory '{}'",
+-                target_dir.display()
+-            ),
+-            e,
+-        )
+-    })?;
+-
+-    for file in files {
+-        if !is_safe_relative_path(&file.relative_path) {
+-            return Err(CentralUpdatesError::UnsupportedRepoFilePath(
+-                file.repo_path.clone(),
+-            ));
+-        }
+-
+-        let destination = target_dir.join(&file.relative_path);
+-        let parent = destination.parent().ok_or_else(|| {
+-            CentralUpdatesError::NoParentDirectory(destination.display().to_string())
+-        })?;
+-        std::fs::create_dir_all(parent).map_err(|e| {
++    let mut progress = progress.map(StageWriteProgressReporter::writer);
++    let result = (|| {
++        let created_root = std::fs::create_dir_all(target_dir);
++        #[cfg(test)]
++        progress::observe_parent_creation(target_dir, created_root.is_ok());
++        created_root.map_err(|e| {
+             CentralUpdatesError::io(
+-                format!("Failed to create update file parent '{}'", parent.display()),
+-                e,
+-            )
+-        })?;
+-        std::fs::write(&destination, &file.bytes).map_err(|e| {
+-            CentralUpdatesError::io(
+-                format!("Failed to write update file '{}'", destination.display()),
++                format!(
++                    "Failed to create update staging directory '{}'",
++                    target_dir.display()
++                ),
+                 e,
+             )
+         })?;
+-    }
++        let mut created_parents = HashSet::from([target_dir.to_path_buf()]);
+ 
+-    Ok(())
++        for file in files {
++            if !is_safe_relative_path(&file.relative_path) {
++                return Err(CentralUpdatesError::UnsupportedRepoFilePath(
++                    file.repo_path.clone(),
++                ));
++            }
++
++            let destination = target_dir.join(&file.relative_path);
++            let parent = destination.parent().ok_or_else(|| {
++                CentralUpdatesError::NoParentDirectory(destination.display().to_string())
++            })?;
++            if !created_parents.contains(parent) {
++                let created_parent = std::fs::create_dir_all(parent);
++                #[cfg(test)]
++                progress::observe_parent_creation(parent, created_parent.is_ok());
++                created_parent.map_err(|e| {
++                    CentralUpdatesError::io(
++                        format!("Failed to create update file parent '{}'", parent.display()),
++                        e,
++                    )
++                })?;
++                created_parents.insert(parent.to_path_buf());
++            }
++            std::fs::write(&destination, &file.bytes).map_err(|e| {
++                CentralUpdatesError::io(
++                    format!("Failed to write update file '{}'", destination.display()),
++                    e,
++                )
++            })?;
++            if let Some(progress) = &mut progress {
++                progress.written(&file.relative_path, file.bytes.len() as u64);
++            }
++        }
++
++        Ok(())
++    })();
++    if let Some(progress) = &mut progress {
++        progress.flush();
++    }
++    result
+ }
+ 
+ #[cfg(test)]
+@@ -270,7 +293,7 @@ fn write_skill_dir_atomic_local(
+         })?;
+     }
+ 
+-    write_remote_skill_files(files, &temp_dir)?;
++    write_remote_skill_files(files, &temp_dir, None)?;
+ 
+     let backup_dir = parent.join(format!(".skillport-backup-{}-{}", skill_id, Uuid::new_v4()));
+     replace_target_dir(target_dir, &temp_dir, &backup_dir)
+@@ -312,7 +335,6 @@ fn hash_local_directory(root: &Path) -> Result<String, CentralUpdatesError> {
+     }
+     let mut entries = Vec::new();
+     collect_local_hash_entries(root, root, &mut entries)?;
+-    entries.sort_by(|left, right| left.0.cmp(&right.0));
+     Ok(hash_entries(entries))
+ }
+ 
+@@ -366,7 +388,6 @@ async fn hash_remote_directory(
+         }
+     }
+ 
+-    entries.sort_by(|left, right| left.0.cmp(&right.0));
+     Ok(hash_entries(entries))
+ }
+ 
+diff --git a/src-tauri/src/services/central_updates/fs/operation.rs b/src-tauri/src/services/central_updates/fs/operation.rs
+index 77dabbfd..aca78346 100644
+--- a/src-tauri/src/services/central_updates/fs/operation.rs
++++ b/src-tauri/src/services/central_updates/fs/operation.rs
+@@ -20,7 +20,7 @@ use super::remote_scripts::{
+ };
+ use super::{
+     hash_entries, hash_local_directory, posix_path, remove_path, write_remote_skill_files,
+-    CentralFs, CentralSkillWrite,
++    CentralFs, CentralSkillWrite, StageWriteProgressReporter,
+ };
+ use crate::services::central_updates::error::CentralUpdatesError;
+ 
+@@ -126,18 +126,29 @@ impl CentralFs {
+         })
+     }
+ 
++    #[cfg(test)]
+     pub(crate) async fn stage_operation_update(
+         &self,
+         manifest: &UpdateManifest,
+-        write: &CentralSkillWrite,
++        write: CentralSkillWrite,
++    ) -> Result<(), CentralUpdatesError> {
++        self.stage_operation_update_with_progress(manifest, write, None)
++            .await
++    }
++
++    async fn stage_operation_update_with_progress(
++        &self,
++        manifest: &UpdateManifest,
++        write: CentralSkillWrite,
++        progress: Option<StageWriteProgressReporter>,
+     ) -> Result<(), CentralUpdatesError> {
+         match self {
+             Self::Local => {
+                 let manifest = manifest.clone();
+-                let files = write.files.clone();
++                let files = write.files;
+                 run_blocking_fs_with(
+                     "Central update durable staging",
+-                    move || stage_local(&manifest, &files),
++                    move || stage_local(&manifest, &files, progress.as_ref()),
+                     CentralUpdatesError::task_join,
+                 )
+                 .await
+@@ -146,7 +157,7 @@ impl CentralFs {
+                 let archive = {
+                     let stage = OperationUpdateStage {
+                         manifest: manifest.clone(),
+-                        write: write.clone(),
++                        write,
+                     };
+                     run_blocking_fs_with(
+                         "Central update durable archive",
+@@ -191,6 +202,16 @@ impl CentralFs {
+         }
+     }
+ 
++    #[cfg(test)]
++    pub(crate) async fn stage_operation_updates(
++        &self,
++        stages: Vec<OperationUpdateStage>,
++        cancel: Option<&AtomicBool>,
++    ) -> Vec<OperationUpdateStageOutcome> {
++        self.stage_operation_updates_with_progress(stages, cancel, None)
++            .await
++    }
++
+     #[tracing::instrument(
+         skip_all,
+         fields(
+@@ -200,10 +221,11 @@ impl CentralFs {
+             write_chunks = stages.len().div_ceil(REMOTE_WRITE_CHUNK_SIZE)
+         )
+     )]
+-    pub(crate) async fn stage_operation_updates(
++    pub(crate) async fn stage_operation_updates_with_progress(
+         &self,
+         stages: Vec<OperationUpdateStage>,
+         cancel: Option<&AtomicBool>,
++        progress: Option<StageWriteProgressReporter>,
+     ) -> Vec<OperationUpdateStageOutcome> {
+         match self {
+             Self::Local => {
+@@ -213,8 +235,12 @@ impl CentralFs {
+                     let result = if cancel.is_some_and(|flag| flag.load(Ordering::SeqCst)) {
+                         Err(CentralUpdatesError::BatchCancelled)
+                     } else {
+-                        self.stage_operation_update(&stage.manifest, &stage.write)
+-                            .await
++                        self.stage_operation_update_with_progress(
++                            &stage.manifest,
++                            stage.write,
++                            progress.clone(),
++                        )
++                        .await
+                     };
+                     outcomes.push(OperationUpdateStageOutcome {
+                         operation_id,
+@@ -470,8 +496,15 @@ async fn stage_operation_updates_remote(
+ 
+     let mut staged = Vec::new();
+     for (parent, group) in groups {
+-        for chunk in group.chunks(REMOTE_WRITE_CHUNK_SIZE) {
+-            let chunk = chunk.to_vec();
++        let mut group = group.into_iter();
++        loop {
++            let chunk = group
++                .by_ref()
++                .take(REMOTE_WRITE_CHUNK_SIZE)
++                .collect::<Vec<_>>();
++            if chunk.is_empty() {
++                break;
++            }
+             if cancel.is_some_and(|flag| flag.load(Ordering::SeqCst)) {
+                 outcomes.extend(chunk.into_iter().map(|stage| OperationUpdateStageOutcome {
+                     operation_id: stage.manifest.operation_id,
+@@ -498,18 +531,17 @@ async fn stage_operation_updates_remote(
+                 skills = chunk.len(),
+                 payload_bytes = tracing::field::Empty
+             );
+-            let archive_chunk = chunk.clone();
+             let archive = run_blocking_fs_with(
+                 "Central update durable batch archive",
+-                move || build_operation_stage_archive(&archive_chunk),
++                move || build_operation_stage_archive(&chunk).map(|archive| (archive, chunk)),
+                 CentralUpdatesError::task_join,
+             )
+             .instrument(archive_span.clone())
+             .await;
+-            let archive = match archive {
+-                Ok(archive) => {
++            let (archive, chunk) = match archive {
++                Ok((archive, chunk)) => {
+                     archive_span.record("payload_bytes", archive.len());
+-                    archive
++                    (archive, chunk)
+                 }
+                 Err(error) => {
+                     let message = error.to_string();
+diff --git a/src-tauri/src/services/central_updates/fs/operation/helpers.rs b/src-tauri/src/services/central_updates/fs/operation/helpers.rs
+index 1ebd241e..39747278 100644
+--- a/src-tauri/src/services/central_updates/fs/operation/helpers.rs
++++ b/src-tauri/src/services/central_updates/fs/operation/helpers.rs
+@@ -3,6 +3,7 @@ use super::*;
+ pub(super) fn stage_local(
+     manifest: &UpdateManifest,
+     files: &[super::super::RemoteSkillFile],
++    progress: Option<&StageWriteProgressReporter>,
+ ) -> Result<(), CentralUpdatesError> {
+     let target = Path::new(&manifest.target);
+     let staging = Path::new(&manifest.staging);
+@@ -25,7 +26,7 @@ pub(super) fn stage_local(
+         .map_err(|error| CentralUpdatesError::io("Failed to create update parent", error))?;
+     std::fs::write(marker, manifest.operation_id.as_bytes())
+         .map_err(|error| CentralUpdatesError::io("Failed to write update marker", error))?;
+-    write_remote_skill_files(files, staging)?;
++    write_remote_skill_files(files, staging, progress)?;
+     if hash_local_directory(staging)? != manifest.new_fingerprint {
+         return Err(CentralOperationError::RecoveryCollision {
+             code: "update_staging_fingerprint",
+diff --git a/src-tauri/src/services/central_updates/fs/operation/tests.rs b/src-tauri/src/services/central_updates/fs/operation/tests.rs
+index 43a9ebac..0e556386 100644
+--- a/src-tauri/src/services/central_updates/fs/operation/tests.rs
++++ b/src-tauri/src/services/central_updates/fs/operation/tests.rs
+@@ -68,7 +68,9 @@ async fn central_operation_crash_process_helper() {
+     insert_row(&pool, &operation_id, "skill-a", &manifest).await;
+ 
+     if phase != "prepared" {
+-        fs.stage_operation_update(&manifest, &write).await.unwrap();
++        fs.stage_operation_update(&manifest, write.clone())
++            .await
++            .unwrap();
+         db::transition_fs_db_operation(&pool, &operation_id, "prepared", "fs_staged")
+             .await
+             .unwrap();
+@@ -226,7 +228,7 @@ async fn local_update_restore_and_finalize_are_idempotent() {
+         .build_operation_update_manifest("rollback-op", &old_write, Vec::new())
+         .await
+         .unwrap();
+-    fs.stage_operation_update(&old_manifest, &old_write)
++    fs.stage_operation_update(&old_manifest, old_write)
+         .await
+         .unwrap();
+     fs.swap_operation_update(&old_manifest).await.unwrap();
+@@ -243,7 +245,7 @@ async fn local_update_restore_and_finalize_are_idempotent() {
+         .build_operation_update_manifest("finalize-op", &new_write, Vec::new())
+         .await
+         .unwrap();
+-    fs.stage_operation_update(&new_manifest, &new_write)
++    fs.stage_operation_update(&new_manifest, new_write)
+         .await
+         .unwrap();
+     fs.swap_operation_update(&new_manifest).await.unwrap();
+@@ -269,7 +271,7 @@ async fn tampered_staging_fails_closed_and_keeps_row_artifacts() {
+     db::transition_fs_db_operation(&pool, "collision-op", "prepared", "fs_staged")
+         .await
+         .unwrap();
+-    fs.stage_operation_update(&manifest, &write).await.unwrap();
++    fs.stage_operation_update(&manifest, write).await.unwrap();
+     std::fs::write(
+         PathBuf::from(&manifest.staging).join("SKILL.md"),
+         b"tampered",
+diff --git a/src-tauri/src/services/central_updates/fs/tests.rs b/src-tauri/src/services/central_updates/fs/tests.rs
+index cd5a62a1..2cdaa9d1 100644
+--- a/src-tauri/src/services/central_updates/fs/tests.rs
++++ b/src-tauri/src/services/central_updates/fs/tests.rs
+@@ -357,7 +357,9 @@ async fn ssh_and_wsl_fake_runners_cover_update_stage_swap_and_phase_loss_rollbac
+         runner.push_success(&remote_hash_output(backup, &old_file_digest));
+         runner.push_success("ROLLED_BACK\n");
+ 
+-        fs.stage_operation_update(&manifest, &write).await.unwrap();
++        fs.stage_operation_update(&manifest, write.clone())
++            .await
++            .unwrap();
+         fs.swap_operation_update(&manifest).await.unwrap();
+         fs.rollback_operation_update(
+             &manifest,
+diff --git a/src-tauri/src/services/central_updates/inventory/force.rs b/src-tauri/src/services/central_updates/inventory/force.rs
+index 4ce5e016..65e6c8d6 100644
+--- a/src-tauri/src/services/central_updates/inventory/force.rs
++++ b/src-tauri/src/services/central_updates/inventory/force.rs
+@@ -85,16 +85,19 @@ pub(crate) async fn force_update_central_skills_impl(
+             }
+         }
+     }
+-    let plans = pending_updates
+-        .iter()
+-        .map(|(skill, remote, _)| SkillUpdatePlan {
+-            skill: skill.clone(),
+-            remote: remote.clone(),
+-            refresh_copies: request.refresh_copy_installations,
+-            first_upsert: false,
++    let (before_updates, plans): (Vec<_>, Vec<_>) = pending_updates
++        .into_iter()
++        .map(|(skill, remote, before)| {
++            let plan = SkillUpdatePlan {
++                skill: skill.clone(),
++                remote,
++                refresh_copies: request.refresh_copy_installations,
++                first_upsert: false,
++            };
++            ((skill, before), plan)
+         })
+-        .collect();
+-    for ((skill, _, before), outcome) in pending_updates
++        .unzip();
++    for ((skill, before), outcome) in before_updates
+         .into_iter()
+         .zip(update_skills_batch(pool, fs, plans, None).await)
+     {
+@@ -214,16 +217,19 @@ pub(crate) async fn force_mirror_central_repositories_impl(
+             }
+         }
+     }
+-    let overwrite_plans = pending_overwrites
+-        .iter()
+-        .map(|(skill, remote, _)| SkillUpdatePlan {
+-            skill: skill.clone(),
+-            remote: remote.clone(),
+-            refresh_copies: true,
+-            first_upsert: false,
++    let (before_overwrites, overwrite_plans): (Vec<_>, Vec<_>) = pending_overwrites
++        .into_iter()
++        .map(|(skill, remote, before)| {
++            let plan = SkillUpdatePlan {
++                skill: skill.clone(),
++                remote,
++                refresh_copies: true,
++                first_upsert: false,
++            };
++            ((skill, before), plan)
+         })
+-        .collect();
+-    for ((skill, _, before), outcome) in pending_overwrites
++        .unzip();
++    for ((skill, before), outcome) in before_overwrites
+         .into_iter()
+         .zip(update_skills_batch(pool, fs, overwrite_plans, None).await)
+     {
+diff --git a/src-tauri/src/services/central_updates/mod.rs b/src-tauri/src/services/central_updates/mod.rs
+index 978fc36a..855651f1 100644
+--- a/src-tauri/src/services/central_updates/mod.rs
++++ b/src-tauri/src/services/central_updates/mod.rs
+@@ -30,10 +30,11 @@ pub use types::{
+ pub(crate) use core::{
+     check_central_skill_updates_impl, get_central_skill_update_states_impl,
+     journaled_central_content_upsert, journaled_central_content_upsert_with_fs,
+-    keep_remote_missing_central_skills_impl, load_remote_skill_content, prepare_skill_updates,
+-    recover_pending_update_operation, recover_pending_update_operations,
+-    state_from_relocated_source, state_from_remote, update_central_skills_impl,
+-    update_skills_batch, JournaledCentralContentUpsert, SkillUpdatePlan,
++    journaled_central_content_upsert_with_fs_and_progress, keep_remote_missing_central_skills_impl,
++    load_remote_skill_content, prepare_skill_updates, recover_pending_update_operation,
++    recover_pending_update_operations, state_from_relocated_source, state_from_remote,
++    update_central_skills_impl, update_skills_batch, JournaledCentralContentUpsert,
++    SkillUpdatePlan,
+ };
+ pub(crate) use fs::{normalize_repo_path, CentralFs};
+ pub(crate) use repository_sync::{
+diff --git a/src-tauri/src/services/github_import/import.rs b/src-tauri/src/services/github_import/import.rs
+index 4a886255..906be8e6 100644
+--- a/src-tauri/src/services/github_import/import.rs
++++ b/src-tauri/src/services/github_import/import.rs
+@@ -513,7 +513,7 @@ pub(super) async fn import_single_staged_skill(
+     provenance: Option<&ImportProvenance>,
+     progress_state: &mut GitHubImportProgressState,
+     app: Option<&AppHandle>,
+-    emit_per_file_progress: bool,
++    report_file_progress: bool,
+ ) -> Result<ImportedGitHubSkillSummary, GithubImportError> {
+     let target_dir = match fs {
+         crate::services::central_updates::CentralFs::Local => central_root.join(&op.final_skill_id),
+@@ -529,37 +529,6 @@ pub(super) async fn import_single_staged_skill(
+                 file.repo_path.clone(),
+             ));
+         }
+-        if emit_per_file_progress {
+-            progress_state.completed_files += 1;
+-            progress_state.completed_bytes += file.byte_len as u64;
+-            emit_github_import_progress(
+-                app,
+-                GitHubImportProgressPayload {
+-                    phase: GitHubImportProgressPhase::Writing,
+-                    current_skill: Some(op.candidate.source_path.clone()),
+-                    current_path: Some(file.relative_path.clone()),
+-                    completed_files: progress_state.completed_files,
+-                    total_files: progress_state.total_files,
+-                    completed_bytes: progress_state.completed_bytes,
+-                    total_bytes: progress_state.total_bytes,
+-                },
+-            );
+-        }
+-    }
+-    if !emit_per_file_progress {
+-        progress_state.completed_files += 1;
+-        emit_github_import_progress(
+-            app,
+-            GitHubImportProgressPayload {
+-                phase: GitHubImportProgressPhase::Writing,
+-                current_skill: Some(op.candidate.source_path.clone()),
+-                current_path: Some("SKILL.md".to_string()),
+-                completed_files: progress_state.completed_files,
+-                total_files: progress_state.total_files,
+-                completed_bytes: progress_state.completed_bytes,
+-                total_bytes: progress_state.total_bytes,
+-            },
+-        );
+     }
+ 
+     if op.resolution != DuplicateResolution::Overwrite
+@@ -597,21 +566,65 @@ pub(super) async fn import_single_staged_skill(
+     };
+     let (resolved_commit_sha, content_digest) =
+         provenance_for(provenance, &op.candidate.source_path);
+-    crate::services::central_updates::journaled_central_content_upsert_with_fs(
+-        pool,
+-        fs,
+-        crate::services::central_updates::JournaledCentralContentUpsert {
+-            skill: db_skill,
+-            repo: repo.clone(),
+-            candidate,
+-            snapshot,
+-            target_dir: target_dir.clone(),
+-            resolved_commit_sha,
+-            content_digest,
+-        },
+-    )
+-    .await
+-    .map_err(map_journaled_upsert_error)?;
++    let input = crate::services::central_updates::JournaledCentralContentUpsert {
++        skill: db_skill,
++        repo: repo.clone(),
++        candidate,
++        snapshot,
++        target_dir: target_dir.clone(),
++        resolved_commit_sha,
++        content_digest,
++    };
++    if report_file_progress {
++        let (reporter, receiver) =
++            crate::services::central_updates::fs::StageWriteProgressReporter::channel();
++        let completed_files = progress_state.completed_files;
++        let completed_bytes = progress_state.completed_bytes;
++        observe_stage_write_progress(
++            crate::services::central_updates::journaled_central_content_upsert_with_fs_and_progress(
++                pool,
++                fs,
++                input,
++                Some(reporter),
++            ),
++            receiver,
++            |written| {
++                progress_state.completed_files = completed_files + written.completed_files;
++                progress_state.completed_bytes = completed_bytes + written.completed_bytes;
++                emit_github_import_progress(
++                    app,
++                    GitHubImportProgressPayload {
++                        phase: GitHubImportProgressPhase::Writing,
++                        current_skill: Some(op.candidate.source_path.clone()),
++                        current_path: written.current_path,
++                        completed_files: progress_state.completed_files,
++                        total_files: progress_state.total_files,
++                        completed_bytes: progress_state.completed_bytes,
++                        total_bytes: progress_state.total_bytes,
++                    },
++                );
++            },
++        )
++        .await
++        .map_err(map_journaled_upsert_error)?;
++    } else {
++        crate::services::central_updates::journaled_central_content_upsert_with_fs(pool, fs, input)
++            .await
++            .map_err(map_journaled_upsert_error)?;
++        progress_state.completed_files += 1;
++        emit_github_import_progress(
++            app,
++            GitHubImportProgressPayload {
++                phase: GitHubImportProgressPhase::Writing,
++                current_skill: Some(op.candidate.source_path.clone()),
++                current_path: Some("SKILL.md".to_string()),
++                completed_files: progress_state.completed_files,
++                total_files: progress_state.total_files,
++                completed_bytes: progress_state.completed_bytes,
++                total_bytes: progress_state.total_bytes,
++            },
++        );
++    }
+ 
+     Ok(ImportedGitHubSkillSummary {
+         source_path: op.candidate.source_path.clone(),
+diff --git a/src-tauri/src/services/github_import/progress.rs b/src-tauri/src/services/github_import/progress.rs
+index 087974ff..cc42b310 100644
+--- a/src-tauri/src/services/github_import/progress.rs
++++ b/src-tauri/src/services/github_import/progress.rs
+@@ -1,4 +1,5 @@
+ use super::*;
++use crate::services::central_updates::fs::StageWriteProgress;
+ 
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub(super) struct SnapshotSourceFile {
+@@ -46,7 +47,42 @@ pub(super) fn emit_github_import_progress(
+     app: Option<&AppHandle>,
+     payload: GitHubImportProgressPayload,
+ ) {
++    #[cfg(test)]
++    tests::observe(&payload);
+     if let Some(app) = app {
+         let _ = app.emit("github-import:progress", payload);
+     }
+ }
++
++/// Samples the retained worker value on the async side. A closed writer does
++/// not change the service's transaction/finalization completion boundary.
++pub(super) async fn observe_stage_write_progress<F: std::future::Future>(
++    future: F,
++    mut receiver: tokio::sync::watch::Receiver<StageWriteProgress>,
++    mut on_progress: impl FnMut(StageWriteProgress),
++) -> F::Output {
++    tokio::pin!(future);
++    let period = TokioDuration::from_millis(100);
++    let mut interval = tokio::time::interval_at(Instant::now() + period, period);
++    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
++    let mut last_progress = StageWriteProgress::default();
++    loop {
++        tokio::select! {
++            result = &mut future => {
++                let progress = receiver.borrow_and_update().clone();
++                on_progress(progress);
++                return result;
++            }
++            _ = interval.tick() => {
++                let progress = receiver.borrow_and_update().clone();
++                if progress != last_progress {
++                    on_progress(progress.clone());
++                    last_progress = progress;
++                }
++            }
++        }
++    }
++}
++
++#[cfg(test)]
++mod tests;
+diff --git a/src-tauri/src/services/github_import/snapshot.rs b/src-tauri/src/services/github_import/snapshot.rs
+index 3dee47ba..722b29e0 100644
+--- a/src-tauri/src/services/github_import/snapshot.rs
++++ b/src-tauri/src/services/github_import/snapshot.rs
+@@ -146,10 +146,23 @@ pub(crate) fn candidate_content_digest_from_snapshot(
+     snapshot: &GitHubRepoSnapshot,
+     source_path: &str,
+ ) -> Result<String, GithubImportError> {
+-    candidate_content_digest_from_repository_files(
+-        &snapshot_files_from_local(snapshot),
+-        source_path,
+-    )
++    let entries = snapshot
++        .files
++        .iter()
++        .filter_map(|(repo_path, bytes)| {
++            repo_file_relative_to_source(repo_path, source_path).map(|path| DigestFileEntry {
++                path,
++                byte_len: bytes.len() as u64,
++                sha256: file_sha256(bytes),
++            })
++        })
++        .collect::<Vec<_>>();
++    if !entries.iter().any(|entry| entry.path == "SKILL.md") {
++        return Err(GithubImportError::PreviewFileManifestIncomplete(
++            source_path.to_string(),
++        ));
++    }
++    Ok(aggregate_digest(SKILL_CONTENT_DIGEST_DOMAIN, &entries))
+ }
+ 
+ pub(super) fn candidate_content_digest_from_repository_files(
+@@ -202,6 +215,58 @@ fn decode_file_digest(value: &str) -> Result<[u8; 32], GithubImportError> {
+     Ok(raw)
+ }
+ 
++#[cfg(test)]
++mod digest_compatibility_tests {
++    use super::*;
++
++    #[test]
++    fn selected_subtree_digest_matches_the_complete_inventory_algorithm() {
++        let mut snapshot = GitHubRepoSnapshot {
++            files: HashMap::from([
++                ("SKILL.md".to_string(), b"root".to_vec()),
++                ("skills/a/SKILL.md".to_string(), b"nested".to_vec()),
++                ("skills/a/empty".to_string(), Vec::new()),
++                ("skills/a/assets/图.bin".to_string(), vec![0, 255, 13, 10]),
++                ("skills/a.ext/SKILL.md".to_string(), b"unrelated".to_vec()),
++                ("skills/b/large.bin".to_string(), vec![127; 4_096]),
++            ]),
++        };
++        for source in [".", "skills/a", "/skills/a/", "skills/a.ext"] {
++            assert_eq!(
++                candidate_content_digest_from_snapshot(&snapshot, source).unwrap(),
++                candidate_content_digest_from_repository_files(
++                    &snapshot_files_from_local(&snapshot),
++                    source
++                )
++                .unwrap(),
++            );
++        }
++        let selected = candidate_content_digest_from_snapshot(&snapshot, "skills/a").unwrap();
++        snapshot.files.get_mut("skills/b/large.bin").unwrap()[0] = 3;
++        assert_eq!(
++            candidate_content_digest_from_snapshot(&snapshot, "skills/a").unwrap(),
++            selected
++        );
++        snapshot.files.remove("skills/a/SKILL.md");
++        snapshot
++            .files
++            .insert("skills/a/skill.md".to_string(), b"wrong case".to_vec());
++        for source in ["skills/a", "missing"] {
++            let new = candidate_content_digest_from_snapshot(&snapshot, source).unwrap_err();
++            let old = candidate_content_digest_from_repository_files(
++                &snapshot_files_from_local(&snapshot),
++                source,
++            )
++            .unwrap_err();
++            assert!(matches!(
++                new,
++                GithubImportError::PreviewFileManifestIncomplete(_)
++            ));
++            assert_eq!(new.to_string(), old.to_string());
++        }
++    }
++}
++
+ /// Recompute the repository snapshot digest from the retained storage and
+ /// compare it with the value registered at preview time.
+ ///

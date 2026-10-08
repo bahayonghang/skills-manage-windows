@@ -1,0 +1,829 @@
+{
+  "logs": {
+    ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-formal-20261008-073116.log": {
+      "sha256": "c53f6a191c53c61eadbcb0ef76f98005e41fa656eadaf5a279fc1a4900162259",
+      "metadata": {
+        "app_handle": false,
+        "files": [
+          13016
+        ],
+        "mode": "stage",
+        "network": "not_requested",
+        "os_cache": "not_cleared",
+        "phase_time": "inclusive wrapper await wall ms",
+        "profile": "release",
+        "samples": 7,
+        "schema": 1,
+        "security_scanner": "not_modified"
+      },
+      "test_status": "PASS",
+      "run_identity": {
+        "captured_utc": "2026-10-08T12:31:16.8602672Z",
+        "binary": ".git/skill-small-files-tools/benchmark-after.exe",
+        "binary_sha256": "41293FD91D399D680488B43AB1CCE547204776864FDDE309C32F1C07D76A3411",
+        "source_head_at_invocation": "063c8d3236197a06ff17083c28a9738487c07510",
+        "current_harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923",
+        "files": "13016",
+        "samples": 7,
+        "mode": "stage",
+        "identity_note": "Binary source and actual harness identity must match the frozen build receipt. Current worktree fields are invocation context only."
+      }
+    }
+  },
+  "groups": [
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-formal-20261008-073116.log",
+      "files": 13016,
+      "operation": "component_delete_finalize",
+      "observations": 7,
+      "samples": 7,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        15699.263,
+        27673.1696,
+        12968.955899999999,
+        15048.4547,
+        16935.957599999998,
+        16988.324200000003,
+        10737.775599999999
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 15699.263,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_finalize",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 15699.2523,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        },
+        {
+          "elapsed_ms": 27673.1696,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_finalize",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 27673.1619,
+              "calls": 1
+            }
+          },
+          "sample": 1
+        },
+        {
+          "elapsed_ms": 12968.955899999999,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_finalize",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 12968.9497,
+              "calls": 1
+            }
+          },
+          "sample": 2
+        },
+        {
+          "elapsed_ms": 15048.4547,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_finalize",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 15048.4476,
+              "calls": 1
+            }
+          },
+          "sample": 3
+        },
+        {
+          "elapsed_ms": 16935.957599999998,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_finalize",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 16935.9493,
+              "calls": 1
+            }
+          },
+          "sample": 4
+        },
+        {
+          "elapsed_ms": 16988.324200000003,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_finalize",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 16988.3169,
+              "calls": 1
+            }
+          },
+          "sample": 5
+        },
+        {
+          "elapsed_ms": 10737.775599999999,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_finalize",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 10737.768300000002,
+              "calls": 1
+            }
+          },
+          "sample": 6
+        }
+      ],
+      "median_ms": 15699.263,
+      "min_ms": 10737.775599999999,
+      "max_ms": 27673.1696,
+      "phase_median_ms": {
+        "Central delete finalize": 15699.2523
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        15699.263
+      ],
+      "samples_1_to_6_ms": [
+        27673.1696,
+        12968.955899999999,
+        15048.4547,
+        16935.957599999998,
+        16988.324200000003,
+        10737.775599999999
+      ]
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-formal-20261008-073116.log",
+      "files": 13016,
+      "operation": "component_delete_finalize_repeat",
+      "observations": 7,
+      "samples": 7,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        0.1485,
+        0.15100000000000002,
+        0.1763,
+        0.1186,
+        0.1313,
+        0.1328,
+        0.0964
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 0.1485,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_finalize_repeat",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 0.1421,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        },
+        {
+          "elapsed_ms": 0.15100000000000002,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_finalize_repeat",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 0.1463,
+              "calls": 1
+            }
+          },
+          "sample": 1
+        },
+        {
+          "elapsed_ms": 0.1763,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_finalize_repeat",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 0.1673,
+              "calls": 1
+            }
+          },
+          "sample": 2
+        },
+        {
+          "elapsed_ms": 0.1186,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_finalize_repeat",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 0.1141,
+              "calls": 1
+            }
+          },
+          "sample": 3
+        },
+        {
+          "elapsed_ms": 0.1313,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_finalize_repeat",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 0.1252,
+              "calls": 1
+            }
+          },
+          "sample": 4
+        },
+        {
+          "elapsed_ms": 0.1328,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_finalize_repeat",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 0.126,
+              "calls": 1
+            }
+          },
+          "sample": 5
+        },
+        {
+          "elapsed_ms": 0.0964,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_finalize_repeat",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 0.09040000000000001,
+              "calls": 1
+            }
+          },
+          "sample": 6
+        }
+      ],
+      "median_ms": 0.1328,
+      "min_ms": 0.0964,
+      "max_ms": 0.1763,
+      "phase_median_ms": {
+        "Central delete finalize": 0.126
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        0.1485
+      ],
+      "samples_1_to_6_ms": [
+        0.15100000000000002,
+        0.1763,
+        0.1186,
+        0.1313,
+        0.1328,
+        0.0964
+      ]
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-formal-20261008-073116.log",
+      "files": 13016,
+      "operation": "component_delete_manifest_fingerprint",
+      "observations": 7,
+      "samples": 7,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        1826.8610999999999,
+        3263.2218000000003,
+        1896.4024,
+        5404.1935,
+        3983.3990999999996,
+        4112.9703,
+        2059.7464
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 1826.8610999999999,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_manifest_fingerprint",
+          "phases": {
+            "Central operation fingerprint": {
+              "await_ms": 1826.822,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        },
+        {
+          "elapsed_ms": 3263.2218000000003,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_manifest_fingerprint",
+          "phases": {
+            "Central operation fingerprint": {
+              "await_ms": 3263.197,
+              "calls": 1
+            }
+          },
+          "sample": 1
+        },
+        {
+          "elapsed_ms": 1896.4024,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_manifest_fingerprint",
+          "phases": {
+            "Central operation fingerprint": {
+              "await_ms": 1896.3832,
+              "calls": 1
+            }
+          },
+          "sample": 2
+        },
+        {
+          "elapsed_ms": 5404.1935,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_manifest_fingerprint",
+          "phases": {
+            "Central operation fingerprint": {
+              "await_ms": 5404.1736,
+              "calls": 1
+            }
+          },
+          "sample": 3
+        },
+        {
+          "elapsed_ms": 3983.3990999999996,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_manifest_fingerprint",
+          "phases": {
+            "Central operation fingerprint": {
+              "await_ms": 3983.3786,
+              "calls": 1
+            }
+          },
+          "sample": 4
+        },
+        {
+          "elapsed_ms": 4112.9703,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_manifest_fingerprint",
+          "phases": {
+            "Central operation fingerprint": {
+              "await_ms": 4112.9481,
+              "calls": 1
+            }
+          },
+          "sample": 5
+        },
+        {
+          "elapsed_ms": 2059.7464,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_manifest_fingerprint",
+          "phases": {
+            "Central operation fingerprint": {
+              "await_ms": 2059.7298,
+              "calls": 1
+            }
+          },
+          "sample": 6
+        }
+      ],
+      "median_ms": 3263.2218000000003,
+      "min_ms": 1826.8610999999999,
+      "max_ms": 5404.1935,
+      "phase_median_ms": {
+        "Central operation fingerprint": 3263.197
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        1826.8610999999999
+      ],
+      "samples_1_to_6_ms": [
+        3263.2218000000003,
+        1896.4024,
+        5404.1935,
+        3983.3990999999996,
+        4112.9703,
+        2059.7464
+      ]
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-formal-20261008-073116.log",
+      "files": 13016,
+      "operation": "component_delete_stage",
+      "observations": 7,
+      "samples": 7,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        26.559800000000003,
+        29.5263,
+        27.979799999999997,
+        38.0778,
+        214.2064,
+        29.8581,
+        23.6574
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 26.559800000000003,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_stage",
+          "phases": {
+            "Central delete staging": {
+              "await_ms": 26.535300000000003,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        },
+        {
+          "elapsed_ms": 29.5263,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_stage",
+          "phases": {
+            "Central delete staging": {
+              "await_ms": 29.5155,
+              "calls": 1
+            }
+          },
+          "sample": 1
+        },
+        {
+          "elapsed_ms": 27.979799999999997,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_stage",
+          "phases": {
+            "Central delete staging": {
+              "await_ms": 27.973000000000003,
+              "calls": 1
+            }
+          },
+          "sample": 2
+        },
+        {
+          "elapsed_ms": 38.0778,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_stage",
+          "phases": {
+            "Central delete staging": {
+              "await_ms": 38.0699,
+              "calls": 1
+            }
+          },
+          "sample": 3
+        },
+        {
+          "elapsed_ms": 214.2064,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_stage",
+          "phases": {
+            "Central delete staging": {
+              "await_ms": 214.1978,
+              "calls": 1
+            }
+          },
+          "sample": 4
+        },
+        {
+          "elapsed_ms": 29.8581,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_stage",
+          "phases": {
+            "Central delete staging": {
+              "await_ms": 29.848699999999997,
+              "calls": 1
+            }
+          },
+          "sample": 5
+        },
+        {
+          "elapsed_ms": 23.6574,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_delete_stage",
+          "phases": {
+            "Central delete staging": {
+              "await_ms": 23.650399999999998,
+              "calls": 1
+            }
+          },
+          "sample": 6
+        }
+      ],
+      "median_ms": 29.5263,
+      "min_ms": 23.6574,
+      "max_ms": 214.2064,
+      "phase_median_ms": {
+        "Central delete staging": 29.5155
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        26.559800000000003
+      ],
+      "samples_1_to_6_ms": [
+        29.5263,
+        27.979799999999997,
+        38.0778,
+        214.2064,
+        29.8581,
+        23.6574
+      ]
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-formal-20261008-073116.log",
+      "files": 13016,
+      "operation": "component_durable_stage",
+      "observations": 7,
+      "samples": 7,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        14606.0509,
+        18749.721999999998,
+        19943.7794,
+        17237.903,
+        17281.426,
+        18113.9783,
+        16099.5364
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 14606.0509,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_durable_stage",
+          "phases": {
+            "Central update durable staging": {
+              "await_ms": 14605.9599,
+              "calls": 1
+            },
+            "durable_stage": {
+              "await_ms": 14606.030999999999,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        },
+        {
+          "elapsed_ms": 18749.721999999998,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_durable_stage",
+          "phases": {
+            "Central update durable staging": {
+              "await_ms": 18749.6931,
+              "calls": 1
+            },
+            "durable_stage": {
+              "await_ms": 18749.7149,
+              "calls": 1
+            }
+          },
+          "sample": 1
+        },
+        {
+          "elapsed_ms": 19943.7794,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_durable_stage",
+          "phases": {
+            "Central update durable staging": {
+              "await_ms": 19943.7565,
+              "calls": 1
+            },
+            "durable_stage": {
+              "await_ms": 19943.772,
+              "calls": 1
+            }
+          },
+          "sample": 2
+        },
+        {
+          "elapsed_ms": 17237.903,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_durable_stage",
+          "phases": {
+            "Central update durable staging": {
+              "await_ms": 17237.8751,
+              "calls": 1
+            },
+            "durable_stage": {
+              "await_ms": 17237.8957,
+              "calls": 1
+            }
+          },
+          "sample": 3
+        },
+        {
+          "elapsed_ms": 17281.426,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_durable_stage",
+          "phases": {
+            "Central update durable staging": {
+              "await_ms": 17281.4005,
+              "calls": 1
+            },
+            "durable_stage": {
+              "await_ms": 17281.4191,
+              "calls": 1
+            }
+          },
+          "sample": 4
+        },
+        {
+          "elapsed_ms": 18113.9783,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_durable_stage",
+          "phases": {
+            "Central update durable staging": {
+              "await_ms": 18113.9557,
+              "calls": 1
+            },
+            "durable_stage": {
+              "await_ms": 18113.9705,
+              "calls": 1
+            }
+          },
+          "sample": 5
+        },
+        {
+          "elapsed_ms": 16099.5364,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_durable_stage",
+          "phases": {
+            "Central update durable staging": {
+              "await_ms": 16099.511400000001,
+              "calls": 1
+            },
+            "durable_stage": {
+              "await_ms": 16099.529400000001,
+              "calls": 1
+            }
+          },
+          "sample": 6
+        }
+      ],
+      "median_ms": 17281.426,
+      "min_ms": 14606.0509,
+      "max_ms": 19943.7794,
+      "phase_median_ms": {
+        "Central update durable staging": 17281.4005,
+        "durable_stage": 17281.4191
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        14606.0509
+      ],
+      "samples_1_to_6_ms": [
+        18749.721999999998,
+        19943.7794,
+        17237.903,
+        17281.426,
+        18113.9783,
+        16099.5364
+      ]
+    }
+  ]
+}

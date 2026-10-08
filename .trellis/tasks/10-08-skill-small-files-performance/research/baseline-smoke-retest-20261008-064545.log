@@ -1,0 +1,8 @@
+   Compiling skillport v1.0.2 (D:\Documents\Code\Agents\skills-manage-windows\src-tauri)
+    Finished `release` profile [optimized] target(s) in 2m 09s
+     Running unittests src\lib.rs (src-tauri\target\release\deps\skillport_lib-db9d63c9887dde3a.exe)
+
+running 1 test
+test services::central_updates::core::performance_benchmark::small_files_service_baseline ... BENCH_META {"app_handle":false,"files":[13016],"network":"not_requested","os_cache":"not_cleared","phase_time":"inclusive wrapper await wall ms","profile":"release","samples":1,"schema":1,"security_scanner":"not_modified"}
+BENCH {"elapsed_ms":11.0224,"fixture":{"bytes":13327429,"directories":206,"files":13016},"operation":"component_snapshot_collect_clone","phases":{},"sample":0}
+BENCH {"elapsed_ms":12.7005,"fixture":{"bytes":13327429,"directories":206,"files":13016},"operation":"component_snapshot_hash_manifest","phases":{},"sample":0}

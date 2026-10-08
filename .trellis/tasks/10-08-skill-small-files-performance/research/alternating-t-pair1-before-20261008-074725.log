@@ -1,0 +1,12 @@
+
+running 1 test
+test services::central_updates::core::performance_benchmark::small_files_service_baseline ... BENCH_META {"app_handle":false,"files":[13016],"mode":"stage","network":"not_requested","os_cache":"not_cleared","phase_time":"inclusive wrapper await wall ms","profile":"release","samples":1,"schema":1,"security_scanner":"not_modified"}
+BENCH {"elapsed_ms":19735.7281,"fixture":{"bytes":13327429,"directories":206,"files":13016},"operation":"component_durable_stage","phases":{"Central update durable staging":{"await_ms":19722.0924,"calls":1},"durable_stage":{"await_ms":19735.7136,"calls":1}},"sample":0}
+BENCH {"elapsed_ms":4039.3414,"fixture":{"bytes":13327429,"directories":206,"files":13016},"operation":"component_delete_manifest_fingerprint","phases":{"Central operation fingerprint":{"await_ms":4039.3141000000005,"calls":1}},"sample":0}
+BENCH {"elapsed_ms":21.0831,"fixture":{"bytes":13327429,"directories":206,"files":13016},"operation":"component_delete_stage","phases":{"Central delete staging":{"await_ms":21.063599999999997,"calls":1}},"sample":0}
+BENCH {"elapsed_ms":15513.131,"fixture":{"bytes":13327429,"directories":206,"files":13016},"operation":"component_delete_finalize","phases":{"Central delete finalize":{"await_ms":15513.122299999999,"calls":1}},"sample":0}
+BENCH {"elapsed_ms":0.1694,"fixture":{"bytes":13327429,"directories":206,"files":13016},"operation":"component_delete_finalize_repeat","phases":{"Central delete finalize":{"await_ms":0.1564,"calls":1}},"sample":0}
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1555 filtered out; finished in 42.91s
+

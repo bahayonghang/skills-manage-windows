@@ -1,0 +1,15 @@
+{
+  "frozen_binary": ".git/skill-small-files-tools/benchmark-before-targeted.exe",
+  "binary_sha256": "46A19EC66B300DF79D7345724DB5CA2440160AC29A23202655965A41088AD36F",
+  "build_identity_receipt": "baseline-targeted-build-identity.json",
+  "filter": "pinned_snapshot_source_progress_probe",
+  "profile": "release",
+  "files": 13016,
+  "bytes": 13327423,
+  "source_calls": 13018,
+  "app_handle": "none",
+  "test_status": "PASS",
+  "ipc_delivery": "NOT_RUN",
+  "native_webview": "NOT_RUN",
+  "raw_log_sha256": "C25AE32A71404779CFA749DAF165CFD8B0B3E88D2660A3C38A8C281842F55847"
+}

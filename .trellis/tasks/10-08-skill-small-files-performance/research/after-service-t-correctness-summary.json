@@ -1,0 +1,1242 @@
+{
+  "logs": {
+    ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-t-correctness-20261008-115038.log": {
+      "sha256": "cb60e1891a9375fa183b0c7bce8ecfd12b72aac698350f7c82612829c0863cb3",
+      "metadata": {
+        "app_handle": false,
+        "files": [
+          13016
+        ],
+        "mode": "service",
+        "network": "not_requested",
+        "os_cache": "not_cleared",
+        "phase_time": "inclusive wrapper await wall ms",
+        "profile": "release",
+        "samples": 1,
+        "schema": 1,
+        "security_scanner": "not_modified"
+      },
+      "test_status": "PASS",
+      "run_identity": {
+        "captured_utc": "2026-10-08T16:50:38.1950891Z",
+        "binary": ".git/skill-small-files-tools/benchmark-after.exe",
+        "binary_sha256": "41293FD91D399D680488B43AB1CCE547204776864FDDE309C32F1C07D76A3411",
+        "source_head_at_invocation": "063c8d3236197a06ff17083c28a9738487c07510",
+        "current_harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923",
+        "files": "13016",
+        "samples": 1,
+        "mode": "service",
+        "identity_note": "Binary source and actual harness identity must match the frozen build receipt. Current worktree fields are invocation context only.",
+        "usage": "correctness_only",
+        "test_status": "PASS",
+        "raw_log_sha256": "CB60E1891A9375FA183B0C7BCE8ECFD12B72AAC698350F7C82612829C0863CB3",
+        "ci_concurrency": "Canonical just ci allowed concurrently; actual IO/load not isolated. Timing is excluded from all performance budgets.",
+        "frozen_build_identity_receipt": "after-build-identity.json"
+      }
+    }
+  },
+  "groups": [
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-t-correctness-20261008-115038.log",
+      "files": 13016,
+      "operation": "check_unchanged",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        1345.2438
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 1345.2438,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "check_unchanged",
+          "phases": {
+            "central skill hashing": {
+              "await_ms": 1276.1282,
+              "calls": 1
+            },
+            "local_or_remote_hash": {
+              "await_ms": 1276.1335000000001,
+              "calls": 1
+            },
+            "snapshot_download": {
+              "await_ms": 0.0413,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 1345.2438,
+      "min_ms": 1345.2438,
+      "max_ms": 1345.2438,
+      "phase_median_ms": {
+        "central skill hashing": 1276.1282,
+        "local_or_remote_hash": 1276.1335000000001,
+        "snapshot_download": 0.0413
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        1345.2438
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-t-correctness-20261008-115038.log",
+      "files": 13016,
+      "operation": "component_snapshot_collect_clone",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        10.8615
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 10.8615,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_snapshot_collect_clone",
+          "phases": {},
+          "sample": 0
+        }
+      ],
+      "median_ms": 10.8615,
+      "min_ms": 10.8615,
+      "max_ms": 10.8615,
+      "phase_median_ms": {},
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        10.8615
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-t-correctness-20261008-115038.log",
+      "files": 13016,
+      "operation": "component_snapshot_hash_manifest",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        12.443
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 12.443,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "component_snapshot_hash_manifest",
+          "phases": {},
+          "sample": 0
+        }
+      ],
+      "median_ms": 12.443,
+      "min_ms": 12.443,
+      "max_ms": 12.443,
+      "phase_median_ms": {},
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        12.443
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-t-correctness-20261008-115038.log",
+      "files": 13016,
+      "operation": "delete_finalize_repeat",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        0.23299999999999998
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 0.23299999999999998,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "delete_finalize_repeat",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 0.2285,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 0.23299999999999998,
+      "min_ms": 0.23299999999999998,
+      "max_ms": 0.23299999999999998,
+      "phase_median_ms": {
+        "Central delete finalize": 0.2285
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        0.23299999999999998
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-t-correctness-20261008-115038.log",
+      "files": 13016,
+      "operation": "delete_retain_3_copy",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        10448.3127
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 10448.3127,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "delete_retain_3_copy",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 7886.0391,
+              "calls": 1
+            },
+            "Central delete staging": {
+              "await_ms": 25.9879,
+              "calls": 1
+            },
+            "Central operation fingerprint": {
+              "await_ms": 2520.6124,
+              "calls": 1
+            },
+            "acquire Central mutation lock": {
+              "await_ms": 0.4616,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 10448.3127,
+      "min_ms": 10448.3127,
+      "max_ms": 10448.3127,
+      "phase_median_ms": {
+        "Central delete finalize": 7886.0391,
+        "Central delete staging": 25.9879,
+        "Central operation fingerprint": 2520.6124,
+        "acquire Central mutation lock": 0.4616
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        10448.3127
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-t-correctness-20261008-115038.log",
+      "files": 13016,
+      "operation": "import_first",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        9332.0951
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 9332.0951,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "import_first",
+          "phases": {
+            "Central update durable finalize": {
+              "await_ms": 1420.7213000000002,
+              "calls": 1
+            },
+            "Central update durable staging": {
+              "await_ms": 7174.3625,
+              "calls": 1
+            },
+            "Central update durable swap": {
+              "await_ms": 680.4915,
+              "calls": 1
+            },
+            "acquire Central mutation lock": {
+              "await_ms": 1.3447,
+              "calls": 1
+            },
+            "central skill hashing": {
+              "await_ms": 0.883,
+              "calls": 1
+            },
+            "copy install batch refresh": {
+              "await_ms": 0.0445,
+              "calls": 1
+            },
+            "copy_refresh": {
+              "await_ms": 0.0572,
+              "calls": 1
+            },
+            "db_persist": {
+              "await_ms": 15.0282,
+              "calls": 1
+            },
+            "durable_stage": {
+              "await_ms": 7174.3901000000005,
+              "calls": 1
+            },
+            "local_or_remote_hash": {
+              "await_ms": 0.9114,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 9332.0951,
+      "min_ms": 9332.0951,
+      "max_ms": 9332.0951,
+      "phase_median_ms": {
+        "Central update durable finalize": 1420.7213000000002,
+        "Central update durable staging": 7174.3625,
+        "Central update durable swap": 680.4915,
+        "acquire Central mutation lock": 1.3447,
+        "central skill hashing": 0.883,
+        "copy install batch refresh": 0.0445,
+        "copy_refresh": 0.0572,
+        "db_persist": 15.0282,
+        "durable_stage": 7174.3901000000005,
+        "local_or_remote_hash": 0.9114
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        9332.0951
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-t-correctness-20261008-115038.log",
+      "files": 13016,
+      "operation": "import_overwrite",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        20491.5837
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 20491.5837,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "import_overwrite",
+          "phases": {
+            "Central update durable finalize": {
+              "await_ms": 8610.2319,
+              "calls": 1
+            },
+            "Central update durable staging": {
+              "await_ms": 8117.3088,
+              "calls": 1
+            },
+            "Central update durable swap": {
+              "await_ms": 2140.3053999999997,
+              "calls": 1
+            },
+            "acquire Central mutation lock": {
+              "await_ms": 0.30820000000000003,
+              "calls": 1
+            },
+            "central skill hashing": {
+              "await_ms": 1570.1604000000002,
+              "calls": 2
+            },
+            "copy install batch refresh": {
+              "await_ms": 0.0488,
+              "calls": 1
+            },
+            "copy_refresh": {
+              "await_ms": 0.055099999999999996,
+              "calls": 1
+            },
+            "db_persist": {
+              "await_ms": 875.2345,
+              "calls": 1
+            },
+            "durable_stage": {
+              "await_ms": 8117.317800000001,
+              "calls": 1
+            },
+            "local_or_remote_hash": {
+              "await_ms": 1570.17,
+              "calls": 2
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 20491.5837,
+      "min_ms": 20491.5837,
+      "max_ms": 20491.5837,
+      "phase_median_ms": {
+        "Central update durable finalize": 8610.2319,
+        "Central update durable staging": 8117.3088,
+        "Central update durable swap": 2140.3053999999997,
+        "acquire Central mutation lock": 0.30820000000000003,
+        "central skill hashing": 1570.1604000000002,
+        "copy install batch refresh": 0.0488,
+        "copy_refresh": 0.055099999999999996,
+        "db_persist": 875.2345,
+        "durable_stage": 8117.317800000001,
+        "local_or_remote_hash": 1570.17
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        20491.5837
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-t-correctness-20261008-115038.log",
+      "files": 13016,
+      "operation": "leftover_cleanup_3_copy",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        13109.8743
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 13109.8743,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "leftover_cleanup_3_copy",
+          "phases": {
+            "acquire Central mutation lock": {
+              "await_ms": 0.5293,
+              "calls": 1
+            },
+            "skill uninstall": {
+              "await_ms": 13091.551000000001,
+              "calls": 3
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 13109.8743,
+      "min_ms": 13109.8743,
+      "max_ms": 13109.8743,
+      "phase_median_ms": {
+        "acquire Central mutation lock": 0.5293,
+        "skill uninstall": 13091.551000000001
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        13109.8743
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-t-correctness-20261008-115038.log",
+      "files": 13016,
+      "operation": "leftover_cleanup_repeat",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        4.8715
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 4.8715,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "leftover_cleanup_repeat",
+          "phases": {
+            "acquire Central mutation lock": {
+              "await_ms": 0.3968,
+              "calls": 1
+            },
+            "skill uninstall": {
+              "await_ms": 0.20149999999999998,
+              "calls": 3
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 4.8715,
+      "min_ms": 4.8715,
+      "max_ms": 4.8715,
+      "phase_median_ms": {
+        "acquire Central mutation lock": 0.3968,
+        "skill uninstall": 0.20149999999999998
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        4.8715
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-t-correctness-20261008-115038.log",
+      "files": 13016,
+      "operation": "recovery_repeat",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        0.6748999999999999
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 0.6748999999999999,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "recovery_repeat",
+          "phases": {
+            "acquire Central mutation lock": {
+              "await_ms": 0.323,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 0.6748999999999999,
+      "min_ms": 0.6748999999999999,
+      "max_ms": 0.6748999999999999,
+      "phase_median_ms": {
+        "acquire Central mutation lock": 0.323
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        0.6748999999999999
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-t-correctness-20261008-115038.log",
+      "files": 13016,
+      "operation": "snapshot_digest",
+      "observations": 6,
+      "samples": 1,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        11.4063,
+        11.4483,
+        10.9326,
+        9.3574,
+        11.206900000000001,
+        11.3067
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 11.4063,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "snapshot_digest",
+          "phases": {},
+          "sample": 0
+        },
+        {
+          "elapsed_ms": 11.4483,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "snapshot_digest",
+          "phases": {},
+          "sample": 0
+        },
+        {
+          "elapsed_ms": 10.9326,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "snapshot_digest",
+          "phases": {},
+          "sample": 0
+        },
+        {
+          "elapsed_ms": 9.3574,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "snapshot_digest",
+          "phases": {},
+          "sample": 0
+        },
+        {
+          "elapsed_ms": 11.206900000000001,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "snapshot_digest",
+          "phases": {},
+          "sample": 0
+        },
+        {
+          "elapsed_ms": 11.3067,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "snapshot_digest",
+          "phases": {},
+          "sample": 0
+        }
+      ],
+      "median_ms": 11.2568,
+      "min_ms": 9.3574,
+      "max_ms": 11.4483,
+      "phase_median_ms": {},
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        11.4063,
+        11.4483,
+        10.9326,
+        9.3574,
+        11.206900000000001,
+        11.3067
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-t-correctness-20261008-115038.log",
+      "files": 13016,
+      "operation": "update_1_file_0_copy",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        18114.3506
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 18114.3506,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "update_1_file_0_copy",
+          "phases": {
+            "Central update durable finalize": {
+              "await_ms": 6911.0589,
+              "calls": 1
+            },
+            "Central update durable staging": {
+              "await_ms": 7125.267199999999,
+              "calls": 1
+            },
+            "Central update durable swap": {
+              "await_ms": 1899.0887,
+              "calls": 1
+            },
+            "acquire Central mutation lock": {
+              "await_ms": 0.3864,
+              "calls": 1
+            },
+            "central skill hashing": {
+              "await_ms": 2090.192,
+              "calls": 2
+            },
+            "copy install batch refresh": {
+              "await_ms": 0.0366,
+              "calls": 1
+            },
+            "copy_refresh": {
+              "await_ms": 0.0419,
+              "calls": 1
+            },
+            "db_persist": {
+              "await_ms": 982.8615000000001,
+              "calls": 1
+            },
+            "durable_stage": {
+              "await_ms": 7125.2766,
+              "calls": 1
+            },
+            "local_or_remote_hash": {
+              "await_ms": 2090.2027,
+              "calls": 2
+            },
+            "snapshot_download": {
+              "await_ms": 0.0125,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 18114.3506,
+      "min_ms": 18114.3506,
+      "max_ms": 18114.3506,
+      "phase_median_ms": {
+        "Central update durable finalize": 6911.0589,
+        "Central update durable staging": 7125.267199999999,
+        "Central update durable swap": 1899.0887,
+        "acquire Central mutation lock": 0.3864,
+        "central skill hashing": 2090.192,
+        "copy install batch refresh": 0.0366,
+        "copy_refresh": 0.0419,
+        "db_persist": 982.8615000000001,
+        "durable_stage": 7125.2766,
+        "local_or_remote_hash": 2090.2027,
+        "snapshot_download": 0.0125
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        18114.3506
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-t-correctness-20261008-115038.log",
+      "files": 13016,
+      "operation": "update_1_percent_0_copy",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        20244.887899999998
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 20244.887899999998,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "update_1_percent_0_copy",
+          "phases": {
+            "Central update durable finalize": {
+              "await_ms": 9178.4824,
+              "calls": 1
+            },
+            "Central update durable staging": {
+              "await_ms": 7166.5841,
+              "calls": 1
+            },
+            "Central update durable swap": {
+              "await_ms": 1856.8265,
+              "calls": 1
+            },
+            "acquire Central mutation lock": {
+              "await_ms": 0.2948,
+              "calls": 1
+            },
+            "central skill hashing": {
+              "await_ms": 1958.2635999999998,
+              "calls": 2
+            },
+            "copy install batch refresh": {
+              "await_ms": 0.022500000000000003,
+              "calls": 1
+            },
+            "copy_refresh": {
+              "await_ms": 0.028399999999999998,
+              "calls": 1
+            },
+            "db_persist": {
+              "await_ms": 877.2112,
+              "calls": 1
+            },
+            "durable_stage": {
+              "await_ms": 7166.6017999999995,
+              "calls": 1
+            },
+            "local_or_remote_hash": {
+              "await_ms": 1958.2739,
+              "calls": 2
+            },
+            "snapshot_download": {
+              "await_ms": 0.011899999999999999,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 20244.887899999998,
+      "min_ms": 20244.887899999998,
+      "max_ms": 20244.887899999998,
+      "phase_median_ms": {
+        "Central update durable finalize": 9178.4824,
+        "Central update durable staging": 7166.5841,
+        "Central update durable swap": 1856.8265,
+        "acquire Central mutation lock": 0.2948,
+        "central skill hashing": 1958.2635999999998,
+        "copy install batch refresh": 0.022500000000000003,
+        "copy_refresh": 0.028399999999999998,
+        "db_persist": 877.2112,
+        "durable_stage": 7166.6017999999995,
+        "local_or_remote_hash": 1958.2739,
+        "snapshot_download": 0.011899999999999999
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        20244.887899999998
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-t-correctness-20261008-115038.log",
+      "files": 13016,
+      "operation": "update_all_0_copy",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        24152.9879
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 24152.9879,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "update_all_0_copy",
+          "phases": {
+            "Central update durable finalize": {
+              "await_ms": 8714.945099999999,
+              "calls": 1
+            },
+            "Central update durable staging": {
+              "await_ms": 9374.193500000001,
+              "calls": 1
+            },
+            "Central update durable swap": {
+              "await_ms": 2905.1771,
+              "calls": 1
+            },
+            "acquire Central mutation lock": {
+              "await_ms": 0.4958,
+              "calls": 1
+            },
+            "central skill hashing": {
+              "await_ms": 3059.8386,
+              "calls": 2
+            },
+            "copy install batch refresh": {
+              "await_ms": 0.0242,
+              "calls": 1
+            },
+            "copy_refresh": {
+              "await_ms": 0.0297,
+              "calls": 1
+            },
+            "db_persist": {
+              "await_ms": 1390.9748,
+              "calls": 1
+            },
+            "durable_stage": {
+              "await_ms": 9374.204300000001,
+              "calls": 1
+            },
+            "local_or_remote_hash": {
+              "await_ms": 3059.8504000000003,
+              "calls": 2
+            },
+            "snapshot_download": {
+              "await_ms": 0.0161,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 24152.9879,
+      "min_ms": 24152.9879,
+      "max_ms": 24152.9879,
+      "phase_median_ms": {
+        "Central update durable finalize": 8714.945099999999,
+        "Central update durable staging": 9374.193500000001,
+        "Central update durable swap": 2905.1771,
+        "acquire Central mutation lock": 0.4958,
+        "central skill hashing": 3059.8386,
+        "copy install batch refresh": 0.0242,
+        "copy_refresh": 0.0297,
+        "db_persist": 1390.9748,
+        "durable_stage": 9374.204300000001,
+        "local_or_remote_hash": 3059.8504000000003,
+        "snapshot_download": 0.0161
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        24152.9879
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-t-correctness-20261008-115038.log",
+      "files": 13016,
+      "operation": "update_all_1_copy",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        49362.2718
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 49362.2718,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "update_all_1_copy",
+          "phases": {
+            "Central update durable finalize": {
+              "await_ms": 9056.8408,
+              "calls": 1
+            },
+            "Central update durable staging": {
+              "await_ms": 16234.251,
+              "calls": 1
+            },
+            "Central update durable swap": {
+              "await_ms": 2885.7243000000003,
+              "calls": 1
+            },
+            "acquire Central mutation lock": {
+              "await_ms": 0.505,
+              "calls": 1
+            },
+            "central skill hashing": {
+              "await_ms": 4737.282200000001,
+              "calls": 2
+            },
+            "copy install batch refresh": {
+              "await_ms": 16352.336399999998,
+              "calls": 1
+            },
+            "copy_refresh": {
+              "await_ms": 16352.346399999999,
+              "calls": 1
+            },
+            "db_persist": {
+              "await_ms": 3017.4855,
+              "calls": 1
+            },
+            "durable_stage": {
+              "await_ms": 16234.2634,
+              "calls": 1
+            },
+            "local_or_remote_hash": {
+              "await_ms": 4737.3002,
+              "calls": 2
+            },
+            "snapshot_download": {
+              "await_ms": 0.013600000000000001,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 49362.2718,
+      "min_ms": 49362.2718,
+      "max_ms": 49362.2718,
+      "phase_median_ms": {
+        "Central update durable finalize": 9056.8408,
+        "Central update durable staging": 16234.251,
+        "Central update durable swap": 2885.7243000000003,
+        "acquire Central mutation lock": 0.505,
+        "central skill hashing": 4737.282200000001,
+        "copy install batch refresh": 16352.336399999998,
+        "copy_refresh": 16352.346399999999,
+        "db_persist": 3017.4855,
+        "durable_stage": 16234.2634,
+        "local_or_remote_hash": 4737.3002,
+        "snapshot_download": 0.013600000000000001
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        49362.2718
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-t-correctness-20261008-115038.log",
+      "files": 13016,
+      "operation": "update_all_3_copy",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        94235.1168
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 94235.1168,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "update_all_3_copy",
+          "phases": {
+            "Central update durable finalize": {
+              "await_ms": 12515.7925,
+              "calls": 1
+            },
+            "Central update durable staging": {
+              "await_ms": 12371.371,
+              "calls": 1
+            },
+            "Central update durable swap": {
+              "await_ms": 3504.6989000000003,
+              "calls": 1
+            },
+            "acquire Central mutation lock": {
+              "await_ms": 0.4688,
+              "calls": 1
+            },
+            "central skill hashing": {
+              "await_ms": 3692.4864,
+              "calls": 2
+            },
+            "copy install batch refresh": {
+              "await_ms": 62046.012599999995,
+              "calls": 1
+            },
+            "copy_refresh": {
+              "await_ms": 62046.0243,
+              "calls": 1
+            },
+            "db_persist": {
+              "await_ms": 1688.9837,
+              "calls": 1
+            },
+            "durable_stage": {
+              "await_ms": 12371.4014,
+              "calls": 1
+            },
+            "local_or_remote_hash": {
+              "await_ms": 3692.4984000000004,
+              "calls": 2
+            },
+            "snapshot_download": {
+              "await_ms": 0.0158,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 94235.1168,
+      "min_ms": 94235.1168,
+      "max_ms": 94235.1168,
+      "phase_median_ms": {
+        "Central update durable finalize": 12515.7925,
+        "Central update durable staging": 12371.371,
+        "Central update durable swap": 3504.6989000000003,
+        "acquire Central mutation lock": 0.4688,
+        "central skill hashing": 3692.4864,
+        "copy install batch refresh": 62046.012599999995,
+        "copy_refresh": 62046.0243,
+        "db_persist": 1688.9837,
+        "durable_stage": 12371.4014,
+        "local_or_remote_hash": 3692.4984000000004,
+        "snapshot_download": 0.0158
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        94235.1168
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-t-correctness-20261008-115038.log",
+      "files": 13016,
+      "operation": "update_noop",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 13327429,
+        "directories": 206,
+        "files": 13016
+      },
+      "raw_ms": [
+        1059.5604999999998
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 1059.5604999999998,
+          "fixture": {
+            "bytes": 13327429,
+            "directories": 206,
+            "files": 13016
+          },
+          "operation": "update_noop",
+          "phases": {
+            "acquire Central mutation lock": {
+              "await_ms": 0.4518,
+              "calls": 1
+            },
+            "central skill hashing": {
+              "await_ms": 992.6064,
+              "calls": 1
+            },
+            "copy install batch refresh": {
+              "await_ms": 0.2249,
+              "calls": 1
+            },
+            "copy_refresh": {
+              "await_ms": 0.22719999999999999,
+              "calls": 1
+            },
+            "db_persist": {
+              "await_ms": 0.0049,
+              "calls": 1
+            },
+            "durable_stage": {
+              "await_ms": 0.0025,
+              "calls": 1
+            },
+            "local_or_remote_hash": {
+              "await_ms": 992.6121999999999,
+              "calls": 1
+            },
+            "snapshot_download": {
+              "await_ms": 0.0117,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 1059.5604999999998,
+      "min_ms": 1059.5604999999998,
+      "max_ms": 1059.5604999999998,
+      "phase_median_ms": {
+        "acquire Central mutation lock": 0.4518,
+        "central skill hashing": 992.6064,
+        "copy install batch refresh": 0.2249,
+        "copy_refresh": 0.22719999999999999,
+        "db_persist": 0.0049,
+        "durable_stage": 0.0025,
+        "local_or_remote_hash": 992.6121999999999,
+        "snapshot_download": 0.0117
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        1059.5604999999998
+      ],
+      "samples_1_to_6_ms": []
+    }
+  ]
+}

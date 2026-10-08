@@ -1,0 +1,1087 @@
+{
+  "before_summary": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-selected-summary.json",
+  "after_summary": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-selected-summary.json",
+  "before_only": [],
+  "after_only": [],
+  "rows": [
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "check_unchanged",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 36.2741,
+      "after_median_ms": 30.109099999999998,
+      "median_delta_percent": -16.995597409722084,
+      "before_range_ms": [
+        27.2963,
+        62.1777
+      ],
+      "after_range_ms": [
+        24.467599999999997,
+        97.6182
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "component_snapshot_collect_clone",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 4.5715,
+      "after_median_ms": 2.9328000000000003,
+      "median_delta_percent": -35.8460024062124,
+      "before_range_ms": [
+        3.5528999999999997,
+        6.1997
+      ],
+      "after_range_ms": [
+        2.625,
+        3.9273
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": null,
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "component_snapshot_hash_manifest",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 3.9141999999999997,
+      "after_median_ms": 3.539,
+      "median_delta_percent": -9.585611363752477,
+      "before_range_ms": [
+        3.4758,
+        6.2194
+      ],
+      "after_range_ms": [
+        3.3019999999999996,
+        4.8217
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": null,
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "delete_finalize_repeat",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 0.1043,
+      "after_median_ms": 0.1171,
+      "median_delta_percent": 12.272291466922326,
+      "before_range_ms": [
+        0.08610000000000001,
+        0.1918
+      ],
+      "after_range_ms": [
+        0.0931,
+        0.16119999999999998
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "REGRESSION_REQUIRES_REVIEW",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "delete_retain_3_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 94.1945,
+      "after_median_ms": 82.7746,
+      "median_delta_percent": -12.123743955326471,
+      "before_range_ms": [
+        69.3231,
+        241.2056
+      ],
+      "after_range_ms": [
+        65.6284,
+        138.8371
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "import_first",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 180.4219,
+      "after_median_ms": 115.4433,
+      "median_delta_percent": -36.01480751505222,
+      "before_range_ms": [
+        125.2638,
+        290.8276
+      ],
+      "after_range_ms": [
+        106.91340000000001,
+        157.2749
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "import_overwrite",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 279.31329999999997,
+      "after_median_ms": 210.70669999999998,
+      "median_delta_percent": -24.562596911783285,
+      "before_range_ms": [
+        202.94,
+        486.2597
+      ],
+      "after_range_ms": [
+        166.9843,
+        781.9017
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "leftover_cleanup_3_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 95.30539999999999,
+      "after_median_ms": 80.6935,
+      "median_delta_percent": -15.331660115796165,
+      "before_range_ms": [
+        65.0198,
+        222.4736
+      ],
+      "after_range_ms": [
+        57.944900000000004,
+        89.21610000000001
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "leftover_cleanup_repeat",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 8.4189,
+      "after_median_ms": 8.5844,
+      "median_delta_percent": 1.965815011462313,
+      "before_range_ms": [
+        5.8450999999999995,
+        14.741000000000001
+      ],
+      "after_range_ms": [
+        7.016900000000001,
+        10.7266
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "recovery_repeat",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 1.0410000000000001,
+      "after_median_ms": 0.8584,
+      "median_delta_percent": -17.540826128722387,
+      "before_range_ms": [
+        0.7195,
+        2.0507
+      ],
+      "after_range_ms": [
+        0.7721,
+        2.0961
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "snapshot_digest",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 3.8867000000000003,
+      "after_median_ms": 3.54985,
+      "median_delta_percent": -8.666735276712888,
+      "before_range_ms": [
+        3.2547,
+        6.3794
+      ],
+      "after_range_ms": [
+        3.2624,
+        6.4606
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": null,
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "update_1_file_0_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 368.6456,
+      "after_median_ms": 200.319,
+      "median_delta_percent": -45.66081895457318,
+      "before_range_ms": [
+        168.77030000000002,
+        615.2657
+      ],
+      "after_range_ms": [
+        184.60770000000002,
+        473.32079999999996
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "update_1_percent_0_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 295.88,
+      "after_median_ms": 198.9951,
+      "median_delta_percent": -32.744659997296196,
+      "before_range_ms": [
+        198.0467,
+        556.1279999999999
+      ],
+      "after_range_ms": [
+        169.8887,
+        227.4899
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "update_all_0_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 378.5608,
+      "after_median_ms": 192.23319999999998,
+      "median_delta_percent": -49.21999319528065,
+      "before_range_ms": [
+        240.1006,
+        449.3364
+      ],
+      "after_range_ms": [
+        167.2045,
+        224.23930000000001
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "update_all_1_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 459.6167,
+      "after_median_ms": 298.706,
+      "median_delta_percent": -35.00975921893177,
+      "before_range_ms": [
+        335.3157,
+        717.6101
+      ],
+      "after_range_ms": [
+        246.4963,
+        485.8002
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "update_all_3_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 607.902,
+      "after_median_ms": 478.09439999999995,
+      "median_delta_percent": -21.353376037585015,
+      "before_range_ms": [
+        516.2843,
+        701.9992000000001
+      ],
+      "after_range_ms": [
+        432.84430000000003,
+        542.0406
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "update_noop",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 32.6592,
+      "after_median_ms": 28.8187,
+      "median_delta_percent": -11.759320497746417,
+      "before_range_ms": [
+        26.831500000000002,
+        88.4092
+      ],
+      "after_range_ms": [
+        26.067300000000003,
+        114.6751
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 128,
+      "operation": "check_unchanged",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 65.3939,
+      "after_median_ms": 24.5299,
+      "median_delta_percent": -62.489008913675434,
+      "before_range_ms": [
+        33.6629,
+        138.2468
+      ],
+      "after_range_ms": [
+        21.3999,
+        65.7176
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 128,
+      "operation": "component_snapshot_collect_clone",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 0.1568,
+      "after_median_ms": 0.14320000000000002,
+      "median_delta_percent": -8.673469387755084,
+      "before_range_ms": [
+        0.1412,
+        0.178
+      ],
+      "after_range_ms": [
+        0.12769999999999998,
+        0.16449999999999998
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": null,
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 128,
+      "operation": "component_snapshot_hash_manifest",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 0.12079999999999999,
+      "after_median_ms": 0.1176,
+      "median_delta_percent": -2.6490066225165476,
+      "before_range_ms": [
+        0.1172,
+        0.1574
+      ],
+      "after_range_ms": [
+        0.0958,
+        0.1445
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": null,
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 128,
+      "operation": "delete_finalize_repeat",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 0.125,
+      "after_median_ms": 0.1225,
+      "median_delta_percent": -2.0000000000000018,
+      "before_range_ms": [
+        0.0901,
+        0.1812
+      ],
+      "after_range_ms": [
+        0.1034,
+        0.1556
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 128,
+      "operation": "delete_retain_3_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 225.15540000000001,
+      "after_median_ms": 147.2404,
+      "median_delta_percent": -34.604988376916566,
+      "before_range_ms": [
+        179.22289999999998,
+        432.3378
+      ],
+      "after_range_ms": [
+        123.9108,
+        227.784
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 128,
+      "operation": "import_first",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 363.55809999999997,
+      "after_median_ms": 213.66969999999998,
+      "median_delta_percent": -41.22818333575844,
+      "before_range_ms": [
+        310.8918,
+        671.8898
+      ],
+      "after_range_ms": [
+        173.2885,
+        467.7035
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 128,
+      "operation": "import_overwrite",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 993.8461,
+      "after_median_ms": 449.58480000000003,
+      "median_delta_percent": -54.76313686797181,
+      "before_range_ms": [
+        543.9621999999999,
+        1419.206
+      ],
+      "after_range_ms": [
+        305.515,
+        512.7817
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 128,
+      "operation": "leftover_cleanup_3_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 317.09,
+      "after_median_ms": 228.1069,
+      "median_delta_percent": -28.062411302784696,
+      "before_range_ms": [
+        214.99779999999998,
+        581.8875999999999
+      ],
+      "after_range_ms": [
+        164.9269,
+        366.07079999999996
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 128,
+      "operation": "leftover_cleanup_repeat",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 15.0473,
+      "after_median_ms": 8.778899999999998,
+      "median_delta_percent": -41.657971862061636,
+      "before_range_ms": [
+        5.4905,
+        27.967
+      ],
+      "after_range_ms": [
+        5.615,
+        17.0544
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 128,
+      "operation": "recovery_repeat",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 1.0309,
+      "after_median_ms": 0.9377,
+      "median_delta_percent": -9.040644097390626,
+      "before_range_ms": [
+        0.837,
+        2.7172
+      ],
+      "after_range_ms": [
+        0.7422000000000001,
+        2.4997000000000003
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 128,
+      "operation": "snapshot_digest",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 0.1054,
+      "after_median_ms": 0.09585,
+      "median_delta_percent": -9.060721062618581,
+      "before_range_ms": [
+        0.0727,
+        0.26739999999999997
+      ],
+      "after_range_ms": [
+        0.0699,
+        0.1803
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": null,
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 128,
+      "operation": "update_1_file_0_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 936.9933,
+      "after_median_ms": 391.7796,
+      "median_delta_percent": -58.187577221736795,
+      "before_range_ms": [
+        621.6163,
+        1820.9242
+      ],
+      "after_range_ms": [
+        303.8198,
+        723.8312
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 128,
+      "operation": "update_1_percent_0_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 909.476,
+      "after_median_ms": 432.231,
+      "median_delta_percent": -52.47472170788454,
+      "before_range_ms": [
+        687.866,
+        1461.4298999999999
+      ],
+      "after_range_ms": [
+        310.6703,
+        587.7253000000001
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 128,
+      "operation": "update_all_0_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 857.8402000000001,
+      "after_median_ms": 454.6042,
+      "median_delta_percent": -47.00595751982712,
+      "before_range_ms": [
+        685.4411,
+        1059.5641
+      ],
+      "after_range_ms": [
+        372.7215,
+        548.8826
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 128,
+      "operation": "update_all_1_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 1377.9556,
+      "after_median_ms": 637.9232000000001,
+      "median_delta_percent": -53.70509760982139,
+      "before_range_ms": [
+        1090.5964,
+        1455.1194
+      ],
+      "after_range_ms": [
+        565.1473,
+        868.6739
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 128,
+      "operation": "update_all_3_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 1879.1741,
+      "after_median_ms": 1434.3766,
+      "median_delta_percent": -23.66983985145389,
+      "before_range_ms": [
+        1488.4433000000001,
+        3424.1012
+      ],
+      "after_range_ms": [
+        1080.9470000000001,
+        1561.6829
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 128,
+      "operation": "update_noop",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-formal-20261008-071329.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-formal-20261008-073713.log",
+      "before_median_ms": 49.0069,
+      "after_median_ms": 30.7074,
+      "median_delta_percent": -37.34066019274837,
+      "before_range_ms": [
+        35.4642,
+        117.0372
+      ],
+      "after_range_ms": [
+        22.486099999999997,
+        37.928200000000004
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "stage",
+      "files": 4096,
+      "operation": "component_delete_finalize",
+      "samples": 1,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-boundary-20261008-073830.log",
+      "before_median_ms": 5565.444,
+      "after_median_ms": 3212.8552,
+      "median_delta_percent": -42.27135876311037,
+      "before_range_ms": [
+        5565.444,
+        5565.444
+      ],
+      "after_range_ms": [
+        3212.8552,
+        3212.8552
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": null,
+      "evidence": "single_boundary_sample"
+    },
+    {
+      "mode": "stage",
+      "files": 4096,
+      "operation": "component_delete_finalize_repeat",
+      "samples": 1,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-boundary-20261008-073830.log",
+      "before_median_ms": 0.1281,
+      "after_median_ms": 0.0934,
+      "median_delta_percent": -27.08821233411397,
+      "before_range_ms": [
+        0.1281,
+        0.1281
+      ],
+      "after_range_ms": [
+        0.0934,
+        0.0934
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": null,
+      "evidence": "single_boundary_sample"
+    },
+    {
+      "mode": "stage",
+      "files": 4096,
+      "operation": "component_delete_manifest_fingerprint",
+      "samples": 1,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-boundary-20261008-073830.log",
+      "before_median_ms": 1451.44,
+      "after_median_ms": 505.7836,
+      "median_delta_percent": -65.15297911040071,
+      "before_range_ms": [
+        1451.44,
+        1451.44
+      ],
+      "after_range_ms": [
+        505.7836,
+        505.7836
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": null,
+      "evidence": "single_boundary_sample"
+    },
+    {
+      "mode": "stage",
+      "files": 4096,
+      "operation": "component_delete_stage",
+      "samples": 1,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-boundary-20261008-073830.log",
+      "before_median_ms": 8.7938,
+      "after_median_ms": 10.7515,
+      "median_delta_percent": 22.26227569423913,
+      "before_range_ms": [
+        8.7938,
+        8.7938
+      ],
+      "after_range_ms": [
+        10.7515,
+        10.7515
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": null,
+      "evidence": "single_boundary_sample"
+    },
+    {
+      "mode": "stage",
+      "files": 4096,
+      "operation": "component_durable_stage",
+      "samples": 1,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-boundary-20261008-073830.log",
+      "before_median_ms": 7667.1667,
+      "after_median_ms": 3762.8254,
+      "median_delta_percent": -50.92286959144895,
+      "before_range_ms": [
+        7667.1667,
+        7667.1667
+      ],
+      "after_range_ms": [
+        3762.8254,
+        3762.8254
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": null,
+      "evidence": "single_boundary_sample"
+    },
+    {
+      "mode": "stage",
+      "files": 13016,
+      "operation": "component_delete_finalize",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-targeted-formal-20261008-070646.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-formal-20261008-073116.log",
+      "before_median_ms": 18588.7603,
+      "after_median_ms": 15699.263,
+      "median_delta_percent": -15.544324921979868,
+      "before_range_ms": [
+        14639.2708,
+        20292.438700000002
+      ],
+      "after_range_ms": [
+        10737.775599999999,
+        27673.1696
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": null,
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "stage",
+      "files": 13016,
+      "operation": "component_delete_finalize_repeat",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-targeted-formal-20261008-070646.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-formal-20261008-073116.log",
+      "before_median_ms": 0.1453,
+      "after_median_ms": 0.1328,
+      "median_delta_percent": -8.602890571231935,
+      "before_range_ms": [
+        0.12129999999999999,
+        0.2299
+      ],
+      "after_range_ms": [
+        0.0964,
+        0.1763
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": null,
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "stage",
+      "files": 13016,
+      "operation": "component_delete_manifest_fingerprint",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-targeted-formal-20261008-070646.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-formal-20261008-073116.log",
+      "before_median_ms": 3404.1441,
+      "after_median_ms": 3263.2218000000003,
+      "median_delta_percent": -4.139727809994875,
+      "before_range_ms": [
+        3119.5943,
+        6093.3422
+      ],
+      "after_range_ms": [
+        1826.8610999999999,
+        5404.1935
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": null,
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "stage",
+      "files": 13016,
+      "operation": "component_delete_stage",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-targeted-formal-20261008-070646.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-formal-20261008-073116.log",
+      "before_median_ms": 21.828400000000002,
+      "after_median_ms": 29.5263,
+      "median_delta_percent": 35.26552564548935,
+      "before_range_ms": [
+        17.6402,
+        25.583499999999997
+      ],
+      "after_range_ms": [
+        23.6574,
+        214.2064
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": null,
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "stage",
+      "files": 13016,
+      "operation": "component_durable_stage",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-targeted-formal-20261008-070646.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-formal-20261008-073116.log",
+      "before_median_ms": 21371.180800000002,
+      "after_median_ms": 17281.426,
+      "median_delta_percent": -19.136775072344157,
+      "before_range_ms": [
+        19878.902700000002,
+        23294.1299
+      ],
+      "after_range_ms": [
+        14606.0509,
+        19943.7794
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "stage",
+      "files": 18000,
+      "operation": "component_delete_finalize",
+      "samples": 1,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-boundary-20261008-073830.log",
+      "before_median_ms": 32185.8614,
+      "after_median_ms": 14308.7138,
+      "median_delta_percent": -55.543480343204365,
+      "before_range_ms": [
+        32185.8614,
+        32185.8614
+      ],
+      "after_range_ms": [
+        14308.7138,
+        14308.7138
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": null,
+      "evidence": "single_boundary_sample"
+    },
+    {
+      "mode": "stage",
+      "files": 18000,
+      "operation": "component_delete_finalize_repeat",
+      "samples": 1,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-boundary-20261008-073830.log",
+      "before_median_ms": 0.1341,
+      "after_median_ms": 0.4921,
+      "median_delta_percent": 266.9649515287099,
+      "before_range_ms": [
+        0.1341,
+        0.1341
+      ],
+      "after_range_ms": [
+        0.4921,
+        0.4921
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": null,
+      "evidence": "single_boundary_sample"
+    },
+    {
+      "mode": "stage",
+      "files": 18000,
+      "operation": "component_delete_manifest_fingerprint",
+      "samples": 1,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-boundary-20261008-073830.log",
+      "before_median_ms": 6381.3108999999995,
+      "after_median_ms": 3080.4996,
+      "median_delta_percent": -51.72622603296134,
+      "before_range_ms": [
+        6381.3108999999995,
+        6381.3108999999995
+      ],
+      "after_range_ms": [
+        3080.4996,
+        3080.4996
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": null,
+      "evidence": "single_boundary_sample"
+    },
+    {
+      "mode": "stage",
+      "files": 18000,
+      "operation": "component_delete_stage",
+      "samples": 1,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-boundary-20261008-073830.log",
+      "before_median_ms": 32.0949,
+      "after_median_ms": 32.214800000000004,
+      "median_delta_percent": 0.373579602989893,
+      "before_range_ms": [
+        32.0949,
+        32.0949
+      ],
+      "after_range_ms": [
+        32.214800000000004,
+        32.214800000000004
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": null,
+      "evidence": "single_boundary_sample"
+    },
+    {
+      "mode": "stage",
+      "files": 18000,
+      "operation": "component_durable_stage",
+      "samples": 1,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-boundary-20261008-073830.log",
+      "before_median_ms": 33198.7321,
+      "after_median_ms": 18569.2399,
+      "median_delta_percent": -44.06641842807003,
+      "before_range_ms": [
+        33198.7321,
+        33198.7321
+      ],
+      "after_range_ms": [
+        18569.2399,
+        18569.2399
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": null,
+      "evidence": "single_boundary_sample"
+    }
+  ],
+  "limits": "Numeric budgets do not establish statistical significance or native WebView performance. Check frozen build/harness identity receipts separately."
+}

@@ -1,0 +1,3 @@
+   Compiling skillport v1.0.2 (D:\Documents\Code\Agents\skills-manage-windows\.git\skill-small-files-tools\benchmark-before-source\src-tauri)
+    Finished `release` profile [optimized] target(s) in 3m 47s
+  Executable unittests src\lib.rs (src-tauri\target\release\deps\skillport_lib-db9d63c9887dde3a.exe)

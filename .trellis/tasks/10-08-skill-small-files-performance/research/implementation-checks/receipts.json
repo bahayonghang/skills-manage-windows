@@ -1,0 +1,137 @@
+{
+  "status": "FOCUSED_PASS_FORMAL_PENDING",
+  "profile": "Windows Rust release lib tests",
+  "receipts": [
+    {
+      "file": null,
+      "command": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check",
+      "exit_code": 0,
+      "status": "PASS",
+      "output": "",
+      "evidence": "Tool returned exit 0 with no stdout or stderr. Tee-Object creates no file for empty output."
+    },
+    {
+      "file": "implementation-release-build.log",
+      "command": "cargo test --manifest-path src-tauri/Cargo.toml --release --lib --locked --no-run",
+      "exit_code": 0,
+      "status": "PASS",
+      "bytes": 256,
+      "sha256": "0928e7ce7d702749bacff07a9f867f80123dfb873c3d0f1455c7664fa03f6651",
+      "crlf_count": 3,
+      "raw_byte_copy_verified": true
+    },
+    {
+      "file": "implementation-test-github_import.log",
+      "command": "cargo test --manifest-path src-tauri/Cargo.toml --release --lib --locked services::github_import",
+      "exit_code": 101,
+      "status": "FAIL",
+      "bytes": 22584,
+      "sha256": "a281cdd89a90757ca9506bca2de755ea6ac59630ceb95d2cb863d9f5bd868498",
+      "crlf_count": 209,
+      "raw_byte_copy_verified": true,
+      "passed": 173,
+      "failed": 3,
+      "ignored": 1,
+      "measured": 0,
+      "filtered": 1391,
+      "test_elapsed_seconds": 2.59,
+      "ignored_tests": [
+        "test services::github_import::progress::tests::pinned_snapshot_source_progress_probe ... ignored, offline pinned-snapshot source probe; creates 13,016 temporary files"
+      ]
+    },
+    {
+      "file": "implementation-test-github_import-retest.log",
+      "command": "cargo test --manifest-path src-tauri/Cargo.toml --release --lib --locked services::github_import",
+      "exit_code": 0,
+      "status": "PASS",
+      "bytes": 21151,
+      "sha256": "cf20317e248583393851764bdf41d3c750fa8f784dec4f273333e04e3a1897b2",
+      "crlf_count": 185,
+      "raw_byte_copy_verified": true,
+      "passed": 176,
+      "failed": 0,
+      "ignored": 1,
+      "measured": 0,
+      "filtered": 1391,
+      "test_elapsed_seconds": 4.14,
+      "ignored_tests": [
+        "test services::github_import::progress::tests::pinned_snapshot_source_progress_probe ... ignored, offline pinned-snapshot source probe; creates 13,016 temporary files"
+      ]
+    },
+    {
+      "file": "implementation-test-central_updates.log",
+      "command": "cargo test --manifest-path src-tauri/Cargo.toml --release --lib --locked services::central_updates",
+      "exit_code": 0,
+      "status": "PASS",
+      "bytes": 21573,
+      "sha256": "13dc40a3fd9513c62b7628183368a2620bad274e88a3123ecfc333882be7d919",
+      "crlf_count": 188,
+      "raw_byte_copy_verified": true,
+      "passed": 178,
+      "failed": 0,
+      "ignored": 3,
+      "measured": 0,
+      "filtered": 1387,
+      "test_elapsed_seconds": 14.24,
+      "ignored_tests": [
+        "test services::central_updates::core::performance_benchmark::small_files_service_baseline ... ignored, Opt-in filesystem service benchmark; generates up to 18,000 files per tree",
+        "test services::central_updates::fs::tests::live_wsl_ten_skill_batch_benchmark ... ignored, requires SKILLPORT_TEST_WSL_DISTRO and writes only under WSL /tmp",
+        "test services::central_updates::fs::tests::local_ten_skill_batch_benchmark ... ignored, performance benchmark"
+      ]
+    },
+    {
+      "file": "implementation-test-central_operation.log",
+      "command": "cargo test --manifest-path src-tauri/Cargo.toml --release --lib --locked services::central_operation",
+      "exit_code": 0,
+      "status": "PASS",
+      "bytes": 2850,
+      "sha256": "25a0ed221b2b117f2c32bcc05fd8c22eb37f3db2aad3d8057bfc4ffca6a00727",
+      "crlf_count": 29,
+      "raw_byte_copy_verified": true,
+      "passed": 21,
+      "failed": 0,
+      "ignored": 1,
+      "measured": 0,
+      "filtered": 1546,
+      "test_elapsed_seconds": 0.86,
+      "ignored_tests": [
+        "test services::central_operation::fs::tests::live_wsl_delete_stage_and_restore_smoke ... ignored, requires SKILLPORT_TEST_WSL_DISTRO and writes only under WSL /tmp"
+      ]
+    },
+    {
+      "file": "implementation-test-installation.log",
+      "command": "cargo test --manifest-path src-tauri/Cargo.toml --release --lib --locked services::installation",
+      "exit_code": 0,
+      "status": "PASS",
+      "bytes": 9151,
+      "sha256": "a37e0ba1d169a328f66d0df24082dde8afb204f13c7acde61a80149033d8f585",
+      "crlf_count": 99,
+      "raw_byte_copy_verified": true,
+      "passed": 92,
+      "failed": 0,
+      "ignored": 0,
+      "measured": 0,
+      "filtered": 1476,
+      "test_elapsed_seconds": 5.53,
+      "ignored_tests": []
+    }
+  ],
+  "first_github_failure_cause": "New fixtures used skills/test. SKIP_DISCOVERY_DIRS excludes test directories. Renamed only new fixture paths and skill ids to progress-case; production discovery unchanged.",
+  "sizecheck_first_failure": {
+    "command": "node scripts/check/check-size-budget.mjs",
+    "status": "FAIL",
+    "exit_code": 1,
+    "evidence": "Captured tool output: src-tauri/src/services/central_operation/fs.rs: 859 lines exceeds budget 800 lines",
+    "raw_file": null,
+    "head_line_count_verified": 859,
+    "resolution": "Moved existing inline cfg(test) module to fs/tests.rs; whitespace-normalized module text remains identical; no production refactor or exemption."
+  },
+  "pending": [
+    "locked all-target Clippy",
+    "just ci",
+    "paired after benchmark",
+    "native WebView",
+    "installer smoke",
+    "live SSH/WSL"
+  ]
+}

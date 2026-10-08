@@ -1,0 +1,217 @@
+{
+  "gate": "canonical just ci",
+  "pnpm": "10.34.5",
+  "quality_configuration_changed": false,
+  "production_behavior_changed_by_reviewer": false,
+  "runs": [
+    {
+      "receipt": "just-ci-20261008-115051.json",
+      "log": "just-ci-20261008-115051.log",
+      "exit_code": 1,
+      "log_sha256": "3DB5F97B01ABD7B48F0FBF2A71AAC6B29E1154550934A691D8B958E5FE685006",
+      "log_bytes": 1833,
+      "completed_stages": [
+        {
+          "stage": "common:version",
+          "wall_seconds": 0.6
+        },
+        {
+          "stage": "common:docs-generated",
+          "wall_seconds": 0.6
+        }
+      ],
+      "failure_lines": [
+        "[ci] [rust-platform:clippy] failed with exit code 101.",
+        "[ci] Failed. First failure: [rust-platform:clippy] failed with exit code 101."
+      ]
+    },
+    {
+      "receipt": "just-ci-fixed-retest-20261008-115814.json",
+      "log": "just-ci-fixed-retest-20261008-115814.log",
+      "exit_code": 0,
+      "log_sha256": "B3D91D3408BE0FE1BF5C5E3DAD0C890F80F4A63E27DF13B0AD8C0E94E7057AF4",
+      "log_bytes": 228420,
+      "completed_stages": [
+        {
+          "stage": "common:version",
+          "wall_seconds": 0.8
+        },
+        {
+          "stage": "common:docs-generated",
+          "wall_seconds": 0.6
+        },
+        {
+          "stage": "common:typecheck",
+          "wall_seconds": 2.2
+        },
+        {
+          "stage": "common:lint",
+          "wall_seconds": 1.4
+        },
+        {
+          "stage": "common:capability",
+          "wall_seconds": 1.2
+        },
+        {
+          "stage": "common:size",
+          "wall_seconds": 0.6
+        },
+        {
+          "stage": "common:entrypoints",
+          "wall_seconds": 0.7
+        },
+        {
+          "stage": "common:fmt",
+          "wall_seconds": 1.4
+        },
+        {
+          "stage": "rust-platform:clippy",
+          "wall_seconds": 68.2
+        },
+        {
+          "stage": "common:ipc-codegen",
+          "wall_seconds": 169.7
+        },
+        {
+          "stage": "common:test",
+          "wall_seconds": 32.5
+        },
+        {
+          "stage": "common:build",
+          "wall_seconds": 4.9
+        },
+        {
+          "stage": "common:docs",
+          "wall_seconds": 7.8
+        },
+        {
+          "stage": "rust-platform:test",
+          "wall_seconds": 313.2
+        },
+        {
+          "stage": "rust-platform:trellis-python",
+          "wall_seconds": 6.1
+        }
+      ],
+      "failure_lines": [],
+      "rust": {
+        "result_groups": 7,
+        "passed": 1574,
+        "failed": 0,
+        "ignored": 9,
+        "raw_groups": [
+          [
+            1559,
+            0,
+            9
+          ],
+          [
+            3,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            3,
+            0,
+            0
+          ],
+          [
+            4,
+            0,
+            0
+          ],
+          [
+            5,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ]
+      },
+      "rust_ignored_lines": [
+        "[rust-platform:test] test services::central_operation::fs::tests::live_wsl_delete_stage_and_restore_smoke ... ignored, requires SKILLPORT_TEST_WSL_DISTRO and writes only under WSL /tmp",
+        "[rust-platform:test] test services::central_skills::pagination_performance_tests::benchmark_central_pagination_large_fixture ... ignored, release-mode evidence benchmark; not a CI timing gate",
+        "[rust-platform:test] test services::central_updates::core::performance_benchmark::small_files_service_baseline ... ignored, Opt-in filesystem service benchmark; generates up to 18,000 files per tree",
+        "[rust-platform:test] test services::central_updates::fs::tests::live_wsl_ten_skill_batch_benchmark ... ignored, requires SKILLPORT_TEST_WSL_DISTRO and writes only under WSL /tmp",
+        "[rust-platform:test] test services::central_updates::fs::tests::local_ten_skill_batch_benchmark ... ignored, performance benchmark",
+        "[rust-platform:test] test services::github_import::progress::tests::pinned_snapshot_source_progress_probe ... ignored, offline pinned-snapshot source probe; creates 13,016 temporary files",
+        "[rust-platform:test] test services::scanner::tests::test_scan_all_skills_impl_claude_fixture_home_sanity ... ignored, manual isolated-home sanity check",
+        "[rust-platform:test] test services::usage::bench::usage_bench_full_scan_wall_time ... ignored, manual benchmark against the real home directory",
+        "[rust-platform:test] test targets::runner::tests::supervised_process_fixture ... ignored, spawned by ProcessRunner tests as a controlled child process"
+      ],
+      "frontend": {
+        "files_passed": 178,
+        "tests_passed": 2078,
+        "skipped": 1,
+        "total": 2079,
+        "skip_detail": "Default Vitest output records count only. Two doctor integration cases are availability-conditional; individual skip identity is not recorded by this reporter."
+      },
+      "python": {
+        "total": 54,
+        "skipped": 4,
+        "passed": 50
+      },
+      "python_skipped_lines": [
+        "[rust-platform:trellis-python] test_add_context_posix_symlink_escape (test_path_security.TestAddContext.test_add_context_posix_symlink_escape) ... skipped 'AC10 missing evidence / UNVERIFIED: POSIX symlink vectors not run on Windows host'",
+        "[rust-platform:trellis-python] test_hook_posix_symlink_escape (test_path_security.TestHook.test_hook_posix_symlink_escape) ... skipped 'AC10 missing evidence / UNVERIFIED: POSIX symlink vectors not run on Windows host'",
+        "[rust-platform:trellis-python] test_task_slug_posix_symlink_escape (test_path_security.TestTaskSlug.test_task_slug_posix_symlink_escape) ... skipped 'AC10 missing evidence / UNVERIFIED: POSIX symlink vectors not run on Windows host'",
+        "[rust-platform:trellis-python] test_process_posix_process_group_cleanup (test_runtime_resilience.TestBoundedProcess.test_process_posix_process_group_cleanup) ... skipped 'AC17 missing evidence / UNVERIFIED: POSIX process-group cleanup not run on Windows host'"
+      ]
+    },
+    {
+      "receipt": "just-ci-retest-20261008-115433.json",
+      "log": "just-ci-retest-20261008-115433.log",
+      "exit_code": 1,
+      "log_sha256": "A603A996BF376552AD0FA2C67DCF6151E498F4209EFBF7B2964295EEE2676C96",
+      "log_bytes": 31301,
+      "completed_stages": [
+        {
+          "stage": "common:version",
+          "wall_seconds": 0.6
+        },
+        {
+          "stage": "common:docs-generated",
+          "wall_seconds": 0.7
+        },
+        {
+          "stage": "common:typecheck",
+          "wall_seconds": 3.3
+        },
+        {
+          "stage": "common:lint",
+          "wall_seconds": 6.6
+        },
+        {
+          "stage": "common:capability",
+          "wall_seconds": 2.2
+        },
+        {
+          "stage": "common:size",
+          "wall_seconds": 1.5
+        },
+        {
+          "stage": "common:entrypoints",
+          "wall_seconds": 1.4
+        },
+        {
+          "stage": "common:fmt",
+          "wall_seconds": 2.4
+        }
+      ],
+      "failure_lines": [
+        "[ci] [rust-platform:clippy] failed with exit code 101.",
+        "[ci] Failed. First failure: [rust-platform:clippy] failed with exit code 101."
+      ]
+    }
+  ],
+  "timing_limit": "CI wall times have no performance-budget meaning"
+}

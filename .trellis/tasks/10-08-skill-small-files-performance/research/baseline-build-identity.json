@@ -1,0 +1,24 @@
+{
+  "source_head": "063c8d3236197a06ff17083c28a9738487c07510",
+  "frozen_binary": ".git/skill-small-files-tools/benchmark-before.exe",
+  "binary_sha256": "F94616DE25677272FFEA8928C37021EA6B0C961EB656119A72FBA593C08CCFA8",
+  "created_utc": "2026-10-08T11:51:52.7072366Z",
+  "harness_files": [
+    {
+      "path": "src-tauri/src/services/central_updates/core/performance_benchmark.rs",
+      "sha256": "2507376E19A476414FA1F4A4390DAA899E8F65717FDD490ECFB774CC7DA8DE8F"
+    },
+    {
+      "path": "src-tauri/src/services/central_updates/core.rs",
+      "sha256": "13F06E94CA99FF946693DBFAAA979B173B7009F86582B79F95340A539FF78449"
+    },
+    {
+      "path": "src-tauri/src/services/central_mutation/mod.rs",
+      "sha256": "E275DF17664F7B456488100C5A9A903D0C03BF91ABC5B27811C8B9913D3893EC"
+    },
+    {
+      "path": "src-tauri/src/fs_util.rs",
+      "sha256": "30C79EC5E510810E9012B0A92975AE0111B1BA8196323B7B1580098E9EF85F4D"
+    }
+  ]
+}

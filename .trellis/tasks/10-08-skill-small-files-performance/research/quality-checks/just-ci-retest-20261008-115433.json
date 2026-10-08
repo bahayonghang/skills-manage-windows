@@ -1,0 +1,17 @@
+{
+  "command": "just ci",
+  "pnpm_version": "10.34.5",
+  "head": "063c8d3236197a06ff17083c28a9738487c07510",
+  "started_utc": "2026-10-08T16:54:33.3020870Z",
+  "ended_utc": "2026-10-08T16:56:45.7201058Z",
+  "exit_code": 1,
+  "log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\quality-checks\\just-ci-retest-20261008-115433.log",
+  "log_sha256": "A603A996BF376552AD0FA2C67DCF6151E498F4209EFBF7B2964295EEE2676C96",
+  "environment": {
+    "PATH_prefix": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools",
+    "CARGO_TARGET_DIR": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\quality-target"
+  },
+  "remediation": "Process-only workspace build path replaces inaccessible dangling default target link; canonical gate unchanged",
+  "concurrent_activity": "Frozen after T fullservice correctness-only may run; elapsed times are not performance evidence",
+  "production_code_changed_by_reviewer": false
+}

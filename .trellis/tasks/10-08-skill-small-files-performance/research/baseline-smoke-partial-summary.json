@@ -1,0 +1,164 @@
+[
+  {
+    "files": 13016,
+    "operation": "check_unchanged",
+    "samples": 1,
+    "fixture": {
+      "bytes": 13327429,
+      "directories": 206,
+      "files": 13016
+    },
+    "raw_ms": [
+      3631.1947999999998
+    ],
+    "median_ms": 3631.1947999999998,
+    "min_ms": 3631.1947999999998,
+    "max_ms": 3631.1947999999998,
+    "phase_median_ms": {
+      "central skill hashing": 3547.1914,
+      "local_or_remote_hash": 3547.1974,
+      "snapshot_download": 0.040299999999999996
+    },
+    "phase_note": "inclusive wrapper await wall time; nested spans overlap"
+  },
+  {
+    "files": 13016,
+    "operation": "component_snapshot_collect_clone",
+    "samples": 1,
+    "fixture": {
+      "bytes": 13327429,
+      "directories": 206,
+      "files": 13016
+    },
+    "raw_ms": [
+      11.477400000000001
+    ],
+    "median_ms": 11.477400000000001,
+    "min_ms": 11.477400000000001,
+    "max_ms": 11.477400000000001,
+    "phase_median_ms": {},
+    "phase_note": "inclusive wrapper await wall time; nested spans overlap"
+  },
+  {
+    "files": 13016,
+    "operation": "component_snapshot_hash_manifest",
+    "samples": 1,
+    "fixture": {
+      "bytes": 13327429,
+      "directories": 206,
+      "files": 13016
+    },
+    "raw_ms": [
+      13.4279
+    ],
+    "median_ms": 13.4279,
+    "min_ms": 13.4279,
+    "max_ms": 13.4279,
+    "phase_median_ms": {},
+    "phase_note": "inclusive wrapper await wall time; nested spans overlap"
+  },
+  {
+    "files": 13016,
+    "operation": "import_first",
+    "samples": 1,
+    "fixture": {
+      "bytes": 13327429,
+      "directories": 206,
+      "files": 13016
+    },
+    "raw_ms": [
+      38365.7432
+    ],
+    "median_ms": 38365.7432,
+    "min_ms": 38365.7432,
+    "max_ms": 38365.7432,
+    "phase_median_ms": {
+      "Central update durable finalize": 6629.6168,
+      "Central update durable staging": 27993.8298,
+      "Central update durable swap": 3645.8089,
+      "acquire Central mutation lock": 1.7004,
+      "central skill hashing": 1.4096,
+      "copy install batch refresh": 0.0537,
+      "copy_refresh": 0.0636,
+      "db_persist": 22.651,
+      "durable_stage": 28004.6178,
+      "local_or_remote_hash": 1.4335
+    },
+    "phase_note": "inclusive wrapper await wall time; nested spans overlap"
+  },
+  {
+    "files": 13016,
+    "operation": "import_overwrite",
+    "samples": 1,
+    "fixture": {
+      "bytes": 13327429,
+      "directories": 206,
+      "files": 13016
+    },
+    "raw_ms": [
+      55172.753800000006
+    ],
+    "median_ms": 55172.753800000006,
+    "min_ms": 55172.753800000006,
+    "max_ms": 55172.753800000006,
+    "phase_median_ms": {
+      "Central update durable finalize": 21662.5799,
+      "Central update durable staging": 20092.1649,
+      "Central update durable swap": 5904.933599999999,
+      "acquire Central mutation lock": 0.372,
+      "central skill hashing": 7426.1122,
+      "copy install batch refresh": 0.0467,
+      "copy_refresh": 0.054200000000000005,
+      "db_persist": 3279.2232,
+      "durable_stage": 20100.856799999998,
+      "local_or_remote_hash": 7426.1252
+    },
+    "phase_note": "inclusive wrapper await wall time; nested spans overlap"
+  },
+  {
+    "files": 13016,
+    "operation": "snapshot_digest",
+    "samples": 2,
+    "fixture": {
+      "bytes": 13327429,
+      "directories": 206,
+      "files": 13016
+    },
+    "raw_ms": [
+      14.353100000000001,
+      9.8873
+    ],
+    "median_ms": 12.1202,
+    "min_ms": 9.8873,
+    "max_ms": 14.353100000000001,
+    "phase_median_ms": {},
+    "phase_note": "inclusive wrapper await wall time; nested spans overlap"
+  },
+  {
+    "files": 13016,
+    "operation": "update_noop",
+    "samples": 1,
+    "fixture": {
+      "bytes": 13327429,
+      "directories": 206,
+      "files": 13016
+    },
+    "raw_ms": [
+      4131.8783
+    ],
+    "median_ms": 4131.8783,
+    "min_ms": 4131.8783,
+    "max_ms": 4131.8783,
+    "phase_median_ms": {
+      "acquire Central mutation lock": 0.4772,
+      "central skill hashing": 4054.1244,
+      "copy install batch refresh": 0.0134,
+      "copy_refresh": 0.0161,
+      "db_persist": 0.0049,
+      "durable_stage": 0.0022,
+      "local_or_remote_hash": 4054.1299000000004,
+      "snapshot_download": 0.0183
+    },
+    "phase_note": "inclusive wrapper await wall time; nested spans overlap"
+  }
+]

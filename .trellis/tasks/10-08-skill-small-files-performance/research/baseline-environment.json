@@ -1,0 +1,35 @@
+{
+  "captured_utc": "2026-10-08T11:46:30.1855699Z",
+  "source_head": "063c8d3236197a06ff17083c28a9738487c07510",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+  "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+  "os": {
+    "Caption": "Microsoft Windows 11 专业版",
+    "Version": "10.0.26300",
+    "BuildNumber": "26300",
+    "TotalVisibleMemorySize": 66546732
+  },
+  "cpu": {
+    "Name": "Intel(R) Core(TM) Ultra 9 275HX",
+    "NumberOfCores": 24,
+    "NumberOfLogicalProcessors": 24
+  },
+  "disks": [
+    {
+      "Model": "YMTC PC411-2048GB-B",
+      "InterfaceType": "SCSI",
+      "Size": 2048407280640
+    },
+    {
+      "Model": "ZHITAI TiPlus7100 2TB",
+      "InterfaceType": "SCSI",
+      "Size": 2048407280640
+    }
+  ],
+  "fixture_volume": "C:\\",
+  "build_profile": "release",
+  "cache_state": "OS cache not cleared; fresh fixture paths per sample",
+  "scanner": "UNVERIFIED: no Get-MpComputerStatus/Get-PhysicalDisk command in this PowerShell session; settings unchanged",
+  "network": "NOT_RUN: prefilled local synthetic immutable snapshot cache",
+  "native_ui": "NOT_RUN: no AppHandle"
+}

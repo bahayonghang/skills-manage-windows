@@ -1,0 +1,493 @@
+{
+  "before_summary": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-control-summary.json",
+  "after_summary": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-control-summary.json",
+  "before_only": [],
+  "after_only": [],
+  "rows": [
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "check_unchanged",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-control-20261008-074159.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-control-20261008-074305.log",
+      "before_median_ms": 32.0149,
+      "after_median_ms": 34.9838,
+      "median_delta_percent": 9.273494529109904,
+      "before_range_ms": [
+        24.8996,
+        36.5108
+      ],
+      "after_range_ms": [
+        26.2607,
+        49.54709999999999
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "component_snapshot_collect_clone",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-control-20261008-074159.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-control-20261008-074305.log",
+      "before_median_ms": 4.619800000000001,
+      "after_median_ms": 3.6715,
+      "median_delta_percent": -20.526862634746102,
+      "before_range_ms": [
+        3.076,
+        5.3768
+      ],
+      "after_range_ms": [
+        3.3801,
+        4.814299999999999
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": null,
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "component_snapshot_hash_manifest",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-control-20261008-074159.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-control-20261008-074305.log",
+      "before_median_ms": 3.7501,
+      "after_median_ms": 3.7502,
+      "median_delta_percent": 0.002666595557454521,
+      "before_range_ms": [
+        3.4061999999999997,
+        4.1444
+      ],
+      "after_range_ms": [
+        3.5244,
+        4.7187
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": null,
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "delete_finalize_repeat",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-control-20261008-074159.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-control-20261008-074305.log",
+      "before_median_ms": 0.12320000000000002,
+      "after_median_ms": 0.12010000000000001,
+      "median_delta_percent": -2.5162337662337664,
+      "before_range_ms": [
+        0.104,
+        0.1825
+      ],
+      "after_range_ms": [
+        0.097,
+        0.1381
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "delete_retain_3_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-control-20261008-074159.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-control-20261008-074305.log",
+      "before_median_ms": 95.1439,
+      "after_median_ms": 91.4721,
+      "median_delta_percent": -3.859206948632554,
+      "before_range_ms": [
+        77.1353,
+        176.3256
+      ],
+      "after_range_ms": [
+        70.92750000000001,
+        102.75869999999999
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "import_first",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-control-20261008-074159.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-control-20261008-074305.log",
+      "before_median_ms": 170.8322,
+      "after_median_ms": 122.62230000000001,
+      "median_delta_percent": -28.220616487992302,
+      "before_range_ms": [
+        127.1092,
+        330.6071
+      ],
+      "after_range_ms": [
+        119.3647,
+        141.33499999999998
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "import_overwrite",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-control-20261008-074159.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-control-20261008-074305.log",
+      "before_median_ms": 256.7198,
+      "after_median_ms": 266.2775,
+      "median_delta_percent": 3.7230085096669363,
+      "before_range_ms": [
+        204.1033,
+        296.4037
+      ],
+      "after_range_ms": [
+        196.6026,
+        330.72249999999997
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "leftover_cleanup_3_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-control-20261008-074159.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-control-20261008-074305.log",
+      "before_median_ms": 102.0877,
+      "after_median_ms": 84.0541,
+      "median_delta_percent": -17.664811725604544,
+      "before_range_ms": [
+        89.03750000000001,
+        158.2944
+      ],
+      "after_range_ms": [
+        72.0435,
+        127.35889999999999
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "leftover_cleanup_repeat",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-control-20261008-074159.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-control-20261008-074305.log",
+      "before_median_ms": 9.9068,
+      "after_median_ms": 7.5795,
+      "median_delta_percent": -23.491944926717,
+      "before_range_ms": [
+        7.16,
+        15.8078
+      ],
+      "after_range_ms": [
+        5.5933,
+        12.624500000000001
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "recovery_repeat",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-control-20261008-074159.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-control-20261008-074305.log",
+      "before_median_ms": 1.2942,
+      "after_median_ms": 0.9072,
+      "median_delta_percent": -29.90264255910987,
+      "before_range_ms": [
+        0.7077,
+        2.7807
+      ],
+      "after_range_ms": [
+        0.744,
+        1.4964
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "snapshot_digest",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-control-20261008-074159.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-control-20261008-074305.log",
+      "before_median_ms": 3.8335999999999997,
+      "after_median_ms": 3.573,
+      "median_delta_percent": -6.797787979966607,
+      "before_range_ms": [
+        3.3295999999999997,
+        4.7949
+      ],
+      "after_range_ms": [
+        3.3508,
+        4.8742
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": null,
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "update_1_file_0_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-control-20261008-074159.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-control-20261008-074305.log",
+      "before_median_ms": 268.3242,
+      "after_median_ms": 225.21089999999998,
+      "median_delta_percent": -16.067615220691998,
+      "before_range_ms": [
+        212.7441,
+        297.2047
+      ],
+      "after_range_ms": [
+        163.77949999999998,
+        293.2689
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "update_1_percent_0_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-control-20261008-074159.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-control-20261008-074305.log",
+      "before_median_ms": 259.17220000000003,
+      "after_median_ms": 215.88479999999998,
+      "median_delta_percent": -16.70217716251976,
+      "before_range_ms": [
+        232.9118,
+        359.3297
+      ],
+      "after_range_ms": [
+        168.4092,
+        236.7107
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "update_all_0_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-control-20261008-074159.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-control-20261008-074305.log",
+      "before_median_ms": 302.3322,
+      "after_median_ms": 183.656,
+      "median_delta_percent": -39.25357603325084,
+      "before_range_ms": [
+        218.2864,
+        396.6739
+      ],
+      "after_range_ms": [
+        169.12269999999998,
+        265.8978
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "update_all_1_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-control-20261008-074159.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-control-20261008-074305.log",
+      "before_median_ms": 381.9084,
+      "after_median_ms": 281.07009999999997,
+      "median_delta_percent": -26.403792113501567,
+      "before_range_ms": [
+        279.8117,
+        467.51
+      ],
+      "after_range_ms": [
+        223.7634,
+        313.419
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "update_all_3_copy",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-control-20261008-074159.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-control-20261008-074305.log",
+      "before_median_ms": 491.6537,
+      "after_median_ms": 477.3623,
+      "median_delta_percent": -2.906802084475313,
+      "before_range_ms": [
+        478.5185,
+        830.8066
+      ],
+      "after_range_ms": [
+        385.7026,
+        611.8144
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "service",
+      "files": 32,
+      "operation": "update_noop",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-service-control-20261008-074159.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-service-control-20261008-074305.log",
+      "before_median_ms": 30.583099999999998,
+      "after_median_ms": 39.977,
+      "median_delta_percent": 30.715983664180534,
+      "before_range_ms": [
+        26.7932,
+        37.285199999999996
+      ],
+      "after_range_ms": [
+        27.369500000000002,
+        61.254799999999996
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "REGRESSION_REQUIRES_REVIEW",
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "stage",
+      "files": 13016,
+      "operation": "component_delete_finalize",
+      "samples": 1,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-targeted-control-20261008-073941.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-control-20261008-074049.log",
+      "before_median_ms": 11465.8189,
+      "after_median_ms": 16061.810099999999,
+      "median_delta_percent": 40.08428216147735,
+      "before_range_ms": [
+        11465.8189,
+        11465.8189
+      ],
+      "after_range_ms": [
+        16061.810099999999,
+        16061.810099999999
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": null,
+      "evidence": "single_boundary_sample"
+    },
+    {
+      "mode": "stage",
+      "files": 13016,
+      "operation": "component_delete_finalize_repeat",
+      "samples": 1,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-targeted-control-20261008-073941.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-control-20261008-074049.log",
+      "before_median_ms": 0.1227,
+      "after_median_ms": 0.1295,
+      "median_delta_percent": 5.541972290138553,
+      "before_range_ms": [
+        0.1227,
+        0.1227
+      ],
+      "after_range_ms": [
+        0.1295,
+        0.1295
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": null,
+      "evidence": "single_boundary_sample"
+    },
+    {
+      "mode": "stage",
+      "files": 13016,
+      "operation": "component_delete_manifest_fingerprint",
+      "samples": 1,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-targeted-control-20261008-073941.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-control-20261008-074049.log",
+      "before_median_ms": 2702.9223,
+      "after_median_ms": 4465.7035,
+      "median_delta_percent": 65.21760540434327,
+      "before_range_ms": [
+        2702.9223,
+        2702.9223
+      ],
+      "after_range_ms": [
+        4465.7035,
+        4465.7035
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": null,
+      "evidence": "single_boundary_sample"
+    },
+    {
+      "mode": "stage",
+      "files": 13016,
+      "operation": "component_delete_stage",
+      "samples": 1,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-targeted-control-20261008-073941.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-control-20261008-074049.log",
+      "before_median_ms": 27.5856,
+      "after_median_ms": 32.246700000000004,
+      "median_delta_percent": 16.896859230903093,
+      "before_range_ms": [
+        27.5856,
+        27.5856
+      ],
+      "after_range_ms": [
+        32.246700000000004,
+        32.246700000000004
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": null,
+      "evidence": "single_boundary_sample"
+    },
+    {
+      "mode": "stage",
+      "files": 13016,
+      "operation": "component_durable_stage",
+      "samples": 1,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-targeted-control-20261008-073941.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-control-20261008-074049.log",
+      "before_median_ms": 18015.2822,
+      "after_median_ms": 22860.909499999998,
+      "median_delta_percent": 26.897315546908263,
+      "before_range_ms": [
+        18015.2822,
+        18015.2822
+      ],
+      "after_range_ms": [
+        22860.909499999998,
+        22860.909499999998
+      ],
+      "sample_ranges_overlap": false,
+      "numeric_budget": null,
+      "evidence": "single_boundary_sample"
+    }
+  ],
+  "limits": "Numeric budgets do not establish statistical significance or native WebView performance. Check frozen build/harness identity receipts separately."
+}

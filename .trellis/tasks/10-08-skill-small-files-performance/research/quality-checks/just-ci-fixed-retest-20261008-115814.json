@@ -1,0 +1,24 @@
+{
+  "command": "just ci",
+  "pnpm_version": "10.34.5",
+  "head": "063c8d3236197a06ff17083c28a9738487c07510",
+  "started_utc": "2026-10-08T16:58:14.1089562Z",
+  "ended_utc": "2026-10-08T17:04:43.5305498Z",
+  "exit_code": 0,
+  "log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\quality-checks\\just-ci-fixed-retest-20261008-115814.log",
+  "log_sha256": "B3D91D3408BE0FE1BF5C5E3DAD0C890F80F4A63E27DF13B0AD8C0E94E7057AF4",
+  "environment": {
+    "PATH_prefix": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools",
+    "CARGO_TARGET_DIR": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\quality-target"
+  },
+  "fixes": [
+    "Process-only workspace build path for dangling target link",
+    "Two test-only RefCell borrows are scoped before await; no lint allowance"
+  ],
+  "source_identity": {
+    "progress_tests_sha256": "5951F0EB5C66CFCF58B16204488C1EB109F59AD6FF86EF455EF22C3A0CBEB252",
+    "benchmark_harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923"
+  },
+  "production_behavior_changed_by_reviewer": false,
+  "concurrent_activity": "Frozen after T fullservice correctness-only finished; elapsed CI times are not performance evidence"
+}

@@ -1,0 +1,11 @@
+{
+  "command": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check",
+  "exit_code": 0,
+  "timestamp_utc": "2026-10-08T16:57:48.7665135Z",
+  "scope": "test-only lexical RefCell borrow scopes",
+  "test_file": "src-tauri/src/services/github_import/progress/tests.rs",
+  "test_file_sha256": "5951F0EB5C66CFCF58B16204488C1EB109F59AD6FF86EF455EF22C3A0CBEB252",
+  "production_behavior_changed": false,
+  "before_test_file_sha256": "F39A30DD187073DBDBF8FEFCE04A8BDE8E6105F2E9A530481FA3A63CA20DB27E",
+  "frozen_performance_binary_sha256": "41293FD91D399D680488B43AB1CCE547204776864FDDE309C32F1C07D76A3411"
+}

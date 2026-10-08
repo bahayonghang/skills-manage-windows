@@ -1,0 +1,486 @@
+{
+  "logs": {
+    ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log": {
+      "sha256": "151ab92e3e4edb6f58a8d1b662aa94940569d8ae04fbbecee30320d02fcb78f1",
+      "metadata": {
+        "app_handle": false,
+        "files": [
+          4096,
+          18000
+        ],
+        "mode": "stage",
+        "network": "not_requested",
+        "os_cache": "not_cleared",
+        "phase_time": "inclusive wrapper await wall ms",
+        "profile": "release",
+        "samples": 1,
+        "schema": 1,
+        "security_scanner": "not_modified"
+      },
+      "test_status": "PASS",
+      "run_identity": {
+        "captured_utc": "2026-10-08T12:15:27.5162066Z",
+        "binary": ".git/skill-small-files-tools/benchmark-before-targeted.exe",
+        "binary_sha256": "46A19EC66B300DF79D7345724DB5CA2440160AC29A23202655965A41088AD36F",
+        "source_head_at_invocation": "063c8d3236197a06ff17083c28a9738487c07510",
+        "current_harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923",
+        "files": "4096,18000",
+        "samples": 1,
+        "mode": "stage",
+        "identity_note": "Binary source and actual harness identity must match the frozen build receipt. Current worktree fields are invocation context only."
+      }
+    }
+  },
+  "groups": [
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "files": 4096,
+      "operation": "component_delete_finalize",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 4193349,
+        "directories": 66,
+        "files": 4096
+      },
+      "raw_ms": [
+        5565.444
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 5565.444,
+          "fixture": {
+            "bytes": 4193349,
+            "directories": 66,
+            "files": 4096
+          },
+          "operation": "component_delete_finalize",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 5565.4345,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 5565.444,
+      "min_ms": 5565.444,
+      "max_ms": 5565.444,
+      "phase_median_ms": {
+        "Central delete finalize": 5565.4345
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        5565.444
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "files": 4096,
+      "operation": "component_delete_finalize_repeat",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 4193349,
+        "directories": 66,
+        "files": 4096
+      },
+      "raw_ms": [
+        0.1281
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 0.1281,
+          "fixture": {
+            "bytes": 4193349,
+            "directories": 66,
+            "files": 4096
+          },
+          "operation": "component_delete_finalize_repeat",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 0.1225,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 0.1281,
+      "min_ms": 0.1281,
+      "max_ms": 0.1281,
+      "phase_median_ms": {
+        "Central delete finalize": 0.1225
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        0.1281
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "files": 4096,
+      "operation": "component_delete_manifest_fingerprint",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 4193349,
+        "directories": 66,
+        "files": 4096
+      },
+      "raw_ms": [
+        1451.44
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 1451.44,
+          "fixture": {
+            "bytes": 4193349,
+            "directories": 66,
+            "files": 4096
+          },
+          "operation": "component_delete_manifest_fingerprint",
+          "phases": {
+            "Central operation fingerprint": {
+              "await_ms": 1451.4147,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 1451.44,
+      "min_ms": 1451.44,
+      "max_ms": 1451.44,
+      "phase_median_ms": {
+        "Central operation fingerprint": 1451.4147
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        1451.44
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "files": 4096,
+      "operation": "component_delete_stage",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 4193349,
+        "directories": 66,
+        "files": 4096
+      },
+      "raw_ms": [
+        8.7938
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 8.7938,
+          "fixture": {
+            "bytes": 4193349,
+            "directories": 66,
+            "files": 4096
+          },
+          "operation": "component_delete_stage",
+          "phases": {
+            "Central delete staging": {
+              "await_ms": 8.783199999999999,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 8.7938,
+      "min_ms": 8.7938,
+      "max_ms": 8.7938,
+      "phase_median_ms": {
+        "Central delete staging": 8.783199999999999
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        8.7938
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "files": 4096,
+      "operation": "component_durable_stage",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 4193349,
+        "directories": 66,
+        "files": 4096
+      },
+      "raw_ms": [
+        7667.1667
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 7667.1667,
+          "fixture": {
+            "bytes": 4193349,
+            "directories": 66,
+            "files": 4096
+          },
+          "operation": "component_durable_stage",
+          "phases": {
+            "Central update durable staging": {
+              "await_ms": 7663.1716,
+              "calls": 1
+            },
+            "durable_stage": {
+              "await_ms": 7667.1497,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 7667.1667,
+      "min_ms": 7667.1667,
+      "max_ms": 7667.1667,
+      "phase_median_ms": {
+        "Central update durable staging": 7663.1716,
+        "durable_stage": 7667.1497
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        7667.1667
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "files": 18000,
+      "operation": "component_delete_finalize",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 18431045,
+        "directories": 284,
+        "files": 18000
+      },
+      "raw_ms": [
+        32185.8614
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 32185.8614,
+          "fixture": {
+            "bytes": 18431045,
+            "directories": 284,
+            "files": 18000
+          },
+          "operation": "component_delete_finalize",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 32185.854900000002,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 32185.8614,
+      "min_ms": 32185.8614,
+      "max_ms": 32185.8614,
+      "phase_median_ms": {
+        "Central delete finalize": 32185.854900000002
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        32185.8614
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "files": 18000,
+      "operation": "component_delete_finalize_repeat",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 18431045,
+        "directories": 284,
+        "files": 18000
+      },
+      "raw_ms": [
+        0.1341
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 0.1341,
+          "fixture": {
+            "bytes": 18431045,
+            "directories": 284,
+            "files": 18000
+          },
+          "operation": "component_delete_finalize_repeat",
+          "phases": {
+            "Central delete finalize": {
+              "await_ms": 0.12760000000000002,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 0.1341,
+      "min_ms": 0.1341,
+      "max_ms": 0.1341,
+      "phase_median_ms": {
+        "Central delete finalize": 0.12760000000000002
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        0.1341
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "files": 18000,
+      "operation": "component_delete_manifest_fingerprint",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 18431045,
+        "directories": 284,
+        "files": 18000
+      },
+      "raw_ms": [
+        6381.3108999999995
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 6381.3108999999995,
+          "fixture": {
+            "bytes": 18431045,
+            "directories": 284,
+            "files": 18000
+          },
+          "operation": "component_delete_manifest_fingerprint",
+          "phases": {
+            "Central operation fingerprint": {
+              "await_ms": 6381.2899,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 6381.3108999999995,
+      "min_ms": 6381.3108999999995,
+      "max_ms": 6381.3108999999995,
+      "phase_median_ms": {
+        "Central operation fingerprint": 6381.2899
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        6381.3108999999995
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "files": 18000,
+      "operation": "component_delete_stage",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 18431045,
+        "directories": 284,
+        "files": 18000
+      },
+      "raw_ms": [
+        32.0949
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 32.0949,
+          "fixture": {
+            "bytes": 18431045,
+            "directories": 284,
+            "files": 18000
+          },
+          "operation": "component_delete_stage",
+          "phases": {
+            "Central delete staging": {
+              "await_ms": 32.0872,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 32.0949,
+      "min_ms": 32.0949,
+      "max_ms": 32.0949,
+      "phase_median_ms": {
+        "Central delete staging": 32.0872
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        32.0949
+      ],
+      "samples_1_to_6_ms": []
+    },
+    {
+      "log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-boundary-20261008-071527.log",
+      "files": 18000,
+      "operation": "component_durable_stage",
+      "observations": 1,
+      "samples": 1,
+      "fixture": {
+        "bytes": 18431045,
+        "directories": 284,
+        "files": 18000
+      },
+      "raw_ms": [
+        33198.7321
+      ],
+      "raw_rows": [
+        {
+          "elapsed_ms": 33198.7321,
+          "fixture": {
+            "bytes": 18431045,
+            "directories": 284,
+            "files": 18000
+          },
+          "operation": "component_durable_stage",
+          "phases": {
+            "Central update durable staging": {
+              "await_ms": 33180.402299999994,
+              "calls": 1
+            },
+            "durable_stage": {
+              "await_ms": 33198.721900000004,
+              "calls": 1
+            }
+          },
+          "sample": 0
+        }
+      ],
+      "median_ms": 33198.7321,
+      "min_ms": 33198.7321,
+      "max_ms": 33198.7321,
+      "phase_median_ms": {
+        "Central update durable staging": 33180.402299999994,
+        "durable_stage": 33198.721900000004
+      },
+      "phase_note": "inclusive wrapper await wall time; nested spans overlap",
+      "sample_0_ms": [
+        33198.7321
+      ],
+      "samples_1_to_6_ms": []
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+   Compiling windows-sys v0.61.2
+   Compiling tauri-plugin-deep-link v2.4.9
+   Compiling skillport v1.0.2 (D:\Documents\Code\Agents\skills-manage-windows\src-tauri)
+   Compiling mio v1.2.0
+   Compiling softbuffer v0.4.8
+   Compiling schannel v0.1.29
+   Compiling tauri-runtime-wry v2.11.4
+   Compiling native-tls v0.2.18
+   Compiling tokio v1.53.1
+   Compiling tauri v2.11.5
+   Compiling tokio-util v0.7.18
+   Compiling tokio-stream v0.1.18
+   Compiling tokio-rustls v0.26.4
+   Compiling tower v0.5.3
+   Compiling tokio-native-tls v0.3.1
+   Compiling sqlx-core v0.8.6
+   Compiling tower-http v0.6.8
+   Compiling h2 v0.4.19
+   Compiling sqlx-sqlite v0.8.6
+   Compiling hyper v1.9.0
+   Compiling sqlx v0.8.6
+   Compiling hyper-util v0.1.20
+   Compiling hyper-rustls v0.27.8
+   Compiling hyper-tls v0.6.0
+   Compiling tauri-plugin-fs v2.5.1
+   Compiling tauri-plugin-single-instance v2.4.3
+   Compiling tauri-plugin-shell v2.3.5
+   Compiling tauri-plugin-process v2.3.1
+   Compiling tauri-plugin-sql v2.4.0
+   Compiling reqwest v0.13.2
+   Compiling reqwest v0.12.28
+   Compiling tauri-plugin-dialog v2.7.2
+   Compiling tauri-plugin-updater v2.10.1
+warning: unused import: `PathBuf`
+ --> src\services\central_updates\core\performance_benchmark.rs:6:23
+  |
+6 | use std::path::{Path, PathBuf};
+  |                       ^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused imports: `collect_remote_skill_files` and `hash_remote_files`
+  --> src\services\central_updates\core\performance_benchmark.rs:20:5
+   |
+20 |     collect_remote_skill_files, hash_remote_files, CopyRefreshRequest,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^
+
+error[E0597]: `span` does not live long enough
+  --> src\services\central_updates\core\performance_benchmark.rs:81:30
+   |
+80 |         let span = ctx.span(&id).expect("closing span");
+   |             ---- binding `span` declared here
+81 |         if let Some(start) = span.extensions().get::<PhaseStart>() {
+   |                              ^^^^-------------
+   |                              |
+   |                              borrowed value does not live long enough
+   |                              a temporary with access to the borrow is created here ...
+...
+87 |     }
+   |     -
+   |     |
+   |     `span` dropped here while still borrowed
+   |     ... and the borrow might be used here, when that temporary is dropped and runs the destructor for type `tracing_subscriber::registry::Extensions<'_>`
+   |
+help: consider adding semicolon after the expression so its temporaries are dropped sooner, before the local variables declared by the block are dropped
+   |
+86 |         };
+   |          +
+
+For more information about this error, try `rustc --explain E0597`.
+warning: `skillport` (lib test) generated 2 warnings
+error: could not compile `skillport` (lib test) due to 1 previous error; 2 warnings emitted

@@ -1,0 +1,37 @@
+{
+  "source_head": "063c8d3236197a06ff17083c28a9738487c07510",
+  "current_source": "src-tauri/src/services/central_operation/fs.rs",
+  "functions": [
+    {
+      "function": "stage_delete_local",
+      "body_equal": true,
+      "before_sha256": "f05d93f626b1463e33d594ce369e2b6eb1e7c64352f34cf6d884620f7c726c59",
+      "after_sha256": "f05d93f626b1463e33d594ce369e2b6eb1e7c64352f34cf6d884620f7c726c59"
+    },
+    {
+      "function": "stage_delete_local_blocking",
+      "body_equal": true,
+      "before_sha256": "2d0ef59a767decd8032c9075b44084b5052230187cafe74eb35b499224a638f0",
+      "after_sha256": "2d0ef59a767decd8032c9075b44084b5052230187cafe74eb35b499224a638f0"
+    },
+    {
+      "function": "finalize_delete_local",
+      "body_equal": true,
+      "before_sha256": "0c3ccc7ee37bcaa47596a8e7ce10a6d1f3ac08c55816e98eb7df4bc4190b4ec2",
+      "after_sha256": "0c3ccc7ee37bcaa47596a8e7ce10a6d1f3ac08c55816e98eb7df4bc4190b4ec2"
+    },
+    {
+      "function": "finalize_delete_local_blocking",
+      "body_equal": true,
+      "before_sha256": "d6e43f0dfbc24a9328a1aae9c97c956f3165f06929cf07d0363c9a2b217805b1",
+      "after_sha256": "d6e43f0dfbc24a9328a1aae9c97c956f3165f06929cf07d0363c9a2b217805b1"
+    },
+    {
+      "function": "fingerprint_path_blocking",
+      "body_equal": false,
+      "before_sha256": "f32f6e8fc4267e1b57233cde4d2a15557aaa585fe2b9cf795427625d60c0bf90",
+      "after_sha256": "e3e21d7d774e3e11008788edbfa2319aa87ba5f996ce2ca16fb5adea0f0709e1"
+    }
+  ],
+  "limits": "Function-body equality is source evidence only. Fingerprint sort changed. No root cause for measured rename, repeated finalize or no-op variation has been established. No stable deletion gain is claimed."
+}

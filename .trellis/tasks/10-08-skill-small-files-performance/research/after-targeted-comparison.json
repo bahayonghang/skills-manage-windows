@@ -1,0 +1,119 @@
+{
+  "before_summary": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-targeted-summary.json",
+  "after_summary": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-summary.json",
+  "before_only": [],
+  "after_only": [],
+  "rows": [
+    {
+      "mode": "stage",
+      "files": 13016,
+      "operation": "component_delete_finalize",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-targeted-formal-20261008-070646.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-formal-20261008-073116.log",
+      "before_median_ms": 18588.7603,
+      "after_median_ms": 15699.263,
+      "median_delta_percent": -15.544324921979868,
+      "before_range_ms": [
+        14639.2708,
+        20292.438700000002
+      ],
+      "after_range_ms": [
+        10737.775599999999,
+        27673.1696
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": null,
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "stage",
+      "files": 13016,
+      "operation": "component_delete_finalize_repeat",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-targeted-formal-20261008-070646.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-formal-20261008-073116.log",
+      "before_median_ms": 0.1453,
+      "after_median_ms": 0.1328,
+      "median_delta_percent": -8.602890571231935,
+      "before_range_ms": [
+        0.12129999999999999,
+        0.2299
+      ],
+      "after_range_ms": [
+        0.0964,
+        0.1763
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": null,
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "stage",
+      "files": 13016,
+      "operation": "component_delete_manifest_fingerprint",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-targeted-formal-20261008-070646.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-formal-20261008-073116.log",
+      "before_median_ms": 3404.1441,
+      "after_median_ms": 3263.2218000000003,
+      "median_delta_percent": -4.139727809994875,
+      "before_range_ms": [
+        3119.5943,
+        6093.3422
+      ],
+      "after_range_ms": [
+        1826.8610999999999,
+        5404.1935
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": null,
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "stage",
+      "files": 13016,
+      "operation": "component_delete_stage",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-targeted-formal-20261008-070646.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-formal-20261008-073116.log",
+      "before_median_ms": 21.828400000000002,
+      "after_median_ms": 29.5263,
+      "median_delta_percent": 35.26552564548935,
+      "before_range_ms": [
+        17.6402,
+        25.583499999999997
+      ],
+      "after_range_ms": [
+        23.6574,
+        214.2064
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": null,
+      "evidence": "seven_samples"
+    },
+    {
+      "mode": "stage",
+      "files": 13016,
+      "operation": "component_durable_stage",
+      "samples": 7,
+      "before_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\baseline-targeted-formal-20261008-070646.log",
+      "after_log": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\after-targeted-formal-20261008-073116.log",
+      "before_median_ms": 21371.180800000002,
+      "after_median_ms": 17281.426,
+      "median_delta_percent": -19.136775072344157,
+      "before_range_ms": [
+        19878.902700000002,
+        23294.1299
+      ],
+      "after_range_ms": [
+        14606.0509,
+        19943.7794
+      ],
+      "sample_ranges_overlap": true,
+      "numeric_budget": "PASS",
+      "evidence": "seven_samples"
+    }
+  ],
+  "limits": "Numeric budgets do not establish statistical significance or native WebView performance. Check frozen build/harness identity receipts separately."
+}

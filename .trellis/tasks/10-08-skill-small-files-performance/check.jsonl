@@ -1,0 +1,11 @@
+{"file":".trellis/spec/backend/fs-db-operation-journal.md","reason":"Validate crash recovery ownership and fail-closed cleanup"}
+{"file":".trellis/spec/backend/skill-deletion-integrity.md","reason":"Validate cascade and retained-installation deletion boundaries"}
+{"file":".trellis/spec/backend/spawn-blocking-io.md","reason":"Verify recursive IO and Windows test runtime constraints"}
+{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"Verify scoped recovery and target locking"}
+{"file":".trellis/spec/backend/central-update-batching.md","reason":"Prevent existing Local SSH WSL batching regressions"}
+{"file":".trellis/spec/frontend/github-preview-snapshot-token.md","reason":"Preserve preview confirmation lifecycle and target binding"}
+{"file":".trellis/tasks/10-08-skill-small-files-performance/research/preview-contract-excerpt.md","reason":"Review required snapshot verification lease and cleanup invariants"}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Formal CI and evidence layer requirements"}
+{"file":".trellis/tasks/10-08-skill-small-files-performance/research/performance-analysis.md","reason":"Separate static cost model from unmeasured runtime results"}
+{"file":".trellis/tasks/10-08-skill-small-files-performance/research/implementation-budget.md","reason":"Compare against pre-change numeric budgets and preserve unverified surfaces"}
+{"file":".trellis/tasks/10-08-skill-small-files-performance/research/optimization-boundaries.md","reason":"Review ownership caller sweep digest compatibility and fresh filesystem validation"}

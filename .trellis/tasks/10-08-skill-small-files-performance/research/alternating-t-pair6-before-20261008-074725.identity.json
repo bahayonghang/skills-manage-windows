@@ -1,0 +1,37 @@
+{
+  "pair_index": 6,
+  "pair_order": "before-after",
+  "version": "before",
+  "started_utc": "2026-10-08T12:55:46.6264246Z",
+  "ended_utc": "2026-10-08T12:56:35.0768959Z",
+  "binary": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-before-targeted.exe",
+  "binary_sha256": "46A19EC66B300DF79D7345724DB5CA2440160AC29A23202655965A41088AD36F",
+  "harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923",
+  "profile": "release",
+  "files": 13016,
+  "samples": 1,
+  "mode": "stage",
+  "raw_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair6-before-20261008-074725.log",
+  "stderr_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair6-before-20261008-074725.stderr.log",
+  "raw_log_sha256": "0D399CD9266F980B0C9FFB3C929810AA65E5FEF437BC3DB15E97455424BBC189",
+  "exit_code": 0,
+  "benchmark_cpu_start": {
+    "cpu_seconds": 0.0,
+    "status": "MEASURED",
+    "pid": 67072
+  },
+  "benchmark_cpu_end": {
+    "cpu_seconds": 44.859375,
+    "status": "MEASURED",
+    "pid": 67072
+  },
+  "scanner_cpu_start": {
+    "status": "UNMEASURED",
+    "reason": "Single readable MsMpEng CPU value unavailable"
+  },
+  "scanner_cpu_end": {
+    "status": "UNMEASURED",
+    "reason": "Single readable MsMpEng CPU value unavailable"
+  },
+  "cpu_note": "Read-only cumulative process CPU endpoints. Scanner CPU is system-wide and does not identify fixture scanning. No worker IO, cache, ETW or peak resource measurement."
+}

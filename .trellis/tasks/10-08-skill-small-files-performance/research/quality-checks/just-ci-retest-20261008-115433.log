@@ -1,0 +1,552 @@
+node scripts/check/sync-version.mjs
+[version] already synced to 1.0.2
+node scripts/check/run-ci.mjs
+[ci] Running common and rust-platform lanes.
+[common:version] $ pnpm version:check
+[rust-platform:clippy] $ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+[common:version] 
+[common:version] > skillport@1.0.2 version:check D:\Documents\Code\Agents\skills-manage-windows
+[common:version] > node scripts/check/sync-version.mjs --check
+[common:version] 
+[common:version] [version] already synced to 1.0.2
+[common:version] completed in 0.6s
+[common:docs-generated] $ pnpm docs:gen:check
+[common:docs-generated] 
+[common:docs-generated] > skillport@1.0.2 docs:gen:check D:\Documents\Code\Agents\skills-manage-windows
+[common:docs-generated] > node scripts/docs/build-ipc-dict.mjs --check && node scripts/docs/build-schema-table.mjs --check
+[common:docs-generated] 
+[common:docs-generated] [build-ipc-dict] up to date: docs/architecture/_generated/ipc-commands.md
+[common:docs-generated] [build-schema-table] up to date: docs/architecture/_generated/data-model.md
+[common:docs-generated] completed in 0.7s
+[common:typecheck] $ pnpm typecheck
+[common:typecheck] 
+[common:typecheck] > skillport@1.0.2 typecheck D:\Documents\Code\Agents\skills-manage-windows
+[common:typecheck] > tsc --noEmit
+[common:typecheck] 
+[rust-platform:clippy]    Compiling proc-macro2 v1.0.106
+[rust-platform:clippy]    Compiling unicode-ident v1.0.24
+[rust-platform:clippy]    Compiling quote v1.0.45
+[rust-platform:clippy]    Compiling cfg-if v1.0.4
+[rust-platform:clippy]    Compiling serde v1.0.229
+[rust-platform:clippy]    Compiling serde_core v1.0.229
+[rust-platform:clippy]    Compiling parking_lot_core v0.9.12
+[rust-platform:clippy]    Compiling siphasher v1.0.2
+[rust-platform:clippy]    Compiling icu_normalizer_data v2.2.0
+[rust-platform:clippy]    Compiling icu_properties_data v2.2.0
+[rust-platform:clippy]    Compiling smallvec v1.15.1
+[rust-platform:clippy]    Compiling stable_deref_trait v1.2.1
+[rust-platform:clippy]    Compiling zerocopy v0.8.48
+[rust-platform:clippy]    Compiling zmij v1.0.21
+[rust-platform:clippy]    Compiling getrandom v0.4.2
+[rust-platform:clippy]    Compiling windows-link v0.2.1
+[rust-platform:clippy]    Compiling thiserror v2.0.20
+[rust-platform:clippy]    Compiling autocfg v1.5.0
+[rust-platform:clippy]    Compiling itoa v1.0.18
+[rust-platform:clippy]    Compiling scopeguard v1.2.0
+[rust-platform:clippy]    Compiling fastrand v2.4.1
+[rust-platform:clippy]    Compiling memchr v2.8.0
+[rust-platform:clippy]    Compiling num-conv v0.2.1
+[rust-platform:clippy]    Compiling time-core v0.1.8
+[rust-platform:clippy]    Compiling windows_x86_64_msvc v0.53.1
+[rust-platform:clippy]    Compiling phf_shared v0.13.1
+[rust-platform:clippy]    Compiling getrandom v0.2.17
+[rust-platform:clippy]    Compiling windows_x86_64_msvc v0.48.5
+[rust-platform:clippy]    Compiling lock_api v0.4.14
+[rust-platform:clippy]    Compiling shlex v1.3.0
+[rust-platform:clippy]    Compiling find-msvc-tools v0.1.9
+[rust-platform:clippy]    Compiling rand_core v0.6.4
+[rust-platform:clippy]    Compiling writeable v0.6.3
+[rust-platform:clippy]    Compiling time-macros v0.2.27
+[rust-platform:clippy]    Compiling phf_generator v0.13.1
+[rust-platform:clippy]    Compiling log v0.4.29
+[rust-platform:clippy]    Compiling litemap v0.8.2
+[rust-platform:clippy]    Compiling siphasher v0.3.11
+[rust-platform:clippy]    Compiling utf8_iter v1.0.4
+[rust-platform:clippy]    Compiling new_debug_unreachable v1.0.6
+[rust-platform:clippy]    Compiling getrandom v0.1.16
+[rust-platform:clippy]    Compiling precomputed-hash v0.1.1
+[rust-platform:clippy]    Compiling serde_json v1.0.151
+[rust-platform:clippy]    Compiling phf_shared v0.11.3
+[rust-platform:clippy]    Compiling cc v1.2.59
+[rust-platform:clippy]    Compiling typeid v1.0.3
+[rust-platform:clippy]    Compiling equivalent v1.0.2
+[rust-platform:clippy]    Compiling percent-encoding v2.3.2
+[rust-platform:clippy]    Compiling windows_x86_64_msvc v0.52.6
+[rust-platform:clippy]    Compiling phf_codegen v0.13.1
+[rust-platform:clippy]    Compiling ident_case v1.0.1
+[rust-platform:clippy]    Compiling strsim v0.11.1
+[rust-platform:clippy]    Compiling syn v1.0.109
+[common:typecheck] completed in 3.3s
+[common:lint] $ pnpm lint
+[rust-platform:clippy]    Compiling utf-8 v0.7.6
+[rust-platform:clippy]    Compiling bytes v1.11.1
+[rust-platform:clippy]    Compiling form_urlencoded v1.2.2
+[rust-platform:clippy]    Compiling thiserror v1.0.69
+[rust-platform:clippy]    Compiling hashbrown v0.16.1
+[rust-platform:clippy]    Compiling powerfmt v0.2.0
+[rust-platform:clippy]    Compiling parking_lot v0.12.5
+[rust-platform:clippy]    Compiling erased-serde v0.4.10
+[rust-platform:clippy]    Compiling phf_shared v0.8.0
+[rust-platform:clippy]    Compiling dtoa v1.0.11
+[rust-platform:clippy]    Compiling proc-macro-hack v0.5.20+deprecated
+[rust-platform:clippy]    Compiling phf_shared v0.10.0
+[rust-platform:clippy]    Compiling byteorder v1.5.0
+[rust-platform:clippy]    Compiling anyhow v1.0.104
+[rust-platform:clippy]    Compiling deranged v0.5.8
+[rust-platform:clippy]    Compiling winnow v1.0.1
+[rust-platform:clippy]    Compiling base64 v0.22.1
+[common:lint] 
+[common:lint] > skillport@1.0.2 lint D:\Documents\Code\Agents\skills-manage-windows
+[common:lint] > eslint "src/**/*.{ts,tsx}" --cache --cache-location node_modules/.cache/eslint/ --report-unused-disable-directives --max-warnings 0
+[common:lint] 
+[rust-platform:clippy]    Compiling dtoa-short v0.3.5
+[rust-platform:clippy]    Compiling indexmap v2.13.1
+[rust-platform:clippy]    Compiling mac v0.1.1
+[rust-platform:clippy]    Compiling ctor-proc-macro v0.0.7
+[rust-platform:clippy]    Compiling toml_writer v1.1.1+spec-1.1.0
+[rust-platform:clippy]    Compiling string_cache v0.9.0
+[rust-platform:clippy]     Checking windows-targets v0.53.5
+[rust-platform:clippy]    Compiling version_check v0.9.5
+[rust-platform:clippy]    Compiling syn v2.0.117
+[rust-platform:clippy]    Compiling syn v3.0.4
+[rust-platform:clippy]    Compiling string_cache_codegen v0.6.1
+[rust-platform:clippy]    Compiling toml_parser v1.1.2+spec-1.1.0
+[rust-platform:clippy]    Compiling bitflags v1.3.2
+[rust-platform:clippy]    Compiling rand_core v0.5.1
+[rust-platform:clippy]    Compiling futf v0.1.5
+[rust-platform:clippy]    Compiling windows-targets v0.48.5
+[rust-platform:clippy]    Compiling tendril v0.5.0
+[rust-platform:clippy]    Compiling selectors v0.36.1
+[rust-platform:clippy]    Compiling phf v0.11.3
+[rust-platform:clippy]    Compiling aho-corasick v1.1.4
+[rust-platform:clippy]    Compiling indexmap v1.9.3
+[rust-platform:clippy]     Checking windows-sys v0.60.2
+[rust-platform:clippy]     Checking pin-project-lite v0.2.17
+[rust-platform:clippy]    Compiling time v0.3.47
+[rust-platform:clippy]    Compiling uuid v1.26.0
+[rust-platform:clippy]    Compiling serde_spanned v1.1.1
+[rust-platform:clippy]    Compiling semver v1.0.28
+[rust-platform:clippy]    Compiling windows-sys v0.48.0
+[rust-platform:clippy]    Compiling tendril v0.4.3
+[rust-platform:clippy]    Compiling rand_pcg v0.2.1
+[rust-platform:clippy]    Compiling camino v1.2.2
+[rust-platform:clippy]    Compiling alloc-no-stdlib v2.0.4
+[rust-platform:clippy]    Compiling web_atoms v0.2.3
+[rust-platform:clippy]    Compiling convert_case v0.4.0
+[rust-platform:clippy]    Compiling matches v0.1.10
+[rust-platform:clippy]    Compiling unic-common v0.9.0
+[rust-platform:clippy]    Compiling unic-char-range v0.9.0
+[rust-platform:clippy]    Compiling regex-syntax v0.8.11
+[rust-platform:clippy]    Compiling nodrop v0.1.14
+[rust-platform:clippy]    Compiling libc v0.2.184
+[rust-platform:clippy]    Compiling unic-ucd-version v0.9.0
+[rust-platform:clippy]    Compiling unic-char-property v0.9.0
+[rust-platform:clippy]    Compiling alloc-stdlib v0.2.2
+[rust-platform:clippy]    Compiling servo_arc v0.2.0
+[rust-platform:clippy]    Compiling fxhash v0.2.1
+[rust-platform:clippy]    Compiling phf v0.8.0
+[rust-platform:clippy]    Compiling servo_arc v0.4.3
+[rust-platform:clippy]    Compiling schemars v0.8.22
+[rust-platform:clippy]    Compiling bitflags v2.11.0
+[rust-platform:clippy]    Compiling hashbrown v0.12.3
+[rust-platform:clippy]    Compiling fnv v1.0.7
+[rust-platform:clippy]    Compiling bit-vec v0.8.0
+[rust-platform:clippy]    Compiling rustc-hash v2.1.2
+[rust-platform:clippy]    Compiling winapi-util v0.1.11
+[rust-platform:clippy]    Compiling brotli-decompressor v5.0.0
+[rust-platform:clippy]    Compiling unic-ucd-ident v0.9.0
+[rust-platform:clippy]    Compiling toml_datetime v1.1.1+spec-1.1.0
+[rust-platform:clippy]    Compiling cfb v0.7.3
+[rust-platform:clippy]    Compiling toml_datetime v0.7.5+spec-1.1.0
+[rust-platform:clippy]    Compiling quick-xml v0.41.0
+[rust-platform:clippy]    Compiling bit-set v0.8.0
+[rust-platform:clippy]    Compiling dyn-clone v1.0.20
+[rust-platform:clippy]    Compiling dunce v1.0.5
+[rust-platform:clippy]    Compiling winnow v0.7.15
+[rust-platform:clippy]    Compiling ppv-lite86 v0.2.21
+[rust-platform:clippy]    Compiling same-file v1.0.6
+[rust-platform:clippy]    Compiling foldhash v0.2.0
+[rust-platform:clippy]     Checking once_cell v1.21.4
+[rust-platform:clippy]    Compiling toml v1.1.2+spec-1.1.0
+[rust-platform:clippy]    Compiling ctor v0.8.0
+[rust-platform:clippy]    Compiling serde-untagged v0.1.9
+[rust-platform:clippy]    Compiling http v1.4.0
+[rust-platform:clippy]    Compiling walkdir v2.5.0
+[rust-platform:clippy]    Compiling glob v0.3.3
+[rust-platform:clippy]     Checking windows-sys v0.61.2
+[rust-platform:clippy]    Compiling infer v0.19.0
+[rust-platform:clippy]    Compiling generic-array v0.14.7
+[rust-platform:clippy]     Checking windows-link v0.1.3
+[rust-platform:clippy]    Compiling regex-automata v0.4.18
+[rust-platform:clippy]    Compiling rand_chacha v0.3.1
+[rust-platform:clippy]    Compiling rand_chacha v0.2.2
+[rust-platform:clippy]    Compiling heck v0.5.0
+[rust-platform:clippy]    Compiling brotli v8.0.2
+[rust-platform:clippy]     Checking windows-result v0.3.4
+[rust-platform:clippy]     Checking windows-strings v0.4.2
+[rust-platform:clippy]    Compiling vswhom-sys v0.1.3
+[rust-platform:clippy]    Compiling windows-targets v0.52.6
+[rust-platform:clippy]    Compiling rand v0.8.5
+[rust-platform:clippy]    Compiling rand v0.7.3
+[rust-platform:clippy]    Compiling windows-sys v0.59.0
+[rust-platform:clippy]    Compiling crossbeam-utils v0.8.21
+[rust-platform:clippy]     Checking tracing-core v0.1.36
+[rust-platform:clippy]    Compiling rustc_version v0.4.1
+[rust-platform:clippy]    Compiling option-ext v0.2.0
+[rust-platform:clippy]     Checking futures-core v0.3.34
+[rust-platform:clippy]    Compiling synstructure v0.13.2
+[rust-platform:clippy]    Compiling darling_core v0.23.0
+[rust-platform:clippy]    Compiling phf_generator v0.11.3
+[rust-platform:clippy]    Compiling phf_generator v0.10.0
+[rust-platform:clippy]    Compiling phf_generator v0.8.0
+[rust-platform:clippy]    Compiling serde_derive_internals v0.29.1
+[rust-platform:clippy]    Compiling toml v0.9.12+spec-1.1.0
+[rust-platform:clippy]    Compiling typenum v1.20.1
+[rust-platform:clippy]    Compiling string_cache_codegen v0.5.4
+[rust-platform:clippy]    Compiling phf_codegen v0.11.3
+[rust-platform:clippy]    Compiling phf_codegen v0.8.0
+[rust-platform:clippy]    Compiling crc32fast v1.5.0
+[rust-platform:clippy]    Compiling serde_derive v1.0.229
+[rust-platform:clippy]    Compiling thiserror-impl v2.0.20
+[rust-platform:clippy]    Compiling selectors v0.24.0
+[rust-platform:clippy]     Checking futures-sink v0.3.34
+[rust-platform:clippy]    Compiling markup5ever v0.14.1
+[rust-platform:clippy]     Checking socket2 v0.6.3
+[rust-platform:clippy]    Compiling regex v1.13.1
+[rust-platform:clippy]     Checking windows-threading v0.1.0
+[rust-platform:clippy]    Compiling vswhom v0.1.0
+[rust-platform:clippy]    Compiling cpufeatures v0.2.17
+[rust-platform:clippy]    Compiling simd-adler32 v0.3.9
+[rust-platform:clippy]    Compiling num-traits v0.2.19
+[rust-platform:clippy]    Compiling adler2 v2.0.1
+[rust-platform:clippy]     Checking raw-window-handle v0.6.2
+[rust-platform:clippy]     Checking slab v0.4.12
+[common:lint] completed in 6.6s
+[common:capability] $ pnpm capabilitycheck
+[rust-platform:clippy]    Compiling crypto-common v0.1.7
+[rust-platform:clippy]    Compiling block-buffer v0.10.4
+[rust-platform:clippy]    Compiling miniz_oxide v0.9.1
+[rust-platform:clippy]    Compiling futures-macro v0.3.34
+[rust-platform:clippy]    Compiling cookie v0.18.1
+[rust-platform:clippy]    Compiling digest v0.10.7
+[rust-platform:clippy]    Compiling phf_macros v0.10.0
+[rust-platform:clippy]    Compiling cssparser v0.29.6
+[rust-platform:clippy]    Compiling zerofrom-derive v0.1.7
+[rust-platform:clippy]    Compiling yoke-derive v0.8.2
+[rust-platform:clippy]    Compiling zerovec-derive v0.11.3
+[common:capability] 
+[common:capability] > skillport@1.0.2 capabilitycheck D:\Documents\Code\Agents\skills-manage-windows
+[common:capability] > node scripts/check/check-capability-drift.mjs
+[common:capability] 
+[rust-platform:clippy]    Compiling displaydoc v0.2.5
+[rust-platform:clippy]    Compiling phf_macros v0.13.1
+[rust-platform:clippy]    Compiling thiserror-impl v1.0.69
+[rust-platform:clippy]    Compiling cssparser-macros v0.6.1
+[rust-platform:clippy]    Compiling derive_more-impl v2.1.1
+[rust-platform:clippy]    Compiling derive_more v0.99.20
+[rust-platform:clippy]    Compiling match_token v0.1.0
+[rust-platform:clippy]    Compiling schemars_derive v0.8.22
+[rust-platform:clippy]    Compiling tracing-attributes v0.1.31
+[rust-platform:clippy]    Compiling tokio-macros v2.7.0
+[rust-platform:clippy]    Compiling windows-implement v0.60.2
+[rust-platform:clippy]    Compiling windows-interface v0.59.3
+[rust-platform:clippy]    Compiling sha2 v0.10.9
+[rust-platform:clippy]    Compiling webview2-com-sys v0.38.2
+[rust-platform:clippy]    Compiling darling_macro v0.23.0
+[rust-platform:clippy]    Compiling phf v0.10.1
+[rust-platform:clippy]    Compiling winreg v0.55.0
+[rust-platform:clippy]    Compiling phf v0.13.1
+[rust-platform:clippy]    Compiling dirs-sys v0.5.0
+[rust-platform:clippy]     Checking futures-io v0.3.34
+[rust-platform:clippy]    Compiling embed-resource v3.0.8
+[rust-platform:clippy]    Compiling cssparser v0.36.0
+[rust-platform:clippy]    Compiling dirs v6.0.0
+[rust-platform:clippy]    Compiling darling v0.23.0
+[rust-platform:clippy]    Compiling derive_more v2.1.1
+[rust-platform:clippy]     Checking futures-task v0.3.34
+[common:capability] [capabilitycheck] Passed. 8 permissions, 4 frontend plugin imports.
+[common:capability] completed in 2.2s
+[common:size] $ pnpm sizecheck
+[rust-platform:clippy]    Compiling tauri-winres v0.3.5
+[rust-platform:clippy]     Checking windows-core v0.61.2
+[rust-platform:clippy]    Compiling zerofrom v0.1.7
+[rust-platform:clippy]    Compiling serde_with_macros v3.18.0
+[rust-platform:clippy]     Checking futures-util v0.3.34
+[rust-platform:clippy]    Compiling flate2 v1.1.10
+[rust-platform:clippy]    Compiling yoke v0.8.2
+[rust-platform:clippy]    Compiling webview2-com-macros v0.8.1
+[rust-platform:clippy]    Compiling fdeflate v0.3.7
+[rust-platform:clippy]     Checking windows-numerics v0.2.0
+[rust-platform:clippy]     Checking tracing v0.1.44
+[rust-platform:clippy]    Compiling string_cache v0.8.9
+[rust-platform:clippy]    Compiling jsonptr v0.6.3
+[rust-platform:clippy]    Compiling markup5ever v0.38.0
+[rust-platform:clippy]    Compiling cargo-platform v0.1.9
+[rust-platform:clippy]    Compiling plist v1.10.0
+[common:size] 
+[common:size] > skillport@1.0.2 sizecheck D:\Documents\Code\Agents\skills-manage-windows
+[common:size] > node scripts/check/check-size-budget.mjs
+[common:size] 
+[rust-platform:clippy]    Compiling cargo_toml v0.22.3
+[rust-platform:clippy]     Checking windows-collections v0.2.0
+[rust-platform:clippy]    Compiling zerovec v0.11.6
+[rust-platform:clippy]    Compiling zerotrie v0.2.4
+[rust-platform:clippy]    Compiling html5ever v0.38.0
+[rust-platform:clippy]    Compiling json-patch v3.0.1
+[rust-platform:clippy]    Compiling cargo_metadata v0.19.2
+[rust-platform:clippy]     Checking windows-future v0.2.1
+[rust-platform:clippy]     Checking dpi v0.1.2
+[common:size] [sizecheck] Passed. Checked 735 production source files with max 800 lines.
+[rust-platform:clippy]    Compiling serde_with v3.18.0
+[rust-platform:clippy]    Compiling miniz_oxide v0.8.9
+[rust-platform:clippy]     Checking crossbeam-channel v0.5.15
+[common:size] completed in 1.5s
+[common:entrypoints] $ pnpm entrypointcheck
+[rust-platform:clippy]     Checking windows v0.61.3
+[rust-platform:clippy]     Checking windows-version v0.1.7
+[rust-platform:clippy]    Compiling tinystr v0.8.3
+[rust-platform:clippy]    Compiling potential_utf v0.1.5
+[rust-platform:clippy]     Checking unicode-segmentation v1.13.2
+[rust-platform:clippy]    Compiling icu_collections v2.2.0
+[rust-platform:clippy]    Compiling icu_locale_core v2.2.0
+[rust-platform:clippy]    Compiling dom_query v0.27.0
+[rust-platform:clippy]    Compiling html5ever v0.29.1
+[rust-platform:clippy]    Compiling png v0.17.16
+[common:entrypoints] 
+[common:entrypoints] > skillport@1.0.2 entrypointcheck D:\Documents\Code\Agents\skills-manage-windows
+[common:entrypoints] > node scripts/check/check-rust-entrypoints.mjs
+[common:entrypoints] 
+[rust-platform:clippy]    Compiling wry v0.55.1
+[rust-platform:clippy]    Compiling tauri-runtime v2.11.3
+[rust-platform:clippy]    Compiling ring v0.17.14
+[rust-platform:clippy]    Compiling getrandom v0.3.4
+[rust-platform:clippy]     Checking zeroize v1.8.2
+[rust-platform:clippy]    Compiling tauri-runtime-wry v2.11.4
+[rust-platform:clippy]     Checking keyboard-types v0.7.0
+[rust-platform:clippy]    Compiling serialize-to-javascript-impl v0.1.2
+[common:entrypoints] [entrypointcheck] Passed. default-run=skillport; bins=skillport, skillport-cli, release-signature-verifier.
+[rust-platform:clippy]     Checking futures-channel v0.3.32
+[rust-platform:clippy]     Checking mime v0.3.17
+[rust-platform:clippy]    Compiling icu_provider v2.2.0
+[common:entrypoints] completed in 1.4s
+[common:fmt] $ cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+[rust-platform:clippy]     Checking mio v1.2.0
+[rust-platform:clippy]     Checking softbuffer v0.4.8
+[rust-platform:clippy]    Compiling kuchikiki v0.8.8-speedreader
+[rust-platform:clippy]    Compiling ico v0.5.0
+[rust-platform:clippy]    Compiling pkg-config v0.3.32
+[rust-platform:clippy]    Compiling vcpkg v0.2.15
+[rust-platform:clippy]     Checking rustls-pki-types v1.14.0
+[rust-platform:clippy]     Checking icu_properties v2.2.0
+[rust-platform:clippy]     Checking icu_normalizer v2.2.0
+[rust-platform:clippy]     Checking serialize-to-javascript v0.1.2
+[rust-platform:clippy]     Checking window-vibrancy v0.6.0
+[rust-platform:clippy]    Compiling serde_repr v0.1.20
+[rust-platform:clippy]     Checking tokio v1.53.1
+[rust-platform:clippy]     Checking http-body v1.0.1
+[rust-platform:clippy]     Checking muda v0.19.2
+[rust-platform:clippy]    Compiling httparse v1.10.1
+[rust-platform:clippy]     Checking untrusted v0.9.0
+[rust-platform:clippy]    Compiling foldhash v0.1.5
+[rust-platform:clippy]     Checking try-lock v0.2.5
+[rust-platform:clippy]    Compiling libsqlite3-sys v0.30.1
+[rust-platform:clippy]     Checking tower-service v0.3.3
+[rust-platform:clippy]    Compiling allocator-api2 v0.2.21
+[rust-platform:clippy]     Checking atomic-waker v1.1.2
+[rust-platform:clippy]    Compiling rust_decimal v1.41.0
+[rust-platform:clippy]    Compiling rustls v0.23.45
+[rust-platform:clippy]     Checking want v0.3.1
+[rust-platform:clippy]     Checking windows-registry v0.5.3
+[rust-platform:clippy]    Compiling hashbrown v0.15.5
+[rust-platform:clippy]     Checking subtle v2.6.1
+[rust-platform:clippy]     Checking idna_adapter v1.2.1
+[rust-platform:clippy]    Compiling arrayvec v0.7.6
+[rust-platform:clippy]    Compiling parking v2.2.1
+[rust-platform:clippy]    Compiling crc-catalog v2.4.0
+[rust-platform:clippy]    Compiling futures-intrusive v0.5.0
+[rust-platform:clippy]    Compiling either v1.15.0
+[rust-platform:clippy]    Compiling crossbeam-queue v0.3.12
+[rust-platform:clippy]     Checking idna v1.1.0
+[rust-platform:clippy]    Compiling crc v3.4.0
+[rust-platform:clippy]    Compiling event-listener v5.4.2
+[rust-platform:clippy]    Compiling spin v0.9.9
+[rust-platform:clippy]     Checking ryu v1.0.23
+[common:fmt] completed in 2.4s
+[common:ipc-codegen] $ pnpm ipc:codegen:check
+[rust-platform:clippy]    Compiling hashlink v0.10.0
+[rust-platform:clippy]     Checking ipnet v2.12.0
+[rust-platform:clippy]    Compiling windows_x86_64_msvc v0.42.2
+[rust-platform:clippy]    Compiling serde_urlencoded v0.7.1
+[rust-platform:clippy]    Compiling flume v0.11.1
+[rust-platform:clippy]    Compiling atoi v2.0.0
+[rust-platform:clippy]     Checking url v2.5.8
+[rust-platform:clippy]     Checking sync_wrapper v1.0.2
+[rust-platform:clippy]    Compiling native-tls v0.2.18
+[rust-platform:clippy]     Checking tower-layer v0.3.3
+[rust-platform:clippy]     Checking http-body-util v0.1.3
+[common:ipc-codegen] 
+[common:ipc-codegen] > skillport@1.0.2 ipc:codegen:check D:\Documents\Code\Agents\skills-manage-windows
+[common:ipc-codegen] > cargo run --manifest-path src-tauri/Cargo.toml --features ipc-codegen --bin skillport --locked -- --ipc-codegen --check
+[common:ipc-codegen] 
+[rust-platform:clippy]     Checking webpki-roots v1.0.6
+[rust-platform:clippy]     Checking schannel v0.1.29
+[rust-platform:clippy]     Checking hybrid-array v0.4.14
+[rust-platform:clippy]     Checking urlpattern v0.3.0
+[rust-platform:clippy]     Checking utf8parse v0.2.2
+[rust-platform:clippy]     Checking once_cell_polyfill v1.70.2
+[rust-platform:clippy]     Checking anstyle v1.0.14
+[rust-platform:clippy]    Compiling dotenvy v0.15.7
+[rust-platform:clippy]    Compiling hex v0.4.3
+[rust-platform:clippy]     Checking iri-string v0.7.12
+[rust-platform:clippy]     Checking windows-targets v0.42.2
+[rust-platform:clippy]     Checking futures-executor v0.3.32
+[rust-platform:clippy]     Checking anstyle-parse v1.0.0
+[rust-platform:clippy]     Checking anstyle-query v1.1.5
+[rust-platform:clippy]     Checking colorchoice v1.0.5
+[rust-platform:clippy]    Compiling rfd v0.16.0
+[rust-platform:clippy]     Checking anstyle-wincon v3.0.11
+[rust-platform:clippy]    Compiling winapi v0.3.9
+[rust-platform:clippy]     Checking lazy_static v1.5.0
+[rust-platform:clippy]     Checking is_terminal_polyfill v1.70.2
+[rust-platform:clippy]     Checking windows-sys v0.45.0
+[rust-platform:clippy]     Checking crypto-common v0.2.2
+[rust-platform:clippy]     Checking block-buffer v0.12.1
+[rust-platform:clippy]     Checking tauri-utils v2.9.3
+[rust-platform:clippy]     Checking nu-ansi-term v0.50.3
+[rust-platform:clippy]     Checking matchers v0.2.0
+[rust-platform:clippy]     Checking tracing-log v0.2.0
+[rust-platform:clippy]     Checking thread_local v1.1.9
+[rust-platform:clippy]     Checking encoding_rs v0.8.35
+[rust-platform:clippy]     Checking clap_lex v1.1.0
+[rust-platform:clippy]     Checking anstream v1.0.0
+[rust-platform:clippy]     Checking sharded-slab v0.1.7
+[rust-platform:clippy]     Checking zlib-rs v0.6.7
+[rust-platform:clippy]     Checking zip v4.6.1
+[rust-platform:clippy]     Checking open v5.3.3
+[rust-platform:clippy]     Checking shared_child v1.1.1
+[rust-platform:clippy]    Compiling clap_derive v4.6.4
+[rust-platform:clippy]     Checking filetime v0.2.27
+[common:ipc-codegen]     Blocking waiting for file lock on build directory
+[rust-platform:clippy]     Checking clap_builder v4.6.6
+[rust-platform:clippy]     Checking typed-path v0.12.3
+[rust-platform:clippy]     Checking unsafe-libyaml-norway v0.2.15
+[rust-platform:clippy]     Checking tempfile v3.27.0
+[rust-platform:clippy]     Checking tracing-subscriber v0.3.23
+[rust-platform:clippy]     Checking cpufeatures v0.3.1
+[rust-platform:clippy]     Checking os_pipe v1.2.3
+[rust-platform:clippy]     Checking symlink v0.1.0
+[rust-platform:clippy]     Checking digest v0.11.3
+[rust-platform:clippy]     Checking minisign-verify v0.2.5
+[rust-platform:clippy]     Checking tar v0.4.46
+[rust-platform:clippy]     Checking chrono v0.4.45
+[rust-platform:clippy]     Checking keyring v3.6.3
+[rust-platform:clippy]    Compiling async-trait v0.1.92
+[rust-platform:clippy]     Checking base64 v0.23.1
+[rust-platform:clippy]     Checking rustls-webpki v0.103.15
+[rust-platform:clippy]     Checking sha2 v0.11.0
+[rust-platform:clippy]     Checking urlencoding v2.1.3
+[rust-platform:clippy]     Checking tokio-util v0.7.18
+[rust-platform:clippy]     Checking tokio-stream v0.1.18
+[rust-platform:clippy]     Checking tower v0.5.3
+[rust-platform:clippy]     Checking tokio-native-tls v0.3.1
+[rust-platform:clippy]     Checking serde_norway v0.9.42
+[rust-platform:clippy]     Checking zip v8.6.0
+[rust-platform:clippy]     Checking sqlx-core v0.8.6
+[rust-platform:clippy]     Checking tower-http v0.6.8
+[rust-platform:clippy]     Checking tracing-appender v0.2.5
+[rust-platform:clippy]     Checking h2 v0.4.19
+[rust-platform:clippy]     Checking clap v4.6.6
+[rust-platform:clippy]     Checking fs2 v0.4.3
+[rust-platform:clippy]     Checking sqlx-sqlite v0.8.6
+[rust-platform:clippy]     Checking tokio-rustls v0.26.4
+[rust-platform:clippy]     Checking rustls-platform-verifier v0.6.2
+[rust-platform:clippy]     Checking hyper v1.9.0
+[rust-platform:clippy]     Checking hyper-util v0.1.20
+[rust-platform:clippy]     Checking hyper-rustls v0.27.8
+[rust-platform:clippy]     Checking hyper-tls v0.6.0
+[rust-platform:clippy]     Checking reqwest v0.13.2
+[rust-platform:clippy]     Checking reqwest v0.12.28
+[rust-platform:clippy]    Compiling sqlx-macros-core v0.8.6
+[rust-platform:clippy]    Compiling tauri-plugin v2.5.4
+[rust-platform:clippy]    Compiling tauri-build v2.6.3
+[rust-platform:clippy]    Compiling tauri-codegen v2.6.3
+[rust-platform:clippy]    Compiling sqlx-macros v0.8.6
+[rust-platform:clippy]     Checking sqlx v0.8.6
+[rust-platform:clippy]    Compiling tauri v2.11.5
+[rust-platform:clippy]    Compiling tauri-macros v2.6.3
+[rust-platform:clippy]    Compiling tauri-plugin-fs v2.5.1
+[rust-platform:clippy]    Compiling tauri-plugin-shell v2.3.5
+[rust-platform:clippy]    Compiling tauri-plugin-sql v2.4.0
+[rust-platform:clippy]    Compiling tauri-plugin-dialog v2.7.2
+[rust-platform:clippy]    Compiling tauri-plugin-process v2.3.1
+[rust-platform:clippy]    Compiling tauri-plugin-deep-link v2.4.9
+[rust-platform:clippy]    Compiling tauri-plugin-updater v2.10.1
+[rust-platform:clippy]    Compiling skillport v1.0.2 (D:\Documents\Code\Agents\skills-manage-windows\src-tauri)
+[rust-platform:clippy]     Checking tao v0.35.3
+[rust-platform:clippy]     Checking webview2-com v0.38.2
+[rust-platform:clippy]     Checking tauri-plugin-single-instance v2.4.3
+[rust-platform:clippy] error: this `RefCell` reference is held across an await point
+[rust-platform:clippy]    --> src\services\github_import\progress\tests.rs:106:9
+[rust-platform:clippy]     |
+[rust-platform:clippy] 106 |     let observations = observations.borrow();
+[rust-platform:clippy]     |         ^^^^^^^^^^^^
+[rust-platform:clippy]     |
+[rust-platform:clippy]     = help: ensure the reference is dropped before calling `await`
+[rust-platform:clippy] note: these are all the await points this reference is held through
+[rust-platform:clippy]    --> src\services\github_import\progress\tests.rs:125:18
+[rust-platform:clippy]     |
+[rust-platform:clippy] 125 |     pool.close().await;
+[rust-platform:clippy]     |                  ^^^^^
+[rust-platform:clippy]     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#await_holding_refcell_ref
+[rust-platform:clippy]     = note: `-D clippy::await-holding-refcell-ref` implied by `-D warnings`
+[rust-platform:clippy]     = help: to override `-D warnings` add `#[allow(clippy::await_holding_refcell_ref)]`
+[rust-platform:clippy] 
+[rust-platform:clippy] error: this `RefCell` reference is held across an await point
+[rust-platform:clippy]    --> src\services\github_import\progress\tests.rs:369:9
+[rust-platform:clippy]     |
+[rust-platform:clippy] 369 |     let observations = observations.borrow();
+[rust-platform:clippy]     |         ^^^^^^^^^^^^
+[rust-platform:clippy]     |
+[rust-platform:clippy]     = help: ensure the reference is dropped before calling `await`
+[rust-platform:clippy] note: these are all the await points this reference is held through
+[rust-platform:clippy]    --> src\services\github_import\progress\tests.rs:385:10
+[rust-platform:clippy]     |
+[rust-platform:clippy] 385 |         .await
+[rust-platform:clippy]     |          ^^^^^
+[rust-platform:clippy] ...
+[rust-platform:clippy] 391 |             .await
+[rust-platform:clippy]     |              ^^^^^
+[rust-platform:clippy]     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#await_holding_refcell_ref
+[rust-platform:clippy] 
+[rust-platform:clippy] error: could not compile `skillport` (lib test) due to 2 previous errors
+[ci] [rust-platform:clippy] failed with exit code 101.
+[ci] Stopping sibling checks...
+[common:ipc-codegen]    Compiling serde_core v1.0.229
+[common:ipc-codegen]    Compiling windows-sys v0.60.2
+[common:ipc-codegen]    Compiling windows-sys v0.61.2
+[common:ipc-codegen]    Compiling smallvec v1.15.1
+[common:ipc-codegen]    Compiling stable_deref_trait v1.2.1
+[common:ipc-codegen]    Compiling log v0.4.29
+[common:ipc-codegen]    Compiling windows-link v0.1.3
+[common:ipc-codegen]    Compiling tracing-core v0.1.36
+[common:ipc-codegen]    Compiling windows-sys v0.59.0
+[common:ipc-codegen]    Compiling futures-sink v0.3.34
+[common:ipc-codegen]    Compiling regex-automata v0.4.18
+[common:ipc-codegen]    Compiling raw-window-handle v0.6.2
+[common:ipc-codegen]    Compiling slab v0.4.12
+[common:ipc-codegen]    Compiling paste v1.0.15
+[common:ipc-codegen]    Compiling specta v2.0.0-rc.25
+[common:ipc-codegen]    Compiling Inflector v0.11.4
+[common:ipc-codegen]    Compiling crossbeam-channel v0.5.15
+[common:ipc-codegen]    Compiling phf_shared v0.13.1
+[common:ipc-codegen]    Compiling windows-version v0.1.7
+[common:ipc-codegen]    Compiling unicode-segmentation v1.13.2
+[common:ipc-codegen]    Compiling typenum v1.20.1
+[common:ipc-codegen]    Compiling tauri v2.11.5
+[common:ipc-codegen]    Compiling cookie v0.18.1
+[common:ipc-codegen]    Compiling zeroize v1.8.2
+[common:ipc-codegen]    Compiling yoke v0.8.2
+[common:ipc-codegen]    Compiling windows-result v0.3.4
+[common:ipc-codegen]    Compiling windows-strings v0.4.2
+[ci] Failed. First failure: [rust-platform:clippy] failed with exit code 101.
+error: recipe `ci` failed on line 35 with exit code 1

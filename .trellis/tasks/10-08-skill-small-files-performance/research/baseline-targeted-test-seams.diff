@@ -1,0 +1,91 @@
+diff --git "a/D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-original-test-files\\src-tauri\\src\\fs_util.rs" "b/D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-before-source\\src-tauri\\src\\fs_util.rs"
+index e32e99f8..304c1fcc 100644
+--- "a/D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-original-test-files\\src-tauri\\src\\fs_util.rs"
++++ "b/D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-before-source\\src-tauri\\src\\fs_util.rs"
+@@ -23,6 +23,8 @@ where
+     E: Send + 'static,
+     F: FnOnce() -> Result<T, E> + Send + 'static,
+ {
++    #[cfg(test)]
++    let _benchmark_span = tracing::info_span!("blocking_fs_await", phase = label);
+     match tauri::async_runtime::spawn_blocking(task).await {
+         Ok(result) => result,
+         Err(e) => Err(join_error(label, e.to_string())),
+diff --git "a/D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-original-test-files\\src-tauri\\src\\services\\central_mutation\\mod.rs" "b/D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-before-source\\src-tauri\\src\\services\\central_mutation\\mod.rs"
+index 570dfe3e..6732da9a 100644
+--- "a/D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-original-test-files\\src-tauri\\src\\services\\central_mutation\\mod.rs"
++++ "b/D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-before-source\\src-tauri\\src\\services\\central_mutation\\mod.rs"
+@@ -18,6 +18,33 @@ pub const DEFAULT_CENTRAL_MUTATION_TIMEOUT: Duration = Duration::from_secs(10);
+ #[cfg(test)]
+ static DEFAULT_LOCK_TEST_MUTEX: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+ 
++#[cfg(test)]
++thread_local! {
++    static TEST_LOCK_PATH: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
++}
++
++/// Scoped Local lock isolation for current-thread service benchmarks.
++#[cfg(test)]
++pub(crate) struct TestMutationLockPathGuard {
++    previous: Option<PathBuf>,
++    _current_thread: std::marker::PhantomData<std::rc::Rc<()>>,
++}
++
++#[cfg(test)]
++pub(crate) fn use_test_mutation_lock_path(path: PathBuf) -> TestMutationLockPathGuard {
++    TestMutationLockPathGuard {
++        previous: TEST_LOCK_PATH.with(|cell| cell.replace(Some(path))),
++        _current_thread: std::marker::PhantomData,
++    }
++}
++
++#[cfg(test)]
++impl Drop for TestMutationLockPathGuard {
++    fn drop(&mut self) {
++        TEST_LOCK_PATH.with(|cell| cell.replace(self.previous.take()));
++    }
++}
++
+ #[derive(Debug)]
+ pub struct CentralMutationGuard {
+     file: File,
+@@ -93,6 +120,9 @@ async fn acquire_default_mutation_guard_at(
+     operation: &'static str,
+     timeout: Duration,
+ ) -> Result<CentralMutationGuard, CentralMutationError> {
++    let path = TEST_LOCK_PATH
++        .with(|cell| cell.borrow().clone())
++        .unwrap_or(path);
+     let test_guard = if timeout.is_zero() {
+         DEFAULT_LOCK_TEST_MUTEX
+             .try_lock()
+diff --git "a/D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-original-test-files\\src-tauri\\src\\services\\central_updates\\core.rs" "b/D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-before-source\\src-tauri\\src\\services\\central_updates\\core.rs"
+index 33da99ed..f5b10457 100644
+--- "a/D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-original-test-files\\src-tauri\\src\\services\\central_updates\\core.rs"
++++ "b/D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-before-source\\src-tauri\\src\\services\\central_updates\\core.rs"
+@@ -30,6 +30,8 @@ mod content_upsert;
+ mod state;
+ #[cfg(test)]
+ mod tests;
++#[cfg(test)]
++mod performance_benchmark;
+ 
+ pub(crate) use batch::{
+     recover_pending_update_operation, recover_pending_update_operations, update_skills_batch,
+diff --git "a/D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-original-test-files\\src-tauri\\src\\services\\github_import\\progress.rs" "b/D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-before-source\\src-tauri\\src\\services\\github_import\\progress.rs"
+index 087974ff..8cb1e6e6 100644
+--- "a/D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-original-test-files\\src-tauri\\src\\services\\github_import\\progress.rs"
++++ "b/D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-before-source\\src-tauri\\src\\services\\github_import\\progress.rs"
+@@ -46,7 +46,12 @@ pub(super) fn emit_github_import_progress(
+     app: Option<&AppHandle>,
+     payload: GitHubImportProgressPayload,
+ ) {
++    #[cfg(test)]
++    tests::observe(&payload);
+     if let Some(app) = app {
+         let _ = app.emit("github-import:progress", payload);
+     }
+ }
++
++#[cfg(test)]
++mod tests;

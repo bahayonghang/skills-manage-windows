@@ -1,0 +1,17 @@
+{
+  "archive_source_head": "063c8d3236197a06ff17083c28a9738487c07510",
+  "archive_sha256": "FF8F337F39DCFE69DC0FE39DD462305590C722AC16CCC9C98102A18DA5190F6D",
+  "tracked_rust_files": 374,
+  "unchanged_outside_test_seams": 370,
+  "permitted_test_seam_paths": [
+    "src-tauri/src/fs_util.rs",
+    "src-tauri/src/services/central_mutation/mod.rs",
+    "src-tauri/src/services/central_updates/core.rs",
+    "src-tauri/src/services/github_import/progress.rs"
+  ],
+  "added_test_files": [
+    "src-tauri/src/services/central_updates/core/performance_benchmark.rs",
+    "src-tauri/src/services/github_import/progress/tests.rs"
+  ],
+  "unexpected_changes": []
+}

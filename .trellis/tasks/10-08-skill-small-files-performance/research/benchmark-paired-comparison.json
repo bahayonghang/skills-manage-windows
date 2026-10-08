@@ -1,0 +1,2715 @@
+{
+  "runs_receipt": ".trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-runs-20261008-074725.json",
+  "runs_sha256": "8f49cc243f54df367ba2466f1dbca154cabf844b3e313c3324712b575422cd9e",
+  "verified_runs": 14,
+  "fixture": {
+    "files": 13016,
+    "directories": 206,
+    "bytes": 13327429
+  },
+  "pairs": [
+    {
+      "pair_index": 0,
+      "order": "before-after",
+      "runs": [
+        {
+          "identity": {
+            "pair_index": 0,
+            "pair_order": "before-after",
+            "version": "before",
+            "started_utc": "2026-10-08T12:47:26.1356921Z",
+            "ended_utc": "2026-10-08T12:48:04.6228954Z",
+            "binary": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-before-targeted.exe",
+            "binary_sha256": "46A19EC66B300DF79D7345724DB5CA2440160AC29A23202655965A41088AD36F",
+            "harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923",
+            "profile": "release",
+            "files": 13016,
+            "samples": 1,
+            "mode": "stage",
+            "raw_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair0-before-20261008-074725.log",
+            "stderr_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair0-before-20261008-074725.stderr.log",
+            "raw_log_sha256": "45584B44C17F72EB097527611BCDBA3FDABDA771E0423692BA4F070845FE1D00",
+            "exit_code": 0,
+            "benchmark_cpu_start": {
+              "cpu_seconds": 0.0,
+              "status": "MEASURED",
+              "pid": 66428
+            },
+            "benchmark_cpu_end": {
+              "cpu_seconds": 36.1875,
+              "status": "MEASURED",
+              "pid": 66428
+            },
+            "scanner_cpu_start": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "scanner_cpu_end": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "cpu_note": "Read-only cumulative process CPU endpoints. Scanner CPU is system-wide and does not identify fixture scanning. No worker IO, cache, ETW or peak resource measurement."
+          },
+          "metadata": {
+            "app_handle": false,
+            "files": [
+              13016
+            ],
+            "mode": "stage",
+            "network": "not_requested",
+            "os_cache": "not_cleared",
+            "phase_time": "inclusive wrapper await wall ms",
+            "profile": "release",
+            "samples": 1,
+            "schema": 1,
+            "security_scanner": "not_modified"
+          },
+          "test_status": "PASS",
+          "raw_rows": [
+            {
+              "elapsed_ms": 17935.341099999998,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_durable_stage",
+              "phases": {
+                "Central update durable staging": {
+                  "await_ms": 17924.051,
+                  "calls": 1
+                },
+                "durable_stage": {
+                  "await_ms": 17935.325100000002,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 3801.2231,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_manifest_fingerprint",
+              "phases": {
+                "Central operation fingerprint": {
+                  "await_ms": 3801.1914,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 22.6809,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_stage",
+              "phases": {
+                "Central delete staging": {
+                  "await_ms": 22.660300000000003,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 13434.996500000001,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 13434.986200000001,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 0.1303,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize_repeat",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 0.1215,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            }
+          ],
+          "benchmark_cpu_delta_seconds": 36.1875
+        },
+        {
+          "identity": {
+            "pair_index": 0,
+            "pair_order": "before-after",
+            "version": "after",
+            "started_utc": "2026-10-08T12:48:04.6511974Z",
+            "ended_utc": "2026-10-08T12:48:45.2811846Z",
+            "binary": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-after.exe",
+            "binary_sha256": "41293FD91D399D680488B43AB1CCE547204776864FDDE309C32F1C07D76A3411",
+            "harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923",
+            "profile": "release",
+            "files": 13016,
+            "samples": 1,
+            "mode": "stage",
+            "raw_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair0-after-20261008-074725.log",
+            "stderr_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair0-after-20261008-074725.stderr.log",
+            "raw_log_sha256": "3603D935CB9307B885DE27111749590C59F08310EFC76ECB3B41687E9C6DD9CA",
+            "exit_code": 0,
+            "benchmark_cpu_start": {
+              "cpu_seconds": 0.0,
+              "status": "MEASURED",
+              "pid": 27284
+            },
+            "benchmark_cpu_end": {
+              "cpu_seconds": 36.265625,
+              "status": "MEASURED",
+              "pid": 27284
+            },
+            "scanner_cpu_start": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "scanner_cpu_end": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "cpu_note": "Read-only cumulative process CPU endpoints. Scanner CPU is system-wide and does not identify fixture scanning. No worker IO, cache, ETW or peak resource measurement."
+          },
+          "metadata": {
+            "app_handle": false,
+            "files": [
+              13016
+            ],
+            "mode": "stage",
+            "network": "not_requested",
+            "os_cache": "not_cleared",
+            "phase_time": "inclusive wrapper await wall ms",
+            "profile": "release",
+            "samples": 1,
+            "schema": 1,
+            "security_scanner": "not_modified"
+          },
+          "test_status": "PASS",
+          "raw_rows": [
+            {
+              "elapsed_ms": 16353.7633,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_durable_stage",
+              "phases": {
+                "Central update durable staging": {
+                  "await_ms": 16353.7041,
+                  "calls": 1
+                },
+                "durable_stage": {
+                  "await_ms": 16353.7498,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 4381.3992,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_manifest_fingerprint",
+              "phases": {
+                "Central operation fingerprint": {
+                  "await_ms": 4381.374400000001,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 25.9219,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_stage",
+              "phases": {
+                "Central delete staging": {
+                  "await_ms": 25.906100000000002,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 16934.262700000003,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 16934.252099999998,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 0.18009999999999998,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize_repeat",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 0.1682,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            }
+          ],
+          "benchmark_cpu_delta_seconds": 36.265625
+        }
+      ],
+      "comparisons": [
+        {
+          "pair_index": 0,
+          "operation": "component_delete_finalize",
+          "before_ms": 13434.996500000001,
+          "after_ms": 16934.262700000003,
+          "delta_ms": 3499.266200000002,
+          "delta_percent": 26.04590332420258
+        },
+        {
+          "pair_index": 0,
+          "operation": "component_delete_finalize_repeat",
+          "before_ms": 0.1303,
+          "after_ms": 0.18009999999999998,
+          "delta_ms": 0.04979999999999998,
+          "delta_percent": 38.21949347659246
+        },
+        {
+          "pair_index": 0,
+          "operation": "component_delete_manifest_fingerprint",
+          "before_ms": 3801.2231,
+          "after_ms": 4381.3992,
+          "delta_ms": 580.1760999999997,
+          "delta_percent": 15.26287946634859
+        },
+        {
+          "pair_index": 0,
+          "operation": "component_delete_stage",
+          "before_ms": 22.6809,
+          "after_ms": 25.9219,
+          "delta_ms": 3.2409999999999997,
+          "delta_percent": 14.289556410900794
+        },
+        {
+          "pair_index": 0,
+          "operation": "component_durable_stage",
+          "before_ms": 17935.341099999998,
+          "after_ms": 16353.7633,
+          "delta_ms": -1581.5777999999973,
+          "delta_percent": -8.81821979956655
+        }
+      ]
+    },
+    {
+      "pair_index": 1,
+      "order": "after-before",
+      "runs": [
+        {
+          "identity": {
+            "pair_index": 1,
+            "pair_order": "after-before",
+            "version": "after",
+            "started_utc": "2026-10-08T12:48:45.2925508Z",
+            "ended_utc": "2026-10-08T12:49:22.3886822Z",
+            "binary": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-after.exe",
+            "binary_sha256": "41293FD91D399D680488B43AB1CCE547204776864FDDE309C32F1C07D76A3411",
+            "harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923",
+            "profile": "release",
+            "files": 13016,
+            "samples": 1,
+            "mode": "stage",
+            "raw_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair1-after-20261008-074725.log",
+            "stderr_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair1-after-20261008-074725.stderr.log",
+            "raw_log_sha256": "47D3C409DFBBA8BF9D4321B27969E586A0BCC60BCF6BA0F248D1101C2A5F4EBF",
+            "exit_code": 0,
+            "benchmark_cpu_start": {
+              "cpu_seconds": 0.0,
+              "status": "MEASURED",
+              "pid": 54108
+            },
+            "benchmark_cpu_end": {
+              "cpu_seconds": 34.359375,
+              "status": "MEASURED",
+              "pid": 54108
+            },
+            "scanner_cpu_start": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "scanner_cpu_end": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "cpu_note": "Read-only cumulative process CPU endpoints. Scanner CPU is system-wide and does not identify fixture scanning. No worker IO, cache, ETW or peak resource measurement."
+          },
+          "metadata": {
+            "app_handle": false,
+            "files": [
+              13016
+            ],
+            "mode": "stage",
+            "network": "not_requested",
+            "os_cache": "not_cleared",
+            "phase_time": "inclusive wrapper await wall ms",
+            "profile": "release",
+            "samples": 1,
+            "schema": 1,
+            "security_scanner": "not_modified"
+          },
+          "test_status": "PASS",
+          "raw_rows": [
+            {
+              "elapsed_ms": 18510.3364,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_durable_stage",
+              "phases": {
+                "Central update durable staging": {
+                  "await_ms": 18510.2704,
+                  "calls": 1
+                },
+                "durable_stage": {
+                  "await_ms": 18510.322200000002,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 2364.4827,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_manifest_fingerprint",
+              "phases": {
+                "Central operation fingerprint": {
+                  "await_ms": 2364.455,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 28.481099999999998,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_stage",
+              "phases": {
+                "Central delete staging": {
+                  "await_ms": 28.4606,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 13532.230800000001,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 13532.2215,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 0.2161,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize_repeat",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 0.2053,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            }
+          ],
+          "benchmark_cpu_delta_seconds": 34.359375
+        },
+        {
+          "identity": {
+            "pair_index": 1,
+            "pair_order": "after-before",
+            "version": "before",
+            "started_utc": "2026-10-08T12:49:22.3958895Z",
+            "ended_utc": "2026-10-08T12:50:05.4539729Z",
+            "binary": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-before-targeted.exe",
+            "binary_sha256": "46A19EC66B300DF79D7345724DB5CA2440160AC29A23202655965A41088AD36F",
+            "harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923",
+            "profile": "release",
+            "files": 13016,
+            "samples": 1,
+            "mode": "stage",
+            "raw_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair1-before-20261008-074725.log",
+            "stderr_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair1-before-20261008-074725.stderr.log",
+            "raw_log_sha256": "9D9A9E54F9D5A13B8A1C55D50B87BA56EDF43C783ECE3205871596E4F459EF04",
+            "exit_code": 0,
+            "benchmark_cpu_start": {
+              "cpu_seconds": 0.0,
+              "status": "MEASURED",
+              "pid": 24748
+            },
+            "benchmark_cpu_end": {
+              "cpu_seconds": 39.953125,
+              "status": "MEASURED",
+              "pid": 24748
+            },
+            "scanner_cpu_start": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "scanner_cpu_end": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "cpu_note": "Read-only cumulative process CPU endpoints. Scanner CPU is system-wide and does not identify fixture scanning. No worker IO, cache, ETW or peak resource measurement."
+          },
+          "metadata": {
+            "app_handle": false,
+            "files": [
+              13016
+            ],
+            "mode": "stage",
+            "network": "not_requested",
+            "os_cache": "not_cleared",
+            "phase_time": "inclusive wrapper await wall ms",
+            "profile": "release",
+            "samples": 1,
+            "schema": 1,
+            "security_scanner": "not_modified"
+          },
+          "test_status": "PASS",
+          "raw_rows": [
+            {
+              "elapsed_ms": 19735.7281,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_durable_stage",
+              "phases": {
+                "Central update durable staging": {
+                  "await_ms": 19722.0924,
+                  "calls": 1
+                },
+                "durable_stage": {
+                  "await_ms": 19735.7136,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 4039.3414,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_manifest_fingerprint",
+              "phases": {
+                "Central operation fingerprint": {
+                  "await_ms": 4039.3141000000005,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 21.0831,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_stage",
+              "phases": {
+                "Central delete staging": {
+                  "await_ms": 21.063599999999997,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 15513.131,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 15513.122299999999,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 0.1694,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize_repeat",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 0.1564,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            }
+          ],
+          "benchmark_cpu_delta_seconds": 39.953125
+        }
+      ],
+      "comparisons": [
+        {
+          "pair_index": 1,
+          "operation": "component_delete_finalize",
+          "before_ms": 15513.131,
+          "after_ms": 13532.230800000001,
+          "delta_ms": -1980.9001999999982,
+          "delta_percent": -12.769183732155675
+        },
+        {
+          "pair_index": 1,
+          "operation": "component_delete_finalize_repeat",
+          "before_ms": 0.1694,
+          "after_ms": 0.2161,
+          "delta_ms": 0.04669999999999999,
+          "delta_percent": 27.56788665879575
+        },
+        {
+          "pair_index": 1,
+          "operation": "component_delete_manifest_fingerprint",
+          "before_ms": 4039.3414,
+          "after_ms": 2364.4827,
+          "delta_ms": -1674.8586999999998,
+          "delta_percent": -41.46365791215369
+        },
+        {
+          "pair_index": 1,
+          "operation": "component_delete_stage",
+          "before_ms": 21.0831,
+          "after_ms": 28.481099999999998,
+          "delta_ms": 7.397999999999996,
+          "delta_percent": 35.08971640792859
+        },
+        {
+          "pair_index": 1,
+          "operation": "component_durable_stage",
+          "before_ms": 19735.7281,
+          "after_ms": 18510.3364,
+          "delta_ms": -1225.3917000000001,
+          "delta_percent": -6.209001734270958
+        }
+      ]
+    },
+    {
+      "pair_index": 2,
+      "order": "before-after",
+      "runs": [
+        {
+          "identity": {
+            "pair_index": 2,
+            "pair_order": "before-after",
+            "version": "before",
+            "started_utc": "2026-10-08T12:50:05.4779715Z",
+            "ended_utc": "2026-10-08T12:50:47.3908255Z",
+            "binary": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-before-targeted.exe",
+            "binary_sha256": "46A19EC66B300DF79D7345724DB5CA2440160AC29A23202655965A41088AD36F",
+            "harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923",
+            "profile": "release",
+            "files": 13016,
+            "samples": 1,
+            "mode": "stage",
+            "raw_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair2-before-20261008-074725.log",
+            "stderr_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair2-before-20261008-074725.stderr.log",
+            "raw_log_sha256": "B556C0AAD5B59D735F9F9B0B3D6E181A3C8BA8E40C90E0D1F0BF78EEBAAB02E2",
+            "exit_code": 0,
+            "benchmark_cpu_start": {
+              "cpu_seconds": 0.0,
+              "status": "MEASURED",
+              "pid": 42888
+            },
+            "benchmark_cpu_end": {
+              "cpu_seconds": 39.078125,
+              "status": "MEASURED",
+              "pid": 42888
+            },
+            "scanner_cpu_start": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "scanner_cpu_end": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "cpu_note": "Read-only cumulative process CPU endpoints. Scanner CPU is system-wide and does not identify fixture scanning. No worker IO, cache, ETW or peak resource measurement."
+          },
+          "metadata": {
+            "app_handle": false,
+            "files": [
+              13016
+            ],
+            "mode": "stage",
+            "network": "not_requested",
+            "os_cache": "not_cleared",
+            "phase_time": "inclusive wrapper await wall ms",
+            "profile": "release",
+            "samples": 1,
+            "schema": 1,
+            "security_scanner": "not_modified"
+          },
+          "test_status": "PASS",
+          "raw_rows": [
+            {
+              "elapsed_ms": 19810.1381,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_durable_stage",
+              "phases": {
+                "Central update durable staging": {
+                  "await_ms": 19798.021500000003,
+                  "calls": 1
+                },
+                "durable_stage": {
+                  "await_ms": 19810.1201,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 3304.0903999999996,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_manifest_fingerprint",
+              "phases": {
+                "Central operation fingerprint": {
+                  "await_ms": 3304.068,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 25.4678,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_stage",
+              "phases": {
+                "Central delete staging": {
+                  "await_ms": 25.4467,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 16118.1083,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 16118.0977,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 0.3463,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize_repeat",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 0.33349999999999996,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            }
+          ],
+          "benchmark_cpu_delta_seconds": 39.078125
+        },
+        {
+          "identity": {
+            "pair_index": 2,
+            "pair_order": "before-after",
+            "version": "after",
+            "started_utc": "2026-10-08T12:50:47.4006407Z",
+            "ended_utc": "2026-10-08T12:51:26.4218951Z",
+            "binary": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-after.exe",
+            "binary_sha256": "41293FD91D399D680488B43AB1CCE547204776864FDDE309C32F1C07D76A3411",
+            "harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923",
+            "profile": "release",
+            "files": 13016,
+            "samples": 1,
+            "mode": "stage",
+            "raw_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair2-after-20261008-074725.log",
+            "stderr_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair2-after-20261008-074725.stderr.log",
+            "raw_log_sha256": "86CA762550CCE7E7326EE54235AFE460C62A94B6E9456DA6634F0A06C3690908",
+            "exit_code": 0,
+            "benchmark_cpu_start": {
+              "cpu_seconds": 0.0,
+              "status": "MEASURED",
+              "pid": 47540
+            },
+            "benchmark_cpu_end": {
+              "cpu_seconds": 36.765625,
+              "status": "MEASURED",
+              "pid": 47540
+            },
+            "scanner_cpu_start": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "scanner_cpu_end": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "cpu_note": "Read-only cumulative process CPU endpoints. Scanner CPU is system-wide and does not identify fixture scanning. No worker IO, cache, ETW or peak resource measurement."
+          },
+          "metadata": {
+            "app_handle": false,
+            "files": [
+              13016
+            ],
+            "mode": "stage",
+            "network": "not_requested",
+            "os_cache": "not_cleared",
+            "phase_time": "inclusive wrapper await wall ms",
+            "profile": "release",
+            "samples": 1,
+            "schema": 1,
+            "security_scanner": "not_modified"
+          },
+          "test_status": "PASS",
+          "raw_rows": [
+            {
+              "elapsed_ms": 16425.5937,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_durable_stage",
+              "phases": {
+                "Central update durable staging": {
+                  "await_ms": 16425.5483,
+                  "calls": 1
+                },
+                "durable_stage": {
+                  "await_ms": 16425.5816,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 2782.4739000000004,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_manifest_fingerprint",
+              "phases": {
+                "Central operation fingerprint": {
+                  "await_ms": 2782.448,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 25.7078,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_stage",
+              "phases": {
+                "Central delete staging": {
+                  "await_ms": 25.692300000000003,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 16513.358,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 16513.346999999998,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 0.1436,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize_repeat",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 0.1344,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            }
+          ],
+          "benchmark_cpu_delta_seconds": 36.765625
+        }
+      ],
+      "comparisons": [
+        {
+          "pair_index": 2,
+          "operation": "component_delete_finalize",
+          "before_ms": 16118.1083,
+          "after_ms": 16513.358,
+          "delta_ms": 395.2497000000003,
+          "delta_percent": 2.452208985343529
+        },
+        {
+          "pair_index": 2,
+          "operation": "component_delete_finalize_repeat",
+          "before_ms": 0.3463,
+          "after_ms": 0.1436,
+          "delta_ms": -0.2027,
+          "delta_percent": -58.533063817499276
+        },
+        {
+          "pair_index": 2,
+          "operation": "component_delete_manifest_fingerprint",
+          "before_ms": 3304.0903999999996,
+          "after_ms": 2782.4739000000004,
+          "delta_ms": -521.6164999999992,
+          "delta_percent": -15.786992389796573
+        },
+        {
+          "pair_index": 2,
+          "operation": "component_delete_stage",
+          "before_ms": 25.4678,
+          "after_ms": 25.7078,
+          "delta_ms": 0.23999999999999844,
+          "delta_percent": 0.942366439189879
+        },
+        {
+          "pair_index": 2,
+          "operation": "component_durable_stage",
+          "before_ms": 19810.1381,
+          "after_ms": 16425.5937,
+          "delta_ms": -3384.544399999999,
+          "delta_percent": -17.084910680153197
+        }
+      ]
+    },
+    {
+      "pair_index": 3,
+      "order": "after-before",
+      "runs": [
+        {
+          "identity": {
+            "pair_index": 3,
+            "pair_order": "after-before",
+            "version": "after",
+            "started_utc": "2026-10-08T12:51:26.4280815Z",
+            "ended_utc": "2026-10-08T12:52:08.5705165Z",
+            "binary": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-after.exe",
+            "binary_sha256": "41293FD91D399D680488B43AB1CCE547204776864FDDE309C32F1C07D76A3411",
+            "harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923",
+            "profile": "release",
+            "files": 13016,
+            "samples": 1,
+            "mode": "stage",
+            "raw_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair3-after-20261008-074725.log",
+            "stderr_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair3-after-20261008-074725.stderr.log",
+            "raw_log_sha256": "373FCB923F3D94D35BDD70959CB0B393B823BA5D4FE62942033199D97A4A22BA",
+            "exit_code": 0,
+            "benchmark_cpu_start": {
+              "cpu_seconds": 0.0,
+              "status": "MEASURED",
+              "pid": 28940
+            },
+            "benchmark_cpu_end": {
+              "cpu_seconds": 39.171875,
+              "status": "MEASURED",
+              "pid": 28940
+            },
+            "scanner_cpu_start": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "scanner_cpu_end": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "cpu_note": "Read-only cumulative process CPU endpoints. Scanner CPU is system-wide and does not identify fixture scanning. No worker IO, cache, ETW or peak resource measurement."
+          },
+          "metadata": {
+            "app_handle": false,
+            "files": [
+              13016
+            ],
+            "mode": "stage",
+            "network": "not_requested",
+            "os_cache": "not_cleared",
+            "phase_time": "inclusive wrapper await wall ms",
+            "profile": "release",
+            "samples": 1,
+            "schema": 1,
+            "security_scanner": "not_modified"
+          },
+          "test_status": "PASS",
+          "raw_rows": [
+            {
+              "elapsed_ms": 18840.2772,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_durable_stage",
+              "phases": {
+                "Central update durable staging": {
+                  "await_ms": 18840.225700000003,
+                  "calls": 1
+                },
+                "durable_stage": {
+                  "await_ms": 18840.2636,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 3325.4234,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_manifest_fingerprint",
+              "phases": {
+                "Central operation fingerprint": {
+                  "await_ms": 3325.3975,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 24.170299999999997,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_stage",
+              "phases": {
+                "Central delete staging": {
+                  "await_ms": 24.1517,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 16643.201699999998,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 16643.191300000002,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 0.1903,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize_repeat",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 0.1789,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            }
+          ],
+          "benchmark_cpu_delta_seconds": 39.171875
+        },
+        {
+          "identity": {
+            "pair_index": 3,
+            "pair_order": "after-before",
+            "version": "before",
+            "started_utc": "2026-10-08T12:52:08.5769670Z",
+            "ended_utc": "2026-10-08T12:52:53.4685419Z",
+            "binary": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-before-targeted.exe",
+            "binary_sha256": "46A19EC66B300DF79D7345724DB5CA2440160AC29A23202655965A41088AD36F",
+            "harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923",
+            "profile": "release",
+            "files": 13016,
+            "samples": 1,
+            "mode": "stage",
+            "raw_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair3-before-20261008-074725.log",
+            "stderr_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair3-before-20261008-074725.stderr.log",
+            "raw_log_sha256": "A1333C6579E77092A0A25D90E86357EC589069D902CA9F14F47DF80B0108EE10",
+            "exit_code": 0,
+            "benchmark_cpu_start": {
+              "cpu_seconds": 0.0,
+              "status": "MEASURED",
+              "pid": 64244
+            },
+            "benchmark_cpu_end": {
+              "cpu_seconds": 42.203125,
+              "status": "MEASURED",
+              "pid": 64244
+            },
+            "scanner_cpu_start": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "scanner_cpu_end": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "cpu_note": "Read-only cumulative process CPU endpoints. Scanner CPU is system-wide and does not identify fixture scanning. No worker IO, cache, ETW or peak resource measurement."
+          },
+          "metadata": {
+            "app_handle": false,
+            "files": [
+              13016
+            ],
+            "mode": "stage",
+            "network": "not_requested",
+            "os_cache": "not_cleared",
+            "phase_time": "inclusive wrapper await wall ms",
+            "profile": "release",
+            "samples": 1,
+            "schema": 1,
+            "security_scanner": "not_modified"
+          },
+          "test_status": "PASS",
+          "raw_rows": [
+            {
+              "elapsed_ms": 20600.3185,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_durable_stage",
+              "phases": {
+                "Central update durable staging": {
+                  "await_ms": 20587.585,
+                  "calls": 1
+                },
+                "durable_stage": {
+                  "await_ms": 20600.303799999998,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 2423.4849,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_manifest_fingerprint",
+              "phases": {
+                "Central operation fingerprint": {
+                  "await_ms": 2423.4581999999996,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 25.814400000000003,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_stage",
+              "phases": {
+                "Central delete staging": {
+                  "await_ms": 25.7943,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 19080.020399999998,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 19080.0089,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 0.15689999999999998,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize_repeat",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 0.1457,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            }
+          ],
+          "benchmark_cpu_delta_seconds": 42.203125
+        }
+      ],
+      "comparisons": [
+        {
+          "pair_index": 3,
+          "operation": "component_delete_finalize",
+          "before_ms": 19080.020399999998,
+          "after_ms": 16643.201699999998,
+          "delta_ms": -2436.8187,
+          "delta_percent": -12.771572822846666
+        },
+        {
+          "pair_index": 3,
+          "operation": "component_delete_finalize_repeat",
+          "before_ms": 0.15689999999999998,
+          "after_ms": 0.1903,
+          "delta_ms": 0.03340000000000001,
+          "delta_percent": 21.28744423199491
+        },
+        {
+          "pair_index": 3,
+          "operation": "component_delete_manifest_fingerprint",
+          "before_ms": 2423.4849,
+          "after_ms": 3325.4234,
+          "delta_ms": 901.9385000000002,
+          "delta_percent": 37.216592519309714
+        },
+        {
+          "pair_index": 3,
+          "operation": "component_delete_stage",
+          "before_ms": 25.814400000000003,
+          "after_ms": 24.170299999999997,
+          "delta_ms": -1.6441000000000052,
+          "delta_percent": -6.368925870831799
+        },
+        {
+          "pair_index": 3,
+          "operation": "component_durable_stage",
+          "before_ms": 20600.3185,
+          "after_ms": 18840.2772,
+          "delta_ms": -1760.0413000000008,
+          "delta_percent": -8.543757709377164
+        }
+      ]
+    },
+    {
+      "pair_index": 4,
+      "order": "before-after",
+      "runs": [
+        {
+          "identity": {
+            "pair_index": 4,
+            "pair_order": "before-after",
+            "version": "before",
+            "started_utc": "2026-10-08T12:52:53.4862764Z",
+            "ended_utc": "2026-10-08T12:53:36.7584371Z",
+            "binary": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-before-targeted.exe",
+            "binary_sha256": "46A19EC66B300DF79D7345724DB5CA2440160AC29A23202655965A41088AD36F",
+            "harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923",
+            "profile": "release",
+            "files": 13016,
+            "samples": 1,
+            "mode": "stage",
+            "raw_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair4-before-20261008-074725.log",
+            "stderr_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair4-before-20261008-074725.stderr.log",
+            "raw_log_sha256": "6364E127BA945020586C31EA4DA9784986892394B2BCD04A1D180BE3C2FF5AF2",
+            "exit_code": 0,
+            "benchmark_cpu_start": {
+              "cpu_seconds": 0.0,
+              "status": "MEASURED",
+              "pid": 67752
+            },
+            "benchmark_cpu_end": {
+              "cpu_seconds": 39.75,
+              "status": "MEASURED",
+              "pid": 67752
+            },
+            "scanner_cpu_start": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "scanner_cpu_end": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "cpu_note": "Read-only cumulative process CPU endpoints. Scanner CPU is system-wide and does not identify fixture scanning. No worker IO, cache, ETW or peak resource measurement."
+          },
+          "metadata": {
+            "app_handle": false,
+            "files": [
+              13016
+            ],
+            "mode": "stage",
+            "network": "not_requested",
+            "os_cache": "not_cleared",
+            "phase_time": "inclusive wrapper await wall ms",
+            "profile": "release",
+            "samples": 1,
+            "schema": 1,
+            "security_scanner": "not_modified"
+          },
+          "test_status": "PASS",
+          "raw_rows": [
+            {
+              "elapsed_ms": 21113.5114,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_durable_stage",
+              "phases": {
+                "Central update durable staging": {
+                  "await_ms": 21100.793800000003,
+                  "calls": 1
+                },
+                "durable_stage": {
+                  "await_ms": 21113.4961,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 3912.5072,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_manifest_fingerprint",
+              "phases": {
+                "Central operation fingerprint": {
+                  "await_ms": 3912.4848,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 24.418100000000003,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_stage",
+              "phases": {
+                "Central delete staging": {
+                  "await_ms": 24.397499999999997,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 15572.3221,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 15572.3103,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 0.1696,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize_repeat",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 0.1591,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            }
+          ],
+          "benchmark_cpu_delta_seconds": 39.75
+        },
+        {
+          "identity": {
+            "pair_index": 4,
+            "pair_order": "before-after",
+            "version": "after",
+            "started_utc": "2026-10-08T12:53:36.7661972Z",
+            "ended_utc": "2026-10-08T12:54:17.3877914Z",
+            "binary": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-after.exe",
+            "binary_sha256": "41293FD91D399D680488B43AB1CCE547204776864FDDE309C32F1C07D76A3411",
+            "harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923",
+            "profile": "release",
+            "files": 13016,
+            "samples": 1,
+            "mode": "stage",
+            "raw_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair4-after-20261008-074725.log",
+            "stderr_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair4-after-20261008-074725.stderr.log",
+            "raw_log_sha256": "5A2D0186E6C451593514B90EE5B67B563478461F50884EA92706393C1484E313",
+            "exit_code": 0,
+            "benchmark_cpu_start": {
+              "cpu_seconds": 0.0,
+              "status": "MEASURED",
+              "pid": 37276
+            },
+            "benchmark_cpu_end": {
+              "cpu_seconds": 38.296875,
+              "status": "MEASURED",
+              "pid": 37276
+            },
+            "scanner_cpu_start": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "scanner_cpu_end": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "cpu_note": "Read-only cumulative process CPU endpoints. Scanner CPU is system-wide and does not identify fixture scanning. No worker IO, cache, ETW or peak resource measurement."
+          },
+          "metadata": {
+            "app_handle": false,
+            "files": [
+              13016
+            ],
+            "mode": "stage",
+            "network": "not_requested",
+            "os_cache": "not_cleared",
+            "phase_time": "inclusive wrapper await wall ms",
+            "profile": "release",
+            "samples": 1,
+            "schema": 1,
+            "security_scanner": "not_modified"
+          },
+          "test_status": "PASS",
+          "raw_rows": [
+            {
+              "elapsed_ms": 18954.914099999998,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_durable_stage",
+              "phases": {
+                "Central update durable staging": {
+                  "await_ms": 18954.8596,
+                  "calls": 1
+                },
+                "durable_stage": {
+                  "await_ms": 18954.900899999997,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 2690.209,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_manifest_fingerprint",
+              "phases": {
+                "Central operation fingerprint": {
+                  "await_ms": 2690.1829,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 27.536,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_stage",
+              "phases": {
+                "Central delete staging": {
+                  "await_ms": 27.5168,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 15086.7121,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 15086.7025,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 0.3519,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize_repeat",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 0.3429,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            }
+          ],
+          "benchmark_cpu_delta_seconds": 38.296875
+        }
+      ],
+      "comparisons": [
+        {
+          "pair_index": 4,
+          "operation": "component_delete_finalize",
+          "before_ms": 15572.3221,
+          "after_ms": 15086.7121,
+          "delta_ms": -485.60999999999876,
+          "delta_percent": -3.1184173874749144
+        },
+        {
+          "pair_index": 4,
+          "operation": "component_delete_finalize_repeat",
+          "before_ms": 0.1696,
+          "after_ms": 0.3519,
+          "delta_ms": 0.1823,
+          "delta_percent": 107.4882075471698
+        },
+        {
+          "pair_index": 4,
+          "operation": "component_delete_manifest_fingerprint",
+          "before_ms": 3912.5072,
+          "after_ms": 2690.209,
+          "delta_ms": -1222.2982000000002,
+          "delta_percent": -31.24079107125989
+        },
+        {
+          "pair_index": 4,
+          "operation": "component_delete_stage",
+          "before_ms": 24.418100000000003,
+          "after_ms": 27.536,
+          "delta_ms": 3.117899999999999,
+          "delta_percent": 12.768806745815597
+        },
+        {
+          "pair_index": 4,
+          "operation": "component_durable_stage",
+          "before_ms": 21113.5114,
+          "after_ms": 18954.914099999998,
+          "delta_ms": -2158.5973000000013,
+          "delta_percent": -10.223772157576793
+        }
+      ]
+    },
+    {
+      "pair_index": 5,
+      "order": "after-before",
+      "runs": [
+        {
+          "identity": {
+            "pair_index": 5,
+            "pair_order": "after-before",
+            "version": "after",
+            "started_utc": "2026-10-08T12:54:17.3963417Z",
+            "ended_utc": "2026-10-08T12:55:04.2674526Z",
+            "binary": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-after.exe",
+            "binary_sha256": "41293FD91D399D680488B43AB1CCE547204776864FDDE309C32F1C07D76A3411",
+            "harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923",
+            "profile": "release",
+            "files": 13016,
+            "samples": 1,
+            "mode": "stage",
+            "raw_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair5-after-20261008-074725.log",
+            "stderr_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair5-after-20261008-074725.stderr.log",
+            "raw_log_sha256": "4AA9ED11962517635DB81EAFE66860FFF55A193432CFA1A31163F6082F9A2F5D",
+            "exit_code": 0,
+            "benchmark_cpu_start": {
+              "cpu_seconds": 0.0,
+              "status": "MEASURED",
+              "pid": 15888
+            },
+            "benchmark_cpu_end": {
+              "cpu_seconds": 43.015625,
+              "status": "MEASURED",
+              "pid": 15888
+            },
+            "scanner_cpu_start": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "scanner_cpu_end": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "cpu_note": "Read-only cumulative process CPU endpoints. Scanner CPU is system-wide and does not identify fixture scanning. No worker IO, cache, ETW or peak resource measurement."
+          },
+          "metadata": {
+            "app_handle": false,
+            "files": [
+              13016
+            ],
+            "mode": "stage",
+            "network": "not_requested",
+            "os_cache": "not_cleared",
+            "phase_time": "inclusive wrapper await wall ms",
+            "profile": "release",
+            "samples": 1,
+            "schema": 1,
+            "security_scanner": "not_modified"
+          },
+          "test_status": "PASS",
+          "raw_rows": [
+            {
+              "elapsed_ms": 21253.6528,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_durable_stage",
+              "phases": {
+                "Central update durable staging": {
+                  "await_ms": 21253.592999999997,
+                  "calls": 1
+                },
+                "durable_stage": {
+                  "await_ms": 21253.6393,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 4234.2579000000005,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_manifest_fingerprint",
+              "phases": {
+                "Central operation fingerprint": {
+                  "await_ms": 4234.2299,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 28.3593,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_stage",
+              "phases": {
+                "Central delete staging": {
+                  "await_ms": 28.3394,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 17186.3421,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 17186.3314,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 0.1459,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize_repeat",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 0.13540000000000002,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            }
+          ],
+          "benchmark_cpu_delta_seconds": 43.015625
+        },
+        {
+          "identity": {
+            "pair_index": 5,
+            "pair_order": "after-before",
+            "version": "before",
+            "started_utc": "2026-10-08T12:55:04.2738942Z",
+            "ended_utc": "2026-10-08T12:55:46.6185268Z",
+            "binary": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-before-targeted.exe",
+            "binary_sha256": "46A19EC66B300DF79D7345724DB5CA2440160AC29A23202655965A41088AD36F",
+            "harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923",
+            "profile": "release",
+            "files": 13016,
+            "samples": 1,
+            "mode": "stage",
+            "raw_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair5-before-20261008-074725.log",
+            "stderr_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair5-before-20261008-074725.stderr.log",
+            "raw_log_sha256": "A63B6AC2494F9D980BBCC55CFEFA4C2DF48971F27DEA404DECE9AA6D52D54737",
+            "exit_code": 0,
+            "benchmark_cpu_start": {
+              "cpu_seconds": 0.0,
+              "status": "MEASURED",
+              "pid": 32604
+            },
+            "benchmark_cpu_end": {
+              "cpu_seconds": 40.15625,
+              "status": "MEASURED",
+              "pid": 32604
+            },
+            "scanner_cpu_start": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "scanner_cpu_end": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "cpu_note": "Read-only cumulative process CPU endpoints. Scanner CPU is system-wide and does not identify fixture scanning. No worker IO, cache, ETW or peak resource measurement."
+          },
+          "metadata": {
+            "app_handle": false,
+            "files": [
+              13016
+            ],
+            "mode": "stage",
+            "network": "not_requested",
+            "os_cache": "not_cleared",
+            "phase_time": "inclusive wrapper await wall ms",
+            "profile": "release",
+            "samples": 1,
+            "schema": 1,
+            "security_scanner": "not_modified"
+          },
+          "test_status": "PASS",
+          "raw_rows": [
+            {
+              "elapsed_ms": 19212.24,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_durable_stage",
+              "phases": {
+                "Central update durable staging": {
+                  "await_ms": 19198.8373,
+                  "calls": 1
+                },
+                "durable_stage": {
+                  "await_ms": 19212.2251,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 2930.5728000000004,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_manifest_fingerprint",
+              "phases": {
+                "Central operation fingerprint": {
+                  "await_ms": 2930.5452999999998,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 22.962699999999998,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_stage",
+              "phases": {
+                "Central delete staging": {
+                  "await_ms": 22.941,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 17336.5675,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 17336.5586,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 0.1924,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize_repeat",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 0.18230000000000002,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            }
+          ],
+          "benchmark_cpu_delta_seconds": 40.15625
+        }
+      ],
+      "comparisons": [
+        {
+          "pair_index": 5,
+          "operation": "component_delete_finalize",
+          "before_ms": 17336.5675,
+          "after_ms": 17186.3421,
+          "delta_ms": -150.22539999999935,
+          "delta_percent": -0.8665233184135146
+        },
+        {
+          "pair_index": 5,
+          "operation": "component_delete_finalize_repeat",
+          "before_ms": 0.1924,
+          "after_ms": 0.1459,
+          "delta_ms": -0.046499999999999986,
+          "delta_percent": -24.16839916839916
+        },
+        {
+          "pair_index": 5,
+          "operation": "component_delete_manifest_fingerprint",
+          "before_ms": 2930.5728000000004,
+          "after_ms": 4234.2579000000005,
+          "delta_ms": 1303.6851000000001,
+          "delta_percent": 44.485675291874685
+        },
+        {
+          "pair_index": 5,
+          "operation": "component_delete_stage",
+          "before_ms": 22.962699999999998,
+          "after_ms": 28.3593,
+          "delta_ms": 5.396600000000003,
+          "delta_percent": 23.501591711776058
+        },
+        {
+          "pair_index": 5,
+          "operation": "component_durable_stage",
+          "before_ms": 19212.24,
+          "after_ms": 21253.6528,
+          "delta_ms": 2041.4127999999982,
+          "delta_percent": 10.625584523199795
+        }
+      ]
+    },
+    {
+      "pair_index": 6,
+      "order": "before-after",
+      "runs": [
+        {
+          "identity": {
+            "pair_index": 6,
+            "pair_order": "before-after",
+            "version": "before",
+            "started_utc": "2026-10-08T12:55:46.6264246Z",
+            "ended_utc": "2026-10-08T12:56:35.0768959Z",
+            "binary": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-before-targeted.exe",
+            "binary_sha256": "46A19EC66B300DF79D7345724DB5CA2440160AC29A23202655965A41088AD36F",
+            "harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923",
+            "profile": "release",
+            "files": 13016,
+            "samples": 1,
+            "mode": "stage",
+            "raw_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair6-before-20261008-074725.log",
+            "stderr_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair6-before-20261008-074725.stderr.log",
+            "raw_log_sha256": "0D399CD9266F980B0C9FFB3C929810AA65E5FEF437BC3DB15E97455424BBC189",
+            "exit_code": 0,
+            "benchmark_cpu_start": {
+              "cpu_seconds": 0.0,
+              "status": "MEASURED",
+              "pid": 67072
+            },
+            "benchmark_cpu_end": {
+              "cpu_seconds": 44.859375,
+              "status": "MEASURED",
+              "pid": 67072
+            },
+            "scanner_cpu_start": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "scanner_cpu_end": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "cpu_note": "Read-only cumulative process CPU endpoints. Scanner CPU is system-wide and does not identify fixture scanning. No worker IO, cache, ETW or peak resource measurement."
+          },
+          "metadata": {
+            "app_handle": false,
+            "files": [
+              13016
+            ],
+            "mode": "stage",
+            "network": "not_requested",
+            "os_cache": "not_cleared",
+            "phase_time": "inclusive wrapper await wall ms",
+            "profile": "release",
+            "samples": 1,
+            "schema": 1,
+            "security_scanner": "not_modified"
+          },
+          "test_status": "PASS",
+          "raw_rows": [
+            {
+              "elapsed_ms": 22101.4482,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_durable_stage",
+              "phases": {
+                "Central update durable staging": {
+                  "await_ms": 22089.9891,
+                  "calls": 1
+                },
+                "durable_stage": {
+                  "await_ms": 22101.432,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 2976.0328,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_manifest_fingerprint",
+              "phases": {
+                "Central operation fingerprint": {
+                  "await_ms": 2976.0058000000004,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 30.2859,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_stage",
+              "phases": {
+                "Central delete staging": {
+                  "await_ms": 30.264400000000002,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 19299.7275,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 19299.7154,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 0.3486,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize_repeat",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 0.33530000000000004,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            }
+          ],
+          "benchmark_cpu_delta_seconds": 44.859375
+        },
+        {
+          "identity": {
+            "pair_index": 6,
+            "pair_order": "before-after",
+            "version": "after",
+            "started_utc": "2026-10-08T12:56:35.0891577Z",
+            "ended_utc": "2026-10-08T12:57:17.9313791Z",
+            "binary": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.git\\skill-small-files-tools\\benchmark-after.exe",
+            "binary_sha256": "41293FD91D399D680488B43AB1CCE547204776864FDDE309C32F1C07D76A3411",
+            "harness_sha256": "203949B25783EA044256268BF4D48CBD6967386A774D78A8515477A64970B923",
+            "profile": "release",
+            "files": 13016,
+            "samples": 1,
+            "mode": "stage",
+            "raw_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair6-after-20261008-074725.log",
+            "stderr_log": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\.trellis\\tasks\\10-08-skill-small-files-performance\\research\\alternating-t-pair6-after-20261008-074725.stderr.log",
+            "raw_log_sha256": "CD297189F49F9DF7FFAB1C5ECAC0D8F04FAE1D3ADB4906F78F2ECA6BF83321DC",
+            "exit_code": 0,
+            "benchmark_cpu_start": {
+              "cpu_seconds": 0.0,
+              "status": "MEASURED",
+              "pid": 66928
+            },
+            "benchmark_cpu_end": {
+              "cpu_seconds": 40.328125,
+              "status": "MEASURED",
+              "pid": 66928
+            },
+            "scanner_cpu_start": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "scanner_cpu_end": {
+              "status": "UNMEASURED",
+              "reason": "Single readable MsMpEng CPU value unavailable"
+            },
+            "cpu_note": "Read-only cumulative process CPU endpoints. Scanner CPU is system-wide and does not identify fixture scanning. No worker IO, cache, ETW or peak resource measurement."
+          },
+          "metadata": {
+            "app_handle": false,
+            "files": [
+              13016
+            ],
+            "mode": "stage",
+            "network": "not_requested",
+            "os_cache": "not_cleared",
+            "phase_time": "inclusive wrapper await wall ms",
+            "profile": "release",
+            "samples": 1,
+            "schema": 1,
+            "security_scanner": "not_modified"
+          },
+          "test_status": "PASS",
+          "raw_rows": [
+            {
+              "elapsed_ms": 17972.248,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_durable_stage",
+              "phases": {
+                "Central update durable staging": {
+                  "await_ms": 17972.1924,
+                  "calls": 1
+                },
+                "durable_stage": {
+                  "await_ms": 17972.2344,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 3780.5261,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_manifest_fingerprint",
+              "phases": {
+                "Central operation fingerprint": {
+                  "await_ms": 3780.5011,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 35.9895,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_stage",
+              "phases": {
+                "Central delete staging": {
+                  "await_ms": 35.969899999999996,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 17504.3963,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 17504.3868,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            },
+            {
+              "elapsed_ms": 0.1597,
+              "fixture": {
+                "bytes": 13327429,
+                "directories": 206,
+                "files": 13016
+              },
+              "operation": "component_delete_finalize_repeat",
+              "phases": {
+                "Central delete finalize": {
+                  "await_ms": 0.1486,
+                  "calls": 1
+                }
+              },
+              "sample": 0
+            }
+          ],
+          "benchmark_cpu_delta_seconds": 40.328125
+        }
+      ],
+      "comparisons": [
+        {
+          "pair_index": 6,
+          "operation": "component_delete_finalize",
+          "before_ms": 19299.7275,
+          "after_ms": 17504.3963,
+          "delta_ms": -1795.3312000000005,
+          "delta_percent": -9.302365538580792
+        },
+        {
+          "pair_index": 6,
+          "operation": "component_delete_finalize_repeat",
+          "before_ms": 0.3486,
+          "after_ms": 0.1597,
+          "delta_ms": -0.1889,
+          "delta_percent": -54.188181296615035
+        },
+        {
+          "pair_index": 6,
+          "operation": "component_delete_manifest_fingerprint",
+          "before_ms": 2976.0328,
+          "after_ms": 3780.5261,
+          "delta_ms": 804.4933000000001,
+          "delta_percent": 27.03240703529881
+        },
+        {
+          "pair_index": 6,
+          "operation": "component_delete_stage",
+          "before_ms": 30.2859,
+          "after_ms": 35.9895,
+          "delta_ms": 5.703599999999998,
+          "delta_percent": 18.832526026963038
+        },
+        {
+          "pair_index": 6,
+          "operation": "component_durable_stage",
+          "before_ms": 22101.4482,
+          "after_ms": 17972.248,
+          "delta_ms": -4129.200199999999,
+          "delta_percent": -18.68293951886827
+        }
+      ]
+    }
+  ],
+  "operations": [
+    {
+      "operation": "component_delete_finalize",
+      "pairs": 7,
+      "raw_pairs": [
+        {
+          "pair_index": 0,
+          "operation": "component_delete_finalize",
+          "before_ms": 13434.996500000001,
+          "after_ms": 16934.262700000003,
+          "delta_ms": 3499.266200000002,
+          "delta_percent": 26.04590332420258
+        },
+        {
+          "pair_index": 1,
+          "operation": "component_delete_finalize",
+          "before_ms": 15513.131,
+          "after_ms": 13532.230800000001,
+          "delta_ms": -1980.9001999999982,
+          "delta_percent": -12.769183732155675
+        },
+        {
+          "pair_index": 2,
+          "operation": "component_delete_finalize",
+          "before_ms": 16118.1083,
+          "after_ms": 16513.358,
+          "delta_ms": 395.2497000000003,
+          "delta_percent": 2.452208985343529
+        },
+        {
+          "pair_index": 3,
+          "operation": "component_delete_finalize",
+          "before_ms": 19080.020399999998,
+          "after_ms": 16643.201699999998,
+          "delta_ms": -2436.8187,
+          "delta_percent": -12.771572822846666
+        },
+        {
+          "pair_index": 4,
+          "operation": "component_delete_finalize",
+          "before_ms": 15572.3221,
+          "after_ms": 15086.7121,
+          "delta_ms": -485.60999999999876,
+          "delta_percent": -3.1184173874749144
+        },
+        {
+          "pair_index": 5,
+          "operation": "component_delete_finalize",
+          "before_ms": 17336.5675,
+          "after_ms": 17186.3421,
+          "delta_ms": -150.22539999999935,
+          "delta_percent": -0.8665233184135146
+        },
+        {
+          "pair_index": 6,
+          "operation": "component_delete_finalize",
+          "before_ms": 19299.7275,
+          "after_ms": 17504.3963,
+          "delta_ms": -1795.3312000000005,
+          "delta_percent": -9.302365538580792
+        }
+      ],
+      "before_median_ms": 16118.1083,
+      "after_median_ms": 16643.201699999998,
+      "median_delta_percent": 3.257785530576185,
+      "median_paired_delta_ms": -485.60999999999876,
+      "median_paired_delta_percent": -3.1184173874749144,
+      "before_range_ms": [
+        13434.996500000001,
+        19299.7275
+      ],
+      "after_range_ms": [
+        13532.230800000001,
+        17504.3963
+      ],
+      "improved_pairs": 5,
+      "pairs_meeting_ten_percent_reduction": 2,
+      "numeric_stage_budget": null
+    },
+    {
+      "operation": "component_delete_finalize_repeat",
+      "pairs": 7,
+      "raw_pairs": [
+        {
+          "pair_index": 0,
+          "operation": "component_delete_finalize_repeat",
+          "before_ms": 0.1303,
+          "after_ms": 0.18009999999999998,
+          "delta_ms": 0.04979999999999998,
+          "delta_percent": 38.21949347659246
+        },
+        {
+          "pair_index": 1,
+          "operation": "component_delete_finalize_repeat",
+          "before_ms": 0.1694,
+          "after_ms": 0.2161,
+          "delta_ms": 0.04669999999999999,
+          "delta_percent": 27.56788665879575
+        },
+        {
+          "pair_index": 2,
+          "operation": "component_delete_finalize_repeat",
+          "before_ms": 0.3463,
+          "after_ms": 0.1436,
+          "delta_ms": -0.2027,
+          "delta_percent": -58.533063817499276
+        },
+        {
+          "pair_index": 3,
+          "operation": "component_delete_finalize_repeat",
+          "before_ms": 0.15689999999999998,
+          "after_ms": 0.1903,
+          "delta_ms": 0.03340000000000001,
+          "delta_percent": 21.28744423199491
+        },
+        {
+          "pair_index": 4,
+          "operation": "component_delete_finalize_repeat",
+          "before_ms": 0.1696,
+          "after_ms": 0.3519,
+          "delta_ms": 0.1823,
+          "delta_percent": 107.4882075471698
+        },
+        {
+          "pair_index": 5,
+          "operation": "component_delete_finalize_repeat",
+          "before_ms": 0.1924,
+          "after_ms": 0.1459,
+          "delta_ms": -0.046499999999999986,
+          "delta_percent": -24.16839916839916
+        },
+        {
+          "pair_index": 6,
+          "operation": "component_delete_finalize_repeat",
+          "before_ms": 0.3486,
+          "after_ms": 0.1597,
+          "delta_ms": -0.1889,
+          "delta_percent": -54.188181296615035
+        }
+      ],
+      "before_median_ms": 0.1696,
+      "after_median_ms": 0.18009999999999998,
+      "median_delta_percent": 6.1910377358490365,
+      "median_paired_delta_ms": 0.03340000000000001,
+      "median_paired_delta_percent": 21.28744423199491,
+      "before_range_ms": [
+        0.1303,
+        0.3486
+      ],
+      "after_range_ms": [
+        0.1436,
+        0.3519
+      ],
+      "improved_pairs": 3,
+      "pairs_meeting_ten_percent_reduction": 3,
+      "numeric_stage_budget": null
+    },
+    {
+      "operation": "component_delete_manifest_fingerprint",
+      "pairs": 7,
+      "raw_pairs": [
+        {
+          "pair_index": 0,
+          "operation": "component_delete_manifest_fingerprint",
+          "before_ms": 3801.2231,
+          "after_ms": 4381.3992,
+          "delta_ms": 580.1760999999997,
+          "delta_percent": 15.26287946634859
+        },
+        {
+          "pair_index": 1,
+          "operation": "component_delete_manifest_fingerprint",
+          "before_ms": 4039.3414,
+          "after_ms": 2364.4827,
+          "delta_ms": -1674.8586999999998,
+          "delta_percent": -41.46365791215369
+        },
+        {
+          "pair_index": 2,
+          "operation": "component_delete_manifest_fingerprint",
+          "before_ms": 3304.0903999999996,
+          "after_ms": 2782.4739000000004,
+          "delta_ms": -521.6164999999992,
+          "delta_percent": -15.786992389796573
+        },
+        {
+          "pair_index": 3,
+          "operation": "component_delete_manifest_fingerprint",
+          "before_ms": 2423.4849,
+          "after_ms": 3325.4234,
+          "delta_ms": 901.9385000000002,
+          "delta_percent": 37.216592519309714
+        },
+        {
+          "pair_index": 4,
+          "operation": "component_delete_manifest_fingerprint",
+          "before_ms": 3912.5072,
+          "after_ms": 2690.209,
+          "delta_ms": -1222.2982000000002,
+          "delta_percent": -31.24079107125989
+        },
+        {
+          "pair_index": 5,
+          "operation": "component_delete_manifest_fingerprint",
+          "before_ms": 2930.5728000000004,
+          "after_ms": 4234.2579000000005,
+          "delta_ms": 1303.6851000000001,
+          "delta_percent": 44.485675291874685
+        },
+        {
+          "pair_index": 6,
+          "operation": "component_delete_manifest_fingerprint",
+          "before_ms": 2976.0328,
+          "after_ms": 3780.5261,
+          "delta_ms": 804.4933000000001,
+          "delta_percent": 27.03240703529881
+        }
+      ],
+      "before_median_ms": 3304.0903999999996,
+      "after_median_ms": 3325.4234,
+      "median_delta_percent": 0.6456542472324855,
+      "median_paired_delta_ms": 580.1760999999997,
+      "median_paired_delta_percent": 15.26287946634859,
+      "before_range_ms": [
+        2423.4849,
+        4039.3414
+      ],
+      "after_range_ms": [
+        2364.4827,
+        4381.3992
+      ],
+      "improved_pairs": 3,
+      "pairs_meeting_ten_percent_reduction": 3,
+      "numeric_stage_budget": null
+    },
+    {
+      "operation": "component_delete_stage",
+      "pairs": 7,
+      "raw_pairs": [
+        {
+          "pair_index": 0,
+          "operation": "component_delete_stage",
+          "before_ms": 22.6809,
+          "after_ms": 25.9219,
+          "delta_ms": 3.2409999999999997,
+          "delta_percent": 14.289556410900794
+        },
+        {
+          "pair_index": 1,
+          "operation": "component_delete_stage",
+          "before_ms": 21.0831,
+          "after_ms": 28.481099999999998,
+          "delta_ms": 7.397999999999996,
+          "delta_percent": 35.08971640792859
+        },
+        {
+          "pair_index": 2,
+          "operation": "component_delete_stage",
+          "before_ms": 25.4678,
+          "after_ms": 25.7078,
+          "delta_ms": 0.23999999999999844,
+          "delta_percent": 0.942366439189879
+        },
+        {
+          "pair_index": 3,
+          "operation": "component_delete_stage",
+          "before_ms": 25.814400000000003,
+          "after_ms": 24.170299999999997,
+          "delta_ms": -1.6441000000000052,
+          "delta_percent": -6.368925870831799
+        },
+        {
+          "pair_index": 4,
+          "operation": "component_delete_stage",
+          "before_ms": 24.418100000000003,
+          "after_ms": 27.536,
+          "delta_ms": 3.117899999999999,
+          "delta_percent": 12.768806745815597
+        },
+        {
+          "pair_index": 5,
+          "operation": "component_delete_stage",
+          "before_ms": 22.962699999999998,
+          "after_ms": 28.3593,
+          "delta_ms": 5.396600000000003,
+          "delta_percent": 23.501591711776058
+        },
+        {
+          "pair_index": 6,
+          "operation": "component_delete_stage",
+          "before_ms": 30.2859,
+          "after_ms": 35.9895,
+          "delta_ms": 5.703599999999998,
+          "delta_percent": 18.832526026963038
+        }
+      ],
+      "before_median_ms": 24.418100000000003,
+      "after_median_ms": 27.536,
+      "median_delta_percent": 12.768806745815597,
+      "median_paired_delta_ms": 3.2409999999999997,
+      "median_paired_delta_percent": 14.289556410900794,
+      "before_range_ms": [
+        21.0831,
+        30.2859
+      ],
+      "after_range_ms": [
+        24.170299999999997,
+        35.9895
+      ],
+      "improved_pairs": 1,
+      "pairs_meeting_ten_percent_reduction": 0,
+      "numeric_stage_budget": null
+    },
+    {
+      "operation": "component_durable_stage",
+      "pairs": 7,
+      "raw_pairs": [
+        {
+          "pair_index": 0,
+          "operation": "component_durable_stage",
+          "before_ms": 17935.341099999998,
+          "after_ms": 16353.7633,
+          "delta_ms": -1581.5777999999973,
+          "delta_percent": -8.81821979956655
+        },
+        {
+          "pair_index": 1,
+          "operation": "component_durable_stage",
+          "before_ms": 19735.7281,
+          "after_ms": 18510.3364,
+          "delta_ms": -1225.3917000000001,
+          "delta_percent": -6.209001734270958
+        },
+        {
+          "pair_index": 2,
+          "operation": "component_durable_stage",
+          "before_ms": 19810.1381,
+          "after_ms": 16425.5937,
+          "delta_ms": -3384.544399999999,
+          "delta_percent": -17.084910680153197
+        },
+        {
+          "pair_index": 3,
+          "operation": "component_durable_stage",
+          "before_ms": 20600.3185,
+          "after_ms": 18840.2772,
+          "delta_ms": -1760.0413000000008,
+          "delta_percent": -8.543757709377164
+        },
+        {
+          "pair_index": 4,
+          "operation": "component_durable_stage",
+          "before_ms": 21113.5114,
+          "after_ms": 18954.914099999998,
+          "delta_ms": -2158.5973000000013,
+          "delta_percent": -10.223772157576793
+        },
+        {
+          "pair_index": 5,
+          "operation": "component_durable_stage",
+          "before_ms": 19212.24,
+          "after_ms": 21253.6528,
+          "delta_ms": 2041.4127999999982,
+          "delta_percent": 10.625584523199795
+        },
+        {
+          "pair_index": 6,
+          "operation": "component_durable_stage",
+          "before_ms": 22101.4482,
+          "after_ms": 17972.248,
+          "delta_ms": -4129.200199999999,
+          "delta_percent": -18.68293951886827
+        }
+      ],
+      "before_median_ms": 19810.1381,
+      "after_median_ms": 18510.3364,
+      "median_delta_percent": -6.561295501518993,
+      "median_paired_delta_ms": -1760.0413000000008,
+      "median_paired_delta_percent": -8.81821979956655,
+      "before_range_ms": [
+        17935.341099999998,
+        22101.4482
+      ],
+      "after_range_ms": [
+        16353.7633,
+        21253.6528
+      ],
+      "improved_pairs": 6,
+      "pairs_meeting_ten_percent_reduction": 3,
+      "numeric_stage_budget": "NOT_MET"
+    }
+  ],
+  "limits": "Alternating seven pairs remain separate from the first formal seven and single controls. All samples are retained. Cumulative benchmark CPU includes fixture setup and validation; scanner CPU is UNMEASURED. No stable-gain or scanner-cause inference follows from overlapping ranges."
+}

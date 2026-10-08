@@ -1,0 +1,15 @@
+{
+  "command": "Get-Item/Get-Acl src-tauri/target and its SymbolicLink destination",
+  "timestamp_utc": "2026-10-08T16:54:16.1452805Z",
+  "source": "D:\\Documents\\Code\\Agents\\skills-manage-windows\\src-tauri\\target",
+  "attributes": "Directory, ReparsePoint",
+  "link_type": "SymbolicLink",
+  "destination": "C:\\Users\\lyh\\AppData\\Local\\mbx\\targets\\v1\\354c9c0d313023c78955f6c73f57f869a28608e849da661aa80f63b26b42be98",
+  "destination_exists": false,
+  "failure": "Cargo cannot create the existing dangling SymbolicLink path: Access is denied (os error 5)",
+  "environment_before": {
+    "CARGO_TARGET_DIR": null
+  },
+  "remediation": "Process-only CARGO_TARGET_DIR under repository .git/skill-small-files-tools; leave link, ACL and global configuration unchanged",
+  "production_code_changed": false
+}
