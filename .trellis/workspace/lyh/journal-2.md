@@ -1735,3 +1735,40 @@ SSH/WSL Platform leftover apply now validates paths, deletes unique POSIX paths 
 ### Next Steps
 
 - 按需开 PR 到 dev；连接测试 Ok 载荷脱敏与 AI 并发 flush 仍延期
+
+
+## Session 115: 小文件性能优化提交与归档
+
+**Date**: 2026-10-08
+**Task**: 小文件性能优化提交与归档
+**Branch**: `dev`
+
+### Summary
+
+按用户授权提交全部任务改动并归档。完整 just ci 通过；原 10% 性能目标未达到，未解耗时回退和未验证项保留。
+
+### Main Changes
+
+- 提交真实写入进度聚合、文件所有权移动、staging 父目录复用与哈希排序优化及规范。
+- 提交全部基准、首个失败和复测证据；138 个 research 文件的 Git blob 与原始字节一致。
+- 归档到 .trellis/tasks/archive/2026-10/10-08-skill-small-files-performance；任务关闭不改变 AC-I1/AC-I2 验收缺口。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `112120cb130c31e195f3fdf497f33fd13eb514e7` | (see git log) |
+| `48d983e0e30edfdf27c9fbc908c2e3b747be5fda` | (see git log) |
+
+### Testing
+
+- [OK] just ci：15/15 阶段通过、退出 0；Rust 1574 PASS/9 ignored，Vitest 2078 PASS/1 skipped，Python 50 PASS/4 skipped。
+- [OK] 21 个 Rust 源码哈希与正式 CI 记录一致；归档后 task validate 通过，implement/check 为 9/11 entries。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 性能后续工作需保留原 10% 预算，并处理删除 stage 和 L no-op 耗时变化、完整源码冻结清单及 native/真实 target/完整性能矩阵证据缺口。
