@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/fs-db-operation-journal.md", "reason": "Delete finalize order, force-delete eligibility, and the ban on following a symlink into its target"}
+{"file": ".trellis/spec/backend/skill-deletion-integrity.md", "reason": "Central delete commits the skill row before backup cleanup; cleanup must not delete the surviving target"}
+{"file": ".trellis/spec/backend/test-support.md", "reason": "Directory symlink fixtures must use test_support::symlink_dir"}
+{"file": ".trellis/tasks/10-08-central-skill-delete-blocked/research/root-cause.md", "reason": "Local db_committed cleanup_file evidence for the two skills"}
+{"file": ".trellis/tasks/10-08-central-skill-delete-blocked/design.md", "reason": "remove_any_path branch and the retry-then-delete flow"}

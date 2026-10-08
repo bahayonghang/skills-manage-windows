@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/fs-db-operation-journal.md", "reason": "Check finalize still fail-closes and force-delete rules are unchanged"}
+{"file": ".trellis/spec/backend/skill-deletion-integrity.md", "reason": "Check backup cleanup cannot remove the Central target before the new delete"}
+{"file": ".trellis/spec/backend/test-support.md", "reason": "Check the new symlink test uses the shared fixture"}
+{"file": ".trellis/tasks/10-08-central-skill-delete-blocked/research/root-cause.md", "reason": "Check the fix explains both skills and does not treat unassigned source as the cause"}
+{"file": ".trellis/tasks/10-08-central-skill-delete-blocked/prd.md", "reason": "Acceptance criteria for directory-symlink finalize and unchanged force-delete"}
