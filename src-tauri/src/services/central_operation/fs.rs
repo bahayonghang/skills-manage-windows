@@ -1,5 +1,7 @@
 use std::fs;
 use std::io::Read;
+#[cfg(windows)]
+use std::os::windows::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
@@ -472,12 +474,30 @@ fn finalize_delete_local_blocking(manifest: &DeleteManifest) -> Result<(), Centr
 fn remove_any_path(path: &Path) -> Result<(), CentralOperationError> {
     let metadata = fs::symlink_metadata(path)
         .map_err(|error| CentralOperationError::io("cleanup_inspect", error))?;
-    if metadata.file_type().is_symlink() || metadata.is_file() {
+    if is_directory_symlink(&metadata) {
+        // RemoveDirectoryW deletes the reparse point and does not follow it.
+        fs::remove_dir(path).map_err(|error| CentralOperationError::io("cleanup_file", error))
+    } else if metadata.file_type().is_symlink() || metadata.is_file() {
         fs::remove_file(path).map_err(|error| CentralOperationError::io("cleanup_file", error))
     } else {
         fs::remove_dir_all(path)
             .map_err(|error| CentralOperationError::io("cleanup_directory", error))
     }
+}
+
+/// Windows directory symlinks keep `FILE_ATTRIBUTE_DIRECTORY`, but
+/// `Metadata::is_dir` is false for reparse points.
+/// `FileTypeExt::is_symlink_dir` is the check that selects `remove_dir`.
+/// Unix `symlink_metadata` never reports a symlink as a directory, so those
+/// links stay on `remove_file` and are not walked with `remove_dir_all`.
+#[cfg(windows)]
+fn is_directory_symlink(metadata: &fs::Metadata) -> bool {
+    metadata.file_type().is_symlink_dir()
+}
+
+#[cfg(not(windows))]
+fn is_directory_symlink(metadata: &fs::Metadata) -> bool {
+    metadata.file_type().is_symlink() && metadata.is_dir()
 }
 
 fn verify_marker(marker: &Path, operation_id: &str) -> Result<(), CentralOperationError> {
@@ -605,6 +625,8 @@ mod tests {
         SshAuthMethod, WslTargetConfig,
     };
     use crate::test_support::FakeRunner;
+    #[cfg(windows)]
+    use std::os::windows::fs::FileTypeExt;
     use std::sync::Arc;
 
     fn fake_connections() -> Vec<(Arc<FakeRunner>, ConnectedRemoteTarget)> {
@@ -669,6 +691,49 @@ mod tests {
         finalize_delete_local(&manifest).await.unwrap();
         finalize_delete_local(&manifest).await.unwrap();
         assert!(!target.exists());
+    }
+
+    #[tokio::test]
+    async fn local_delete_finalize_removes_directory_symlink_without_following_target() {
+        let temp = tempfile::tempdir().unwrap();
+        let target = temp.path().join("central-skill");
+        fs::create_dir(&target).unwrap();
+        fs::write(target.join("SKILL.md"), "keep").unwrap();
+        let link = temp.path().join("agent-skill");
+        crate::test_support::symlink_dir(&target, &link);
+
+        let manifest = build_local_delete_manifest("op-dir-link", vec![link.clone()])
+            .await
+            .unwrap();
+        assert_eq!(manifest.paths.len(), 1);
+        assert!(manifest.paths[0].expected_present);
+        assert_eq!(Path::new(&manifest.paths[0].original), link.as_path());
+
+        stage_delete_local(&manifest).await.unwrap();
+
+        let backup = Path::new(&manifest.paths[0].backup);
+        let marker = Path::new(&manifest.paths[0].marker);
+        assert_eq!(
+            fs::symlink_metadata(&link).unwrap_err().kind(),
+            std::io::ErrorKind::NotFound
+        );
+        let backup_type = fs::symlink_metadata(backup).unwrap().file_type();
+        assert!(backup_type.is_symlink());
+        #[cfg(windows)]
+        assert!(backup_type.is_symlink_dir());
+
+        finalize_delete_local(&manifest).await.unwrap();
+
+        assert_eq!(
+            fs::symlink_metadata(backup).unwrap_err().kind(),
+            std::io::ErrorKind::NotFound
+        );
+        assert_eq!(
+            fs::symlink_metadata(marker).unwrap_err().kind(),
+            std::io::ErrorKind::NotFound
+        );
+        assert!(target.is_dir());
+        assert_eq!(fs::read_to_string(target.join("SKILL.md")).unwrap(), "keep");
     }
 
     #[tokio::test]
