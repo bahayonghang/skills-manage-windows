@@ -1,0 +1,10 @@
+{"file":".trellis/spec/quality/index.md","reason":"Quality gates and evidence ownership"}
+{"file":".trellis/spec/quality/test-suite-layout.md","reason":"Frontend tests under src/test, Rust tests with service"}
+{"file":".trellis/spec/quality/ci-quality-gate.md","reason":"Full just ci required after implementation"}
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Generated typed IPC and reviewed errors"}
+{"file":".trellis/spec/frontend/typography-tokens.md","reason":"Semantic typography, current theme and contrast"}
+{"file":".trellis/spec/frontend/renderer-authority-boundary.md","reason":"No renderer file writes or arbitrary paths"}
+{"file":".trellis/spec/backend/path-policy.md","reason":"Protect roots against path and link escapes"}
+{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"Guard lifetime and no nested acquisition"}
+{"file":".trellis/spec/backend/spawn-blocking-io.md","reason":"Real Windows test execution and coherent blocking work"}
+{"file":".trellis/tasks/10-08-rules-management/research/current-state.md","reason":"Body versus byte comparison, real symlinks and unrun evidence"}

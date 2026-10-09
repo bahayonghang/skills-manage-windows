@@ -1,0 +1,10 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Rules page, store, i18n and current UI conventions"}
+{"file":".trellis/spec/frontend/module-boundaries.md","reason":"Keep domain state and typed IPC in the store"}
+{"file":".trellis/spec/frontend/ipc-adapter.md","reason":"Register generated commands and safe typed errors"}
+{"file":".trellis/spec/frontend/typography-tokens.md","reason":"Reuse semantic typography, theme and accessible foreground roles"}
+{"file":".trellis/spec/backend/index.md","reason":"Rules service ownership and backend contracts"}
+{"file":".trellis/spec/backend/layer-boundaries.md","reason":"Commands call services, no business logic in IPC shells"}
+{"file":".trellis/spec/backend/path-policy.md","reason":"Single path policy, containment and Windows equivalence"}
+{"file":".trellis/spec/backend/central-mutation-lock.md","reason":"Established Local guard around top-level file mutations"}
+{"file":".trellis/spec/backend/spawn-blocking-io.md","reason":"Multi-file work and blocking locks off async workers"}
+{"file":".trellis/tasks/10-08-rules-management/research/current-state.md","reason":"Six-rule compatibility, current evidence and verification limits"}
