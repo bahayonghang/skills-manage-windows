@@ -6,6 +6,15 @@
 macro_rules! __skillport_runtime_commands {
     ($callback:ident) => {
         $callback! {
+            list_rules => (commands::rules::list_rules, runtime_only(ReadOnly)),
+            read_rule => (commands::rules::read_rule, runtime_only(ReadOnly)),
+            preview_rules_import => (commands::rules::preview_rules_import, runtime_only(Preview)),
+            import_existing_rules => (commands::rules::import_existing_rules, operation(Central, Filesystem, StartedThenTerminal)),
+            create_rule => (commands::rules::create_rule, operation(Central, Filesystem, StartedThenTerminal)),
+            save_rule => (commands::rules::save_rule, operation(Central, Filesystem, StartedThenTerminal)),
+            set_rule_target_enabled => (commands::rules::set_rule_target_enabled, operation(Central, Filesystem, StartedThenTerminal)),
+            delete_rule => (commands::rules::delete_rule, operation(Central, Filesystem, StartedThenTerminal)),
+            recover_rule_operation => (commands::rules::recover_rule_operation, operation(Central, Recovery, StartedThenTerminal)),
             get_startup_status => (commands::startup::get_startup_status, runtime_only(ReadOnly)),
             retry_startup => (commands::startup::retry_startup, operation(Startup, Startup, StartedThenTerminal)),
             rebuild_startup_database => (commands::startup::rebuild_startup_database, operation(Startup, Recovery, StartedThenTerminal)),
@@ -226,6 +235,15 @@ macro_rules! __skillport_runtime_commands {
 macro_rules! __skillport_generated_commands {
     ($callback:ident) => {
         $callback! {
+            list_rules => commands::rules::list_rules,
+            read_rule => commands::rules::read_rule,
+            preview_rules_import => commands::rules::preview_rules_import,
+            import_existing_rules => commands::rules::import_existing_rules,
+            create_rule => commands::rules::create_rule,
+            save_rule => commands::rules::save_rule,
+            set_rule_target_enabled => commands::rules::set_rule_target_enabled,
+            delete_rule => commands::rules::delete_rule,
+            recover_rule_operation => commands::rules::recover_rule_operation,
             preview_local_remote_sync => commands::local_remote_sync::preview_local_remote_sync,
             apply_local_remote_sync => commands::local_remote_sync::apply_local_remote_sync,
             install_skill_to_agent => commands::linker::install_skill_to_agent,

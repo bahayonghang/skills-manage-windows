@@ -12,6 +12,38 @@ pub use skills_cli::{
 };
 
 pub const APP_DATA_DIR_NAME: &str = ".skillsmanage";
+pub const RULES_APP_DIR_NAME: &str = ".skillport";
+pub const RULES_DIR_NAME: &str = "rules";
+
+pub fn rules_dir_from_home(home: &Path) -> PathBuf {
+    home.join(RULES_APP_DIR_NAME).join(RULES_DIR_NAME)
+}
+
+pub fn rule_tool_dir_from_home(home: &Path, omp: bool) -> PathBuf {
+    if omp {
+        home.join(".omp").join("agent").join(RULES_DIR_NAME)
+    } else {
+        home.join(".claude").join(RULES_DIR_NAME)
+    }
+}
+
+pub fn rule_tool_uses_default_root_with<F>(omp: bool, mut get_var: F) -> bool
+where
+    F: FnMut(&str) -> Option<OsString>,
+{
+    let vars: &[&str] = if omp {
+        &[
+            "PI_CODING_AGENT_DIR",
+            "PI_CONFIG_DIR",
+            "OMP_PROFILE",
+            "PI_PROFILE",
+        ]
+    } else {
+        &["CLAUDE_CONFIG_DIR"]
+    };
+    vars.iter()
+        .all(|key| non_empty_os_env(get_var(key)).is_none())
+}
 pub const CENTRAL_SKILLS_REL_FROM_HOME: &str = ".skillsmanage/skills";
 pub const REMOTE_REPOS_REL_FROM_HOME: &str = ".skillsmanage/repos";
 pub const TARGETS_CACHE_DIR_NAME: &str = "targets";

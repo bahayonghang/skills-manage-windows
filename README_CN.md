@@ -28,6 +28,14 @@
 - 提供中英文界面、Catppuccin 主题、强调色、首次引导和响应式导航。
 - **中央技能库 V2（默认开启）**：支持结构化查询语法（`tag:`、`repo:`、`owner:`、`has:source` 等）、URL-as-state、保存视图、命令面板（`Ctrl+K`）、标签分组、列表分组视图（不分组 / 按仓库 / 按 owner / 按标签 / 按状态）。通过 Beta 徽章旁的"切回经典布局"链接，或在 DevTools localStorage 中设 `featureFlag.central.newLayout=off`，可退回 V1 布局。
 
+## Rules 管理
+
+Rules 页面在本机 Local 目标上管理平面的无条件 Markdown 规则。可以预览并导入 `~/.claude/rules/` 与 `~/.omp/agent/rules/` 中的现有规则，将共享内容保存到 `~/.skillport/rules/`，再编辑和预览正文。共享文件包含 OMP 所需的 `alwaysApply: true` 和 description。
+
+导入会保留工具原文件。分别启用 Claude Code 或 OMP 后，工具入口通过文件 symlink 指向共享规则。接管同内容的普通文件需要确认，并生成原始字节备份；异文文件和外部链接保留。Windows 需要允许创建文件软链接，权限不足时会显示错误。
+
+备份与恢复凭据分别保存在 `~/.skillport/rules/.backups/` 和 `~/.skillport/rules/.state/`。目标被外部修改后，恢复会停止。会话草稿在切页和切换目标后保留，关闭应用后清除。首版不支持 SSH、WSL、项目规则、条件规则、自定义配置根目录及 OMP profile。
+
 ## SSH 远程模式
 
 SkillPort 可以通过 SSH 管理远程 Linux 或 macOS 用户目录里的全局 skills。桌面界面仍在本机运行，后端会连接当前选中的远程目标，并扫描远程用户的 Central 与各平台 skills 目录。

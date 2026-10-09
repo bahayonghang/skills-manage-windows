@@ -2,6 +2,17 @@
 /// structured Runtime diagnostics. Adding a code is an explicit review point;
 /// syntax validity alone is never sufficient.
 pub const REVIEWED_IPC_ERROR_CODES: &[&str] = &[
+    "rules.invalid_name",
+    "rules.revision_conflict",
+    "rules.target_conflict",
+    "rules.permission_denied",
+    "rules.lock_busy",
+    "rules.local_only",
+    "rules.unsupported",
+    "rules.recovery_blocked",
+    "rules.budget_exceeded",
+    "rules.io",
+    "rules.not_found",
     "ai.client_build_failed",
     "ai.connect",
     "ai.dns",
@@ -149,6 +160,21 @@ pub fn is_reviewed_ipc_code(code: &str) -> bool {
 
 pub(super) fn direct_public_message(code: &str) -> Option<&'static str> {
     match code {
+        "rules.invalid_name" => Some("The rule filename is invalid."),
+        "rules.revision_conflict" => {
+            Some("The rule changed outside SkillPort. Reload before saving.")
+        }
+        "rules.target_conflict" => Some("The tool entry contains conflicting data."),
+        "rules.permission_denied" => {
+            Some("Permission to access the rule or create a file link was denied.")
+        }
+        "rules.lock_busy" => Some("Another local file operation is running. Try again."),
+        "rules.local_only" => Some("Rules are available for the Local target only."),
+        "rules.unsupported" => Some("The rule format or tool configuration is not supported."),
+        "rules.recovery_blocked" => Some("Rule recovery was blocked by external changes."),
+        "rules.budget_exceeded" => Some("The rules resource budget was exceeded."),
+        "rules.io" => Some("The rule file operation failed."),
+        "rules.not_found" => Some("The rule was not found."),
         "credential.ssh_password_unavailable" => {
             Some("The SSH password is unavailable. Open Settings, save it, and retry.")
         }

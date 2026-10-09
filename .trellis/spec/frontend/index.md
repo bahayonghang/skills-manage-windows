@@ -6,6 +6,7 @@
 - [前端平台技能安装来源分类约定](./platform-origin-classification.md)
 - [前端 IPC adapter 与 fixture seam 约定](./ipc-adapter.md)
 - [Frontend Module Boundaries](./module-boundaries.md)
+- [Rules 前端状态契约](./rules-management.md)
 - [Renderer Authority Boundary](./renderer-authority-boundary.md)
 - [前端异步动作失败反馈约定](./async-error-feedback.md)
 - [前端异步 UI 测试稳定性约定](./async-ui-test-stability.md)

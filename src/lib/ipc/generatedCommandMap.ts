@@ -34,10 +34,12 @@ export const GENERATED_IPC_COMMANDS = {
 } | null }, null>(),
   create_collection: command<{ name: string; description: string | null }, Collection>(),
   create_or_update_skill_repository: command<{ id: string | null; name: string; sourceType: string | null; owner: string | null; repo: string | null; branch: string | null; url: string | null; isUnknown: boolean | null }, SkillRepository>(),
+  create_rule: command<{ targetId: string; name: string; description: string; body: string }, RuleDetail>(),
   create_skill_tag: command<{ name: string; description: string | null; color: string | null }, SkillTag>(),
   delete_central_skill: command<{ skillId: string; removeAgentIds: string[]; force: boolean | null }, DeleteCentralSkillResult>(),
   delete_central_skills: command<{ requests: BatchDeleteCentralSkillRequest[] }, BatchDeleteCentralSkillResult_Serialize>(),
   delete_collection: command<{ collectionId: string }, null>(),
+  delete_rule: command<{ targetId: string; name: string; expectedRevision: string }, RuleMutationResult>(),
   delete_skill_repository: command<{ repositoryId: string; requests: BatchDeleteCentralSkillRequest[] }, DeleteSkillRepositoryResult_Serialize>(),
   explain_skill: command<{ content: string }, string>(),
   explain_skill_stream: command<{ skillId: string; content: string; lang: string }, null>(),
@@ -67,6 +69,7 @@ export const GENERATED_IPC_COMMANDS = {
 	agentIds?: string[] | null,
 } | null }, SkillUpdateInventory_Serialize>(),
   import_collection: command<{ json: string }, Collection>(),
+  import_existing_rules: command<{ targetId: string; entries: RuleImportEntry[] }, RulesImportResult>(),
   import_obsidian_skill_to_central: command<{ dirPath: string }, ObsidianImportResult>(),
   import_obsidian_skill_to_platform: command<{ dirPath: string; agentId: string; method: string | null }, ObsidianImportResult>(),
   install_from_skills_sh: command<{ source: string; skillId: string }, string>(),
@@ -77,13 +80,17 @@ export const GENERATED_IPC_COMMANDS = {
   list_projects: command<undefined, ProjectDto[]>(),
   list_projects_using_skill: command<{ skillId: string }, ProjectUsingSkillDto[]>(),
   list_registries: command<undefined, SkillRegistry[]>(),
+  list_rules: command<{ targetId: string }, RulesSnapshot>(),
   pick_project_folder: command<undefined, string | null>(),
   preview_central_store_location_change: command<{ request: CentralStoreLocationPreviewRequest }, CentralStoreLocationPreview>(),
   preview_delete_central_skills: command<{ skillIds: string[] }, BatchDeleteCentralSkillPreviewResult_Serialize>(),
   preview_delete_skill_repository: command<{ repositoryId: string }, DeleteSkillRepositoryPreview_Serialize>(),
   preview_local_remote_sync: command<{ request: LocalRemoteSyncPreviewRequest }, LocalRemoteSyncPreview_Serialize>(),
+  preview_rules_import: command<{ targetId: string }, RulesImportPreview>(),
+  read_rule: command<{ targetId: string; name: string }, RuleDetail>(),
   read_skills_sh_file: command<{ source: string; filePath: string }, string>(),
   record_frontend_runtime_log: command<{ payload: FrontendRuntimeLogPayload }, null>(),
+  recover_rule_operation: command<{ targetId: string; operationId: string }, RuleMutationResult>(),
   refresh_skill_explanation: command<{ skillId: string; content: string; lang: string }, null>(),
   refresh_skill_update_inventory: command<{ scope: SkillRefreshScope; operationId: string }, SkillUpdateInventory_Serialize>(),
   remove_project: command<{ id: string; uninstallSkills: boolean }, null>(),
@@ -94,6 +101,7 @@ export const GENERATED_IPC_COMMANDS = {
   rescan_project: command<{ id: string }, number>(),
   resolve_skills_sh_url: command<{ source: string; skillId: string }, string>(),
   retry_failed_update_repositories: command<{ scope: SkillRefreshScope; repositoryIds: string[]; modeOverride: "regular" | "sync" | null; operationId: string }, SkillUpdateInventory_Serialize>(),
+  save_rule: command<{ targetId: string; name: string; body: string; expectedRevision: string }, RuleDetail>(),
   scan_deleted_platform_copies: command<{ agentIds: string[] | null }, DeletedPlatformCopyGroup[]>(),
   scan_platform_duplicate_skills: command<{ agentIds: string[] | null }, PlatformDuplicateGroup[]>(),
   search_marketplace_skills: command<{ registryId: string | null; query: string | null }, MarketplaceSkill[]>(),
@@ -101,6 +109,7 @@ export const GENERATED_IPC_COMMANDS = {
   set_ai_api_key: command<{ value: string; provider: string | null }, AiApiKeyState_Serialize>(),
   set_github_pat: command<{ value: string }, GitHubPatState_Serialize>(),
   set_project_pinned: command<{ id: string; pinned: boolean }, null>(),
+  set_rule_target_enabled: command<{ targetId: string; name: string; tool: RuleTool; enabled: boolean; expectedDestinationFingerprint: string | null }, RuleDetail>(),
   set_scan_directory_active: command<{ path: string; isActive: boolean }, null>(),
   set_settings: command<{ values: { [key in string]: string } }, null>(),
   set_skill_repository_pinned: command<{ repositoryId: string; pinned: boolean }, SkillRepository>(),
@@ -158,10 +167,12 @@ export const GENERATED_IPC_COMMAND_NAMES = [
   "clear_skill_update_inventory",
   "create_collection",
   "create_or_update_skill_repository",
+  "create_rule",
   "create_skill_tag",
   "delete_central_skill",
   "delete_central_skills",
   "delete_collection",
+  "delete_rule",
   "delete_skill_repository",
   "explain_skill",
   "explain_skill_stream",
@@ -184,6 +195,7 @@ export const GENERATED_IPC_COMMAND_NAMES = [
   "get_skill_tags",
   "get_skill_update_inventory",
   "import_collection",
+  "import_existing_rules",
   "import_obsidian_skill_to_central",
   "import_obsidian_skill_to_platform",
   "install_from_skills_sh",
@@ -194,13 +206,17 @@ export const GENERATED_IPC_COMMAND_NAMES = [
   "list_projects",
   "list_projects_using_skill",
   "list_registries",
+  "list_rules",
   "pick_project_folder",
   "preview_central_store_location_change",
   "preview_delete_central_skills",
   "preview_delete_skill_repository",
   "preview_local_remote_sync",
+  "preview_rules_import",
+  "read_rule",
   "read_skills_sh_file",
   "record_frontend_runtime_log",
+  "recover_rule_operation",
   "refresh_skill_explanation",
   "refresh_skill_update_inventory",
   "remove_project",
@@ -211,6 +227,7 @@ export const GENERATED_IPC_COMMAND_NAMES = [
   "rescan_project",
   "resolve_skills_sh_url",
   "retry_failed_update_repositories",
+  "save_rule",
   "scan_deleted_platform_copies",
   "scan_platform_duplicate_skills",
   "search_marketplace_skills",
@@ -218,6 +235,7 @@ export const GENERATED_IPC_COMMAND_NAMES = [
   "set_ai_api_key",
   "set_github_pat",
   "set_project_pinned",
+  "set_rule_target_enabled",
   "set_scan_directory_active",
   "set_settings",
   "set_skill_repository_pinned",
@@ -251,6 +269,17 @@ export const GENERATED_IPC_COMMAND_NAMES = [
 ] as const;
 
 export const GENERATED_REVIEWED_IPC_ERROR_CODES = [
+  "rules.invalid_name",
+  "rules.revision_conflict",
+  "rules.target_conflict",
+  "rules.permission_denied",
+  "rules.lock_busy",
+  "rules.local_only",
+  "rules.unsupported",
+  "rules.recovery_blocked",
+  "rules.budget_exceeded",
+  "rules.io",
+  "rules.not_found",
   "ai.client_build_failed",
   "ai.connect",
   "ai.dns",
@@ -1123,6 +1152,108 @@ export type RemoteMissingSkill = {
 export type Result<T, E> = {
 	ok: T,
 	err: E,
+};
+
+export type RuleCompatibility = "supported" | "unsupported";
+
+export type RuleDetail = {
+	name: string,
+	title: string,
+	description: string,
+	bytes: number,
+	revision: string,
+	compatibility: RuleCompatibility,
+	targets: RuleTargetStatus[],
+	body: string,
+	source: string,
+};
+
+export type RuleImportEntry = {
+	name: string,
+	sourceFingerprints: RuleSourceFingerprint[],
+};
+
+export type RuleImportPreviewEntry = {
+	name: string,
+	status: RuleImportStatus,
+	sourceFingerprints: RuleSourceFingerprint[],
+	description: string,
+	errorCode: string | null,
+};
+
+export type RuleImportResultEntry = {
+	name: string,
+	status: RuleImportStatus,
+	errorCode: string | null,
+};
+
+export type RuleImportStatus = "new" | "same" | "conflict" | "unsupported" | "failed" | "imported";
+
+export type RuleMutationResult = {
+	operationId: string,
+	name: string,
+	recoveryRequired: boolean,
+};
+
+export type RuleOperationKind = "enable" | "disable" | "delete";
+
+export type RuleRecoveryOperation = {
+	operationId: string,
+	name: string,
+	kind: RuleOperationKind,
+	phase: string,
+	tool: RuleTool | null,
+	backupPath: string | null,
+};
+
+export type RuleSourceFingerprint = {
+	tool: RuleTool,
+	fingerprint: string,
+};
+
+export type RuleSummary = {
+	name: string,
+	title: string,
+	description: string,
+	bytes: number,
+	revision: string,
+	compatibility: RuleCompatibility,
+	targets: RuleTargetStatus[],
+};
+
+export type RuleTargetInfo = {
+	tool: RuleTool,
+	path: string,
+	supported: boolean,
+	errorCode: string | null,
+};
+
+export type RuleTargetState = "linked" | "absent" | "native_equivalent" | "conflict" | "broken" | "unreadable" | "unsupported" | "recovery_required";
+
+export type RuleTargetStatus = {
+	tool: RuleTool,
+	path: string,
+	state: RuleTargetState,
+	fingerprint: string | null,
+	errorCode: string | null,
+};
+
+export type RuleTool = "claude-code" | "omp";
+
+export type RulesImportPreview = {
+	entries: RuleImportPreviewEntry[],
+};
+
+export type RulesImportResult = {
+	entries: RuleImportResultEntry[],
+	operationId: string,
+};
+
+export type RulesSnapshot = {
+	rootPath: string,
+	targets: RuleTargetInfo[],
+	rules: RuleSummary[],
+	recoveryOperations: RuleRecoveryOperation[],
 };
 
 export type ScanDirectory = {

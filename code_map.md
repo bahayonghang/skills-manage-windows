@@ -18,6 +18,7 @@ Use this file for navigation. It is not a replacement for behavior rules in `AGE
 - `src-tauri/src/commands/` is the IPC shell: argument translation, operation logging, and error
   stringification. Domain behavior belongs in `src-tauri/src/services/` and repositories.
 - `src-tauri/src/services/installation/` owns Centralization and install/uninstall transport.
+- `src-tauri/src/services/rules/` owns Local rule files, import backups, file symlinks, and recovery.
 - `src-tauri/src/db/` owns SQLite schema and repositories; read the backend spec index before
   changing migrations or persistence.
 - `src-tauri/src/paths.rs` is the path-policy source for Central, Universal Agents, database, and
@@ -26,6 +27,7 @@ Use this file for navigation. It is not a replacement for behavior rules in `AGE
 ## Frontend Routes
 
 - `src/stores/` contains domain Zustand stores and their Tauri IPC adapters.
+- `/rules` uses `src/pages/RulesView.tsx`, `src/components/rules/`, and `src/stores/rulesStore.ts`.
 - `src/components/skill/UnifiedSkillCard.tsx` is the shared skill-card implementation.
 - `src/i18n/` contains English and Chinese user-visible strings.
 - `src/test/` contains Vitest setup, fixtures, and renderer tests.

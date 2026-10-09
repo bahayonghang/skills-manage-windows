@@ -13,6 +13,7 @@ import {
   ChevronRight,
   BarChart3,
   Terminal,
+  FileText,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
@@ -228,6 +229,13 @@ export function Sidebar() {
           icon={<Blocks className="size-4" />}
           expanded={expanded}
           count={skillsByAgent["central"]}
+        />
+        <NavItem
+          label={t("sidebar.rules")}
+          isActive={pathname === "/rules"}
+          onClick={() => navigate("/rules")}
+          icon={<FileText className="size-4" />}
+          expanded={expanded}
         />
 
         <NavItem

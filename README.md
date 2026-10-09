@@ -29,6 +29,14 @@
 - Bilingual UI, Catppuccin themes, accent colors, onboarding, and responsive navigation.
 - **Central Library V2 (default)**: structured query syntax (`tag:`, `repo:`, `owner:`, `has:source`, etc.), URL-as-state, saved views, command palette (`Ctrl+K`), tag groups, group-by views (none / repository / owner / tag / status). Use the "Switch to classic layout" link in the Beta badge area, or set `featureFlag.central.newLayout=off` in DevTools localStorage, to fall back to the V1 layout.
 
+## Rules
+
+The Rules page manages flat, unconditional Markdown rules on the Local target. Preview and import existing rules from `~/.claude/rules/` and `~/.omp/agent/rules/` into `~/.skillport/rules/`, then edit and preview their shared body. Each shared file includes `alwaysApply: true` and a description for OMP.
+
+Import preserves source files. Enable Claude Code or OMP separately to create a file symlink to the shared rule. Replacing an equivalent ordinary file requires confirmation and creates a byte backup. Conflicting content and external links remain intact. Windows must permit file symlinks; SkillPort reports permission failures.
+
+Backups and recovery receipts stay under `~/.skillport/rules/.backups/` and `~/.skillport/rules/.state/`. Recovery stops when a destination has changed externally. Session drafts survive page and target changes until the application closes. Rules management currently excludes SSH, WSL, project rules, conditional rules, custom configuration roots, and OMP profiles.
+
 ## SSH Remote Mode
 
 SkillPort can manage a remote Linux or macOS user's global skills through SSH. The desktop UI still runs locally, while the backend connects to the selected target and scans the remote user's Central and platform skill directories.

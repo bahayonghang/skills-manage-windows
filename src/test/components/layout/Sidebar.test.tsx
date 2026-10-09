@@ -124,6 +124,18 @@ describe("Sidebar", () => {
     expect(nav).toHaveStyle({ width: "208px" });
   });
 
+  it("places Rules after Central and navigates in expanded and collapsed states", () => {
+    const { container } = renderSidebar();
+    const buttons = Array.from(container.querySelectorAll("nav button"));
+    const central = screen.getByRole("button", { name: /中央技能库/ });
+    const rules = screen.getByRole("button", { name: "规则管理" });
+    expect(buttons.indexOf(rules)).toBe(buttons.indexOf(central) + 1);
+    fireEvent.click(rules);
+    expect(screen.getByTestId("location")).toHaveTextContent("/rules");
+    fireEvent.click(screen.getByRole("button", { name: "折叠侧边栏" }));
+    expect(screen.getByRole("button", { name: "规则管理" })).toBeInTheDocument();
+  });
+
   it("defaults to collapsed sidebar on narrow viewports", () => {
     const originalInnerWidth = window.innerWidth;
     Object.defineProperty(window, "innerWidth", {

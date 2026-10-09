@@ -1,4 +1,92 @@
 {
+  "rules": {
+    "fixture": {
+      "description": "Synthetic browser acceptance data",
+      "reviewBody": "# Review checklist\n\n## Before a change\n\n- Read the affected source files.\n- Define a result that can be checked.\n\n## Before delivery\n\nReport the checks that ran and preserve any remaining verification gap.\n",
+      "writingBody": "# Writing style\n\nUse short sentences and precise names. Keep one meaning in each paragraph.\n",
+      "safetyBody": "# File safety\n\nPreserve external changes. Check the original revision before replacing a file.\n",
+      "contextBody": "# Project context\n\nRead the project guidance before editing. Keep changes within the requested scope.\n"
+    },
+    "title": "Rules",
+    "listTitle": "Rule files",
+    "selectRule": "Select {{name}}",
+    "fileNamePlaceholder": "example.md",
+    "editorTitle": "Rule editor",
+    "targetsTitle": "Tool links",
+    "importExisting": "Import existing rules",
+    "newRule": "New rule",
+    "search": "Search rules",
+    "unsaved": "Unsaved changes",
+    "saved": "Saved",
+    "saving": "Saving",
+    "applying": "Applying",
+    "enable": "Enable",
+    "disable": "Disable",
+    "takeOver": "Replace with link",
+    "reloadHint": "Tools read saved content after reload or in a new session.",
+    "bodyLabel": "Rule body",
+    "sourceLabel": "Complete source file",
+    "viewMode": "Editor view",
+    "diskChanged": "The file changed outside SkillPort. Your draft remains available; saving requires the original revision.",
+    "unsupportedHint": "Conditional or unsupported rule formats are read-only.",
+    "localOnly": "Local rules only",
+    "localOnlyDetail": "Select the Local target to manage rules. Session drafts remain available when you return.",
+    "fixtureNotice": "Browser preview uses synthetic data. No local files change.",
+    "reloadRequired": "Refresh the file state before continuing.",
+    "recoveryNeeded": "Recovery required: {{name}}",
+    "reviewRecovery": "Review recovery",
+    "empty": "No rules in the central library. Import existing rules or create a rule.",
+    "noResults": "No matching rule files.",
+    "retryHint": "Refresh to retry loading the rule.",
+    "selectHint": "Select a rule to edit its body and manage tool links.",
+    "backToList": "Rule files",
+    "newRuleHint": "Create a flat .md file. The shared metadata applies the rule to all sessions.",
+    "fileName": "File name",
+    "description": "Description",
+    "importHint": "Import saves a shared file with alwaysApply metadata. Original files remain in place. Enable each tool separately to replace an equivalent file with a link; SkillPort preserves a byte-for-byte backup.",
+    "noImportSources": "No supported source files found.",
+    "importing": "Importing",
+    "importSelected": "Import selected ({{count}})",
+    "unsavedTitle": "Unsaved changes",
+    "unsavedHint": "Save the draft before switching, discard the draft, or keep editing.",
+    "discard": "Discard and switch",
+    "saveAndSwitch": "Save and switch",
+    "takeOverTitle": "Replace equivalent file with link",
+    "takeOverHint": "SkillPort backs up the complete original file, then replaces the file with a symbolic link to the saved central rule. Different content and external links remain unchanged.",
+    "backupLocation": "Original file backup directory",
+    "deleteTitle": "Delete rule",
+    "deleteHint": "Delete {{name}} from the central library and remove verified SkillPort links from both tools. SkillPort preserves a recovery backup.",
+    "recoveryTitle": "Recover interrupted operation",
+    "recoveryHint": "Restore the original file from the verified backup or undo the interrupted operation. Recovery stops if an external change conflicts with the recorded state.",
+    "recover": "Recover",
+    "modes": {
+      "body": "Body",
+      "preview": "Preview",
+      "source": "Source"
+    },
+    "tools": {
+      "claude-code": "Claude Code",
+      "omp": "OMP"
+    },
+    "states": {
+      "linked": "Linked",
+      "absent": "No link",
+      "native_equivalent": "Equivalent file",
+      "conflict": "Conflict",
+      "broken": "Broken link",
+      "unreadable": "Unreadable",
+      "unsupported": "Unsupported",
+      "recovery_required": "Recovery required"
+    },
+    "importStates": {
+      "new": "Ready to import",
+      "same": "Already imported",
+      "conflict": "Different content",
+      "unsupported": "Unsupported format",
+      "failed": "Import unavailable",
+      "imported": "Imported"
+    }
+  },
   "app": {
     "name": "SkillPort"
   },
@@ -65,6 +153,19 @@
     "disabled": "Disabled"
   },
   "backendErrors": {
+    "rules": {
+      "invalid_name": "Use a flat .md file name without path separators or reserved names.",
+      "revision_conflict": "The rule changed outside SkillPort. Your draft remains available.",
+      "target_conflict": "The tool file has different content or an external link. Resolve the conflict before enabling.",
+      "permission_denied": "SkillPort cannot write the file or create a file symbolic link. Check permissions and Windows Developer Mode.",
+      "lock_busy": "Another Local file operation is running. Retry when the operation finishes.",
+      "local_only": "Rules management requires the Local target.",
+      "unsupported": "The rule format or custom tool configuration is not supported.",
+      "recovery_blocked": "External changes prevent safe recovery. The backup and operation record remain available.",
+      "budget_exceeded": "The rule file or scan exceeds the supported limit.",
+      "io": "The file operation did not finish. Refresh the state and review any recovery record.",
+      "not_found": "The rule file no longer exists."
+    },
     "wrong_link_target": "This link points at a different folder.",
     "broken_link": "This link is broken.",
     "not_a_directory": "This path is a file, not a skill folder.",
@@ -325,6 +426,7 @@
     "themeToggleDark": "Switch to dark theme"
   },
   "sidebar": {
+    "rules": "Rules",
     "byTool": "By Tool",
     "dashboard": "Dashboard",
     "centralSkills": "Central Skills",

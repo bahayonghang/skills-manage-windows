@@ -1,4 +1,92 @@
 {
+  "rules": {
+    "fixture": {
+      "description": "浏览器验收合成数据",
+      "reviewBody": "# 代码检查清单\n\n## 修改前\n\n- 阅读受影响的源文件。\n- 明确可检查的结果。\n\n## 交付前\n\n报告已执行的检查，并注明尚未验证的行为。\n",
+      "writingBody": "# 写作约定\n\n使用短句和准确名称。每段表达一层意思。\n",
+      "safetyBody": "# 文件安全\n\n保留外部修改。替换文件前检查原始版本。\n",
+      "contextBody": "# 项目上下文\n\n编辑前阅读项目规范。改动保持在请求范围内。\n"
+    },
+    "title": "规则管理",
+    "listTitle": "规则文件",
+    "selectRule": "选择 {{name}}",
+    "fileNamePlaceholder": "example.md",
+    "editorTitle": "规则编辑器",
+    "targetsTitle": "工具链接",
+    "importExisting": "导入现有规则",
+    "newRule": "新建规则",
+    "search": "搜索规则",
+    "unsaved": "未保存",
+    "saved": "已保存",
+    "saving": "保存中",
+    "applying": "处理中",
+    "enable": "启用",
+    "disable": "停用",
+    "takeOver": "接管为链接",
+    "reloadHint": "工具重新加载或开启新会话后读取已保存内容。",
+    "bodyLabel": "规则正文",
+    "sourceLabel": "完整源文件",
+    "viewMode": "编辑视图",
+    "diskChanged": "文件已在 SkillPort 外修改。草稿已保留；保存需匹配原始版本。",
+    "unsupportedHint": "条件规则或不支持的格式为只读。",
+    "localOnly": "仅支持本机规则",
+    "localOnlyDetail": "切换到 Local 目标后管理规则。返回时可继续编辑会话草稿。",
+    "fixtureNotice": "浏览器预览使用合成数据，不修改本机文件。",
+    "reloadRequired": "请刷新文件状态后继续。",
+    "recoveryNeeded": "需要恢复：{{name}}",
+    "reviewRecovery": "查看恢复",
+    "empty": "中央规则库为空。可导入现有规则或新建规则。",
+    "noResults": "没有匹配的规则文件。",
+    "retryHint": "请刷新后重新加载规则。",
+    "selectHint": "选择规则后编辑正文并管理工具链接。",
+    "backToList": "规则文件",
+    "newRuleHint": "新建平铺 .md 文件，共享元数据设置为始终应用。",
+    "fileName": "文件名",
+    "description": "描述",
+    "importHint": "导入会保存含 alwaysApply 元数据的共享文件，原文件保持原位。分别启用工具后，同文文件才会替换为链接；完整原文件按字节备份。",
+    "noImportSources": "未找到支持的源文件。",
+    "importing": "导入中",
+    "importSelected": "导入所选（{{count}}）",
+    "unsavedTitle": "正文尚未保存",
+    "unsavedHint": "可保存后切换、放弃草稿，或继续编辑。",
+    "discard": "放弃并切换",
+    "saveAndSwitch": "保存并切换",
+    "takeOverTitle": "将同文文件接管为链接",
+    "takeOverHint": "SkillPort 先备份完整原文件，再替换为指向已保存中央规则的文件软链接。异文文件和外部链接保持原样。",
+    "backupLocation": "原文件备份目录",
+    "deleteTitle": "删除规则",
+    "deleteHint": "删除中央规则 {{name}}，并解除两个工具中已验证的 SkillPort 链接。完整内容保存在恢复备份中。",
+    "recoveryTitle": "恢复中断操作",
+    "recoveryHint": "从已验证的备份恢复原文件，或撤销中断操作。外部修改与记录冲突时，恢复停止。",
+    "recover": "恢复",
+    "modes": {
+      "body": "正文",
+      "preview": "预览",
+      "source": "源文件"
+    },
+    "tools": {
+      "claude-code": "Claude Code",
+      "omp": "OMP"
+    },
+    "states": {
+      "linked": "已链接",
+      "absent": "未链接",
+      "native_equivalent": "同文文件",
+      "conflict": "冲突",
+      "broken": "断链",
+      "unreadable": "无法读取",
+      "unsupported": "不支持",
+      "recovery_required": "需要恢复"
+    },
+    "importStates": {
+      "new": "可导入",
+      "same": "已导入",
+      "conflict": "正文不同",
+      "unsupported": "格式不支持",
+      "failed": "无法导入",
+      "imported": "导入完成"
+    }
+  },
   "app": {
     "name": "SkillPort"
   },
@@ -65,6 +153,19 @@
     "disabled": "禁用"
   },
   "backendErrors": {
+    "rules": {
+      "invalid_name": "请使用平铺 .md 文件名，不能含路径分隔符或保留名称。",
+      "revision_conflict": "规则已在 SkillPort 外修改，草稿已保留。",
+      "target_conflict": "工具文件存在异文或外部链接。解决冲突后才能启用。",
+      "permission_denied": "无法写入文件或创建文件软链接。请检查权限和 Windows 开发者模式。",
+      "lock_busy": "另一项本机文件操作正在执行，请完成后重试。",
+      "local_only": "规则管理需要 Local 目标。",
+      "unsupported": "规则格式或工具的自定义配置不受支持。",
+      "recovery_blocked": "外部修改阻止安全恢复，备份和操作记录已保留。",
+      "budget_exceeded": "规则文件或扫描数量超过支持的限额。",
+      "io": "文件操作未完成。请刷新状态并检查恢复记录。",
+      "not_found": "规则文件已不存在。"
+    },
     "wrong_link_target": "该链接指向其他目录。",
     "broken_link": "该链接已失效。",
     "not_a_directory": "该路径是文件，不是技能目录。",
@@ -325,6 +426,7 @@
     "themeToggleDark": "切换到深色主题"
   },
   "sidebar": {
+    "rules": "规则管理",
     "byTool": "按工具",
     "dashboard": "Dashboard",
     "centralSkills": "中央技能库",

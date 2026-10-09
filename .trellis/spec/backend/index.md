@@ -3,6 +3,7 @@
 ## Guidelines
 
 - [Backend Layer Boundaries](./layer-boundaries.md)
+- [Rules 文件库与恢复契约](./rules-management.md)
 - [Central Skill Tags](./central-skill-tags.md)
 - [SQL-Backed Central Skill Pagination](./central-skills-pagination.md)
 - [Central Project Install Visibility Contract](./central-project-install-visibility.md)

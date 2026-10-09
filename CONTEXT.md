@@ -28,6 +28,12 @@ SkillPort 的私有中央技能库。README 中的权威目录是：
 
 Central Skills 不等同于 Universal Agents。只有显式安装到目标平台的 Skill 才会暴露给对应工具。
 
+### Rules
+
+本机无条件 Markdown 规则，权威目录为 `~/.skillport/rules/`。Rules 页面预览并导入 Claude Code 和 OMP 的现有规则，工具原文件在导入后保留。逐工具启用后，`~/.claude/rules/` 与 `~/.omp/agent/rules/` 中的文件 symlink 指向同一个共享规则。
+
+Rules 不使用 Skill uid 或数据库表；备份与恢复凭据保存在规则库的隐藏子目录。Rules 首版只支持 Local，全局规则与配置根目录固定。旧 `~/.skillsmanage/` 路径保持原有领域语义。
+
 ### Universal Agents
 
 多个 AI coding agent 共享的技能目标位置。README 中的权威目录是：

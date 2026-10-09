@@ -10,6 +10,7 @@ import { registerTagGroupFixtures } from "./tagGroups";
 import { registerTargetFixtures } from "./targets";
 import { registerUsageFixtures } from "./usage";
 import { registerStartupFixtures } from "./startup";
+import { registerRulesFixtures } from "./rules";
 
 /**
  * 浏览器演示态的 IPC fixture 总装：按命令名注册到 @/lib/ipc 的 fixture 侧。
@@ -31,4 +32,5 @@ export function installBrowserIpcFixtures(): void {
   registerRuntimeLogFixtures();
   registerTagGroupFixtures();
   registerSavedViewFixtures();
+  registerRulesFixtures();
 }

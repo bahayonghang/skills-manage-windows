@@ -14,6 +14,9 @@ const CentralSkillsView = lazy(() =>
     default: CentralSkillsView,
   }))
 );
+const RulesView = lazy(() =>
+  import("@/pages/RulesView").then(({ RulesView }) => ({ default: RulesView }))
+);
 const SkillsCliView = lazy(() =>
   import("@/pages/SkillsCliView").then(({ SkillsCliView }) => ({
     default: SkillsCliView,
@@ -107,6 +110,7 @@ function App() {
           path="central"
           element={lazyPage(<CentralSkillsView />)}
         />
+        <Route path="rules" element={lazyPage(<RulesView />)} />
         <Route
           path="skills-cli"
           element={lazyPage(<SkillsCliView />)}
