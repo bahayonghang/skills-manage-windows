@@ -1772,3 +1772,41 @@ SSH/WSL Platform leftover apply now validates paths, deletes unique POSIX paths 
 ### Next Steps
 
 - 性能后续工作需保留原 10% 预算，并处理删除 stage 和 L no-op 耗时变化、完整源码冻结清单及 native/真实 target/完整性能矩阵证据缺口。
+
+
+## Session 116: 提交 Rules 管理并归档已完成任务
+
+**Date**: 2026-10-08
+**Task**: 提交 Rules 管理并归档已完成任务
+**Branch**: `dev`
+
+### Summary
+
+按用户授权提交 Rules 管理与 pnpm 版本声明改动，并归档三个已完成任务。本次未重新运行 just ci。
+
+### Main Changes
+
+- 移除仓库内 pnpm 精确版本声明；doctor 只检查可用性，托管 CI 使用 latest。Node 26 与 Rust 1.98.0 仍固定。
+- 新增 Local Rules 管理，中央库为 ~/.skillport/rules，并通过文件 symlink 分发到 Claude Code 与 OMP。
+- 归档 10-08-rules-management、09-10-central-skill-project-destinations、10-08-central-skill-delete-blocked。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a03951e1` | (see git log) |
+| `d7e57ac4` | (see git log) |
+
+### Testing
+
+- [OK] 本次会话未重新运行 just ci。Rules 任务已记录的 just ci 与 Windows x64 NSIS 构建此前通过。
+- [OK] 原生交互、安装流程、真实用户导入和 provider 行为仍未运行。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 改动尚未推送。需要时再开向 dev 的 PR。
+- Rules 的原生交互、安装流程、真实用户导入和 provider 行为仍待验证。
