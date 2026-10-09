@@ -1,7 +1,12 @@
 # Build And Test
 
-Use the repository root as the working directory. The toolchain is pinned by `.node-version`,
-`package.json`, and `rust-toolchain.toml`: Node 26, pnpm 10.34.5, and Rust 1.98.0.
+Use the repository root as the working directory. `.node-version`, `package.json`, and
+`rust-toolchain.toml` pin Node 26 and Rust 1.98.0. Prefer the latest stable pnpm. The repository
+does not declare a pnpm version; hosted setup requests `latest`.
+
+`pnpm-workspace.yaml` owns dependency overrides. `verifyDepsBeforeRun: false` prevents
+`pnpm run` and `pnpm exec` from installing or replacing dependencies implicitly. Install
+dependencies explicitly with `pnpm install --frozen-lockfile` before running checks.
 
 ## Read-only review entry
 
@@ -15,8 +20,9 @@ node scripts/check/run-ci.mjs --lane quick|common|rust-platform|all
 `just version-check` is the same version check. These commands do not install a toolchain, do not
 switch PATH, and do not rewrite version metadata.
 
-A matching `just doctor` result does not prove the pinned pnpm is the command later gates will
-spawn. Direct CLI such as `node node_modules/vitest/vitest.mjs` is **direct** evidence only; it is
+A successful `just doctor` result reports the installed pnpm version. Doctor does not query the
+registry or verify that the installed version is the latest release. Direct CLI such as
+`node node_modules/vitest/vitest.mjs` is **direct** evidence only; the direct command is
 not a substitute for canonical `pnpm exec` or `just ci`.
 
 `just ci` is the parent repository completion gate. This harness-rules child does not treat it as
@@ -25,10 +31,9 @@ already run.
 ## Fast Feedback
 
 - `just doctor` is read-only environment diagnostics. The pnpm probe is `pnpm --version` with a 5s
-  timeout and pin 10.34.5. Only the probe child env sets `pnpm_config_pm_on_fail=ignore`. Doctor
-  never installs packages, switches a toolchain, modifies PATH, or prints credentials. A PATH
-  shim such as Scoop pnpm 12.x may still be present; that is a mismatch, not a pin, and does not
-  prove 10.34.5 is available for later commands.
+  timeout. Doctor checks availability and reports the actual version. Only the probe child env
+  sets `pnpm_config_pm_on_fail=ignore`. Doctor never installs packages, switches a toolchain,
+  modifies PATH, or prints credentials.
 - `just check` runs the quick CI lane after synchronizing version metadata locally.
 - `just version-check` verifies package, Tauri, and Cargo versions without changing files.
 

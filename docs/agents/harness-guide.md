@@ -136,13 +136,15 @@ remains **UNVERIFIED**.
 
 ### doctor-pnpm-readonly
 
-Probe is `pnpm --version`, timeout 5s, pin 10.34.5, with child env
+Historical evidence used `pnpm --version`, timeout 5s, pin 10.34.5, with child env
 `pnpm_config_pm_on_fail=ignore` only. Match / mismatch / timeout tests 20 passed via
 leftover-engine 10.34.5. Scoop PATH shim is still 12.3.4. Typecheck follow-up:
 `doctor.test.ts` ES2020-safe (`6edb265d`). PATH canonical `pnpm exec` / `just ci` were **not**
 that child's gate.
 
-Applies to local doctor diagnostics. Does not prove the pin is on PATH for later commands.
+Current policy prefers the latest stable pnpm and removes the repository version pin.
+Doctor retains the read-only probe, checks availability, and reports the installed version.
+Historical pin results do not establish current gate results.
 
 ### bootstrap-and-gates
 

@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { delimiter, dirname, join, relative } from "node:path";
+import { join, relative } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 type CommandResult = {
@@ -52,7 +52,7 @@ type DoctorHelpers = {
   redactSecrets: (value: string, env?: NodeJS.ProcessEnv) => string;
   runCommand: CommandRunner;
   runDoctor: (options?: DoctorOptions) => { ok: boolean; failures: Array<unknown> };
-  TOOLCHAIN: { nodeMajor: number; pnpm: string; rust: string };
+  TOOLCHAIN: { nodeMajor: number; rust: string };
   withPnpmReadonlyProbeEnv: (env?: NodeJS.ProcessEnv) => NodeJS.ProcessEnv;
 };
 
@@ -79,7 +79,7 @@ afterEach(() => {
 function commandResults(overrides: Record<string, CommandResult> = {}): CommandRunner {
   const defaults: Record<string, CommandResult> = {
     [process.execPath]: { status: 0, stdout: "v26.7.0\n" },
-    pnpm: { status: 0, stdout: `${TOOLCHAIN.pnpm}\n` },
+    pnpm: { status: 0, stdout: "12.10.1\n" },
     rustc: { status: 0, stdout: `rustc ${TOOLCHAIN.rust} (stable)\n` },
     cargo: { status: 0, stdout: `cargo ${TOOLCHAIN.rust} (stable)\n` },
     just: { status: 0, stdout: "just 1.57.0\n" },
@@ -118,17 +118,6 @@ function userHome() {
   return process.env.USERPROFILE ?? homedir();
 }
 
-function pathKey(env: NodeJS.ProcessEnv) {
-  return Object.keys(env).find((key) => key.toLowerCase() === "path") ?? "PATH";
-}
-
-function prependPath(env: NodeJS.ProcessEnv, directory: string) {
-  const next = { ...env };
-  const key = pathKey(next);
-  next[key] = `${directory}${delimiter}${next[key] ?? ""}`;
-  return next;
-}
-
 function isolatedProbeEnv(root: string) {
   const cacheRoot = join(root, "cache");
   const pnpmHome = join(root, "pnpm-home");
@@ -148,40 +137,13 @@ function isolatedProbeEnv(root: string) {
   return { cacheRoot, env, pnpmHome };
 }
 
-function writeManifest(cwd: string, packageManager: string) {
+function writeManifest(cwd: string, packageManager?: string) {
   mkdirSync(cwd, { recursive: true });
   writeFileSync(join(cwd, "package.json"), `${JSON.stringify({
     name: "doctor-pnpm-probe",
     private: true,
     packageManager,
   }, null, 2)}\n`);
-}
-
-function findPinnedPnpm10345() {
-  const storeRoot = join(
-    userHome(),
-    "scoop",
-    "apps",
-    "pnpm",
-    "current",
-    "package-manager-store",
-    "v11",
-    "links",
-    "@pnpm",
-    "exe",
-    "10.34.5",
-  );
-  if (!existsSync(storeRoot)) return undefined;
-  for (const hash of readdirSync(storeRoot)) {
-    const exe = join(storeRoot, hash, "node_modules", "@pnpm", "exe", "pnpm.exe");
-    if (existsSync(exe)) return exe;
-  }
-  return undefined;
-}
-
-function scoopPnpm1234Dir() {
-  const dir = join(userHome(), "scoop", "apps", "pnpm", "12.3.4");
-  return existsSync(join(dir, "pnpm.exe")) ? dir : undefined;
 }
 
 function extractPnpmVersion(result: CommandResult) {
@@ -191,39 +153,10 @@ function extractPnpmVersion(result: CommandResult) {
   return match?.[1];
 }
 
-function findPnpmOnPath(version: string) {
-  const pathValue = process.env.PATH ?? process.env.Path ?? "";
-  const names = process.platform === "win32"
-    ? ["pnpm.cmd", "pnpm.exe", "pnpm"]
-    : ["pnpm"];
-  const probeEnv = withPnpmReadonlyProbeEnv(process.env);
-  for (const dir of pathValue.split(delimiter)) {
-    if (!dir) continue;
-    for (const name of names) {
-      const candidate = join(dir, name);
-      if (!existsSync(candidate)) continue;
-      const result = runCommand(candidate, ["--version"], { env: probeEnv });
-      if (extractPnpmVersion(result) === version) return candidate;
-    }
-  }
-  return undefined;
-}
-
-function findPnpmDir(version: string) {
-  if (version === "12.3.4") {
-    const scoopDir = scoopPnpm1234Dir();
-    if (scoopDir) return scoopDir;
-  }
-  if (version === "10.34.5") {
-    const pinned = findPinnedPnpm10345();
-    if (pinned) return dirname(pinned);
-  }
-  const onPath = findPnpmOnPath(version);
-  return onPath ? dirname(onPath) : undefined;
-}
-
-const pnpm12Dir = findPnpmDir("12.3.4");
-const pnpm10345Dir = findPnpmDir("10.34.5");
+const installedPnpm = runCommand("pnpm", ["--version"], {
+  env: withPnpmReadonlyProbeEnv(process.env),
+});
+const installedPnpmVersion = installedPnpm.status === 0 ? extractPnpmVersion(installedPnpm) : undefined;
 
 function scoopPnpmEngineStoreRoot() {
   return join(
@@ -309,8 +242,8 @@ describe("doctor", () => {
     expect(checks.find((check) => check.id === "rustc")).toMatchObject({ status: "mismatch" });
   });
 
-  it("checks Node by major and pnpm/Rust by exact version", () => {
-    expect(TOOLCHAIN.pnpm).toBe("10.34.5");
+  it("checks Node by major and Rust by exact version while accepting the installed pnpm", () => {
+    expect(TOOLCHAIN).not.toHaveProperty("pnpm");
     const checks = collectDoctorChecks({
       platform: "linux",
       commandRunner: commandResults({
@@ -321,9 +254,9 @@ describe("doctor", () => {
 
     expect(checks.find((check) => check.id === "node")).toMatchObject({ status: "mismatch", actual: "25.9.0" });
     expect(checks.find((check) => check.id === "pnpm")).toMatchObject({
-      status: "mismatch",
+      status: "ok",
       actual: "12.3.4",
-      expected: "10.34.5",
+      expected: "available",
     });
     expect(checks.find((check) => check.id === "rustc")).toMatchObject({ status: "ok", actual: TOOLCHAIN.rust });
   });
@@ -372,7 +305,7 @@ describe("doctor", () => {
     });
 
     const pnpm = checks.find((check) => check.id === "pnpm");
-    expect(pnpm).toMatchObject({ status: "mismatch", expected: "10.34.5" });
+    expect(pnpm).toMatchObject({ status: "mismatch", expected: "available" });
     expect(pnpm?.actual).toContain("ETIMEDOUT");
   });
 
@@ -405,12 +338,40 @@ describe("doctor", () => {
     expect(checks.find((check) => check.id === "pnpm")?.actual).not.toContain(secret);
   });
 
-  it.skipIf(!pnpm12Dir)("returns a pnpm 12 mismatch promptly without writing an isolated cache or repo bytes", () => {
-    const root = makeTempDir("doctor-pnpm-mismatch-");
+  it.skipIf(!installedPnpmVersion)("executes without an implicit install when dependencies are absent", () => {
+    const root = makeTempDir("pnpm-explicit-install-");
     const cwd = join(root, "cwd");
-    writeManifest(cwd, "pnpm@10.34.5");
+    mkdirSync(cwd, { recursive: true });
+    writeFileSync(join(cwd, "package.json"), JSON.stringify({
+      name: "pnpm-explicit-install-probe",
+      private: true,
+      dependencies: { "skillport-no-install-probe": "0.0.0" },
+    }));
+    writeFileSync(join(cwd, "pnpm-workspace.yaml"), readFileSync("pnpm-workspace.yaml"));
+    const modules = join(cwd, "node_modules");
+    mkdirSync(modules);
+    writeFileSync(join(modules, "keep.txt"), "existing dependency state");
     const { cacheRoot, env, pnpmHome } = isolatedProbeEnv(root);
-    const probeEnv = prependPath(env, pnpm12Dir!);
+    env.pnpm_config_offline = "true";
+    const before = listRelativePaths(cwd);
+
+    const result = runCommand("pnpm", [
+      "exec", "node", "-e", "process.stdout.write('pnpm-exec-ok')",
+    ], { cwd, env });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("pnpm-exec-ok");
+    expect(listRelativePaths(cwd)).toEqual(before);
+    expect(readFileSync(join(modules, "keep.txt"), "utf8")).toBe("existing dependency state");
+    expect(listRelativePaths(cacheRoot)).toEqual([]);
+    expect(listRelativePaths(pnpmHome)).toEqual([]);
+  });
+
+  it.skipIf(!installedPnpmVersion).each([undefined, "pnpm@0.0.0"])("probes installed pnpm with manifest %s without writing cache or repo bytes", (packageManager) => {
+    const root = makeTempDir("doctor-pnpm-readonly-");
+    const cwd = join(root, "cwd");
+    writeManifest(cwd, packageManager);
+    const { cacheRoot, env, pnpmHome } = isolatedProbeEnv(root);
     const repoBytesBefore = readFileSync(repoPackageJsonPath);
     const parentPmOnFail = process.env.pnpm_config_pm_on_fail;
     const parentPnpmHome = process.env.PNPM_HOME;
@@ -424,7 +385,7 @@ describe("doctor", () => {
     const checks = collectDoctorChecks({
       platform: "linux",
       cwd,
-      env: probeEnv,
+      env,
       commandRunner,
     });
     const elapsedMs = Date.now() - started;
@@ -437,9 +398,9 @@ describe("doctor", () => {
 
     const pnpm = checks.find((check) => check.id === "pnpm");
     expect(pnpm).toMatchObject({
-      status: "mismatch",
-      actual: "12.3.4",
-      expected: "10.34.5",
+      status: "ok",
+      actual: installedPnpmVersion,
+      expected: "available",
     });
     expect(elapsedMs).toBeLessThan(3_000);
 
@@ -456,40 +417,4 @@ describe("doctor", () => {
     expect(process.env.PNPM_HOME).toBe(parentPnpmHome);
   });
 
-  it.skipIf(!pnpm10345Dir)("passes a matching pnpm 10.34.5 probe without writing an isolated cache", () => {
-    const root = makeTempDir("doctor-pnpm-match-");
-    const cwd = join(root, "cwd");
-    writeManifest(cwd, "pnpm@10.34.5");
-    const { cacheRoot, env, pnpmHome } = isolatedProbeEnv(root);
-    const probeEnv = prependPath(env, pnpm10345Dir!);
-    const repoBytesBefore = readFileSync(repoPackageJsonPath);
-    const parentPmOnFail = process.env.pnpm_config_pm_on_fail;
-    const cacheBefore = listRelativePaths(cacheRoot);
-    const homeBefore = listRelativePaths(pnpmHome);
-    const engineVersionsBefore = scoopPnpmEngineVersions();
-    const storeMarkersBefore = scoopPnpmEngineStoreMarkerNames();
-    const { calls, commandRunner } = capturingPnpmProbeRunner();
-
-    const checks = collectDoctorChecks({
-      platform: "linux",
-      cwd,
-      env: probeEnv,
-      commandRunner,
-    });
-
-    const pnpmCall = calls.find((call) => call.command === "pnpm");
-    expect(pnpmCall?.args).toEqual(["--version"]);
-    expect(pnpmCall?.options?.env?.pnpm_config_pm_on_fail).toBe("ignore");
-    expect(checks.find((check) => check.id === "pnpm")).toMatchObject({
-      status: "ok",
-      actual: "10.34.5",
-      expected: "10.34.5",
-    });
-    expect(listRelativePaths(cacheRoot).filter((path) => !cacheBefore.includes(path))).toEqual([]);
-    expect(listRelativePaths(pnpmHome).filter((path) => !homeBefore.includes(path))).toEqual([]);
-    expect(scoopPnpmEngineVersions()).toEqual(engineVersionsBefore);
-    expect(scoopPnpmEngineStoreMarkerNames()).toEqual(storeMarkersBefore);
-    expect(readFileSync(repoPackageJsonPath)).toEqual(repoBytesBefore);
-    expect(process.env.pnpm_config_pm_on_fail).toBe(parentPmOnFail);
-  });
 });

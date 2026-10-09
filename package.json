@@ -4,18 +4,8 @@
   "version": "1.0.2",
   "license": "Apache-2.0",
   "type": "module",
-  "packageManager": "pnpm@10.34.5",
   "engines": {
     "node": "26.x"
-  },
-  "pnpm": {
-    "overrides": {
-      "@vue/server-renderer": "3.5.42",
-      "@vue/shared": "3.5.42",
-      "source-map-js": "1.2.2",
-      "vitepress>vite": "6.4.3",
-      "vue": "3.5.42"
-    }
   },
   "scripts": {
     "dev": "node scripts/build/dev-server.mjs",

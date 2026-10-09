@@ -25,14 +25,14 @@ just audit
 
 Toolchain:
   .node-version / package.json engines -> Node 26
-  package.json packageManager         -> pnpm 10.34.5
+  pnpm                               -> latest stable preferred; no repository version pin
   rust-toolchain.toml                 -> Rust 1.98.0 + rustfmt + clippy
 
 just doctor
   -> node scripts/check/doctor.mjs (read-only environment diagnostics)
-     pnpm probe: `pnpm --version`, 5s timeout, pin 10.34.5
+     pnpm probe: `pnpm --version`, 5s timeout, availability + actual version
      child env only `pnpm_config_pm_on_fail=ignore`
-     Does not prove the pin is on PATH for later gates; does not install or switch toolchains
+     Does not query the registry; does not install or switch toolchains
 
 just check
   -> node scripts/check/run-ci.mjs --lane quick (development feedback only)
@@ -105,9 +105,13 @@ just audit  -> production dependency vulnerability gate before a PR
 ```
 
 `just doctor` never installs packages, switches a toolchain, modifies PATH, or
-prints credentials. Its pnpm probe is `pnpm --version` with a 5s timeout and pin
-10.34.5; only the probe child env sets `pnpm_config_pm_on_fail=ignore`. A match or
-mismatch does not prove the pin is the PATH command later gates will spawn.
+prints credentials. Its pnpm probe is `pnpm --version` with a 5s timeout; only the
+probe child env sets `pnpm_config_pm_on_fail=ignore`. Doctor checks availability
+and reports the actual version without requiring an exact pnpm version or querying
+the registry. Prefer the latest stable pnpm; hosted setup uses `version: latest`.
+Dependency overrides live in `pnpm-workspace.yaml` and match the checked lockfile.
+`verifyDepsBeforeRun: false` keeps `pnpm run` and `pnpm exec` from installing or replacing
+dependencies. Dependency installation remains an explicit `pnpm install --frozen-lockfile` step.
 `just check` is not a substitute for `just ci` or `just audit`.
 
 ## 3. Contracts
@@ -340,7 +344,7 @@ For GitHub REST updates, `required_status_checks.checks` and legacy `contexts` a
   - Assert all version drift is reported without writes; explicit sync remains available; lane selection,
     unknown lanes, default/all, failure propagation, real spawned-command-tree cancellation, timing, and summary stay stable.
 - `pnpm vitest run src/test/scripts/doctor.test.ts src/test/contracts/developerExperienceContract.test.ts`
-  - Assert missing and mismatched tools, exact pnpm/Rust versions versus Node major,
+  - Assert missing and mismatched tools, available pnpm, exact Rust versions versus Node major,
     Windows prerequisite checks, secret redaction, read-only behavior, quick/full
     gate commands, PR template fields, and synchronized branch/toolchain documentation.
 - `pnpm exec vitest run src/test/contracts/dependencyAuditContract.test.ts`

@@ -1,6 +1,9 @@
 packages:
   - '.'
 
+# Run and exec use installed dependencies; only an explicit install changes them.
+verifyDepsBeforeRun: false
+
 allowBuilds:
   esbuild: true
   better-sqlite3: true
@@ -11,5 +14,8 @@ minimumReleaseAgeExclude:
   - shadcn@4.15.0
 
 overrides:
-  postcss: 8.5.23
-  nanoid: '^3.3.17'
+  "@vue/server-renderer": 3.5.42
+  "@vue/shared": 3.5.42
+  source-map-js: 1.2.2
+  "vitepress>vite": 6.4.3
+  vue: 3.5.42

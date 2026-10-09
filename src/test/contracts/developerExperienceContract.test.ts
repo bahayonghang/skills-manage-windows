@@ -19,9 +19,17 @@ type Workflow = {
 const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
   engines?: { node?: string };
   packageManager?: string;
+  pnpm?: unknown;
   scripts: Record<string, string>;
 };
 const nodeVersion = readFileSync(".node-version", "utf8").trim();
+const pnpmWorkspace = parse(readFileSync("pnpm-workspace.yaml", "utf8")) as {
+  overrides?: Record<string, string>;
+  verifyDepsBeforeRun?: boolean;
+};
+const pnpmLockfile = parse(readFileSync("pnpm-lock.yaml", "utf8")) as {
+  overrides?: Record<string, string>;
+};
 const rustToolchain = readFileSync("rust-toolchain.toml", "utf8");
 const justfile = readFileSync("justfile", "utf8");
 const template = readFileSync(".github/pull_request_template.md", "utf8");
@@ -34,19 +42,25 @@ function allSteps() {
 }
 
 describe("developer and PR experience contract", () => {
-  it("declares one Node/pnpm/Rust toolchain", () => {
+  it("pins Node and Rust without declaring a pnpm version", () => {
     expect(nodeVersion).toBe("26");
-    expect(packageJson.packageManager).toBe("pnpm@10.34.5");
+    expect(packageJson.packageManager).toBeUndefined();
+    expect(packageJson.pnpm).toBeUndefined();
     expect(packageJson.engines?.node).toBe("26.x");
     expect(rustToolchain).toContain('channel = "1.98.0"');
     expect(rustToolchain).toContain('components = ["rustfmt", "clippy"]');
   });
 
-  it("keeps hosted Actions on the declared Node, pnpm, and Rust versions", () => {
+  it("keeps effective overrides in workspace config and prevents implicit installs", () => {
+    expect(pnpmWorkspace.overrides).toEqual(pnpmLockfile.overrides);
+    expect(pnpmWorkspace.verifyDepsBeforeRun).toBe(false);
+  });
+
+  it("uses latest pnpm in hosted Actions and keeps the declared Node and Rust versions", () => {
     const steps = allSteps();
     const pnpmSetupSteps = steps.filter((step) => step.uses?.startsWith("pnpm/action-setup@"));
     expect(pnpmSetupSteps.length).toBeGreaterThan(0);
-    expect(pnpmSetupSteps.every((step) => step.with?.version === "10.34.5")).toBe(true);
+    expect(pnpmSetupSteps.every((step) => step.with?.version === "latest")).toBe(true);
 
     const nodeSetupSteps = steps.filter((step) => step.uses?.startsWith("actions/setup-node@"));
     expect(nodeSetupSteps.length).toBeGreaterThan(0);
@@ -109,7 +123,8 @@ describe("developer and PR experience contract", () => {
 
     for (const document of [english, chinese, contributing, agents, quality]) {
       expect(document).toContain("Node 26");
-      expect(document).toContain("pnpm 10.34.5");
+      expect(document).toMatch(/pnpm.*latest|latest.*pnpm|pnpm.*最新/i);
+      expect(document).not.toContain("pnpm 10.34.5");
       expect(document).toContain("Rust 1.98.0");
       expect(document).toContain("just doctor");
       expect(document).toContain("just check");

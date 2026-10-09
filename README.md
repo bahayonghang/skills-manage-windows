@@ -188,11 +188,11 @@ Custom platforms can be added through Settings.
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) 26 (see `.node-version`)
-- [pnpm](https://pnpm.io/) 10.34.5
+- [pnpm](https://pnpm.io/), latest stable release
 - [Rust toolchain](https://rustup.rs/) 1.98.0 (see `rust-toolchain.toml`)
 - Tauri v2 system dependencies: <https://v2.tauri.app/start/prerequisites/>
 
-The repository toolchain is Node 26, pnpm 10.34.5, and Rust 1.98.0.
+The repository pins Node 26 and Rust 1.98.0. Prefer the latest stable pnpm; the repository does not pin a pnpm version.
 
 ### Install Dependencies
 

@@ -8,7 +8,6 @@ const repoRoot = resolveRepoRoot(import.meta.url);
 
 export const TOOLCHAIN = Object.freeze({
   nodeMajor: 26,
-  pnpm: "10.34.5",
   rust: "1.98.0",
 });
 
@@ -44,7 +43,7 @@ export function redactSecrets(value, env = process.env) {
 /**
  * pnpm 12+ defaults `pmOnFail` to download. Inject ignore only into the
  * version probe so diagnostics cannot fetch, self-update, or rewrite global
- * config. This must not be used to bypass the repository pin in CI.
+ * config. Doctor reports the installed version without selecting a version.
  */
 const PNPM_PM_ON_FAIL_KEY = "pnpm_config_pm_on_fail";
 
@@ -209,14 +208,12 @@ export function collectDoctorChecks({
       mode: "major",
       hint: "use Node.js 26 for this repository",
     }, options),
-    checkVersion({
+    checkPresence({
       id: "pnpm",
       label: "pnpm",
       command: "pnpm",
       args: ["--version"],
-      expected: TOOLCHAIN.pnpm,
-      mode: "exact",
-      hint: "activate pnpm 10.34.5 without changing the repository",
+      hint: "install the latest stable pnpm",
     }, { ...options, env: withPnpmReadonlyProbeEnv(options.env) }),
     checkVersion({
       id: "rustc",
